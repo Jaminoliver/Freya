@@ -25,16 +25,13 @@ export function SignUpForm() {
       password: formData.password,
       options: {
         data: { full_name: formData.fullName, account_type: "fan" },
-        emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
       },
     });
 
     if (signUpError) { setError(signUpError.message); setLoading(false); return; }
 
-    // Store email in localStorage for verification page fallback
-    localStorage.setItem('pendingVerificationEmail', formData.email);
-    
-    router.push(`/verify-email?email=${encodeURIComponent(formData.email)}`);
+    // Redirect to OTP verification page
+    router.push(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
   };
 
   const handleGoogle = async () => {
