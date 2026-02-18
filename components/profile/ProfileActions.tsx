@@ -1,0 +1,120 @@
+"use client";
+
+import { MessageCircle } from "lucide-react";
+
+interface ProfileActionsProps {
+  viewContext: "ownFan" | "ownCreator" | "creatorViewingFan" | "fanViewingCreator";
+  onEditProfile?: () => void;
+  onMessage?: () => void;
+}
+
+export default function ProfileActions({
+  viewContext,
+  onEditProfile,
+  onMessage,
+}: ProfileActionsProps) {
+  // Fan viewing own profile
+  if (viewContext === "ownFan") {
+    return (
+      <button
+        onClick={onEditProfile}
+        style={{
+          padding: "5px 12px",
+          borderRadius: "6px",
+          backgroundColor: "transparent",
+          border: "1px solid #8B5CF6",
+          color: "#8B5CF6",
+          fontSize: "12px",
+          fontWeight: 600,
+          fontFamily: "'Inter', sans-serif",
+          cursor: "pointer",
+          transition: "background-color 0.2s ease, color 0.2s ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "#8B5CF6";
+          e.currentTarget.style.color = "#FFFFFF";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+          e.currentTarget.style.color = "#8B5CF6";
+        }}
+      >
+        Edit Profile
+      </button>
+    );
+  }
+
+  // Creator viewing own profile
+  if (viewContext === "ownCreator") {
+    return (
+      <button
+        onClick={onEditProfile}
+        style={{
+          padding: "5px 12px",
+          borderRadius: "6px",
+          backgroundColor: "transparent",
+          border: "1px solid #8B5CF6",
+          color: "#8B5CF6",
+          fontSize: "12px",
+          fontWeight: 600,
+          fontFamily: "'Inter', sans-serif",
+          cursor: "pointer",
+          transition: "background-color 0.2s ease, color 0.2s ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "#8B5CF6";
+          e.currentTarget.style.color = "#FFFFFF";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+          e.currentTarget.style.color = "#8B5CF6";
+        }}
+      >
+        Edit Profile
+      </button>
+    );
+  }
+
+  // Creator viewing fan profile
+  if (viewContext === "creatorViewingFan") {
+    return (
+      <div
+        style={{
+          position: "absolute",
+          top: "24px",
+          right: "24px",
+        }}
+      >
+        <button
+          onClick={onMessage}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "5px 12px",
+            borderRadius: "6px",
+            backgroundColor: "#8B5CF6",
+            border: "none",
+            color: "#FFFFFF",
+            fontSize: "12px",
+            fontWeight: 600,
+            fontFamily: "'Inter', sans-serif",
+            cursor: "pointer",
+            transition: "background-color 0.2s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "#7C3AED";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "#8B5CF6";
+          }}
+        >
+          <MessageCircle size={16} strokeWidth={2} />
+          Message
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}

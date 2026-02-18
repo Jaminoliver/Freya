@@ -4,6 +4,31 @@
 
 @theme {
   --spacing: 0.25rem;
+
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-sidebar: var(--sidebar);
+  --color-border: var(--border);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-coral: var(--coral);
+  --color-coral-hover: var(--coral-hover);
+  --color-gold: var(--gold);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-pink: var(--pink);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --radius-btn: var(--radius-btn);
+  --radius-card: var(--radius-card);
+  --radius-input: var(--radius-input);
+
+  --background-image-gradient-brand: var(--gradient-brand);
+  --background-image-gradient-banner: var(--gradient-banner);
 }
 
 :root {
@@ -70,5 +95,14 @@
 
   .gradient-banner {
     background-image: var(--gradient-banner);
+  }
+
+  /* ✅ Hide scrollbar on main content — all browsers */
+  .main-scroll::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+  .main-scroll {
+    scrollbar-width: none;       /* Firefox */
+    -ms-overflow-style: none;    /* IE / Edge */
   }
 }
