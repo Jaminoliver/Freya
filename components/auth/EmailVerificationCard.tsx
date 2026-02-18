@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 interface EmailVerificationCardProps {
   email?: string;
@@ -13,6 +14,8 @@ export function EmailVerificationCard({ email = "user@example.com" }: EmailVerif
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<"pending" | "loading" | "success" | "error">("pending");
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (searchParams.get("verified") === "true") {
@@ -25,8 +28,23 @@ export function EmailVerificationCard({ email = "user@example.com" }: EmailVerif
     }
   }, [searchParams]);
 
-  const handleResend = () => {
-    console.log("Resend verification email to:", email);
+  const handleResend = async () => {
+    setResendLoading(true);
+    setResendMessage(null);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: email,
+    });
+
+    setResendLoading(false);
+
+    if (error) {
+      setResendMessage({ type: "error", text: error.message });
+    } else {
+      setResendMessage({ type: "success", text: "Verification email sent! Check your inbox." });
+    }
   };
 
   // Loading state
@@ -86,11 +104,48 @@ export function EmailVerificationCard({ email = "user@example.com" }: EmailVerif
           </svg>
         </div>
         <h1 style={{ margin: "0 0 8px", fontSize: "24px", fontWeight: 700, color: "#F1F5F9" }}>Link expired</h1>
-        <p style={{ color: "#A3A3C2", fontSize: "14px", margin: "0 0 32px", lineHeight: 1.6 }}>
+        <p style={{ color: "#A3A3C2", fontSize: "14px", margin: "0 0 20px", lineHeight: 1.6 }}>
           This verification link is invalid or has expired. Request a new one below.
         </p>
-        <button onClick={handleResend} style={{ width: "100%", borderRadius: "12px", padding: "16px", fontSize: "16px", fontWeight: 700, border: "none", cursor: "pointer", backgroundColor: "#8B5CF6", color: "#fff", boxShadow: "0 4px 24px rgba(139,92,246,0.35)", marginBottom: "12px" }}>
-          Resend Verification Email
+        
+        {resendMessage && (
+          <div style={{
+            width: "100%",
+            padding: "12px 16px",
+            borderRadius: "8px",
+            marginBottom: "16px",
+            backgroundColor: resendMessage.type === "success" ? "#10B98114" : "#EF444414",
+            border: `1px solid ${resendMessage.type === "success" ? "#10B981" : "#EF4444"}`,
+          }}>
+            <p style={{
+              margin: 0,
+              fontSize: "13px",
+              color: resendMessage.type === "success" ? "#10B981" : "#EF4444",
+            }}>
+              {resendMessage.text}
+            </p>
+          </div>
+        )}
+
+        <button 
+          onClick={handleResend} 
+          disabled={resendLoading}
+          style={{ 
+            width: "100%", 
+            borderRadius: "12px", 
+            padding: "16px", 
+            fontSize: "16px", 
+            fontWeight: 700, 
+            border: "none", 
+            cursor: resendLoading ? "not-allowed" : "pointer", 
+            backgroundColor: "#8B5CF6", 
+            color: "#fff", 
+            boxShadow: "0 4px 24px rgba(139,92,246,0.35)", 
+            marginBottom: "12px",
+            opacity: resendLoading ? 0.6 : 1,
+          }}
+        >
+          {resendLoading ? "Sending..." : "Resend Verification Email"}
         </button>
         <Link href="/login" style={{ display: "block", width: "100%", borderRadius: "12px", padding: "16px", fontSize: "16px", fontWeight: 600, textAlign: "center", textDecoration: "none", backgroundColor: "#141420", border: "1.5px solid #1F1F2A", color: "#A3A3C2", boxSizing: "border-box" }}>
           Back to Log In
@@ -116,9 +171,46 @@ export function EmailVerificationCard({ email = "user@example.com" }: EmailVerif
         <p style={{ color: "#F1F5F9", fontSize: "15px", fontWeight: 700, margin: "0 0 8px" }}>{email}</p>
         <p style={{ color: "#6B6B8A", fontSize: "14px", margin: "0 0 20px", lineHeight: 1.6 }}>Click the link in your email to verify your account and get started.</p>
         <div style={{ width: "100%", height: "1px", backgroundColor: "#1F1F2A", marginBottom: "20px" }} />
+        
+        {resendMessage && (
+          <div style={{
+            width: "100%",
+            padding: "12px 16px",
+            borderRadius: "8px",
+            marginBottom: "12px",
+            backgroundColor: resendMessage.type === "success" ? "#10B98114" : "#EF444414",
+            border: `1px solid ${resendMessage.type === "success" ? "#10B981" : "#EF4444"}`,
+          }}>
+            <p style={{
+              margin: 0,
+              fontSize: "13px",
+              color: resendMessage.type === "success" ? "#10B981" : "#EF4444",
+            }}>
+              {resendMessage.text}
+            </p>
+          </div>
+        )}
+
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "12px" }}>
-          <button type="button" onClick={handleResend} style={{ width: "100%", borderRadius: "12px", padding: "16px", fontSize: "16px", fontWeight: 700, border: "none", cursor: "pointer", backgroundColor: "#8B5CF6", color: "#FFFFFF", boxShadow: "0 4px 24px rgba(139, 92, 246, 0.35)" }}>
-            Resend Verification Email
+          <button 
+            type="button" 
+            onClick={handleResend}
+            disabled={resendLoading}
+            style={{ 
+              width: "100%", 
+              borderRadius: "12px", 
+              padding: "16px", 
+              fontSize: "16px", 
+              fontWeight: 700, 
+              border: "none", 
+              cursor: resendLoading ? "not-allowed" : "pointer", 
+              backgroundColor: "#8B5CF6", 
+              color: "#FFFFFF", 
+              boxShadow: "0 4px 24px rgba(139, 92, 246, 0.35)",
+              opacity: resendLoading ? 0.6 : 1,
+            }}
+          >
+            {resendLoading ? "Sending..." : "Resend Verification Email"}
           </button>
           <Link href="/login" style={{ display: "block", width: "100%", borderRadius: "12px", padding: "16px", fontSize: "16px", fontWeight: 600, textAlign: "center", textDecoration: "none", backgroundColor: "#141420", border: "1.5px solid #1F1F2A", color: "#A3A3C2", boxSizing: "border-box" }}>
             Back to Log In
