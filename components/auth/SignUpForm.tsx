@@ -18,6 +18,8 @@ export function SignUpForm() {
     setError(null);
     setLoading(true);
 
+    console.log("🚀 SIGNUP STARTED", { email: formData.email });
+
     const supabase = createClient();
 
     const { data, error: signUpError } = await supabase.auth.signUp({
@@ -28,10 +30,20 @@ export function SignUpForm() {
       },
     });
 
-    if (signUpError) { setError(signUpError.message); setLoading(false); return; }
+    console.log("📦 SUPABASE RESPONSE", { data, error: signUpError });
 
+    if (signUpError) { 
+      console.log("❌ SIGNUP ERROR", signUpError.message);
+      setError(signUpError.message); 
+      setLoading(false); 
+      return; 
+    }
+
+    const redirectUrl = `/verify-otp?email=${encodeURIComponent(formData.email)}`;
+    console.log("✅ SIGNUP SUCCESS - REDIRECTING TO:", redirectUrl);
+    
     // Redirect to OTP verification page
-    router.push(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
+    router.push(redirectUrl);
   };
 
   const handleGoogle = async () => {
