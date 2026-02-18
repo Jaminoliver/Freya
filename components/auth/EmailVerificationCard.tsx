@@ -8,25 +8,45 @@ import { createClient } from "@/lib/supabase/client";
 
 interface EmailVerificationCardProps {
   email?: string;
+  verified?: string;
 }
 
-export function EmailVerificationCard({ email = "user@example.com" }: EmailVerificationCardProps) {
+export function EmailVerificationCard({ email: emailProp, verified }: EmailVerificationCardProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<"pending" | "loading" | "success" | "error">("pending");
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [email, setEmail] = useState<string>("");
+
+  // Get email from props (URL param) or localStorage fallback
+  useEffect(() => {
+    if (emailProp) {
+      setEmail(emailProp);
+    } else if (typeof window !== 'undefined') {
+      const storedEmail = localStorage.getItem('pendingVerificationEmail');
+      setEmail(storedEmail || 'your email');
+    } else {
+      setEmail('your email');
+    }
+  }, [emailProp]);
 
   useEffect(() => {
-    if (searchParams.get("verified") === "true") {
+    if (searchParams.get("verified") === "true" || verified === "true") {
       setStatus("loading");
-      const timer = setTimeout(() => setStatus("success"), 1800);
+      const timer = setTimeout(() => {
+        setStatus("success");
+        // Clear localStorage after successful verification
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('pendingVerificationEmail');
+        }
+      }, 1800);
       return () => clearTimeout(timer);
     }
     if (searchParams.get("error") === "true") {
       setStatus("error");
     }
-  }, [searchParams]);
+  }, [searchParams, verified]);
 
   const handleResend = async () => {
     setResendLoading(true);

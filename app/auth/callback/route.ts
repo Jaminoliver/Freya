@@ -41,8 +41,13 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      return NextResponse.redirect(`${origin}/verify-email?verified=true`)
+      const email = data.user.email || ''
+      return NextResponse.redirect(`${origin}/verify-email?verified=true&email=${encodeURIComponent(email)}`)
     }
+
+    // Error: preserve email if available from error or try localStorage fallback
+    const emailParam = data?.user?.email ? `&email=${encodeURIComponent(data.user.email)}` : ''
+    return NextResponse.redirect(`${origin}/verify-email?error=true${emailParam}`)
   }
 
   // Handle OAuth (code)
@@ -72,5 +77,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Fallback error redirect (no email available)
   return NextResponse.redirect(`${origin}/verify-email?error=true`)
 }

@@ -31,6 +31,9 @@ export function SignUpForm() {
 
     if (signUpError) { setError(signUpError.message); setLoading(false); return; }
 
+    // Store email in localStorage for verification page fallback
+    localStorage.setItem('pendingVerificationEmail', formData.email);
+    
     router.push(`/verify-email?email=${encodeURIComponent(formData.email)}`);
   };
 
