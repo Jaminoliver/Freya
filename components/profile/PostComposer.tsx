@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { Image, Video, BarChart2, Lock, Unlock } from "lucide-react";
 import type { User } from "@/lib/types/profile";
@@ -32,11 +34,6 @@ export default function PostComposer({
 
   const firstLetter = (user.display_name || user.username || "?").charAt(0).toUpperCase();
 
-  const handleExpand = () => {
-    setExpanded(true);
-    setTimeout(() => textareaRef.current?.focus(), 50);
-  };
-
   const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     setMedia((prev) => [...prev, ...files]);
@@ -51,6 +48,7 @@ export default function PostComposer({
       setPrice(0);
       setShowPricing(false);
       setExpanded(false);
+      textareaRef.current?.blur();
     }
   };
 
@@ -71,8 +69,8 @@ export default function PostComposer({
       }}
       className={className}
     >
-      {/* Main Row: Avatar + Placeholder/Textarea */}
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px" }}>
+      {/* Main Row: Avatar + Textarea (always rendered) */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "10px 14px" }}>
         {/* Avatar */}
         <div
           style={{
@@ -89,46 +87,37 @@ export default function PostComposer({
             fontWeight: 700,
             color: "#FFFFFF",
             flexShrink: 0,
+            marginTop: "6px",
           }}
         >
           {!user.avatar_url && firstLetter}
         </div>
 
-        {/* Input area */}
-        {!expanded ? (
-          <div
-            onClick={handleExpand}
-            style={{
-              flex: 1,
-              fontSize: "15px",
-              color: "#64748B",
-              cursor: "text",
-              padding: "6px 0",
-            }}
-          >
-            What&apos;s on your mind?
-          </div>
-        ) : (
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="What's on your mind?"
-            style={{
-              flex: 1,
-              backgroundColor: "transparent",
-              border: "none",
-              outline: "none",
-              fontSize: "15px",
-              color: "#F1F5F9",
-              resize: "none",
-              minHeight: "40px",
-              fontFamily: "'Inter', sans-serif",
-              lineHeight: "1.5",
-            }}
-            rows={2}
-          />
-        )}
+        {/* ✅ Always-rendered textarea — no div swap, keyboard opens on first tap */}
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          onFocus={() => setExpanded(true)}
+          onBlur={() => { if (!content.trim()) setExpanded(false); }}
+          placeholder="What's on your mind?"
+          rows={expanded ? 3 : 1}
+          style={{
+            flex: 1,
+            backgroundColor: "transparent",
+            border: "none",
+            outline: "none",
+            fontSize: "16px",
+            color: content ? "#F1F5F9" : "#64748B",
+            resize: "none",
+            minHeight: "40px",
+            fontFamily: "'Inter', sans-serif",
+            lineHeight: "1.5",
+            paddingTop: "6px",
+            cursor: "text",
+            transition: "all 0.15s ease",
+          }}
+        />
       </div>
 
       {/* Media Preview */}
@@ -161,7 +150,7 @@ export default function PostComposer({
               min="0"
               step="100"
               placeholder="0"
-              style={{ flex: 1, backgroundColor: "#0A0A0F", border: "1px solid #2D2D3D", borderRadius: "6px", padding: "6px 10px", fontSize: "14px", color: "#F1F5F9", outline: "none" }}
+              style={{ flex: 1, backgroundColor: "#0A0A0F", border: "1px solid #2D2D3D", borderRadius: "6px", padding: "6px 10px", fontSize: "16px", color: "#F1F5F9", outline: "none" }}
             />
           </div>
         </div>
@@ -182,16 +171,9 @@ export default function PostComposer({
               onClick={btn.onClick}
               aria-label={btn.label}
               style={{
-                width: "34px",
-                height: "34px",
-                borderRadius: "8px",
-                backgroundColor: "transparent",
-                border: "none",
-                color: "#64748B",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+                width: "34px", height: "34px", borderRadius: "8px",
+                backgroundColor: "transparent", border: "none", color: "#64748B",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                 transition: "color 0.15s ease, background-color 0.15s ease",
               }}
               onMouseEnter={(e) => { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "#1F1F2A"; }}
@@ -201,21 +183,14 @@ export default function PostComposer({
             </button>
           ))}
 
-          {/* Lock */}
           <button
             onClick={toggleLock}
             aria-label={isLocked ? "Unlock post" : "Lock post"}
             style={{
-              width: "34px",
-              height: "34px",
-              borderRadius: "8px",
+              width: "34px", height: "34px", borderRadius: "8px",
               backgroundColor: isLocked ? "rgba(139, 92, 246, 0.15)" : "transparent",
-              border: "none",
-              color: isLocked ? "#8B5CF6" : "#64748B",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              border: "none", color: isLocked ? "#8B5CF6" : "#64748B",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
               transition: "all 0.15s ease",
             }}
             onMouseEnter={(e) => { if (!isLocked) { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "#1F1F2A"; } }}
@@ -225,7 +200,6 @@ export default function PostComposer({
           </button>
         </div>
 
-        {/* Right side: char count + post button (only when expanded) */}
         {expanded && (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "12px", color: isOverLimit ? "#EF4444" : "#64748B" }}>
@@ -235,13 +209,10 @@ export default function PostComposer({
               onClick={handlePost}
               disabled={!canPost}
               style={{
-                padding: "7px 18px",
-                borderRadius: "8px",
+                padding: "7px 18px", borderRadius: "8px",
                 backgroundColor: canPost ? "#8B5CF6" : "#2D2D3D",
-                border: "none",
-                color: canPost ? "#FFFFFF" : "#64748B",
-                fontSize: "13px",
-                fontWeight: 600,
+                border: "none", color: canPost ? "#FFFFFF" : "#64748B",
+                fontSize: "13px", fontWeight: 600,
                 cursor: canPost ? "pointer" : "not-allowed",
                 transition: "background-color 0.15s ease",
                 fontFamily: "'Inter', sans-serif",
