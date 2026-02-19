@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Search, MessageCircle, Bell, Wallet, Bookmark, User, Plus } from "lucide-react";
+import { Home, Search, MessageCircle, Bell, Wallet, Bookmark, User, Plus, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -33,6 +33,8 @@ export function Sidebar() {
     };
     fetchUsername();
   }, []);
+
+  const isSettings = pathname.startsWith("/settings");
 
   return (
     <>
@@ -87,10 +89,23 @@ export function Sidebar() {
               Profile
             </Link>
           )}
+
+          {/* Settings */}
+          <Link href="/settings" style={{
+            display: "flex", alignItems: "center", gap: "14px",
+            padding: "12px 16px", borderRadius: "12px", textDecoration: "none",
+            backgroundColor: isSettings ? "#1E1E2E" : "transparent",
+            color: isSettings ? "#8B5CF6" : "#A3A3C2",
+            fontSize: "16px", fontWeight: isSettings ? 600 : 400,
+            transition: "all 0.15s ease",
+          }}>
+            <Settings size={22} strokeWidth={isSettings ? 2.2 : 1.8} />
+            Settings
+          </Link>
         </nav>
       </div>
 
-      {/* MOBILE BOTTOM NAV — ✅ NO inline display, Tailwind controls visibility */}
+      {/* MOBILE BOTTOM NAV */}
       <nav
         className="md:hidden flex items-center justify-around"
         style={{
@@ -119,9 +134,9 @@ export function Sidebar() {
           <Plus size={22} color="#fff" />
         </Link>
 
-        <Link href="/notifications" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === "/notifications" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
-          <Bell size={22} strokeWidth={pathname === "/notifications" ? 2.2 : 1.8} />
-          <span style={{ fontSize: "10px" }}>Alerts</span>
+        <Link href="/settings" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: isSettings ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
+          <Settings size={22} strokeWidth={isSettings ? 2.2 : 1.8} />
+          <span style={{ fontSize: "10px" }}>Settings</span>
         </Link>
 
         {username ? (

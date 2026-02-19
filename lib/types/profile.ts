@@ -33,12 +33,34 @@ export interface User {
   created_at: string;
   updated_at: string;
 
+  // Step 1 onboarding fields — locked after creator setup
+  date_of_birth: string | null;   // DATE stored as ISO string (YYYY-MM-DD)
+  country: string | null;         // Cannot be changed after setup
+  state: string | null;           // State of residence
+  phone: string | null;           // Phone number
+
   // Creator-specific (not in DB, handled separately)
   subscriptionPrice?: number;
   bundlePricing?: {
     threeMonths?: number;
     sixMonths?: number;
   };
+}
+
+// Bank account — matches public.bank_accounts table
+export interface BankAccount {
+  id: number;
+  creator_id: string;
+  legal_name: string | null;
+  bank_name: string;
+  bank_code: string | null;
+  account_number: string;
+  account_name: string;
+  is_primary: boolean;
+  is_verified: boolean;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // Profile stats
