@@ -34,6 +34,7 @@ export function Sidebar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const isSettings = pathname.startsWith("/settings");
+  const isDashboard = pathname === "/dashboard";
 
   useEffect(() => {
     const fetchUsername = async () => {
@@ -70,7 +71,6 @@ export function Sidebar() {
 
   const pendingClose = useRef(false);
 
-  // Close search AFTER route changes to prevent flash of previous page
   useEffect(() => {
     if (pendingClose.current) {
       pendingClose.current = false;
@@ -102,77 +102,79 @@ export function Sidebar() {
         }
       `}</style>
 
-      {/* MOBILE TOP BAR */}
-      <div
-        className="md:hidden"
-        style={{
-          position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-          backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A",
-          height: "56px", fontFamily: "'Inter', sans-serif",
-        }}
-      >
-        {/* Normal top bar */}
+      {/* MOBILE TOP BAR — dashboard only */}
+      {isDashboard && (
         <div
+          className="md:hidden"
           style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "0 16px", height: "100%",
-            opacity: searchOpen ? 0 : 1,
-            transform: searchOpen ? "translateY(-10px)" : "translateY(0)",
-            transition: "all 0.2s ease",
-            pointerEvents: searchOpen ? "none" : "auto",
-            position: "absolute", inset: 0,
+            position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+            backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A",
+            height: "56px", fontFamily: "'Inter', sans-serif",
           }}
         >
-          <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
-          <button
-            onClick={() => setSearchOpen(true)}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px" }}
+          {/* Normal top bar */}
+          <div
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "0 16px", height: "100%",
+              opacity: searchOpen ? 0 : 1,
+              transform: searchOpen ? "translateY(-10px)" : "translateY(0)",
+              transition: "all 0.2s ease",
+              pointerEvents: searchOpen ? "none" : "auto",
+              position: "absolute", inset: 0,
+            }}
           >
-            <Search size={22} strokeWidth={1.8} />
-          </button>
-        </div>
+            <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
+            <button
+              onClick={() => setSearchOpen(true)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px" }}
+            >
+              <Search size={22} strokeWidth={1.8} />
+            </button>
+          </div>
 
-        {/* Search bar - slides in */}
-        <div
-          style={{
-            display: "flex", alignItems: "center", gap: "10px",
-            padding: "0 12px", height: "100%",
-            opacity: searchOpen ? 1 : 0,
-            transform: searchOpen ? "translateY(0)" : "translateY(-10px)",
-            transition: "all 0.2s ease",
-            pointerEvents: searchOpen ? "auto" : "none",
-            position: "absolute", inset: 0,
-          }}
-        >
-          <button onClick={closeSearch} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", flexShrink: 0 }}>
-            <ArrowLeft size={22} strokeWidth={1.8} />
-          </button>
-          <div style={{ position: "relative", flex: 1 }}>
-            <Search size={15} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#6B6B8A" }} />
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="Search creators..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              style={{
-                width: "100%", borderRadius: "10px", padding: "10px 36px 10px 36px",
-                fontSize: "14px", outline: "none", backgroundColor: "#1E1E2E",
-                border: "1.5px solid #2A2A3D", color: "#FFFFFF",
-                boxSizing: "border-box", fontFamily: "'Inter', sans-serif",
-              }}
-            />
-            {query && (
-              <button onClick={() => setQuery("")} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", padding: 0 }}>
-                <X size={14} />
-              </button>
-            )}
+          {/* Search bar - slides in */}
+          <div
+            style={{
+              display: "flex", alignItems: "center", gap: "10px",
+              padding: "0 12px", height: "100%",
+              opacity: searchOpen ? 1 : 0,
+              transform: searchOpen ? "translateY(0)" : "translateY(-10px)",
+              transition: "all 0.2s ease",
+              pointerEvents: searchOpen ? "auto" : "none",
+              position: "absolute", inset: 0,
+            }}
+          >
+            <button onClick={closeSearch} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", flexShrink: 0 }}>
+              <ArrowLeft size={22} strokeWidth={1.8} />
+            </button>
+            <div style={{ position: "relative", flex: 1 }}>
+              <Search size={15} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#6B6B8A" }} />
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Search creators..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                style={{
+                  width: "100%", borderRadius: "10px", padding: "10px 36px 10px 36px",
+                  fontSize: "14px", outline: "none", backgroundColor: "#1E1E2E",
+                  border: "1.5px solid #2A2A3D", color: "#FFFFFF",
+                  boxSizing: "border-box", fontFamily: "'Inter', sans-serif",
+                }}
+              />
+              {query && (
+                <button onClick={() => setQuery("")} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", padding: 0 }}>
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* MOBILE SEARCH OVERLAY */}
-      {searchOpen && (
+      {/* MOBILE SEARCH OVERLAY — dashboard only */}
+      {isDashboard && searchOpen && (
         <div
           className="md:hidden"
           style={{
