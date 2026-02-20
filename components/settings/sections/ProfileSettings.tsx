@@ -179,7 +179,8 @@ export default function ProfileSettings() {
         </div>
 
         {/* ── BANNER + AVATAR ── */}
-        <div style={{ position: "relative", marginBottom: "48px" }}>
+        <div style={{ marginBottom: "16px" }}>
+          {/* Banner */}
           <div
             onClick={() => bannerInputRef.current?.click()}
             style={{
@@ -211,34 +212,37 @@ export default function ProfileSettings() {
             </div>
           </div>
 
-          <div
-            onClick={() => avatarInputRef.current?.click()}
-            style={{
-              position: "absolute", bottom: "-36px", left: "20px",
-              width: "72px", height: "72px", borderRadius: "50%",
-              border: "3px solid #0A0A0F", cursor: "pointer", overflow: "hidden",
-              backgroundImage: avatarUrl ? `url(${avatarUrl})` : "linear-gradient(135deg, #8B5CF6, #EC4899)",
-              backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            {!avatarUrl && (
-              <span style={{ fontSize: "24px", fontWeight: 700, color: "#fff" }}>
-                {form.display_name?.charAt(0) || form.username?.charAt(0) || "?"}
-              </span>
-            )}
+          {/* Avatar — negative margin pulls it up over banner, no position: absolute */}
+          <div style={{ paddingLeft: "20px", marginTop: "-36px" }}>
             <div
+              onClick={() => avatarInputRef.current?.click()}
               style={{
-                position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.5)",
+                width: "72px", height: "72px", borderRadius: "50%",
+                border: "3px solid #0A0A0F", cursor: "pointer", overflow: "hidden",
+                backgroundImage: avatarUrl ? `url(${avatarUrl})` : "linear-gradient(135deg, #8B5CF6, #EC4899)",
+                backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                borderRadius: "50%", opacity: 0, transition: "opacity 0.2s",
+                position: "relative",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}
             >
-              {uploadingAvatar
-                ? <Loader2 size={14} color="#fff" style={{ animation: "spin 0.9s linear infinite" }} />
-                : <Camera size={14} color="#fff" />}
+              {!avatarUrl && (
+                <span style={{ fontSize: "24px", fontWeight: 700, color: "#fff" }}>
+                  {form.display_name?.charAt(0) || form.username?.charAt(0) || "?"}
+                </span>
+              )}
+              <div
+                style={{
+                  position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.5)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  borderRadius: "50%", opacity: 0, transition: "opacity 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}
+              >
+                {uploadingAvatar
+                  ? <Loader2 size={14} color="#fff" style={{ animation: "spin 0.9s linear infinite" }} />
+                  : <Camera size={14} color="#fff" />}
+              </div>
             </div>
           </div>
         </div>
