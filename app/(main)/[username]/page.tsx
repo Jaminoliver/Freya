@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import ProfileBanner from "@/components/profile/ProfileBanner";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
@@ -65,6 +65,7 @@ function TabBar({ tabs, active, onChange }: { tabs: Tab[]; active: string; onCha
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const params = useParams();
+  const router = useRouter();
   const username = params.username as string;
 
   const [viewer, setViewer] = React.useState<User | null>(null);
@@ -87,8 +88,24 @@ export default function ProfilePage() {
         const { data: viewerData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
         if (viewerData) setViewer(viewerData as User);
       }
-      const { data: profileData } = await supabase.from("profiles").select("*").eq("username", username).single();
-      if (profileData) setProfile(profileData as User);
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
+        .eq("username", username)
+        .single();
+
+      if (profileData) {
+        const enriched: User = {
+          ...(profileData as User),
+          subscriptionPrice: profileData.subscription_price ?? 0,
+          bundlePricing: {
+            threeMonths: profileData.bundle_price_3_months ?? undefined,
+            sixMonths: profileData.bundle_price_6_months ?? undefined,
+          },
+        };
+        setProfile(enriched);
+      }
+
       setLoading(false);
     };
     fetchData();
@@ -98,6 +115,8 @@ export default function ProfilePage() {
   const isCreatorViewingFan = viewer?.role === "creator" && profile?.role === "fan";
   const isFanViewingCreator = viewer?.role === "fan" && profile?.role === "creator";
   const isSubscribed = subscription?.status === "active";
+
+  const goToProfileSettings = () => router.push("/settings");
 
   const handlePost = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
@@ -138,7 +157,6 @@ export default function ProfilePage() {
     const tabs: Tab[] = [
       { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
       { label: "Media", key: "media", count: 0 },
-      { label: "Locked Content", key: "locked", count: 0 },
       { label: "Subscriptions", key: "subscriptions", count: 0 },
     ];
 
@@ -149,8 +167,9 @@ export default function ProfilePage() {
           displayName={profile.display_name || profile.username}
           isEditable={true}
           isCreator={true}
-          onEditBanner={() => console.log("Edit banner")}
           stats={bannerStats}
+          userId={profile.id}
+          onBannerUpdated={(url) => setProfile((p) => p ? { ...p, banner_url: url } : p)}
         />
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 16px" }}>
           <ProfileAvatar
@@ -158,17 +177,18 @@ export default function ProfilePage() {
             displayName={profile.display_name || profile.username}
             isEditable={true}
             isOnline={true}
-            onEditAvatar={() => console.log("Edit avatar")}
+            userId={profile.id}
+            onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
           />
           <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingBottom: "12px", paddingRight: "8px" }}>
             <SubscriptionCard
-              monthlyPrice={profile.subscriptionPrice || 5000}
+              monthlyPrice={profile.subscriptionPrice ?? 0}
               threeMonthPrice={profile.bundlePricing?.threeMonths}
               sixMonthPrice={profile.bundlePricing?.sixMonths}
               isEditable={true}
               onEditPricing={() => console.log("Edit pricing")}
             />
-            <ProfileActions viewContext="ownCreator" onEditProfile={() => console.log("Edit profile")} />
+            <ProfileActions viewContext="ownCreator" onEditProfile={goToProfileSettings} />
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
@@ -185,11 +205,11 @@ export default function ProfilePage() {
             isEditable={true}
           />
         </div>
-        <div style={{ marginTop: "16px" }}>
-          <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
-        </div>
-        <div style={{ padding: "16px 24px" }}>
+        <div style={{ padding: "16px 24px 8px" }}>
           <PostComposer user={profile} onPost={handlePost} onSchedule={handleSchedule} />
+        </div>
+        <div style={{ marginTop: "8px" }}>
+          <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
         </div>
         <div style={{ padding: "0 24px" }}>
           <ContentFeed posts={posts} isSubscribed={true} activeTab={activeTab} onLike={handleLike} onComment={handleComment} onTip={handleTip} onUnlock={handleUnlock} />
@@ -228,10 +248,11 @@ export default function ProfilePage() {
             displayName={profile.display_name || profile.username}
             isEditable={true}
             isOnline={true}
-            onEditAvatar={() => console.log("Edit avatar")}
+            userId={profile.id}
+            onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
           />
           <div style={{ paddingBottom: "12px", paddingRight: "8px" }}>
-            <ProfileActions viewContext="ownFan" onEditProfile={() => console.log("Edit profile")} />
+            <ProfileActions viewContext="ownFan" onEditProfile={goToProfileSettings} />
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
@@ -363,7 +384,12 @@ export default function ProfilePage() {
           />
         </div>
         <div style={{ padding: "16px 24px" }}>
-          <SubscriptionCard monthlyPrice={profile.subscriptionPrice ?? 0} threeMonthPrice={profile.bundlePricing?.threeMonths ?? 12600} sixMonthPrice={profile.bundlePricing?.sixMonths ?? 22800} isEditable={false} />
+          <SubscriptionCard
+            monthlyPrice={profile.subscriptionPrice ?? 0}
+            threeMonthPrice={profile.bundlePricing?.threeMonths}
+            sixMonthPrice={profile.bundlePricing?.sixMonths}
+            isEditable={false}
+          />
         </div>
         <div style={{ marginTop: "4px" }}>
           <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />

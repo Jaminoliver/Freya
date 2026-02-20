@@ -16,10 +16,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       overflow: "hidden",
       width: "100%",
     }}>
-      {/* Sidebar - desktop sidebar & mobile bottom nav handled inside */}
       <Sidebar />
 
-      {/* Main content - ONLY this scrolls, scrollbar hidden */}
       <main
         className="main-scroll md:pb-0"
         style={{
@@ -30,23 +28,24 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           overflowY: "auto",
           overflowX: "hidden",
           paddingBottom: "72px",
+          paddingTop: "56px", // mobile top bar height
           scrollbarWidth: "none",
           msOverflowStyle: "none",
         } as React.CSSProperties}
       >
+        {/* Remove top padding on desktop */}
+        <style>{`
+          @media (min-width: 768px) {
+            .main-scroll { padding-top: 0 !important; }
+          }
+        `}</style>
         {children}
       </main>
 
-      {/* Right panel - hidden on settings, hidden on mobile */}
       {!isSettings && (
         <div
           className="hidden lg:block"
-          style={{
-            position: "sticky",
-            top: 0,
-            height: "100vh",
-            overflow: "hidden",
-          }}
+          style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden" }}
         >
           <RightPanel />
         </div>
