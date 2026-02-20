@@ -68,9 +68,26 @@ export function Sidebar() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
+  const pendingClose = useRef(false);
+
+  // Close search AFTER route changes to prevent flash of previous page
+  useEffect(() => {
+    if (pendingClose.current) {
+      pendingClose.current = false;
+      setSearchOpen(false);
+      setQuery("");
+      setResults([]);
+    }
+  }, [pathname]);
+
   const closeSearch = () => { setSearchOpen(false); setQuery(""); setResults([]); };
 
-  const goToProfile = (u: string) => { router.push(`/${u}`); closeSearch(); };
+  const goToProfile = (u: string) => {
+    pendingClose.current = true;
+    router.push(`/${u}`);
+  };
+
+  const handleNavClick = () => { pendingClose.current = true; };
 
   return (
     <>
@@ -166,9 +183,7 @@ export function Sidebar() {
           }}
         >
           {!query.trim() && (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: "#6B6B8A", fontSize: "14px" }}>
-              Search for creators on Freya
-            </div>
+            <MobileSuggestedCreators onSelect={goToProfile} />
           )}
 
           {searching && (
@@ -292,26 +307,26 @@ export function Sidebar() {
         style={{
           position: "fixed", bottom: 0, left: 0, right: 0, height: "64px",
           backgroundColor: "#13131F", borderTop: "1px solid #1F1F2A",
-          zIndex: 50, fontFamily: "'Inter', sans-serif",
+          zIndex: 101, fontFamily: "'Inter', sans-serif",
         }}
       >
-        <Link href="/dashboard" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === "/dashboard" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
+        <Link href="/dashboard" onClick={handleNavClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === "/dashboard" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
           <Home size={22} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
           <span style={{ fontSize: "10px" }}>Home</span>
         </Link>
-        <Link href="/explore" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === "/explore" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
+        <Link href="/explore" onClick={handleNavClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === "/explore" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
           <Search size={22} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
           <span style={{ fontSize: "10px" }}>Explore</span>
         </Link>
-        <Link href="/new-post" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#8B5CF6", textDecoration: "none" }}>
+        <Link href="/new-post" onClick={handleNavClick} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#8B5CF6", textDecoration: "none" }}>
           <Plus size={22} color="#fff" />
         </Link>
-        <Link href="/settings" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: isSettings ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
+        <Link href="/settings" onClick={handleNavClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: isSettings ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
           <Settings size={22} strokeWidth={isSettings ? 2.2 : 1.8} />
           <span style={{ fontSize: "10px" }}>Settings</span>
         </Link>
         {username ? (
-          <Link href={`/${username}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === `/${username}` ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
+          <Link href={`/${username}`} onClick={handleNavClick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === `/${username}` ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}>
             <User size={22} strokeWidth={pathname === `/${username}` ? 2.2 : 1.8} />
             <span style={{ fontSize: "10px" }}>Profile</span>
           </Link>
@@ -323,5 +338,61 @@ export function Sidebar() {
         )}
       </nav>
     </>
+  );
+}
+
+function MobileSuggestedCreators({ onSelect }: { onSelect: (username: string) => void }) {
+  const [creators, setCreators] = useState<Creator[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, username, display_name, avatar_url, is_verified")
+        .eq("role", "creator")
+        .limit(8);
+      setCreators((data as Creator[]) || []);
+    };
+    load();
+  }, []);
+
+  return (
+    <div>
+      <p style={{ padding: "16px 20px 8px", margin: 0, fontSize: "13px", fontWeight: 600, color: "#6B6B8A", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        Suggested Creators
+      </p>
+      {creators.map((creator) => (
+        <div
+          key={creator.id}
+          onClick={() => onSelect(creator.username)}
+          style={{
+            display: "flex", alignItems: "center", gap: "12px",
+            padding: "14px 20px", borderBottom: "1px solid #1F1F2A",
+            cursor: "pointer", transition: "background 0.15s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1E1E2E")}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+        >
+          <div style={{
+            width: "44px", height: "44px", borderRadius: "50%", flexShrink: 0,
+            background: creator.avatar_url ? `url(${creator.avatar_url}) center/cover` : "linear-gradient(135deg, #8B5CF6, #EC4899)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "17px", fontWeight: 700, color: "#fff",
+          }}>
+            {!creator.avatar_url && (creator.display_name || creator.username).charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <span style={{ fontSize: "15px", fontWeight: 600, color: "#FFFFFF" }}>
+                {creator.display_name || creator.username}
+              </span>
+              {creator.is_verified && <BadgeCheck size={14} color="#8B5CF6" />}
+            </div>
+            <span style={{ fontSize: "13px", color: "#6B6B8A" }}>@{creator.username}</span>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

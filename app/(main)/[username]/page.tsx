@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { followCreator, unfollowCreator, checkIsFollowing } from "@/lib/utils/follow";
 import ProfileBanner from "@/components/profile/ProfileBanner";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import ProfileInfo from "@/components/profile/ProfileInfo";
@@ -14,7 +15,6 @@ import ContentFeed from "@/components/profile/ContentFeed";
 import PostComposer from "@/components/profile/PostComposer";
 import type { User, Subscription, Post } from "@/lib/types/profile";
 
-// ─── Tab Bar ────────────────────────────────────────────────────────────────
 type Tab = { label: string; key: string; count?: number };
 
 function TabBar({ tabs, active, onChange }: { tabs: Tab[]; active: string; onChange: (key: string) => void }) {
@@ -25,33 +25,21 @@ function TabBar({ tabs, active, onChange }: { tabs: Tab[]; active: string; onCha
           key={tab.key}
           onClick={() => onChange(tab.key)}
           style={{
-            padding: "12px 20px",
-            fontSize: "15px",
-            fontWeight: 500,
-            fontFamily: "'Inter', sans-serif",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: active === tab.key ? "#8B5CF6" : "#64748B",
+            padding: "12px 20px", fontSize: "15px", fontWeight: 500,
+            fontFamily: "'Inter', sans-serif", background: "none", border: "none",
+            cursor: "pointer", color: active === tab.key ? "#8B5CF6" : "#64748B",
             borderBottom: active === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
-            marginBottom: "-1px",
-            textTransform: "capitalize",
-            transition: "color 0.15s ease",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
+            marginBottom: "-1px", textTransform: "capitalize", transition: "color 0.15s ease",
+            display: "flex", alignItems: "center", gap: "6px",
           }}
         >
           {tab.label}
           {tab.count !== undefined && (
             <span style={{
-              fontSize: "12px",
-              fontWeight: 600,
+              fontSize: "12px", fontWeight: 600,
               color: active === tab.key ? "#8B5CF6" : "#475569",
               backgroundColor: active === tab.key ? "rgba(139,92,246,0.15)" : "#1E1E2E",
-              padding: "1px 7px",
-              borderRadius: "20px",
-              transition: "all 0.15s ease",
+              padding: "1px 7px", borderRadius: "20px", transition: "all 0.15s ease",
             }}>
               {tab.count}
             </span>
@@ -62,7 +50,6 @@ function TabBar({ tabs, active, onChange }: { tabs: Tab[]; active: string; onCha
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -74,20 +61,22 @@ export default function ProfilePage() {
   const [posts, setPosts] = React.useState<Post[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [isFollowing, setIsFollowing] = React.useState(false);
+  const [followLoading, setFollowLoading] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState("posts");
 
-  React.useEffect(() => {
-    setActiveTab("posts");
-  }, [username]);
+  React.useEffect(() => { setActiveTab("posts"); }, [username]);
 
   React.useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+
       if (user) {
         const { data: viewerData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
         if (viewerData) setViewer(viewerData as User);
       }
+
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
@@ -104,6 +93,11 @@ export default function ProfilePage() {
           },
         };
         setProfile(enriched);
+
+        if (user && user.id !== profileData.id && profileData.role === "creator") {
+          const following = await checkIsFollowing(profileData.id);
+          setIsFollowing(following);
+        }
       }
 
       setLoading(false);
@@ -111,13 +105,32 @@ export default function ProfilePage() {
     fetchData();
   }, [username]);
 
-  const isOwnProfile = viewer?.username === profile?.username;
+  const handleFollow = async () => {
+    if (!profile || followLoading) return;
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        await unfollowCreator(profile.id);
+        setIsFollowing(false);
+        setProfile((prev) => prev ? { ...prev, follower_count: Math.max((prev.follower_count ?? 1) - 1, 0) } : prev);
+      } else {
+        await followCreator(profile.id);
+        setIsFollowing(true);
+        setProfile((prev) => prev ? { ...prev, follower_count: (prev.follower_count ?? 0) + 1 } : prev);
+      }
+    } catch (err) {
+      console.error("Follow error:", err);
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
+  const isOwnProfile = viewer?.id === profile?.id;
   const isCreatorViewingFan = viewer?.role === "creator" && profile?.role === "fan";
-  const isFanViewingCreator = viewer?.role === "fan" && profile?.role === "creator";
+  const isViewingCreator = profile?.role === "creator" && !isOwnProfile && !isCreatorViewingFan;
   const isSubscribed = subscription?.status === "active";
 
   const goToProfileSettings = () => router.push("/settings");
-
   const handlePost = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
   const handleLike = (id: string) => console.log("Like:", id);
@@ -159,50 +172,33 @@ export default function ProfilePage() {
       { label: "Media", key: "media", count: 0 },
       { label: "Subscriptions", key: "subscriptions", count: 0 },
     ];
-
     return (
       <div style={{ maxWidth: "768px", margin: "0 auto" }}>
         <ProfileBanner
-          bannerUrl={profile.banner_url || undefined}
-          displayName={profile.display_name || profile.username}
-          isEditable={true}
-          isCreator={true}
-          stats={bannerStats}
-          userId={profile.id}
+          bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username}
+          isEditable={true} isCreator={true} stats={bannerStats} userId={profile.id}
           onBannerUpdated={(url) => setProfile((p) => p ? { ...p, banner_url: url } : p)}
         />
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 16px" }}>
           <ProfileAvatar
-            avatarUrl={profile.avatar_url || undefined}
-            displayName={profile.display_name || profile.username}
-            isEditable={true}
-            isOnline={true}
-            userId={profile.id}
+            avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username}
+            isEditable={true} isOnline={true} userId={profile.id}
             onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
           />
           <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingBottom: "12px", paddingRight: "8px" }}>
             <SubscriptionCard
-              monthlyPrice={profile.subscriptionPrice ?? 0}
-              threeMonthPrice={profile.bundlePricing?.threeMonths}
-              sixMonthPrice={profile.bundlePricing?.sixMonths}
-              isEditable={true}
-              onEditPricing={() => console.log("Edit pricing")}
+              monthlyPrice={profile.subscriptionPrice ?? 0} threeMonthPrice={profile.bundlePricing?.threeMonths}
+              sixMonthPrice={profile.bundlePricing?.sixMonths} isEditable={true} onEditPricing={() => console.log("Edit pricing")}
             />
             <ProfileActions viewContext="ownCreator" onEditProfile={goToProfileSettings} />
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
           <ProfileInfo
-            displayName={profile.display_name || profile.username}
-            username={profile.username}
-            mode="full"
-            bio={profile.bio || undefined}
-            location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined}
-            twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined}
-            isVerified={profile.is_verified}
-            isEditable={true}
+            displayName={profile.display_name || profile.username} username={profile.username} mode="full"
+            bio={profile.bio || undefined} location={profile.location || undefined}
+            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
+            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified} isEditable={true}
           />
         </div>
         <div style={{ padding: "16px 24px 8px" }}>
@@ -225,30 +221,17 @@ export default function ProfilePage() {
       { label: "Media", key: "media", count: 0 },
       { label: "Subscriptions", key: "subscriptions", count: 0 },
     ];
-
-    const fanStats = {
-      posts: profile.post_count ?? 0,
-      media: 0,
-      likes: 0,
-      subscribers: profile.subscriber_count ?? 0,
-    };
-
+    const fanStats = { posts: profile.post_count ?? 0, media: 0, likes: 0, subscribers: profile.subscriber_count ?? 0 };
     return (
       <div style={{ maxWidth: "768px", margin: "0 auto" }}>
         <ProfileBanner
-          bannerUrl={profile.banner_url || undefined}
-          displayName={profile.display_name || profile.username}
-          isEditable={false}
-          isCreator={false}
-          stats={fanStats}
+          bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username}
+          isEditable={false} isCreator={false} stats={fanStats}
         />
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 16px" }}>
           <ProfileAvatar
-            avatarUrl={profile.avatar_url || undefined}
-            displayName={profile.display_name || profile.username}
-            isEditable={true}
-            isOnline={true}
-            userId={profile.id}
+            avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username}
+            isEditable={true} isOnline={true} userId={profile.id}
             onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
           />
           <div style={{ paddingBottom: "12px", paddingRight: "8px" }}>
@@ -257,16 +240,10 @@ export default function ProfilePage() {
         </div>
         <div style={{ padding: "8px 24px 0" }}>
           <ProfileInfo
-            displayName={profile.display_name || profile.username}
-            username={profile.username}
-            mode="full"
-            bio={profile.bio || undefined}
-            location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined}
-            twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined}
-            isVerified={profile.is_verified}
-            isEditable={true}
+            displayName={profile.display_name || profile.username} username={profile.username} mode="full"
+            bio={profile.bio || undefined} location={profile.location || undefined}
+            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
+            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified} isEditable={true}
           />
         </div>
         <div style={{ marginTop: "16px" }}>
@@ -284,61 +261,43 @@ export default function ProfilePage() {
     return (
       <div style={{ maxWidth: "768px", margin: "0 auto", padding: "24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <ProfileAvatar
-            avatarUrl={profile.avatar_url || undefined}
-            displayName={profile.display_name || profile.username}
-            isOnline={false}
-          />
+          <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
           <ProfileActions viewContext="creatorViewingFan" onMessage={() => console.log("Message fan")} />
         </div>
         <div style={{ marginTop: "16px" }}>
           <ProfileInfo
-            displayName={profile.display_name || profile.username}
-            username={profile.username}
-            bio={profile.bio || undefined}
-            location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined}
-            twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined}
-            isVerified={profile.is_verified}
+            displayName={profile.display_name || profile.username} username={profile.username}
+            bio={profile.bio || undefined} location={profile.location || undefined}
+            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
+            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified}
           />
         </div>
-        {subscription && (
-          <div style={{ marginTop: "24px" }}>
-            <FanActivityCard subscription={subscription} />
-          </div>
-        )}
+        {subscription && <div style={{ marginTop: "24px" }}><FanActivityCard subscription={subscription} /></div>}
       </div>
     );
   }
 
-  // ── 4. FAN VIEWING CREATOR (SUBSCRIBED) ───────────────────────────────────
-  if (isFanViewingCreator && isSubscribed) {
+  // ── 4. ANYONE VIEWING A CREATOR (SUBSCRIBED) ──────────────────────────────
+  if (isViewingCreator && isSubscribed) {
     const tabs: Tab[] = [
       { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
       { label: "Media", key: "media", count: 0 },
     ];
-
     return (
       <div style={{ maxWidth: "768px", margin: "0 auto" }}>
         <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 24px" }}>
           <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
           <div style={{ paddingBottom: "12px" }}>
-            <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={() => console.log("Tip")} onShare={() => console.log("Share")} onFollow={() => setIsFollowing((p) => !p)} isFollowing={isFollowing} />
+            <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={() => console.log("Tip")} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
           <ProfileInfo
-            displayName={profile.display_name || profile.username}
-            username={profile.username}
-            mode="full"
-            bio={profile.bio || undefined}
-            location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined}
-            twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined}
-            isVerified={profile.is_verified}
+            displayName={profile.display_name || profile.username} username={profile.username} mode="full"
+            bio={profile.bio || undefined} location={profile.location || undefined}
+            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
+            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified}
           />
         </div>
         <div style={{ padding: "16px 24px" }}>
@@ -354,41 +313,33 @@ export default function ProfilePage() {
     );
   }
 
-  // ── 5. FAN VIEWING CREATOR (NOT SUBSCRIBED) ───────────────────────────────
-  if (isFanViewingCreator && !isSubscribed) {
+  // ── 5. ANYONE VIEWING A CREATOR (NOT SUBSCRIBED) ──────────────────────────
+  if (isViewingCreator && !isSubscribed) {
     const tabs: Tab[] = [
       { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
       { label: "Media", key: "media", count: 0 },
     ];
-
     return (
       <div style={{ maxWidth: "768px", margin: "0 auto" }}>
         <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 24px" }}>
           <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
           <div style={{ paddingBottom: "12px" }}>
-            <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={() => console.log("Tip")} onShare={() => console.log("Share")} onFollow={() => setIsFollowing((p) => !p)} isFollowing={isFollowing} />
+            <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={() => console.log("Tip")} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
           <ProfileInfo
-            displayName={profile.display_name || profile.username}
-            username={profile.username}
-            mode="full"
-            bio={profile.bio || undefined}
-            location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined}
-            twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined}
-            isVerified={profile.is_verified}
+            displayName={profile.display_name || profile.username} username={profile.username} mode="full"
+            bio={profile.bio || undefined} location={profile.location || undefined}
+            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
+            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified}
           />
         </div>
         <div style={{ padding: "16px 24px" }}>
           <SubscriptionCard
-            monthlyPrice={profile.subscriptionPrice ?? 0}
-            threeMonthPrice={profile.bundlePricing?.threeMonths}
-            sixMonthPrice={profile.bundlePricing?.sixMonths}
-            isEditable={false}
+            monthlyPrice={profile.subscriptionPrice ?? 0} threeMonthPrice={profile.bundlePricing?.threeMonths}
+            sixMonthPrice={profile.bundlePricing?.sixMonths} isEditable={false}
           />
         </div>
         <div style={{ marginTop: "4px" }}>
