@@ -9,6 +9,9 @@ interface ProfileForm {
   username: string;
   bio: string;
   location: string;
+  country: string;
+  state: string;
+  date_of_birth: string;
   website_url: string;
   twitter_url: string;
   instagram_url: string;
@@ -22,6 +25,9 @@ export default function ProfileSettings() {
     username: "",
     bio: "",
     location: "",
+    country: "",
+    state: "",
+    date_of_birth: "",
     website_url: "",
     twitter_url: "",
     instagram_url: "",
@@ -46,7 +52,7 @@ export default function ProfileSettings() {
       setUserId(user.id);
       const { data } = await supabase
         .from("profiles")
-        .select("display_name, username, bio, location, website_url, twitter_url, instagram_url, avatar_url, banner_url")
+        .select("display_name, username, bio, location, country, state, date_of_birth, website_url, twitter_url, instagram_url, avatar_url, banner_url")
         .eq("id", user.id)
         .single();
       if (data) {
@@ -55,6 +61,9 @@ export default function ProfileSettings() {
           username: data.username ?? "",
           bio: data.bio ?? "",
           location: data.location ?? "",
+          country: data.country ?? "",
+          state: data.state ?? "",
+          date_of_birth: data.date_of_birth ?? "",
           website_url: data.website_url ?? "",
           twitter_url: data.twitter_url ?? "",
           instagram_url: data.instagram_url ?? "",
@@ -80,6 +89,9 @@ export default function ProfileSettings() {
         display_name: form.display_name || null,
         bio: form.bio || null,
         location: form.location || null,
+        country: form.country || null,
+        state: form.state || null,
+        date_of_birth: form.date_of_birth || null,
         website_url: form.website_url || null,
         twitter_url: form.twitter_url || null,
         instagram_url: form.instagram_url || null,
@@ -132,38 +144,27 @@ export default function ProfileSettings() {
 
   // ── Styles ──
   const inputBase: React.CSSProperties = {
-    width: "100%",
-    borderRadius: "10px",
-    padding: "12px 14px",
-    fontSize: "14px",
-    outline: "none",
-    backgroundColor: "#141420",
-    border: "1.5px solid #2A2A3D",
-    color: "#F1F5F9",
-    boxSizing: "border-box",
-    fontFamily: "'Inter', sans-serif",
+    width: "100%", borderRadius: "10px", padding: "12px 14px",
+    fontSize: "14px", outline: "none", backgroundColor: "#141420",
+    border: "1.5px solid #2A2A3D", color: "#F1F5F9",
+    boxSizing: "border-box", fontFamily: "'Inter', sans-serif",
     transition: "border-color 0.2s",
   };
 
   const labelStyle: React.CSSProperties = {
-    fontSize: "13px",
-    fontWeight: 500,
-    color: "#8B5CF6",
-    marginBottom: "6px",
-    display: "block",
+    fontSize: "13px", fontWeight: 500, color: "#8B5CF6",
+    marginBottom: "6px", display: "block",
   };
 
   const sectionTitle: React.CSSProperties = {
-    fontSize: "11px",
-    fontWeight: 600,
-    color: "#6B6B8A",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
+    fontSize: "11px", fontWeight: 600, color: "#6B6B8A",
+    letterSpacing: "0.08em", textTransform: "uppercase",
     margin: "28px 0 14px",
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* Header */}
       <div style={{ marginBottom: "24px" }}>
@@ -171,9 +172,8 @@ export default function ProfileSettings() {
         <p style={{ fontSize: "13px", color: "#A3A3C2", margin: 0 }}>Manage your public profile information</p>
       </div>
 
-      {/* ── BANNER ── */}
+      {/* ── BANNER + AVATAR ── */}
       <div style={{ position: "relative", marginBottom: "48px" }}>
-        {/* Banner */}
         <div
           onClick={() => bannerInputRef.current?.click()}
           style={{
@@ -182,7 +182,6 @@ export default function ProfileSettings() {
             backgroundImage: bannerUrl ? `url(${bannerUrl})` : undefined,
             backgroundSize: "cover", backgroundPosition: "center",
             cursor: "pointer", position: "relative", overflow: "hidden",
-            transition: "border-color 0.2s",
           }}
         >
           <div style={{
@@ -195,22 +194,19 @@ export default function ProfileSettings() {
           >
             {uploadingBanner
               ? <Loader2 size={20} color="#fff" style={{ animation: "spin 0.9s linear infinite" }} />
-              : <Camera size={20} color="#fff" />
-            }
+              : <Camera size={20} color="#fff" />}
           </div>
         </div>
 
-        {/* Avatar */}
         <div
           onClick={() => avatarInputRef.current?.click()}
           style={{
             position: "absolute", bottom: "-36px", left: "20px",
             width: "72px", height: "72px", borderRadius: "50%",
-            backgroundColor: "#1C1C2E", border: "3px solid #0A0A0F",
+            border: "3px solid #0A0A0F", cursor: "pointer", overflow: "hidden",
+            background: avatarUrl ? undefined : "linear-gradient(135deg, #8B5CF6, #EC4899)",
             backgroundImage: avatarUrl ? `url(${avatarUrl})` : undefined,
             backgroundSize: "cover", backgroundPosition: "center",
-            cursor: "pointer", overflow: "hidden",
-            background: avatarUrl ? undefined : "linear-gradient(135deg, #8B5CF6, #EC4899)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}
         >
@@ -229,12 +225,9 @@ export default function ProfileSettings() {
           >
             {uploadingAvatar
               ? <Loader2 size={14} color="#fff" style={{ animation: "spin 0.9s linear infinite" }} />
-              : <Camera size={14} color="#fff" />
-            }
+              : <Camera size={14} color="#fff" />}
           </div>
         </div>
-
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
 
       <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarUpload} />
@@ -246,26 +239,16 @@ export default function ProfileSettings() {
 
         <div>
           <label style={labelStyle}>Display Name</label>
-          <input
-            type="text"
-            value={form.display_name}
-            onChange={(e) => set("display_name", e.target.value)}
-            placeholder="Your public name"
-            style={inputBase}
+          <input type="text" value={form.display_name} onChange={(e) => set("display_name", e.target.value)}
+            placeholder="Your public name" style={inputBase}
             onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
-          />
+            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
         </div>
 
         <div>
           <label style={labelStyle}>Username</label>
-          <input
-            type="text"
-            value={form.username}
-            readOnly
-            placeholder="@username"
-            style={{ ...inputBase, color: "#6B6B8A", cursor: "not-allowed" }}
-          />
+          <input type="text" value={form.username} readOnly
+            style={{ ...inputBase, color: "#6B6B8A", cursor: "not-allowed" }} />
           <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", fontStyle: "italic" }}>
             Change username in Account settings
           </span>
@@ -273,36 +256,59 @@ export default function ProfileSettings() {
 
         <div>
           <label style={labelStyle}>Bio</label>
-          <textarea
-            value={form.bio}
-            onChange={(e) => set("bio", e.target.value)}
-            placeholder="Tell people about yourself..."
-            maxLength={200}
-            rows={3}
-            style={{
-              ...inputBase,
-              resize: "none",
-              lineHeight: 1.6,
-            }}
+          <textarea value={form.bio} onChange={(e) => set("bio", e.target.value)}
+            placeholder="Tell people about yourself..." maxLength={200} rows={3}
+            style={{ ...inputBase, resize: "none", lineHeight: 1.6 }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
-          />
+            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", textAlign: "right" }}>
             {form.bio.length}/200
           </span>
         </div>
 
         <div>
-          <label style={labelStyle}>Location</label>
-          <input
-            type="text"
-            value={form.location}
-            onChange={(e) => set("location", e.target.value)}
-            placeholder="City, Country"
-            style={inputBase}
+          <label style={labelStyle}>Date of Birth</label>
+          <input type="date" value={form.date_of_birth} onChange={(e) => set("date_of_birth", e.target.value)}
+            style={{ ...inputBase, colorScheme: "dark" }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
-          />
+            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+          <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", fontStyle: "italic" }}>
+            Not shown publicly — used for age verification
+          </span>
+        </div>
+      </div>
+
+      {/* ── LOCATION ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "28px 0 14px" }}>
+        <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
+        <span style={{ fontSize: "11px", color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>Location</span>
+        <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div>
+          <label style={labelStyle}>City / Location</label>
+          <input type="text" value={form.location} onChange={(e) => set("location", e.target.value)}
+            placeholder="e.g. Lagos" style={inputBase}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+          <div>
+            <label style={labelStyle}>State / Region</label>
+            <input type="text" value={form.state} onChange={(e) => set("state", e.target.value)}
+              placeholder="e.g. Lagos State" style={inputBase}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
+              onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+          </div>
+          <div>
+            <label style={labelStyle}>Country</label>
+            <input type="text" value={form.country} onChange={(e) => set("country", e.target.value)}
+              placeholder="e.g. Nigeria" style={inputBase}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
+              onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+          </div>
         </div>
       </div>
 
@@ -316,45 +322,28 @@ export default function ProfileSettings() {
       <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
         <div>
           <label style={labelStyle}>Website URL</label>
-          <input
-            type="url"
-            value={form.website_url}
-            onChange={(e) => set("website_url", e.target.value)}
-            placeholder="https://yoursite.com"
-            style={inputBase}
+          <input type="url" value={form.website_url} onChange={(e) => set("website_url", e.target.value)}
+            placeholder="https://yoursite.com" style={inputBase}
             onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
-          />
+            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
         </div>
-
         <div>
           <label style={labelStyle}>Twitter / X URL</label>
-          <input
-            type="url"
-            value={form.twitter_url}
-            onChange={(e) => set("twitter_url", e.target.value)}
-            placeholder="https://x.com/yourhandle"
-            style={inputBase}
+          <input type="url" value={form.twitter_url} onChange={(e) => set("twitter_url", e.target.value)}
+            placeholder="https://x.com/yourhandle" style={inputBase}
             onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
-          />
+            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
         </div>
-
         <div>
           <label style={labelStyle}>Instagram URL</label>
-          <input
-            type="url"
-            value={form.instagram_url}
-            onChange={(e) => set("instagram_url", e.target.value)}
-            placeholder="https://instagram.com/yourhandle"
-            style={inputBase}
+          <input type="url" value={form.instagram_url} onChange={(e) => set("instagram_url", e.target.value)}
+            placeholder="https://instagram.com/yourhandle" style={inputBase}
             onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
-          />
+            onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
         </div>
       </div>
 
-      {/* ── SAVE ── */}
+      {/* ── ERROR ── */}
       {errorMsg && (
         <div style={{
           display: "flex", alignItems: "center", gap: "8px",
@@ -366,6 +355,7 @@ export default function ProfileSettings() {
         </div>
       )}
 
+      {/* ── SAVE ── */}
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "28px" }}>
         <button
           type="button"
@@ -374,7 +364,8 @@ export default function ProfileSettings() {
           style={{
             display: "flex", alignItems: "center", gap: "8px",
             padding: "11px 24px", borderRadius: "8px", fontSize: "14px",
-            fontWeight: 600, border: "none", cursor: saveState === "saving" ? "not-allowed" : "pointer",
+            fontWeight: 600, border: "none",
+            cursor: saveState === "saving" ? "not-allowed" : "pointer",
             backgroundColor: saveState === "saved" ? "#059669" : "#8B5CF6",
             color: "#FFFFFF", boxShadow: "0 4px 20px rgba(139,92,246,0.3)",
             fontFamily: "'Inter', sans-serif", transition: "background-color 0.2s",

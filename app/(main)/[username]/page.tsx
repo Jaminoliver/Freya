@@ -39,6 +39,8 @@ export default function ProfilePage() {
     fetchData();
   }, [username]);
 
+  const [isFollowing, setIsFollowing] = React.useState(false);
+
   // 🧪 TEST MODE — force unsubscribed fan view. Remove these 4 lines when done.
   const isOwnProfile = false;
   const isCreatorViewingFan = false;
@@ -270,6 +272,8 @@ export default function ProfilePage() {
               onMessage={() => console.log("Message")}
               onTip={() => console.log("Tip")}
               onShare={() => console.log("Share")}
+              onFollow={() => setIsFollowing((p) => !p)}
+              isFollowing={isFollowing}
             />
           </div>
         </div>
@@ -320,6 +324,8 @@ export default function ProfilePage() {
               onMessage={() => console.log("Message")}
               onTip={() => console.log("Tip")}
               onShare={() => console.log("Share")}
+              onFollow={() => setIsFollowing((p) => !p)}
+              isFollowing={isFollowing}
             />
           </div>
         </div>
