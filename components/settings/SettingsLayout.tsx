@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { User, Shield, CreditCard, Lock, Bell, ArrowLeft } from "lucide-react";
+import { User, Shield, CreditCard, Lock, Bell, ChevronRight, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import ProfileSettings from "@/components/settings/sections/ProfileSettings";
 import AccountSettings from "@/components/settings/sections/AccountSettings";
@@ -21,6 +21,16 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType; descripti
 
 export function SettingsLayout() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+  const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
+
+  const activeSection = tabs.find((t) => t.id === activeTab)!;
+
+  const handleTabSelect = (id: SettingsTab) => {
+    setActiveTab(id);
+    setMobileView("content");
+  };
+
+  const handleBack = () => setMobileView("menu");
 
   const renderSection = () => {
     switch (activeTab) {
@@ -41,19 +51,55 @@ export function SettingsLayout() {
       overflow: "hidden",
     }}>
 
+      <style>{`
+        @keyframes slideInRight {
+          from { transform: translateX(30px); opacity: 0; }
+          to   { transform: translateX(0);    opacity: 1; }
+        }
+        @keyframes slideInLeft {
+          from { transform: translateX(-30px); opacity: 0; }
+          to   { transform: translateX(0);     opacity: 1; }
+        }
+
+        /* Desktop overrides — always show both panels */
+        @media (min-width: 768px) {
+          .settings-sidebar-panel {
+            display: flex !important;
+            width: 260px !important;
+            flex-shrink: 0 !important;
+          }
+          .settings-content-panel {
+            display: flex !important;
+          }
+          .settings-mobile-back {
+            display: none !important;
+          }
+          .settings-mobile-chevron {
+            display: none !important;
+          }
+          .settings-content-inner {
+            padding: 32px 28px 60px !important;
+          }
+        }
+      `}</style>
+
       {/* ── SETTINGS SIDEBAR ── */}
       <div
+        className="settings-sidebar-panel"
         style={{
-          width: "260px",
-          flexShrink: 0,
-          display: "flex",
+          display: mobileView === "menu" ? "flex" : "none",
+          width: "100%",
           flexDirection: "column",
           borderRight: "1px solid #1F1F2A",
+          padding: "32px 0",
           position: "sticky",
           top: 0,
           height: "100vh",
-          overflow: "hidden",
+          overflowY: "auto",
+          scrollbarWidth: "none",
           backgroundColor: "#0A0A0F",
+          flexShrink: 0,
+          animation: "slideInLeft 0.22s ease forwards",
         }}
       >
         {/* Header */}
@@ -81,24 +127,34 @@ export function SettingsLayout() {
             return (
               <button
                 key={id}
-                onClick={() => setActiveTab(id)}
+                onClick={() => handleTabSelect(id)}
                 style={{
-                  display: "flex", alignItems: "center", gap: "14px",
-                  padding: "12px 16px", borderRadius: "12px",
+                  display: "flex", alignItems: "center", gap: "12px",
+                  padding: "14px 16px", borderRadius: "10px",
                   border: "none",
+                  borderLeft: active ? "2px solid #8B5CF6" : "2px solid transparent",
                   cursor: "pointer", width: "100%", textAlign: "left",
-                  backgroundColor: active ? "#1E1E2E" : "transparent",
-                  color: active ? "#8B5CF6" : "#A3A3C2",
-                  fontSize: "16px", fontWeight: active ? 600 : 400,
+                  backgroundColor: active ? "rgba(139,92,246,0.1)" : "transparent",
                   transition: "all 0.15s ease",
+                  minHeight: "56px",
                 }}
                 onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(255,255,255,0.03)"; }}
                 onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
               >
-                <Icon size={22} color={active ? "#8B5CF6" : "#A3A3C2"} strokeWidth={active ? 2.2 : 1.8} />
-                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <p style={{ margin: 0, fontSize: "15px", fontWeight: active ? 600 : 400, color: active ? "#8B5CF6" : "#A3A3C2", lineHeight: 1.3 }}>{label}</p>
+                <div style={{
+                  width: "36px", height: "36px", borderRadius: "8px", flexShrink: 0,
+                  backgroundColor: active ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.04)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "background-color 0.15s",
+                }}>
+                  <Icon size={17} color={active ? "#8B5CF6" : "#6B6B8A"} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: "15px", fontWeight: active ? 600 : 400, color: active ? "#F1F5F9" : "#A3A3C2", lineHeight: 1.3 }}>{label}</p>
                   <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A", marginTop: "2px" }}>{description}</p>
+                </div>
+                <div className="settings-mobile-chevron" style={{ display: "flex" }}>
+                  <ChevronRight size={16} color="#6B6B8A" />
                 </div>
               </button>
             );
@@ -108,17 +164,56 @@ export function SettingsLayout() {
 
       {/* ── CONTENT AREA ── */}
       <div
+        className="settings-content-panel"
         style={{
+          display: mobileView === "content" ? "flex" : "none",
           flex: 1,
           minWidth: 0,
-          display: "flex",
           flexDirection: "column",
           overflowY: "auto",
           scrollbarWidth: "none",
           height: "100vh",
+          width: "100%",
+          animation: "slideInRight 0.22s ease forwards",
         }}
       >
-        <div style={{ padding: "32px 28px 60px", maxWidth: "640px", width: "100%" }}>
+        {/* Mobile top bar */}
+        <div
+          className="settings-mobile-back"
+          style={{
+            display: "flex",
+            padding: "0 16px",
+            height: "56px",
+            borderBottom: "1px solid #1F1F2A",
+            alignItems: "center",
+            gap: "12px",
+            backgroundColor: "#0A0A0F",
+            position: "sticky",
+            top: 0,
+            zIndex: 10,
+          }}
+        >
+          <button
+            onClick={handleBack}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: "36px", height: "36px", borderRadius: "8px",
+              background: "rgba(255,255,255,0.05)", border: "none",
+              cursor: "pointer", flexShrink: 0,
+            }}
+          >
+            <ArrowLeft size={18} color="#A3A3C2" />
+          </button>
+          <span style={{ fontSize: "16px", fontWeight: 600, color: "#F1F5F9" }}>
+            {activeSection.label}
+          </span>
+        </div>
+
+        {/* Section content */}
+        <div
+          className="settings-content-inner"
+          style={{ padding: "24px 16px 100px", maxWidth: "640px", width: "100%" }}
+        >
           {renderSection()}
         </div>
       </div>
