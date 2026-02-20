@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import { MessageCircle, Heart, Share2 } from "lucide-react";
 
 interface ProfileActionsProps {
@@ -85,49 +84,58 @@ export default function ProfileActions({
 
   // Fan viewing creator profile (subscribed or not)
   if (viewContext === "fanViewingCreator") {
-    const pillBase: React.CSSProperties = {
-      display: "flex", alignItems: "center", gap: "7px",
-      padding: "9px 18px", borderRadius: "999px",
-      backgroundColor: "#1E1E2E", border: "1px solid #2A2A3D",
-      color: "#D1D5DB", fontSize: "14px", fontWeight: 600,
-      fontFamily: "'Inter', sans-serif", cursor: "pointer",
-      transition: "all 0.15s ease",
-    };
-
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
 
         {/* Message */}
         <button
           onClick={onMessage}
-          style={pillBase}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: "38px", height: "38px", borderRadius: "10px",
+            backgroundColor: "#1E1E2E", border: "1px solid #2A2A3D",
+            color: "#A3A3C2", cursor: "pointer",
+            transition: "all 0.15s ease",
+          }}
+          title="Message"
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.15)"; e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#D1D5DB"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}
         >
-          <MessageCircle size={16} strokeWidth={1.8} />
-          Message
+          <MessageCircle size={17} strokeWidth={1.8} />
         </button>
 
         {/* Tip */}
         <button
           onClick={onTip}
-          style={pillBase}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: "38px", height: "38px", borderRadius: "10px",
+            backgroundColor: "#1E1E2E", border: "1px solid #2A2A3D",
+            color: "#A3A3C2", cursor: "pointer",
+            transition: "all 0.15s ease",
+          }}
+          title="Send Tip"
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(236,72,153,0.15)"; e.currentTarget.style.borderColor = "#EC4899"; e.currentTarget.style.color = "#EC4899"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#D1D5DB"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}
         >
-          <Heart size={16} strokeWidth={1.8} />
-          Tip
+          <Heart size={17} strokeWidth={1.8} />
         </button>
 
         {/* Share */}
         <button
           onClick={onShare}
-          style={pillBase}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: "38px", height: "38px", borderRadius: "10px",
+            backgroundColor: "#1E1E2E", border: "1px solid #2A2A3D",
+            color: "#A3A3C2", cursor: "pointer",
+            transition: "all 0.15s ease",
+          }}
+          title="Share"
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.15)"; e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#D1D5DB"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}
         >
-          <Share2 size={16} strokeWidth={1.8} />
-          Share
+          <Share2 size={17} strokeWidth={1.8} />
         </button>
 
       </div>

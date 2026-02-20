@@ -287,7 +287,7 @@ export default function ProfilePage() {
         </div>
         <div style={{ padding: "16px 24px" }}>
           <SubscriptionCard
-            monthlyPrice={profile.subscriptionPrice || 5000}
+            monthlyPrice={0}
             threeMonthPrice={profile.bundlePricing?.threeMonths ?? 12600}
             sixMonthPrice={profile.bundlePricing?.sixMonths ?? 22800}
             isEditable={false}

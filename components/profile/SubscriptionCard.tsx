@@ -21,10 +21,12 @@ export default function SubscriptionCard({
 }: SubscriptionCardProps) {
   const [selected, setSelected] = React.useState<"monthly" | "three_month" | "six_month">("monthly");
 
+  const isFree = monthlyPrice === 0;
   const formatNaira = (amount: number) => `₦${amount.toLocaleString()}`;
   const savingsPercent = (base: number, months: number, bundleTotal: number) =>
     Math.round(((base * months - bundleTotal) / (base * months)) * 100);
 
+  // Editable mode (own profile)
   if (isEditable) {
     return (
       <button
@@ -39,8 +41,8 @@ export default function SubscriptionCard({
         onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.1)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
       >
-        <span style={{ fontSize: "12px", fontWeight: 700, color: "#FF6B6B" }}>
-          {formatNaira(monthlyPrice)}/mo
+        <span style={{ fontSize: "12px", fontWeight: 700, color: isFree ? "#22C55E" : "#FF6B6B" }}>
+          {isFree ? "Free" : `${formatNaira(monthlyPrice)}/mo`}
         </span>
         <span style={{ fontSize: "12px", color: "#8B5CF6", fontWeight: 500 }}>
           · Edit Pricing
@@ -49,6 +51,30 @@ export default function SubscriptionCard({
     );
   }
 
+  // Free subscription
+  if (isFree) {
+    return (
+      <button
+        onClick={() => onSubscribe?.("monthly")}
+        style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px",
+          padding: "5px 14px", borderRadius: "6px",
+          background: "linear-gradient(135deg, #22C55E, #16A34A)",
+          border: "none", cursor: "pointer",
+          fontFamily: "'Inter', sans-serif", width: "100%",
+          transition: "opacity 0.15s ease",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+      >
+        <span style={{ fontSize: "12px", fontWeight: 700, color: "#FFFFFF" }}>
+          Subscribe for Free
+        </span>
+      </button>
+    );
+  }
+
+  // Paid tiers
   type TierKey = "monthly" | "three_month" | "six_month";
 
   const tiers: Array<{ key: TierKey; label: string; price: number; months: number; savings?: number }> = [
@@ -74,17 +100,13 @@ export default function SubscriptionCard({
               key={tier.key}
               onClick={() => setSelected(tier.key)}
               style={{
-                position: "relative",
-                flex: 1,
-                padding: "5px 8px",
-                borderRadius: "6px",
+                position: "relative", flex: 1, padding: "5px 8px", borderRadius: "6px",
                 backgroundColor: isActive ? "rgba(139,92,246,0.15)" : "transparent",
                 border: isActive ? "1px solid #8B5CF6" : "1px solid #2A2A3D",
                 color: isActive ? "#A78BFA" : "#64748B",
                 fontSize: "11px", fontWeight: 600,
                 fontFamily: "'Inter', sans-serif",
-                cursor: "pointer", transition: "all 0.15s ease",
-                whiteSpace: "nowrap",
+                cursor: "pointer", transition: "all 0.15s ease", whiteSpace: "nowrap",
               }}
             >
               {tier.savings && (
@@ -92,8 +114,7 @@ export default function SubscriptionCard({
                   position: "absolute", top: "-8px", left: "50%", transform: "translateX(-50%)",
                   backgroundColor: "#22C55E", color: "#fff",
                   fontSize: "9px", fontWeight: 700,
-                  padding: "1px 5px", borderRadius: "999px",
-                  whiteSpace: "nowrap",
+                  padding: "1px 5px", borderRadius: "999px", whiteSpace: "nowrap",
                 }}>
                   -{tier.savings}%
                 </span>
@@ -121,7 +142,6 @@ export default function SubscriptionCard({
           Subscribe · {displayPrice}
         </span>
       </button>
-
     </div>
   );
 }
