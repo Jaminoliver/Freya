@@ -35,6 +35,7 @@ export function Sidebar() {
   }, []);
 
   const isSettings = pathname.startsWith("/settings");
+  const isCreator = pathname.startsWith("/become-a-creator");
 
   return (
     <>
@@ -55,8 +56,21 @@ export function Sidebar() {
           fontFamily: "'Inter', sans-serif",
         }}
       >
-        <div style={{ padding: "0 12px 32px" }}>
+        <div style={{ padding: "0 12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: "26px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
+          <Link
+            href="/become-a-creator"
+            style={{
+              display: "flex", alignItems: "center", gap: "5px",
+              padding: "5px 10px", borderRadius: "20px", textDecoration: "none",
+              background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(109,40,217,0.15))",
+              border: "1px solid rgba(139,92,246,0.35)",
+              fontSize: "11px", fontWeight: 600, color: "#A78BFA",
+              whiteSpace: "nowrap", transition: "all 0.15s ease",
+            }}
+          >
+            ✦ Creator
+          </Link>
         </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
@@ -103,6 +117,8 @@ export function Sidebar() {
             Settings
           </Link>
         </nav>
+
+
       </div>
 
       {/* MOBILE BOTTOM NAV */}
