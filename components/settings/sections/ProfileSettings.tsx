@@ -23,16 +23,9 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 
 export default function ProfileSettings() {
   const [form, setForm] = useState<ProfileForm>({
-    display_name: "",
-    username: "",
-    bio: "",
-    location: "",
-    country: "",
-    state: "",
-    date_of_birth: "",
-    website_url: "",
-    twitter_url: "",
-    instagram_url: "",
+    display_name: "", username: "", bio: "", location: "",
+    country: "", state: "", date_of_birth: "",
+    website_url: "", twitter_url: "", instagram_url: "",
   });
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -42,8 +35,6 @@ export default function ProfileSettings() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
-
-  // Crop modal state
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [cropType, setCropType] = useState<"avatar" | "banner">("avatar");
 
@@ -84,7 +75,6 @@ export default function ProfileSettings() {
   const set = (key: keyof ProfileForm, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  // Open file picker → read file → show crop modal
   const handleFileSelect = (type: "avatar" | "banner") => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -94,11 +84,9 @@ export default function ProfileSettings() {
       setCropImageSrc(reader.result as string);
     };
     reader.readAsDataURL(file);
-    // Reset input so same file can be selected again
     e.target.value = "";
   };
 
-  // After crop — upload blob to correct bucket
   const handleCropSave = async (blob: Blob) => {
     if (!userId) return;
     const type = cropType;
@@ -110,13 +98,8 @@ export default function ProfileSettings() {
     try {
       const supabase = createClient();
       const url = await uploadImage(blob, type, userId);
-
       const field = type === "avatar" ? "avatar_url" : "banner_url";
-      await supabase
-        .from("profiles")
-        .update({ [field]: url, updated_at: new Date().toISOString() })
-        .eq("id", userId);
-
+      await supabase.from("profiles").update({ [field]: url, updated_at: new Date().toISOString() }).eq("id", userId);
       if (type === "avatar") setAvatarUrl(url);
       else setBannerUrl(url);
     } catch (err) {
@@ -132,21 +115,18 @@ export default function ProfileSettings() {
     setSaveState("saving");
     setErrorMsg(null);
     const supabase = createClient();
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        display_name: form.display_name || null,
-        bio: form.bio || null,
-        location: form.location || null,
-        country: form.country || null,
-        state: form.state || null,
-        date_of_birth: form.date_of_birth || null,
-        website_url: form.website_url || null,
-        twitter_url: form.twitter_url || null,
-        instagram_url: form.instagram_url || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId);
+    const { error } = await supabase.from("profiles").update({
+      display_name: form.display_name || null,
+      bio: form.bio || null,
+      location: form.location || null,
+      country: form.country || null,
+      state: form.state || null,
+      date_of_birth: form.date_of_birth || null,
+      website_url: form.website_url || null,
+      twitter_url: form.twitter_url || null,
+      instagram_url: form.instagram_url || null,
+      updated_at: new Date().toISOString(),
+    }).eq("id", userId);
 
     if (error) {
       setSaveState("error");
@@ -157,7 +137,6 @@ export default function ProfileSettings() {
     }
   };
 
-  // ── Styles ──
   const inputBase: React.CSSProperties = {
     width: "100%", borderRadius: "10px", padding: "12px 14px",
     fontSize: "14px", outline: "none", backgroundColor: "#141420",
@@ -180,7 +159,7 @@ export default function ProfileSettings() {
     <>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* Crop Modal */}
+      {/* Crop Modal — zIndex 9999 covers settings header and bottom nav */}
       {cropImageSrc && (
         <ImageCropModal
           imageSrc={cropImageSrc}
@@ -190,7 +169,8 @@ export default function ProfileSettings() {
         />
       )}
 
-      <div style={{ display: "flex", flexDirection: "column" }}>
+      {/* paddingBottom clears mobile bottom nav (64px) + extra breathing room */}
+      <div style={{ display: "flex", flexDirection: "column", paddingBottom: "80px" }}>
 
         {/* Header */}
         <div style={{ marginBottom: "24px" }}>
@@ -200,7 +180,6 @@ export default function ProfileSettings() {
 
         {/* ── BANNER + AVATAR ── */}
         <div style={{ position: "relative", marginBottom: "48px" }}>
-          {/* Banner */}
           <div
             onClick={() => bannerInputRef.current?.click()}
             style={{
@@ -232,7 +211,6 @@ export default function ProfileSettings() {
             </div>
           </div>
 
-          {/* Avatar */}
           <div
             onClick={() => avatarInputRef.current?.click()}
             style={{
@@ -240,8 +218,7 @@ export default function ProfileSettings() {
               width: "72px", height: "72px", borderRadius: "50%",
               border: "3px solid #0A0A0F", cursor: "pointer", overflow: "hidden",
               backgroundImage: avatarUrl ? `url(${avatarUrl})` : "linear-gradient(135deg, #8B5CF6, #EC4899)",
-              backgroundSize: "cover", backgroundPosition: "center",
-              backgroundRepeat: "no-repeat",
+              backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}
           >
@@ -266,7 +243,6 @@ export default function ProfileSettings() {
           </div>
         </div>
 
-        {/* Hidden file inputs */}
         <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileSelect("avatar")} />
         <input ref={bannerInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileSelect("banner")} />
 
