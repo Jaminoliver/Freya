@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MapPin, Twitter, Instagram } from "lucide-react";
+import { MapPin, Twitter, Instagram, Globe } from "lucide-react";
 
 interface ProfileInfoProps {
   displayName: string | null;
@@ -10,9 +10,22 @@ interface ProfileInfoProps {
   location?: string | null;
   twitterUrl?: string | null;
   instagramUrl?: string | null;
+  websiteUrl?: string | null;
   isVerified?: boolean;
   isEditable?: boolean;
   mode?: "header" | "body" | "full";
+}
+
+function shortenUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+    const path = u.pathname !== "/" ? u.pathname : "";
+    const full = host + path;
+    return full.length > 22 ? full.slice(0, 22) + "…" : full;
+  } catch {
+    return url.length > 22 ? url.slice(0, 22) + "…" : url;
+  }
 }
 
 export default function ProfileInfo({
@@ -22,6 +35,7 @@ export default function ProfileInfo({
   location,
   twitterUrl,
   instagramUrl,
+  websiteUrl,
   isVerified = false,
   isEditable = false,
   mode = "full",
@@ -78,7 +92,6 @@ export default function ProfileInfo({
               {expanded ? displayBio : collapsedBio}
             </p>
 
-            {/* Fade overlay — only when collapsed and bio is long */}
             {isLong && !expanded && (
               <div
                 style={{
@@ -94,7 +107,6 @@ export default function ProfileInfo({
             )}
           </div>
 
-          {/* More info / Less info */}
           {isLong && (
             <button
               onClick={() => setExpanded(!expanded)}
@@ -114,25 +126,46 @@ export default function ProfileInfo({
             </button>
           )}
 
-          {/* Location + socials — always show when expanded, or if bio is short */}
           {(expanded || !isLong) && (
-            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap", marginTop: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <MapPin size={15} color="#64748B" strokeWidth={1.8} />
-                <span style={{ fontSize: "13px", color: "#94A3B8" }}>{displayLocation}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
+
+              {/* Website */}
+              {websiteUrl && (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <Globe size={15} color="#64748B" strokeWidth={1.8} />
+                  <span style={{ fontSize: "13px", color: "#94A3B8" }}>Website: </span>
+                  <a
+                    href={websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: "13px", color: "#8B5CF6", textDecoration: "none" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+                  >
+                    {shortenUrl(websiteUrl)}
+                  </a>
+                </div>
+              )}
+
+              {/* Location + socials */}
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <MapPin size={15} color="#64748B" strokeWidth={1.8} />
+                  <span style={{ fontSize: "13px", color: "#94A3B8" }}>{displayLocation}</span>
+                </div>
+                <a href={displayTwitter} target="_blank" rel="noopener noreferrer"
+                  style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "#94A3B8"; }}>
+                  <Twitter size={16} strokeWidth={1.8} />
+                </a>
+                <a href={displayInstagram} target="_blank" rel="noopener noreferrer"
+                  style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "#94A3B8"; }}>
+                  <Instagram size={16} strokeWidth={1.8} />
+                </a>
               </div>
-              <a href={displayTwitter} target="_blank" rel="noopener noreferrer"
-                style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#94A3B8"; }}>
-                <Twitter size={16} strokeWidth={1.8} />
-              </a>
-              <a href={displayInstagram} target="_blank" rel="noopener noreferrer"
-                style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#94A3B8"; }}>
-                <Instagram size={16} strokeWidth={1.8} />
-              </a>
             </div>
           )}
         </div>
