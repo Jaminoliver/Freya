@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Camera, Loader2, Check, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
@@ -22,6 +23,8 @@ interface ProfileForm {
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export default function ProfileSettings() {
+  const router = useRouter();
+
   const [form, setForm] = useState<ProfileForm>({
     display_name: "", username: "", bio: "", location: "",
     country: "", state: "", date_of_birth: "",
@@ -133,7 +136,9 @@ export default function ProfileSettings() {
       setErrorMsg(error.message);
     } else {
       setSaveState("saved");
-      setTimeout(() => setSaveState("idle"), 3000);
+      setTimeout(() => {
+        router.push(`/${form.username}`);
+      }, 1000);
     }
   };
 
@@ -159,7 +164,6 @@ export default function ProfileSettings() {
     <>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* Crop Modal — zIndex 9999 covers settings header and bottom nav */}
       {cropImageSrc && (
         <ImageCropModal
           imageSrc={cropImageSrc}
@@ -169,18 +173,14 @@ export default function ProfileSettings() {
         />
       )}
 
-      {/* paddingBottom clears mobile bottom nav (64px) + extra breathing room */}
       <div style={{ display: "flex", flexDirection: "column", paddingBottom: "80px" }}>
 
-        {/* Header */}
         <div style={{ marginBottom: "24px" }}>
           <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 3px" }}>Profile</h2>
           <p style={{ fontSize: "13px", color: "#A3A3C2", margin: 0 }}>Manage your public profile information</p>
         </div>
 
-        {/* ── BANNER + AVATAR ── */}
         <div style={{ marginBottom: "16px" }}>
-          {/* Banner */}
           <div
             onClick={() => bannerInputRef.current?.click()}
             style={{
@@ -212,7 +212,6 @@ export default function ProfileSettings() {
             </div>
           </div>
 
-          {/* Avatar — negative margin pulls it up over banner, no position: absolute */}
           <div style={{ paddingLeft: "20px", marginTop: "-36px" }}>
             <div
               onClick={() => avatarInputRef.current?.click()}
@@ -250,7 +249,6 @@ export default function ProfileSettings() {
         <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileSelect("avatar")} />
         <input ref={bannerInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileSelect("banner")} />
 
-        {/* ── BASIC INFO ── */}
         <p style={{ fontSize: "11px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 14px" }}>Basic Info</p>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
@@ -294,7 +292,6 @@ export default function ProfileSettings() {
           </div>
         </div>
 
-        {/* ── LOCATION ── */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "28px 0 14px" }}>
           <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
           <span style={dividerLabel}>Location</span>
@@ -328,7 +325,6 @@ export default function ProfileSettings() {
           </div>
         </div>
 
-        {/* ── SOCIAL LINKS ── */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "28px 0 14px" }}>
           <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
           <span style={dividerLabel}>Social Links</span>
@@ -359,7 +355,6 @@ export default function ProfileSettings() {
           </div>
         </div>
 
-        {/* ── ERROR ── */}
         {errorMsg && (
           <div style={{
             display: "flex", alignItems: "center", gap: "8px",
@@ -371,7 +366,6 @@ export default function ProfileSettings() {
           </div>
         )}
 
-        {/* ── SAVE ── */}
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "28px" }}>
           <button
             type="button"
@@ -392,7 +386,7 @@ export default function ProfileSettings() {
           >
             {saveState === "saving" && <Loader2 size={14} style={{ animation: "spin 0.9s linear infinite" }} />}
             {saveState === "saved" && <Check size={14} />}
-            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Save Changes"}
+            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : "Save Changes"}
           </button>
         </div>
 
