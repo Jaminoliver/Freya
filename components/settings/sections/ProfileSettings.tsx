@@ -22,7 +22,7 @@ interface ProfileForm {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-export default function ProfileSettings() {
+export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
   const router = useRouter();
 
   const [form, setForm] = useState<ProfileForm>({
@@ -82,10 +82,7 @@ export default function ProfileSettings() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      setCropType(type);
-      setCropImageSrc(reader.result as string);
-    };
+    reader.onload = () => { setCropType(type); setCropImageSrc(reader.result as string); };
     reader.readAsDataURL(file);
     e.target.value = "";
   };
@@ -94,10 +91,8 @@ export default function ProfileSettings() {
     if (!userId) return;
     const type = cropType;
     setCropImageSrc(null);
-
     if (type === "avatar") setUploadingAvatar(true);
     else setUploadingBanner(true);
-
     try {
       const supabase = createClient();
       const url = await uploadImage(blob, type, userId);
@@ -131,15 +126,8 @@ export default function ProfileSettings() {
       updated_at: new Date().toISOString(),
     }).eq("id", userId);
 
-    if (error) {
-      setSaveState("error");
-      setErrorMsg(error.message);
-    } else {
-      setSaveState("saved");
-      setTimeout(() => {
-        router.push(`/${form.username}`);
-      }, 1000);
-    }
+    if (error) { setSaveState("error"); setErrorMsg(error.message); }
+    else { setSaveState("saved"); setTimeout(() => { router.push(`/${form.username}`); }, 1000); }
   };
 
   const inputBase: React.CSSProperties = {
@@ -165,82 +153,40 @@ export default function ProfileSettings() {
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {cropImageSrc && (
-        <ImageCropModal
-          imageSrc={cropImageSrc}
-          type={cropType}
-          onSave={handleCropSave}
-          onCancel={() => setCropImageSrc(null)}
-        />
+        <ImageCropModal imageSrc={cropImageSrc} type={cropType} onSave={handleCropSave} onCancel={() => setCropImageSrc(null)} />
       )}
 
       <div style={{ display: "flex", flexDirection: "column", paddingBottom: "80px" }}>
 
-        <div style={{ marginBottom: "24px" }}>
-          <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 3px" }}>Profile</h2>
-          <p style={{ fontSize: "13px", color: "#A3A3C2", margin: 0 }}>Manage your public profile information</p>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
+          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B6B8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </button>
+          <div>
+            <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 3px" }}>Profile</h2>
+            <p style={{ fontSize: "13px", color: "#A3A3C2", margin: 0 }}>Manage your public profile information</p>
+          </div>
         </div>
 
         <div style={{ marginBottom: "16px" }}>
-          <div
-            onClick={() => bannerInputRef.current?.click()}
-            style={{
-              width: "100%", height: "120px", borderRadius: "12px",
-              backgroundColor: "#1C1C2E", border: "1.5px solid #2A2A3D",
-              backgroundImage: bannerUrl ? `url(${bannerUrl})` : undefined,
-              backgroundSize: "cover", backgroundPosition: "center",
-              cursor: "pointer", position: "relative", overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.45)",
-                display: "flex", flexDirection: "column", alignItems: "center",
-                justifyContent: "center", gap: "4px",
-                opacity: bannerUrl ? 0 : 1, transition: "opacity 0.2s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = bannerUrl ? "0" : "1")}
-            >
-              {uploadingBanner
-                ? <Loader2 size={20} color="#fff" style={{ animation: "spin 0.9s linear infinite" }} />
-                : <Camera size={20} color="#fff" />}
-              {!uploadingBanner && (
-                <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)", fontFamily: "'Inter', sans-serif" }}>
-                  Edit banner
-                </span>
-              )}
+          <div onClick={() => bannerInputRef.current?.click()}
+            style={{ width: "100%", height: "120px", borderRadius: "12px", backgroundColor: "#1C1C2E", border: "1.5px solid #2A2A3D", backgroundImage: bannerUrl ? `url(${bannerUrl})` : undefined, backgroundSize: "cover", backgroundPosition: "center", cursor: "pointer", position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", opacity: bannerUrl ? 0 : 1, transition: "opacity 0.2s" }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")} onMouseLeave={(e) => (e.currentTarget.style.opacity = bannerUrl ? "0" : "1")}>
+              {uploadingBanner ? <Loader2 size={20} color="#fff" style={{ animation: "spin 0.9s linear infinite" }} /> : <Camera size={20} color="#fff" />}
+              {!uploadingBanner && <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)", fontFamily: "'Inter', sans-serif" }}>Edit banner</span>}
             </div>
           </div>
-
           <div style={{ paddingLeft: "20px", marginTop: "-36px" }}>
-            <div
-              onClick={() => avatarInputRef.current?.click()}
-              style={{
-                width: "72px", height: "72px", borderRadius: "50%",
-                border: "3px solid #0A0A0F", cursor: "pointer", overflow: "hidden",
-                backgroundImage: avatarUrl ? `url(${avatarUrl})` : "linear-gradient(135deg, #8B5CF6, #EC4899)",
-                backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                position: "relative",
-              }}
-            >
-              {!avatarUrl && (
-                <span style={{ fontSize: "24px", fontWeight: 700, color: "#fff" }}>
-                  {form.display_name?.charAt(0) || form.username?.charAt(0) || "?"}
-                </span>
-              )}
-              <div
-                style={{
-                  position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.5)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  borderRadius: "50%", opacity: 0, transition: "opacity 0.2s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}
-              >
-                {uploadingAvatar
-                  ? <Loader2 size={14} color="#fff" style={{ animation: "spin 0.9s linear infinite" }} />
-                  : <Camera size={14} color="#fff" />}
+            <div onClick={() => avatarInputRef.current?.click()}
+              style={{ width: "72px", height: "72px", borderRadius: "50%", border: "3px solid #0A0A0F", cursor: "pointer", overflow: "hidden", backgroundImage: avatarUrl ? `url(${avatarUrl})` : "linear-gradient(135deg, #8B5CF6, #EC4899)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+              {!avatarUrl && <span style={{ fontSize: "24px", fontWeight: 700, color: "#fff" }}>{form.display_name?.charAt(0) || form.username?.charAt(0) || "?"}</span>}
+              <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", opacity: 0, transition: "opacity 0.2s" }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")} onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}>
+                {uploadingAvatar ? <Loader2 size={14} color="#fff" style={{ animation: "spin 0.9s linear infinite" }} /> : <Camera size={14} color="#fff" />}
               </div>
             </div>
           </div>
@@ -253,42 +199,27 @@ export default function ProfileSettings() {
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label style={labelStyle}>Display Name</label>
-            <input type="text" value={form.display_name} onChange={(e) => set("display_name", e.target.value)}
-              placeholder="Your public name" style={inputBase}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+            <input type="text" value={form.display_name} onChange={(e) => set("display_name", e.target.value)} placeholder="Your public name" style={inputBase}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           </div>
-
           <div>
             <label style={labelStyle}>Username</label>
-            <input type="text" value={form.username} readOnly
-              style={{ ...inputBase, color: "#6B6B8A", cursor: "not-allowed" }} />
-            <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", fontStyle: "italic" }}>
-              Change username in Account settings
-            </span>
+            <input type="text" value={form.username} readOnly style={{ ...inputBase, color: "#6B6B8A", cursor: "not-allowed" }} />
+            <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", fontStyle: "italic" }}>Change username in Account settings</span>
           </div>
-
           <div>
             <label style={labelStyle}>Bio</label>
-            <textarea value={form.bio} onChange={(e) => set("bio", e.target.value)}
-              placeholder="Tell people about yourself..." maxLength={200} rows={3}
+            <textarea value={form.bio} onChange={(e) => set("bio", e.target.value)} placeholder="Tell people about yourself..." maxLength={200} rows={3}
               style={{ ...inputBase, resize: "none", lineHeight: 1.6 }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
-            <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", textAlign: "right" }}>
-              {form.bio.length}/200
-            </span>
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+            <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", textAlign: "right" }}>{form.bio.length}/200</span>
           </div>
-
           <div>
             <label style={labelStyle}>Date of Birth</label>
             <input type="date" value={form.date_of_birth} onChange={(e) => set("date_of_birth", e.target.value)}
               style={{ ...inputBase, colorScheme: "dark" }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
-            <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", fontStyle: "italic" }}>
-              Not shown publicly — used for age verification
-            </span>
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+            <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", fontStyle: "italic" }}>Not shown publicly — used for age verification</span>
           </div>
         </div>
 
@@ -301,26 +232,19 @@ export default function ProfileSettings() {
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label style={labelStyle}>City / Location</label>
-            <input type="text" value={form.location} onChange={(e) => set("location", e.target.value)}
-              placeholder="e.g. Lagos" style={inputBase}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+            <input type="text" value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. Lagos" style={inputBase}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           </div>
-
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
             <div>
               <label style={labelStyle}>State / Region</label>
-              <input type="text" value={form.state} onChange={(e) => set("state", e.target.value)}
-                placeholder="e.g. Lagos State" style={inputBase}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+              <input type="text" value={form.state} onChange={(e) => set("state", e.target.value)} placeholder="e.g. Lagos State" style={inputBase}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
             </div>
             <div>
               <label style={labelStyle}>Country</label>
-              <input type="text" value={form.country} onChange={(e) => set("country", e.target.value)}
-                placeholder="e.g. Nigeria" style={inputBase}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+              <input type="text" value={form.country} onChange={(e) => set("country", e.target.value)} placeholder="e.g. Nigeria" style={inputBase}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
             </div>
           </div>
         </div>
@@ -334,62 +258,36 @@ export default function ProfileSettings() {
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label style={labelStyle}>Website URL</label>
-            <input type="url" value={form.website_url} onChange={(e) => set("website_url", e.target.value)}
-              placeholder="https://yoursite.com" style={inputBase}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+            <input type="url" value={form.website_url} onChange={(e) => set("website_url", e.target.value)} placeholder="https://yoursite.com" style={inputBase}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           </div>
           <div>
             <label style={labelStyle}>Twitter / X URL</label>
-            <input type="url" value={form.twitter_url} onChange={(e) => set("twitter_url", e.target.value)}
-              placeholder="https://x.com/yourhandle" style={inputBase}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+            <input type="url" value={form.twitter_url} onChange={(e) => set("twitter_url", e.target.value)} placeholder="https://x.com/yourhandle" style={inputBase}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           </div>
           <div>
             <label style={labelStyle}>Instagram URL</label>
-            <input type="url" value={form.instagram_url} onChange={(e) => set("instagram_url", e.target.value)}
-              placeholder="https://instagram.com/yourhandle" style={inputBase}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+            <input type="url" value={form.instagram_url} onChange={(e) => set("instagram_url", e.target.value)} placeholder="https://instagram.com/yourhandle" style={inputBase}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           </div>
         </div>
 
         {errorMsg && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: "8px",
-            backgroundColor: "rgba(239,68,68,0.08)", border: "1.5px solid rgba(239,68,68,0.2)",
-            borderRadius: "10px", padding: "12px 14px", marginTop: "24px",
-          }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", backgroundColor: "rgba(239,68,68,0.08)", border: "1.5px solid rgba(239,68,68,0.2)", borderRadius: "10px", padding: "12px 14px", marginTop: "24px" }}>
             <AlertCircle size={14} color="#EF4444" />
             <span style={{ fontSize: "13px", color: "#EF4444" }}>{errorMsg}</span>
           </div>
         )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "28px" }}>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saveState === "saving"}
-            style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              padding: "11px 24px", borderRadius: "8px", fontSize: "14px",
-              fontWeight: 600, border: "none",
-              cursor: saveState === "saving" ? "not-allowed" : "pointer",
-              backgroundColor: saveState === "saved" ? "#059669" : "#8B5CF6",
-              color: "#FFFFFF", boxShadow: "0 4px 20px rgba(139,92,246,0.3)",
-              fontFamily: "'Inter', sans-serif", transition: "background-color 0.2s",
-              opacity: saveState === "saving" ? 0.7 : 1,
-            }}
-            onMouseEnter={(e) => { if (saveState === "idle") (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#7C3AED"; }}
-            onMouseLeave={(e) => { if (saveState === "idle") (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#8B5CF6"; }}
-          >
+          <button type="button" onClick={handleSave} disabled={saveState === "saving"}
+            style={{ display: "flex", alignItems: "center", gap: "8px", padding: "11px 24px", borderRadius: "8px", fontSize: "14px", fontWeight: 600, border: "none", cursor: saveState === "saving" ? "not-allowed" : "pointer", backgroundColor: saveState === "saved" ? "#059669" : "#8B5CF6", color: "#FFFFFF", boxShadow: "0 4px 20px rgba(139,92,246,0.3)", fontFamily: "'Inter', sans-serif", transition: "background-color 0.2s", opacity: saveState === "saving" ? 0.7 : 1 }}>
             {saveState === "saving" && <Loader2 size={14} style={{ animation: "spin 0.9s linear infinite" }} />}
             {saveState === "saved" && <Check size={14} />}
             {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : "Save Changes"}
           </button>
         </div>
-
       </div>
     </>
   );

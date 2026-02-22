@@ -5,6 +5,7 @@ import { Camera, X, Pencil } from "lucide-react";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { uploadImage } from "@/lib/utils/uploadImage";
 import { createClient } from "@/lib/supabase/client";
+import { Avatar } from "@/components/ui/Avatar";
 
 interface ProfileAvatarProps {
   avatarUrl?: string | null;
@@ -15,6 +16,8 @@ interface ProfileAvatarProps {
   userId?: string;
   onAvatarUpdated?: (url: string) => void;
 }
+
+const GRADIENT = "linear-gradient(to right, #8B5CF6, #EC4899)";
 
 export default function ProfileAvatar({
   avatarUrl: initialAvatarUrl,
@@ -33,11 +36,7 @@ export default function ProfileAvatar({
 
   const firstLetter = (displayName || "?").charAt(0).toUpperCase();
 
-  const handleAvatarClick = () => {
-    if (isEditable) {
-      setPreview(true);
-    }
-  };
+  const handleAvatarClick = () => { if (isEditable) setPreview(true); };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -80,76 +79,31 @@ export default function ProfileAvatar({
       {preview && (
         <div
           onClick={() => setPreview(false)}
-          style={{
-            position: "fixed", inset: 0, zIndex: 1000,
-            backgroundColor: "rgba(0,0,0,0.75)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: "16px",
-          }}
+          style={{ position: "fixed", inset: 0, zIndex: 1000, backgroundColor: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{
-              position: "relative",
-              backgroundColor: "#13131F",
-              borderRadius: "16px",
-              border: "1px solid #2A2A3D",
-              overflow: "hidden",
-              maxWidth: "320px",
-              width: "100%",
-              boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
-            }}
+            style={{ position: "relative", backgroundColor: "#13131F", borderRadius: "16px", border: "1px solid #2A2A3D", overflow: "hidden", maxWidth: "320px", width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}
           >
-            {/* Full image */}
             <div
-              style={{
-                width: "100%",
-                aspectRatio: "1 / 1",
-                background: avatarUrl
-                  ? `url(${avatarUrl}) center/cover no-repeat`
-                  : "linear-gradient(135deg, #8B5CF6, #EC4899)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "72px", fontWeight: 700, color: "#fff",
-                fontFamily: "'Inter', sans-serif",
-              }}
+              style={{ width: "100%", aspectRatio: "1 / 1", background: avatarUrl ? `url(${avatarUrl}) center/cover no-repeat` : GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "72px", fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif" }}
             >
               {!avatarUrl && firstLetter}
             </div>
-
-            {/* Bottom bar */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px" }}>
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>
-                {displayName}
-              </span>
-
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>{displayName}</span>
               {isEditable && (
                 <button
                   onClick={() => { setPreview(false); fileInputRef.current?.click(); }}
-                  style={{
-                    display: "flex", alignItems: "center", gap: "5px",
-                    padding: "6px 12px", borderRadius: "6px",
-                    backgroundColor: "#8B5CF6", border: "none",
-                    color: "#fff", fontSize: "12px", fontWeight: 600,
-                    fontFamily: "'Inter', sans-serif", cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
+                  style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "6px", backgroundColor: "#8B5CF6", border: "none", color: "#fff", fontSize: "12px", fontWeight: 600, fontFamily: "'Inter', sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}
                 >
-                  <Pencil size={12} />
-                  Edit Photo
+                  <Pencil size={12} /> Edit Photo
                 </button>
               )}
             </div>
-
-            {/* Close */}
             <button
               onClick={() => setPreview(false)}
-              style={{
-                position: "absolute", top: "10px", right: "10px",
-                background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%",
-                width: "28px", height: "28px",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", color: "#fff", backdropFilter: "blur(4px)",
-              }}
+              style={{ position: "absolute", top: "10px", right: "10px", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", backdropFilter: "blur(4px)" }}
             >
               <X size={14} />
             </button>
@@ -159,30 +113,19 @@ export default function ProfileAvatar({
 
       <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
 
-      <div style={{ position: "relative", width: "96px", height: "96px", marginTop: "-38px", marginLeft: "10px" }}>
-        <div
-          onClick={handleAvatarClick}
-          style={{
-            width: "96px", height: "96px", borderRadius: "50%",
-            background: avatarUrl ? `url(${avatarUrl}) center/cover no-repeat` : "linear-gradient(135deg, #8B5CF6, #EC4899)",
-            border: "3px solid #0A0A0F",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "36px", fontWeight: 700, color: "#FFFFFF",
-            fontFamily: "'Inter', sans-serif",
-            cursor: isEditable ? "pointer" : "default",
-            position: "relative", overflow: "hidden",
-          }}
-        >
-          {!avatarUrl && firstLetter}
-
+      <div style={{ position: "relative", marginTop: "-42px", marginLeft: "10px", display: "inline-block" }}>
+        <div onClick={handleAvatarClick} style={{ cursor: isEditable ? "pointer" : "default", position: "relative" }}>
+          <Avatar
+            src={avatarUrl ?? undefined}
+            alt={displayName ?? "?"}
+            size="2xl"
+            showRing
+            isOnline={isOnline}
+            showOnlineStatus={isOnline}
+          />
           {isEditable && (
             <div
-              style={{
-                position: "absolute", inset: 0,
-                backgroundColor: "rgba(10,10,15,0.7)",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px",
-                opacity: avatarUrl ? 0 : 1, transition: "opacity 0.2s ease",
-              }}
+              style={{ position: "absolute", inset: 0, borderRadius: "50%", backgroundColor: "rgba(10,10,15,0.7)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", opacity: avatarUrl ? 0 : 1, transition: "opacity 0.2s ease" }}
               onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
               onMouseLeave={(e) => { e.currentTarget.style.opacity = avatarUrl ? "0" : "1"; }}
             >
@@ -197,10 +140,6 @@ export default function ProfileAvatar({
             </div>
           )}
         </div>
-
-        {isOnline && (
-          <div style={{ position: "absolute", bottom: "6px", right: "6px", width: "16px", height: "16px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0A0A0F" }} />
-        )}
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>
