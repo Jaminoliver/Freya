@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { User, Shield, CreditCard, Lock, Bell, ChevronRight, TrendingUp, Wallet } from "lucide-react";
 import ProfileSettings from "@/components/settings/sections/ProfileSettings";
@@ -23,21 +23,19 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType; descripti
   { id: "notifications", label: "Notifications", icon: Bell,       description: "Alerts & preferences"       },
 ];
 
-export function SettingsLayout() {
+// Inner component that uses useSearchParams — must be wrapped in Suspense
+function SettingsLayoutInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
 
-  // When ?panel=menu is present, reset to menu and clear the param
   useEffect(() => {
     if (searchParams.get("panel") === "menu") {
       setMobileView("menu");
       router.replace("/settings");
     }
   }, [searchParams, router]);
-
-  const activeSection = tabs.find((t) => t.id === activeTab)!;
 
   const handleTabSelect = (id: SettingsTab) => {
     setActiveTab(id);
@@ -141,5 +139,14 @@ export function SettingsLayout() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Public export wraps inner component in Suspense so useSearchParams is safe
+export function SettingsLayout() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsLayoutInner />
+    </Suspense>
   );
 }
