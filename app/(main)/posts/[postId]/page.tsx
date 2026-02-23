@@ -145,10 +145,14 @@ export default function SinglePostPage() {
       />
 
       {/* Page header */}
-      <div style={{
+      <style>{`
+        .post-sticky-header { top: 0; }
+        @media (max-width: 767px) { .post-sticky-header { top: 56px; } }
+      `}</style>
+      <div className="post-sticky-header" style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "16px 24px", borderBottom: "1px solid #1E1E2E",
-        position: "sticky", top: 0, backgroundColor: "#0D0D16", zIndex: 10,
+        position: "sticky", backgroundColor: "#0D0D16", zIndex: 10,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <button
