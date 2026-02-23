@@ -1,8 +1,13 @@
+"use client";
+
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { LockedContent } from "./LockedContent";
 import { getRelativeTime } from "@/lib/utils/profile";
-import { Search, Grid3X3, List, MoreHorizontal, ImageIcon, Film, Lock, Heart, MessageCircle, Share2, DollarSign } from "lucide-react";
+import { Search, Grid3X3, List, MoreHorizontal, ImageIcon, Film, Lock } from "lucide-react";
 import type { Post } from "@/lib/types/profile";
+import PostActions from "@/components/profile/PostActions";
+import CommentSection from "@/components/profile/CommentSection";
 
 export interface ContentFeedProps {
   posts: Post[];
@@ -17,7 +22,6 @@ export interface ContentFeedProps {
   className?: string;
 }
 
-// Fix: use string type instead of "image" as const so "video" comparison is valid
 const DUMMY_POSTS = [
   { id: "dp1", category: "Routine",      author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Lagos nights hit different when you're with the right people ✨🌙", media: [{ type: "image" as string, url: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&q=80" }], is_locked: false, price: null, likes: 89,  comments: 14, created_at: new Date(Date.now() - 3600000 * 12).toISOString() },
   { id: "dp2", category: "Coffee Break", author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Sunday vibes and good energy only 🧘🏽‍♀️☀️",                      media: [{ type: "image" as string, url: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800&q=80" }], is_locked: false, price: null, likes: 312, comments: 45, created_at: new Date(Date.now() - 3600000 * 48).toISOString() },
@@ -45,7 +49,6 @@ const CATEGORIES = ["All", "TV", "Coffee Break", "Eye to Eye", "Routine", "Kitte
 const photoCount  = DUMMY_MEDIA.filter((m) => m.type === "image").length;
 const videoCount  = DUMMY_MEDIA.filter((m) => m.type === "video").length;
 
-// ── Creator post dropdown ─────────────────────────────────────────────────────
 function PostMenu({ onEdit, onDelete, onShare }: { onEdit: () => void; onDelete: () => void; onShare: () => void }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -86,14 +89,18 @@ function PostMenu({ onEdit, onDelete, onShare }: { onEdit: () => void; onDelete:
   );
 }
 
-// ── Single post row ───────────────────────────────────────────────────────────
 function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, onUnlock }: {
   post: typeof DUMMY_POSTS[0]; isOwnProfile?: boolean; isSubscribed: boolean;
   onLike?: (id: string) => void; onComment?: (id: string) => void;
   onTip?: (id: string) => void; onUnlock?: (id: string) => void;
 }) {
   const isLocked = post.is_locked && !isSubscribed;
-  const [liked, setLiked] = React.useState(false);
+  const [commentOpen, setCommentOpen] = React.useState(false);
+  const router = useRouter();
+
+  const navigateToPost = () => router.push(`/posts/${post.id}`);
+
+  const VIEWER = { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=36" };
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", padding: "16px 0" }}>
@@ -116,7 +123,7 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
       </div>
 
       {/* Caption */}
-      {post.content && <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0 0 10px" }}>{post.content}</p>}
+      {post.content && <p onClick={navigateToPost} style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0 0 10px", cursor: "pointer" }}>{post.content}</p>}
 
       {/* Media */}
       {post.media.length > 0 && (
@@ -131,69 +138,44 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
             </div>
           </div>
         ) : (
-          <div style={{ borderRadius: "10px", overflow: "hidden" }}>
+          <div onClick={navigateToPost} style={{ borderRadius: "10px", overflow: "hidden", cursor: "pointer" }}>
             <img src={post.media[0].url} alt="" style={{ width: "100%", maxHeight: "380px", objectFit: "cover", display: "block" }} />
           </div>
         )
       )}
 
-      {/* ── Action bar ── */}
+      {/* PostActions */}
       {!isLocked && (
-        <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "12px" }}>
-
-          {/* Like */}
-          <button
-            onClick={() => { setLiked(!liked); onLike?.(post.id); }}
-            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "none", background: liked ? "rgba(239,68,68,0.1)" : "transparent", color: liked ? "#EF4444" : "#6B6B8A", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
-            onMouseEnter={(e) => { if (!liked) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
-            onMouseLeave={(e) => { if (!liked) e.currentTarget.style.backgroundColor = "transparent"; }}
-          >
-            <Heart size={22} fill={liked ? "#EF4444" : "none"} strokeWidth={1.8} />
-            <span>{liked ? post.likes + 1 : post.likes}</span>
-          </button>
-
-          {/* Comment */}
-          <button
-            onClick={() => onComment?.(post.id)}
-            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "none", background: "transparent", color: "#6B6B8A", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-          >
-            <MessageCircle size={22} strokeWidth={1.8} />
-            <span>{post.comments}</span>
-          </button>
-
-          {/* Share */}
-          <button
-            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "none", background: "transparent", color: "#6B6B8A", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-          >
-            <Share2 size={22} strokeWidth={1.8} />
-          </button>
-
-          {/* Send Tip — pushed to the right */}
-          <button
-            onClick={() => onTip?.(post.id)}
-            style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "10px", border: "1px solid #2A2A3D", background: "transparent", color: "#8B5CF6", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.1)")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-          >
-            <DollarSign size={16} strokeWidth={2} />
-            Send tip
-          </button>
-
-        </div>
+        <PostActions
+          likes={post.likes}
+          comments={post.comments}
+          isSubscribed={isSubscribed}
+          isOwnProfile={isOwnProfile}
+          onLike={() => onLike?.(post.id)}
+          onComment={() => setCommentOpen((prev) => !prev)}
+          onTip={() => onTip?.(post.id)}
+          onBookmark={() => console.log("bookmarked", post.id)}
+        />
       )}
+
+      {/* CommentSection */}
+      <CommentSection
+        postId={post.id}
+        comments={[]}
+        viewer={VIEWER}
+        isOpen={commentOpen}
+        onAddComment={(id, text) => console.log("Comment on", id, ":", text)}
+      />
     </div>
   );
 }
 
 export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false, activeTab = "posts", onLike, onComment, onTip, onUnlock, emptyState, className }: ContentFeedProps) {
+  const router = useRouter();
   const [categoryFilter,   setCategoryFilter]   = React.useState("All");
   const [mediaFilter,      setMediaFilter]      = React.useState<"all" | "photo" | "video">("all");
-  const [isPostsGridView,  setIsPostsGridView]  = React.useState(false); // posts → list by default
-  const [isMediaGridView,  setIsMediaGridView]  = React.useState(true);  // media → grid by default
+  const [isPostsGridView,  setIsPostsGridView]  = React.useState(false);
+  const [isMediaGridView,  setIsMediaGridView]  = React.useState(true);
   const [showSearch,       setShowSearch]       = React.useState(false);
   const [searchQuery,      setSearchQuery]      = React.useState("");
 
@@ -251,7 +233,6 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
     )
   );
 
-  // ── Posts tab ─────────────────────────────────────────────────────────────
   if (activeTab === "posts") {
     return (
       <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -277,11 +258,10 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
         {isPostsGridView ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px" }}>
             {filteredPosts.map((post) => (
-              <div key={post.id} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
+              <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
                 {post.media[0] && <img src={post.media[0].url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
                 {post.is_locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}><Lock size={16} color="#fff" /></div>}
                 <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
-                  {/* Fix: type is now string so comparison to "video" is valid */}
                   {post.media[0]?.type === "video" ? <Film size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} /> : <ImageIcon size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />}
                 </div>
               </div>
