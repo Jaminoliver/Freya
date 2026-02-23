@@ -1,7 +1,7 @@
 import * as React from "react";
 import { LockedContent } from "./LockedContent";
 import { getRelativeTime } from "@/lib/utils/profile";
-import { Search, Grid3X3, List, MoreHorizontal, ImageIcon, Film, Lock } from "lucide-react";
+import { Search, Grid3X3, List, MoreHorizontal, ImageIcon, Film, Lock, Heart, MessageCircle, Share2, DollarSign } from "lucide-react";
 import type { Post } from "@/lib/types/profile";
 
 export interface ContentFeedProps {
@@ -17,12 +17,13 @@ export interface ContentFeedProps {
   className?: string;
 }
 
+// Fix: use string type instead of "image" as const so "video" comparison is valid
 const DUMMY_POSTS = [
-  { id: "dp1", category: "Routine",      author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Lagos nights hit different when you're with the right people ✨🌙", media: [{ type: "image" as const, url: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&q=80" }], is_locked: false, price: null, likes: 89,  comments: 14, created_at: new Date(Date.now() - 3600000 * 12).toISOString() },
-  { id: "dp2", category: "Coffee Break", author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Sunday vibes and good energy only 🧘🏽‍♀️☀️",                      media: [{ type: "image" as const, url: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800&q=80" }], is_locked: false, price: null, likes: 312, comments: 45, created_at: new Date(Date.now() - 3600000 * 48).toISOString() },
-  { id: "dp3", category: "TV",           author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Just dropped something special 🔥",                                   media: [{ type: "image" as const, url: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800&q=80" }], is_locked: false, price: null, likes: 176, comments: 22, created_at: new Date(Date.now() - 3600000 * 60).toISOString() },
-  { id: "dp4", category: "Eye to Eye",   author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "New exclusive content 🔒",                                             media: [{ type: "image" as const, url: "https://images.unsplash.com/photo-1502323703110-f849b5b2f8a2?w=800&q=80" }], is_locked: true,  price: 2500, likes: 204, comments: 31, created_at: new Date(Date.now() - 3600000 * 72).toISOString() },
-  { id: "dp5", category: "Routine",      author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Morning routine drop 🌅",                                              media: [{ type: "image" as const, url: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&q=80" }], is_locked: false, price: null, likes: 98,  comments: 11, created_at: new Date(Date.now() - 3600000 * 96).toISOString() },
+  { id: "dp1", category: "Routine",      author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Lagos nights hit different when you're with the right people ✨🌙", media: [{ type: "image" as string, url: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&q=80" }], is_locked: false, price: null, likes: 89,  comments: 14, created_at: new Date(Date.now() - 3600000 * 12).toISOString() },
+  { id: "dp2", category: "Coffee Break", author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Sunday vibes and good energy only 🧘🏽‍♀️☀️",                      media: [{ type: "image" as string, url: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800&q=80" }], is_locked: false, price: null, likes: 312, comments: 45, created_at: new Date(Date.now() - 3600000 * 48).toISOString() },
+  { id: "dp3", category: "TV",           author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Just dropped something special 🔥",                                   media: [{ type: "image" as string, url: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800&q=80" }], is_locked: false, price: null, likes: 176, comments: 22, created_at: new Date(Date.now() - 3600000 * 60).toISOString() },
+  { id: "dp4", category: "Eye to Eye",   author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "New exclusive content 🔒",                                             media: [{ type: "video" as string, url: "https://images.unsplash.com/photo-1502323703110-f849b5b2f8a2?w=800&q=80" }], is_locked: true,  price: 2500, likes: 204, comments: 31, created_at: new Date(Date.now() - 3600000 * 72).toISOString() },
+  { id: "dp5", category: "Routine",      author: { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=47", is_verified: true }, content: "Morning routine drop 🌅",                                              media: [{ type: "image" as string, url: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&q=80" }], is_locked: false, price: null, likes: 98,  comments: 11, created_at: new Date(Date.now() - 3600000 * 96).toISOString() },
 ];
 
 const DUMMY_MEDIA = [
@@ -92,9 +93,11 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
   onTip?: (id: string) => void; onUnlock?: (id: string) => void;
 }) {
   const isLocked = post.is_locked && !isSubscribed;
+  const [liked, setLiked] = React.useState(false);
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", padding: "16px 0" }}>
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <img src={post.author.avatar_url} alt="" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
@@ -112,8 +115,10 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
         </div>
       </div>
 
+      {/* Caption */}
       {post.content && <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0 0 10px" }}>{post.content}</p>}
 
+      {/* Media */}
       {post.media.length > 0 && (
         isLocked ? (
           <div style={{ borderRadius: "10px", overflow: "hidden", position: "relative" }}>
@@ -132,11 +137,52 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
         )
       )}
 
+      {/* ── Action bar ── */}
       {!isLocked && (
-        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "10px" }}>
-          <button onClick={() => onLike?.(post.id)} style={{ background: "none", border: "none", color: "#6B6B8A", fontSize: "13px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>♡ {post.likes}</button>
-          <button onClick={() => onComment?.(post.id)} style={{ background: "none", border: "none", color: "#6B6B8A", fontSize: "13px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>💬 {post.comments}</button>
-          <button onClick={() => onTip?.(post.id)} style={{ background: "none", border: "none", color: "#6B6B8A", fontSize: "13px", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>$ Send tip</button>
+        <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "12px" }}>
+
+          {/* Like */}
+          <button
+            onClick={() => { setLiked(!liked); onLike?.(post.id); }}
+            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "none", background: liked ? "rgba(239,68,68,0.1)" : "transparent", color: liked ? "#EF4444" : "#6B6B8A", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
+            onMouseEnter={(e) => { if (!liked) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
+            onMouseLeave={(e) => { if (!liked) e.currentTarget.style.backgroundColor = "transparent"; }}
+          >
+            <Heart size={22} fill={liked ? "#EF4444" : "none"} strokeWidth={1.8} />
+            <span>{liked ? post.likes + 1 : post.likes}</span>
+          </button>
+
+          {/* Comment */}
+          <button
+            onClick={() => onComment?.(post.id)}
+            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "none", background: "transparent", color: "#6B6B8A", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+          >
+            <MessageCircle size={22} strokeWidth={1.8} />
+            <span>{post.comments}</span>
+          </button>
+
+          {/* Share */}
+          <button
+            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", borderRadius: "10px", border: "none", background: "transparent", color: "#6B6B8A", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+          >
+            <Share2 size={22} strokeWidth={1.8} />
+          </button>
+
+          {/* Send Tip — pushed to the right */}
+          <button
+            onClick={() => onTip?.(post.id)}
+            style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "10px", border: "1px solid #2A2A3D", background: "transparent", color: "#8B5CF6", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.1)")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+          >
+            <DollarSign size={16} strokeWidth={2} />
+            Send tip
+          </button>
+
         </div>
       )}
     </div>
@@ -155,13 +201,11 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
 
   const MediaToolbar = () => (
     <div style={{ paddingTop: "12px" }}>
-      {/* Row 1 — filter pills */}
       <div style={{ display: "flex", gap: "6px", overflowX: "auto", scrollbarWidth: "none", marginBottom: "8px" }}>
         {([{ key: "all", label: `All ${DUMMY_MEDIA.length}` }, { key: "photo", label: `Photo ${photoCount}` }, { key: "video", label: `Video ${videoCount}` }] as const).map((f) => (
           <button key={f.key} onClick={() => setMediaFilter(f.key)} style={{ padding: "5px 14px", borderRadius: "20px", border: "none", backgroundColor: mediaFilter === f.key ? "#8B5CF6" : "#1C1C2E", color: mediaFilter === f.key ? "#fff" : "#8A8AA0", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.15s" }}>{f.label}</button>
         ))}
       </div>
-      {/* Row 2 — controls */}
       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
         <button onClick={() => setShowSearch(!showSearch)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: showSearch ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: showSearch ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Search size={15} /></button>
         <button onClick={() => setIsGridView(true)}  style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: isGridView  ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: isGridView  ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Grid3X3 size={15} /></button>
@@ -211,13 +255,11 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
     return (
       <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
         <div style={{ paddingTop: "12px", marginBottom: "4px" }}>
-          {/* Row 1 — category pills */}
           <div style={{ display: "flex", gap: "6px", overflowX: "auto", scrollbarWidth: "none", marginBottom: "8px" }}>
             {CATEGORIES.map((cat) => (
               <button key={cat} onClick={() => setCategoryFilter(cat)} style={{ padding: "5px 14px", borderRadius: "20px", border: "none", backgroundColor: categoryFilter === cat ? "#8B5CF6" : "#1C1C2E", color: categoryFilter === cat ? "#fff" : "#8A8AA0", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.15s" }}>{cat}</button>
             ))}
           </div>
-          {/* Row 2 — controls */}
           <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
             <button onClick={() => setShowSearch(!showSearch)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: showSearch ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: showSearch ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Search size={15} /></button>
             <button onClick={() => setIsGridView(false)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: !isGridView ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: !isGridView ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><List size={15} /></button>
@@ -238,6 +280,7 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
                 {post.media[0] && <img src={post.media[0].url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
                 {post.is_locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}><Lock size={16} color="#fff" /></div>}
                 <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
+                  {/* Fix: type is now string so comparison to "video" is valid */}
                   {post.media[0]?.type === "video" ? <Film size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} /> : <ImageIcon size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />}
                 </div>
               </div>
