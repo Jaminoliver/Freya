@@ -21,7 +21,7 @@ type Tab = { label: string; key: string; count?: number };
 
 function TabBar({ tabs, active, onChange }: { tabs: Tab[]; active: string; onChange: (key: string) => void }) {
   return (
-    <div style={{ display: "flex", borderBottom: "1px solid #1E1E2E", padding: "0 24px" }}>
+    <div style={{ display: "flex", borderBottom: "1px solid #1E1E2E", padding: "0 24px", overflowX: "auto", scrollbarWidth: "none" }}>
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -32,7 +32,7 @@ function TabBar({ tabs, active, onChange }: { tabs: Tab[]; active: string; onCha
             cursor: "pointer", color: active === tab.key ? "#8B5CF6" : "#64748B",
             borderBottom: active === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
             marginBottom: "-1px", textTransform: "capitalize", transition: "color 0.15s ease",
-            display: "flex", alignItems: "center", gap: "6px",
+            display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", flexShrink: 0,
           }}
         >
           {tab.label}
@@ -66,7 +66,6 @@ export default function ProfilePage() {
   const [followLoading, setFollowLoading] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState("posts");
 
-  // ── Checkout modal state ───────────────────────────────────────────────────
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
   const [checkoutType, setCheckoutType] = React.useState<CheckoutType>("subscription");
   const [checkoutTier, setCheckoutTier] = React.useState<SubscriptionTier>("monthly");
@@ -74,20 +73,13 @@ export default function ProfilePage() {
   const [lockedPostPrice, setLockedPostPrice] = React.useState<number>(0);
 
   const openCheckout = (type: CheckoutType, tier: SubscriptionTier = "monthly") => {
-    setCheckoutType(type);
-    setCheckoutTier(tier);
-    setCheckoutOpen(true);
+    setCheckoutType(type); setCheckoutTier(tier); setCheckoutOpen(true);
   };
-
   const openTip = () => openCheckout("tips");
-
   const openUnlock = (postId: string, price: number = 0) => {
-    setLockedPostId(postId);
-    setLockedPostPrice(price);
-    setCheckoutType("locked_post");
-    setCheckoutOpen(true);
+    setLockedPostId(postId); setLockedPostPrice(price);
+    setCheckoutType("locked_post"); setCheckoutOpen(true);
   };
-  // ──────────────────────────────────────────────────────────────────────────
 
   React.useEffect(() => { setActiveTab("posts"); }, [username]);
 
@@ -96,18 +88,14 @@ export default function ProfilePage() {
       setLoading(true);
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-
       if (user) {
         const { data: viewerData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
         if (viewerData) setViewer(viewerData as User);
       }
-
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
-        .eq("username", username)
-        .single();
-
+        .eq("username", username).single();
       if (profileData) {
         const enriched: User = {
           ...(profileData as User),
@@ -118,13 +106,11 @@ export default function ProfilePage() {
           },
         };
         setProfile(enriched);
-
         if (user && user.id !== profileData.id && profileData.role === "creator") {
           const following = await checkIsFollowing(profileData.id);
           setIsFollowing(following);
         }
       }
-
       setLoading(false);
     };
     fetchData();
@@ -143,11 +129,8 @@ export default function ProfilePage() {
         setIsFollowing(true);
         setProfile((prev) => prev ? { ...prev, follower_count: (prev.follower_count ?? 0) + 1 } : prev);
       }
-    } catch (err) {
-      console.error("Follow error:", err);
-    } finally {
-      setFollowLoading(false);
-    }
+    } catch (err) { console.error("Follow error:", err); }
+    finally { setFollowLoading(false); }
   };
 
   const isOwnProfile = viewer?.id === profile?.id;
@@ -163,18 +146,14 @@ export default function ProfilePage() {
   const handleTip = (_id: string) => openTip();
   const handleUnlock = (id: string) => openUnlock(id);
 
-  // Shared checkout modal — rendered once, used by all flows
   const checkoutModal = profile ? (
     <CheckoutModal
-      isOpen={checkoutOpen}
-      onClose={() => setCheckoutOpen(false)}
-      type={checkoutType}
-      creator={profile}
+      isOpen={checkoutOpen} onClose={() => setCheckoutOpen(false)}
+      type={checkoutType} creator={profile}
       monthlyPrice={profile.subscriptionPrice ?? 0}
       threeMonthPrice={profile.bundlePricing?.threeMonths}
       sixMonthPrice={profile.bundlePricing?.sixMonths}
-      initialTier={checkoutTier}
-      postPrice={lockedPostPrice}
+      initialTier={checkoutTier} postPrice={lockedPostPrice}
       onViewContent={() => router.push(`/${profile.username}`)}
       onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
     />
@@ -202,16 +181,16 @@ export default function ProfilePage() {
 
   const bannerStats = {
     posts: profile.post_count ?? 0,
-    media: 0,
-    likes: 0,
+    media: 0, likes: 0,
     subscribers: profile.subscriber_count ?? profile.follower_count ?? 0,
   };
 
-  // ── 1. CREATOR VIEWING OWN PROFILE ─────────────────────────────────────────
+  // ── 1. CREATOR VIEWING OWN PROFILE ────────────────────────────────────────
   if (isOwnProfile && profile.role === "creator") {
     const tabs: Tab[] = [
-      { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
-      { label: "Media", key: "media", count: 0 },
+      { label: "Posts",         key: "posts",         count: profile.post_count ?? 0 },
+      { label: "Media",         key: "media",         count: 0 },
+      { label: "Vault",         key: "vault",         count: 0 },
       { label: "Subscriptions", key: "subscriptions", count: 0 },
     ];
     return (
@@ -231,7 +210,8 @@ export default function ProfilePage() {
           <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingBottom: "12px", paddingRight: "8px" }}>
             <SubscriptionCard
               monthlyPrice={profile.subscriptionPrice ?? 0} threeMonthPrice={profile.bundlePricing?.threeMonths}
-              sixMonthPrice={profile.bundlePricing?.sixMonths} isEditable={true} onEditPricing={() => router.push("/settings?panel=pricing")}
+              sixMonthPrice={profile.bundlePricing?.sixMonths} isEditable={true}
+              onEditPricing={() => router.push("/settings?panel=pricing")}
             />
             <ProfileActions viewContext="ownCreator" onEditProfile={goToProfileSettings} />
           </div>
@@ -257,11 +237,11 @@ export default function ProfilePage() {
     );
   }
 
-  // ── 2. FAN VIEWING OWN PROFILE ─────────────────────────────────────────────
+  // ── 2. FAN VIEWING OWN PROFILE ────────────────────────────────────────────
   if (isOwnProfile && profile.role === "fan") {
     const tabs: Tab[] = [
-      { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
-      { label: "Media", key: "media", count: 0 },
+      { label: "Posts",         key: "posts",         count: profile.post_count ?? 0 },
+      { label: "Media",         key: "media",         count: 0 },
       { label: "Subscriptions", key: "subscriptions", count: 0 },
     ];
     const fanStats = { posts: profile.post_count ?? 0, media: 0, likes: 0, subscribers: profile.subscriber_count ?? 0 };
@@ -335,14 +315,7 @@ export default function ProfilePage() {
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 24px" }}>
           <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
           <div style={{ paddingBottom: "12px" }}>
-            <ProfileActions
-              viewContext="fanViewingCreator"
-              onMessage={() => console.log("Message")}
-              onTip={openTip}
-              onShare={() => console.log("Share")}
-              onFollow={handleFollow}
-              isFollowing={isFollowing}
-            />
+            <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={openTip} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
@@ -379,14 +352,7 @@ export default function ProfilePage() {
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 24px" }}>
           <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
           <div style={{ paddingBottom: "12px" }}>
-            <ProfileActions
-              viewContext="fanViewingCreator"
-              onMessage={() => console.log("Message")}
-              onTip={openTip}
-              onShare={() => console.log("Share")}
-              onFollow={handleFollow}
-              isFollowing={isFollowing}
-            />
+            <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={openTip} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
