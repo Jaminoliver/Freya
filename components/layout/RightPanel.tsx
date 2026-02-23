@@ -5,6 +5,7 @@ import { Search, BadgeCheck, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
+import { HomeSidebar } from "@/components/feed/HomeSidebar";
 
 interface Creator {
   id: string;
@@ -37,6 +38,7 @@ export function RightPanel() {
   const router          = useRouter();
   const isExplore       = pathname === "/explore";
   const isSubscriptions = pathname.startsWith("/subscriptions");
+  const isHome          = pathname === "/dashboard";
   const debounceRef     = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -102,7 +104,7 @@ export function RightPanel() {
 
   // ── Default right panel ────────────────────────────────────────────────────
   return (
-    <div style={{ width: "300px", flexShrink: 0, minHeight: "100vh", backgroundColor: "#13131F", borderLeft: "1px solid #1F1F2A", padding: "24px 20px", display: "flex", flexDirection: "column", gap: "24px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", fontFamily: "'Inter', sans-serif", scrollbarWidth: "none" }}>
+    <div style={{ width: "320px", flexShrink: 0, minHeight: "100vh", backgroundColor: "#13131F", borderLeft: "1px solid #1F1F2A", padding: "24px 20px", display: "flex", flexDirection: "column", gap: "24px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", fontFamily: "'Inter', sans-serif", scrollbarWidth: "none" }}>
 
       {/* Search */}
       <div style={{ position: "relative" }}>
@@ -145,6 +147,9 @@ export function RightPanel() {
         </div>
       )}
 
+      {/* Home page — suggestions grid */}
+      {!showResults && isHome && <HomeSidebar />}
+
       {/* Explore page content */}
       {!showResults && isExplore && (
         <>
@@ -180,8 +185,8 @@ export function RightPanel() {
         </>
       )}
 
-      {/* Default: suggested creators */}
-      {!showResults && !isExplore && (
+      {/* Default: suggested creators (non-home, non-explore) */}
+      {!showResults && !isExplore && !isHome && (
         <div>
           <h3 style={{ margin: "0 0 16px", fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>Suggested Creators</h3>
           <SuggestedCreators router={router} />

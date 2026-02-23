@@ -35,7 +35,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       </main>
 
       {showRightPanel && (
-        <div className="hidden lg:block" style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden" }}>
+        <div className="hidden lg:block" style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", width: "320px", flexShrink: 0 }}>
           <RightPanel />
         </div>
       )}

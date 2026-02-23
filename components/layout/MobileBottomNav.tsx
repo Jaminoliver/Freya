@@ -1,21 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Home, MessageCircle, CreditCard, MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 
 export function MobileBottomNav() {
   const pathname = usePathname();
-  const router   = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
-
-  const navItems = [
-    { label: "Home",    href: "/dashboard",     icon: Home          },
-    { label: "Messages",href: "/messages",       icon: MessageCircle },
-    { label: "Subs",    href: "/subscriptions",  icon: CreditCard    },
-  ];
 
   return (
     <>
@@ -28,7 +21,6 @@ export function MobileBottomNav() {
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
-        {/* Home */}
         <Link
           href="/dashboard"
           style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === "/dashboard" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}
@@ -37,7 +29,6 @@ export function MobileBottomNav() {
           <span style={{ fontSize: "10px" }}>Home</span>
         </Link>
 
-        {/* Messages */}
         <Link
           href="/messages"
           style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === "/messages" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}
@@ -46,15 +37,14 @@ export function MobileBottomNav() {
           <span style={{ fontSize: "10px" }}>Messages</span>
         </Link>
 
-        {/* + Center button */}
+        {/* ＋ links to /create */}
         <Link
-          href="/new-post"
+          href="/create"
           style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#8B5CF6", textDecoration: "none", flexShrink: 0 }}
         >
           <Plus size={22} color="#fff" />
         </Link>
 
-        {/* Subscriptions */}
         <Link
           href="/subscriptions"
           style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname.startsWith("/subscriptions") ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}
@@ -63,7 +53,6 @@ export function MobileBottomNav() {
           <span style={{ fontSize: "10px" }}>Subs</span>
         </Link>
 
-        {/* More */}
         <button
           onClick={() => setMoreOpen(true)}
           style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: moreOpen ? "#8B5CF6" : "#6B6B8A", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: 0 }}
