@@ -190,11 +190,12 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
 }
 
 export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false, activeTab = "posts", onLike, onComment, onTip, onUnlock, emptyState, className }: ContentFeedProps) {
-  const [categoryFilter, setCategoryFilter] = React.useState("All");
-  const [mediaFilter,    setMediaFilter]    = React.useState<"all" | "photo" | "video">("all");
-  const [isGridView,     setIsGridView]     = React.useState(true);
-  const [showSearch,     setShowSearch]     = React.useState(false);
-  const [searchQuery,    setSearchQuery]    = React.useState("");
+  const [categoryFilter,   setCategoryFilter]   = React.useState("All");
+  const [mediaFilter,      setMediaFilter]      = React.useState<"all" | "photo" | "video">("all");
+  const [isPostsGridView,  setIsPostsGridView]  = React.useState(false); // posts → list by default
+  const [isMediaGridView,  setIsMediaGridView]  = React.useState(true);  // media → grid by default
+  const [showSearch,       setShowSearch]       = React.useState(false);
+  const [searchQuery,      setSearchQuery]      = React.useState("");
 
   const filteredPosts = categoryFilter === "All" ? DUMMY_POSTS : DUMMY_POSTS.filter((p) => p.category === categoryFilter);
   const filteredMedia = DUMMY_MEDIA.filter((m) => mediaFilter === "all" ? true : mediaFilter === "photo" ? m.type === "image" : m.type === "video");
@@ -208,8 +209,8 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
         <button onClick={() => setShowSearch(!showSearch)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: showSearch ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: showSearch ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Search size={15} /></button>
-        <button onClick={() => setIsGridView(true)}  style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: isGridView  ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: isGridView  ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Grid3X3 size={15} /></button>
-        <button onClick={() => setIsGridView(false)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: !isGridView ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: !isGridView ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><List size={15} /></button>
+        <button onClick={() => setIsMediaGridView(true)}  style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: isMediaGridView  ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: isMediaGridView  ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Grid3X3 size={15} /></button>
+        <button onClick={() => setIsMediaGridView(false)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: !isMediaGridView ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: !isMediaGridView ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><List size={15} /></button>
       </div>
       {showSearch && (
         <div style={{ marginBottom: "10px", position: "relative" }}>
@@ -221,7 +222,7 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
   );
 
   const MediaGrid = () => (
-    isGridView ? (
+    isMediaGridView ? (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px" }}>
         {filteredMedia.map((item) => (
           <div key={item.id} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
@@ -262,8 +263,8 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
             <button onClick={() => setShowSearch(!showSearch)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: showSearch ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: showSearch ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Search size={15} /></button>
-            <button onClick={() => setIsGridView(false)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: !isGridView ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: !isGridView ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><List size={15} /></button>
-            <button onClick={() => setIsGridView(true)}  style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: isGridView  ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: isGridView  ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Grid3X3 size={15} /></button>
+            <button onClick={() => setIsPostsGridView(false)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: !isPostsGridView ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: !isPostsGridView ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><List size={15} /></button>
+            <button onClick={() => setIsPostsGridView(true)}  style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: isPostsGridView  ? "rgba(139,92,246,0.15)" : "#1C1C2E", color: isPostsGridView  ? "#8B5CF6" : "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Grid3X3 size={15} /></button>
             <button style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", backgroundColor: "#1C1C2E", color: "#8A8AA0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><MoreHorizontal size={15} /></button>
           </div>
           {showSearch && (
@@ -273,7 +274,7 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
             </div>
           )}
         </div>
-        {isGridView ? (
+        {isPostsGridView ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px" }}>
             {filteredPosts.map((post) => (
               <div key={post.id} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
@@ -295,19 +296,11 @@ export default function ContentFeed({ posts, isSubscribed, isOwnProfile = false,
     );
   }
 
-  if (activeTab === "media" || activeTab === "vault") {
+  if (activeTab === "media") {
     return (
       <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
         <MediaToolbar />
         <MediaGrid />
-      </div>
-    );
-  }
-
-  if (activeTab === "subscriptions") {
-    return (
-      <div className={className} style={{ fontFamily: "'Inter', sans-serif", textAlign: "center", padding: "48px 0", color: "#4A4A6A", fontSize: "14px" }}>
-        No subscriptions yet
       </div>
     );
   }

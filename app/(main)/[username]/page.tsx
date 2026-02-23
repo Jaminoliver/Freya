@@ -21,7 +21,7 @@ type Tab = { label: string; key: string; count?: number };
 
 function TabBar({ tabs, active, onChange }: { tabs: Tab[]; active: string; onChange: (key: string) => void }) {
   return (
-    <div style={{ display: "flex", borderBottom: "1px solid #1E1E2E", padding: "0 24px", overflowX: "auto", scrollbarWidth: "none" }}>
+    <div style={{ display: "flex", justifyContent: "center", borderBottom: "1px solid #1E1E2E", padding: "0 24px", overflowX: "auto", scrollbarWidth: "none" }}>
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -188,10 +188,8 @@ export default function ProfilePage() {
   // ── 1. CREATOR VIEWING OWN PROFILE ────────────────────────────────────────
   if (isOwnProfile && profile.role === "creator") {
     const tabs: Tab[] = [
-      { label: "Posts",         key: "posts",         count: profile.post_count ?? 0 },
-      { label: "Media",         key: "media",         count: 0 },
-      { label: "Vault",         key: "vault",         count: 0 },
-      { label: "Subscriptions", key: "subscriptions", count: 0 },
+      { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
+      { label: "Media", key: "media", count: 0 },
     ];
     return (
       <div style={{ maxWidth: "768px", margin: "0 auto" }}>
@@ -240,9 +238,8 @@ export default function ProfilePage() {
   // ── 2. FAN VIEWING OWN PROFILE ────────────────────────────────────────────
   if (isOwnProfile && profile.role === "fan") {
     const tabs: Tab[] = [
-      { label: "Posts",         key: "posts",         count: profile.post_count ?? 0 },
-      { label: "Media",         key: "media",         count: 0 },
-      { label: "Subscriptions", key: "subscriptions", count: 0 },
+      { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
+      { label: "Media", key: "media", count: 0 },
     ];
     const fanStats = { posts: profile.post_count ?? 0, media: 0, likes: 0, subscribers: profile.subscriber_count ?? 0 };
     return (
