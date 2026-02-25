@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 export interface SavedCard {
   id: string;
   last_four: string;
@@ -10,43 +12,52 @@ export interface SavedCard {
 
 interface CardsTabProps {
   cards: SavedCard[];
-  onAddCard: () => void;
+  onAddCard: () => void; // triggers Kyshi checkout — no card details collected client-side
   onSetDefault: (id: string) => void;
   onRemoveCard: (id: string) => void;
 }
 
 export default function CardsTab({ cards, onAddCard, onSetDefault, onRemoveCard }: CardsTabProps) {
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-        <p style={{ fontSize: "10px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0, fontFamily: "'Inter', sans-serif" }}>
-          Payment Cards
+    <div style={{ padding: "24px 20px 0", fontFamily: "'Inter', sans-serif" }}>
+
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+        <p style={{ fontSize: "11px", fontWeight: 500, color: "#6B6B8A", margin: 0, letterSpacing: "0.04em" }}>
+          Saved cards
         </p>
         <button
           onClick={onAddCard}
           style={{
-            display: "flex", alignItems: "center", gap: "4px",
-            padding: "5px 12px", borderRadius: "6px",
-            border: "1.5px solid #8B5CF6", backgroundColor: "transparent",
-            color: "#8B5CF6", fontSize: "12px", fontWeight: 600,
-            cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "background-color 0.15s",
+            backgroundColor: "#8B5CF6",
+            color: "#fff",
+            border: "none",
+            borderRadius: "8px",
+            padding: "8px 16px",
+            fontSize: "13px",
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "all 0.2s",
+            fontFamily: "'Inter', sans-serif",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.1)")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
-          <span style={{ fontSize: "14px", lineHeight: 1 }}>+</span>
-          Add Card
+          + Add Card
         </button>
       </div>
 
+      {/* Card list */}
       {cards.length === 0 ? (
-        <div style={{ backgroundColor: "#1C1C2E", border: "1.5px dashed #2A2A3D", borderRadius: "10px", padding: "28px 16px", textAlign: "center" }}>
+        <div style={{ backgroundColor: "#1C1C2E", border: "1.5px dashed #2A2A3D", borderRadius: "10px", padding: "28px 16px", textAlign: "center", marginBottom: "16px" }}>
           <div style={{ fontSize: "22px", marginBottom: "8px" }}>💳</div>
           <p style={{ fontSize: "13px", color: "#6B6B8A", margin: 0, fontFamily: "'Inter', sans-serif" }}>No saved cards yet</p>
-          <p style={{ fontSize: "11px", color: "#6B6B8A", margin: "3px 0 0", fontFamily: "'Inter', sans-serif" }}>Add a card to top up instantly</p>
+          <p style={{ fontSize: "11px", color: "#4A4A6A", margin: "3px 0 0", fontFamily: "'Inter', sans-serif" }}>
+            Add a card via Kyshi checkout — your card is saved securely after the first payment
+          </p>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px" }}>
           {cards.map((card) => (
             <div
               key={card.id}
@@ -56,6 +67,7 @@ export default function CardsTab({ cards, onAddCard, onSetDefault, onRemoveCard 
                 borderRadius: "10px", padding: "12px 14px",
                 display: "flex", alignItems: "center", gap: "10px",
                 boxShadow: card.is_default ? "0 0 0 1px rgba(139,92,246,0.2)" : "none",
+                position: "relative",
               }}
             >
               {/* Card icon */}
@@ -69,10 +81,10 @@ export default function CardsTab({ cards, onAddCard, onSetDefault, onRemoveCard 
               {/* Card info */}
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: "13px", fontWeight: 600, color: "#F1F5F9", margin: "0 0 1px", fontFamily: "'Inter', sans-serif" }}>
-                  •••• •••• •••• {card.last_four}
+                  {card.card_type} •••• {card.last_four}
                 </p>
                 <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0, fontFamily: "'Inter', sans-serif" }}>
-                  Expires {card.expiry}
+                  {card.expiry}
                 </p>
               </div>
 
@@ -82,23 +94,53 @@ export default function CardsTab({ cards, onAddCard, onSetDefault, onRemoveCard 
                 </span>
               )}
 
-              <button style={{ background: "none", border: "none", color: "#6B6B8A", cursor: "pointer", padding: "2px 4px", fontSize: "16px", lineHeight: 1 }}>
-                ⋯
-              </button>
+              {/* Menu button */}
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setMenuOpen(menuOpen === card.id ? null : card.id)}
+                  style={{ background: "none", border: "none", color: "#6B6B8A", cursor: "pointer", padding: "2px 4px", fontSize: "16px", lineHeight: 1 }}
+                >
+                  ⋯
+                </button>
+
+                {menuOpen === card.id && (
+                  <div style={{
+                    position: "absolute", right: 0, top: "100%", zIndex: 10,
+                    backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D",
+                    borderRadius: "8px", overflow: "hidden", minWidth: "140px",
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+                  }}>
+                    {!card.is_default && (
+                      <button
+                        onClick={() => { onSetDefault(card.id); setMenuOpen(null); }}
+                        style={{ display: "block", width: "100%", padding: "10px 14px", background: "none", border: "none", color: "#F1F5F9", fontSize: "13px", textAlign: "left", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+                      >
+                        Set as default
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { onRemoveCard(card.id); setMenuOpen(null); }}
+                      style={{ display: "block", width: "100%", padding: "10px 14px", background: "none", border: "none", color: "#F87171", fontSize: "13px", textAlign: "left", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+                    >
+                      Remove card
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
       )}
 
       {/* Statement notice */}
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: "#1C1C2E", border: "1.5px solid #2A2A3D", borderRadius: "8px", padding: "10px 12px", marginTop: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: "#1C1C2E", border: "1.5px solid #2A2A3D", borderRadius: "8px", padding: "10px 12px" }}>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6B6B8A" strokeWidth="2">
           <circle cx="12" cy="12" r="10" />
           <line x1="12" y1="8" x2="12" y2="12" />
           <line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
         <span style={{ fontSize: "11px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>
-          Charges on your statement will appear as &apos;Freya Credits&apos;
+          Cards are tokenized by Kyshi — your details are never stored on Freya
         </span>
       </div>
     </div>

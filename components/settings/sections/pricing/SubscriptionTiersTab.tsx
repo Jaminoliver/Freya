@@ -1,24 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Check } from "lucide-react";
-import BankAccountWarningBanner from "./BankAccountWarningBanner";
 
+const MIN_PRICE = 10000;
 const MAX_DISCOUNT = 50;
 const STEP = 5;
-type SaveState = "idle" | "saving" | "saved";
+type SaveState = "idle" | "saving" | "saved" | "error";
 
 const formatNaira = (n: number) => "₦" + n.toLocaleString("en-NG");
 
-export default function SubscriptionTiersTab() {
-  const hasBankAccount = false;
+export default function SubscriptionTiersTab({ username }: { username: string }) {
+  const router = useRouter();
 
   const [monthlyPrice, setMonthlyPrice] = useState(0);
   const [monthlyInput, setMonthlyInput] = useState("");
   const [threeMonthDiscount, setThreeMonthDiscount] = useState(0);
   const [sixMonthDiscount, setSixMonthDiscount] = useState(0);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const isFirstRender = useRef(true);
 
   const threeBase = monthlyPrice * 3;
   const sixBase = monthlyPrice * 6;
@@ -26,6 +30,31 @@ export default function SubscriptionTiersTab() {
   const sixMonthPrice = Math.round(sixBase * (1 - sixMonthDiscount / 100));
 
   useEffect(() => {
+    fetch("/api/settings/pricing")
+      .then((r) => r.json())
+      .then((json) => {
+        const { pricing } = json;
+        if (pricing?.monthly_price !== undefined) {
+          const monthly = Number(pricing.monthly_price);
+          setMonthlyPrice(monthly);
+          setMonthlyInput(monthly > 0 ? String(monthly) : "");
+
+          if (pricing.three_month_price && monthly > 0) {
+            const discount = Math.round((1 - Number(pricing.three_month_price) / (monthly * 3)) * 100);
+            setThreeMonthDiscount(Math.max(0, discount));
+          }
+          if (pricing.six_month_price && monthly > 0) {
+            const discount = Math.round((1 - Number(pricing.six_month_price) / (monthly * 6)) * 100);
+            setSixMonthDiscount(Math.max(0, discount));
+          }
+        }
+      })
+      .catch((err) => console.error("[SubscriptionTiersTab] GET error:", err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
     setThreeMonthDiscount(0);
     setSixMonthDiscount(0);
   }, [monthlyPrice]);
@@ -40,19 +69,51 @@ export default function SubscriptionTiersTab() {
   const handleMonthlyBlur = () => {
     setFocused(false);
     if (!monthlyInput.trim() || monthlyPrice === 0) {
-      setMonthlyPrice(0); setMonthlyInput("");
-    } else if (monthlyPrice < 1000) {
-      setMonthlyPrice(1000); setMonthlyInput("1000");
+      setMonthlyPrice(0);
+      setMonthlyInput("");
     } else {
       setMonthlyInput(String(monthlyPrice));
     }
   };
 
   const handleSave = async () => {
+    setErrorMsg(null);
+
+    if (monthlyPrice > 0 && monthlyPrice < MIN_PRICE) {
+      setErrorMsg(`Minimum subscription price is ${formatNaira(MIN_PRICE)}`);
+      return;
+    }
+
     setSaveState("saving");
-    await new Promise((r) => setTimeout(r, 900));
-    setSaveState("saved");
-    setTimeout(() => setSaveState("idle"), 2500);
+
+    const payload = {
+      monthly_price: monthlyPrice > 0 ? monthlyPrice : null,
+      three_month_price: monthlyPrice > 0 ? threeMonthPrice : null,
+      six_month_price: monthlyPrice > 0 ? sixMonthPrice : null,
+    };
+
+    try {
+      const res = await fetch("/api/settings/pricing", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMsg(data.message ?? "Failed to save");
+        setSaveState("error");
+        return;
+      }
+
+      setSaveState("saved");
+      setTimeout(() => router.push(`/${username}`), 900);
+    } catch (err) {
+      console.error("[SubscriptionTiersTab] PATCH error:", err);
+      setErrorMsg("Something went wrong");
+      setSaveState("error");
+    }
   };
 
   const stepBtn = (onClick: () => void, disabled: boolean, label: string) => (
@@ -77,22 +138,22 @@ export default function SubscriptionTiersTab() {
     </button>
   );
 
+  if (loading) {
+    return <p style={{ fontSize: "12px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>Loading...</p>;
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", fontFamily: "'Inter', sans-serif" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-
-      {!hasBankAccount && <BankAccountWarningBanner />}
 
       {/* Price per month */}
       <div style={{ padding: "20px 0 24px", borderBottom: "1px solid #1E1E2E" }}>
         <p style={{ fontSize: "11px", fontWeight: 500, color: "#94A3B8", margin: "0 0 4px", letterSpacing: "0.04em" }}>
           Price per month
         </p>
-
-        <p style={{ fontSize: "28px", fontWeight: 700, color: monthlyPrice > 0 ? "#F1F5F9" : "#64748B", margin: "0 0 16px", letterSpacing: "-0.5px" }}>
+        <p style={{ fontSize: "28px", fontWeight: 700, color: monthlyPrice > 0 ? "#F1F5F9" : "#22C55E", margin: "0 0 16px", letterSpacing: "-0.5px" }}>
           {monthlyPrice > 0 ? formatNaira(monthlyPrice) : "Free"}
         </p>
-
         <input
           type="text"
           inputMode="numeric"
@@ -102,24 +163,15 @@ export default function SubscriptionTiersTab() {
           onBlur={handleMonthlyBlur}
           placeholder="Leave empty for free"
           style={{
-            width: "100%",
-            backgroundColor: "transparent",
-            border: "none",
+            width: "100%", backgroundColor: "transparent", border: "none",
             borderBottom: `1px solid ${focused ? "#8B5CF6" : "#2A2A3D"}`,
-            borderRadius: 0,
-            padding: "8px 0",
-            fontSize: "13px",
-            color: "#F1F5F9",
-            outline: "none",
-            boxSizing: "border-box",
-            fontFamily: "'Inter', sans-serif",
-            transition: "border-color 0.2s",
-            marginBottom: "8px",
+            borderRadius: 0, padding: "8px 0", fontSize: "13px", color: "#F1F5F9",
+            outline: "none", boxSizing: "border-box", fontFamily: "'Inter', sans-serif",
+            transition: "border-color 0.2s", marginBottom: "8px",
           }}
         />
-
         <p style={{ fontSize: "11px", color: "#94A3B8", margin: 0 }}>
-          Min ₦1,000 · Recommended ₦2,000–₦25,000
+          Leave empty for free · Minimum ₦10,000
           {monthlyPrice > 0 && ` · ~$${(monthlyPrice / 1600).toFixed(2)} USD`}
         </p>
       </div>
@@ -132,86 +184,58 @@ export default function SubscriptionTiersTab() {
         <p style={{ fontSize: "11px", color: "#64748B", margin: "0 0 20px" }}>
           Discount for longer commitments. Max 50% off, steps of 5%.
         </p>
-
         <div style={{ display: "flex", gap: "24px" }}>
           {/* 3 Months */}
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
               <p style={{ fontSize: "12px", color: "#CBD5E1", margin: 0 }}>3 months</p>
-              {threeMonthDiscount > 0 && (
-                <span style={{ fontSize: "11px", color: "#34D399" }}>{threeMonthDiscount}% off</span>
-              )}
+              {threeMonthDiscount > 0 && <span style={{ fontSize: "11px", color: "#34D399" }}>{threeMonthDiscount}% off</span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              {/* − left: increases discount, lowers price */}
-              {stepBtn(
-                () => setThreeMonthDiscount((d) => Math.min(d + STEP, MAX_DISCOUNT)),
-                threeMonthDiscount >= MAX_DISCOUNT || monthlyPrice === 0,
-                "−"
-              )}
+              {stepBtn(() => setThreeMonthDiscount((d) => Math.min(d + STEP, MAX_DISCOUNT)), threeMonthDiscount >= MAX_DISCOUNT || monthlyPrice === 0, "−")}
               <span style={{ flex: 1, textAlign: "center", fontSize: "13px", color: monthlyPrice > 0 ? "#F1F5F9" : "#64748B", fontWeight: 500 }}>
                 {monthlyPrice > 0 ? formatNaira(threeMonthPrice) : "—"}
               </span>
-              {/* + right: decreases discount, raises price */}
-              {stepBtn(
-                () => setThreeMonthDiscount((d) => Math.max(d - STEP, 0)),
-                threeMonthDiscount === 0 || monthlyPrice === 0,
-                "+"
-              )}
+              {stepBtn(() => setThreeMonthDiscount((d) => Math.max(d - STEP, 0)), threeMonthDiscount === 0 || monthlyPrice === 0, "+")}
             </div>
             {monthlyPrice > 0 && threeMonthDiscount > 0 && (
-              <p style={{ fontSize: "11px", color: "#34D399", margin: "6px 0 0", textAlign: "center" }}>
-                saves {formatNaira(threeBase - threeMonthPrice)}
-              </p>
+              <p style={{ fontSize: "11px", color: "#34D399", margin: "6px 0 0", textAlign: "center" }}>saves {formatNaira(threeBase - threeMonthPrice)}</p>
             )}
           </div>
 
-          {/* Divider */}
           <div style={{ width: "1px", backgroundColor: "#1E1E2E" }} />
 
           {/* 6 Months */}
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
               <p style={{ fontSize: "12px", color: "#CBD5E1", margin: 0 }}>6 months</p>
-              {sixMonthDiscount > 0 && (
-                <span style={{ fontSize: "11px", color: "#34D399" }}>{sixMonthDiscount}% off</span>
-              )}
+              {sixMonthDiscount > 0 && <span style={{ fontSize: "11px", color: "#34D399" }}>{sixMonthDiscount}% off</span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              {/* − left: increases discount, lowers price */}
-              {stepBtn(
-                () => setSixMonthDiscount((d) => Math.min(d + STEP, MAX_DISCOUNT)),
-                sixMonthDiscount >= MAX_DISCOUNT || monthlyPrice === 0,
-                "−"
-              )}
+              {stepBtn(() => setSixMonthDiscount((d) => Math.min(d + STEP, MAX_DISCOUNT)), sixMonthDiscount >= MAX_DISCOUNT || monthlyPrice === 0, "−")}
               <span style={{ flex: 1, textAlign: "center", fontSize: "13px", color: monthlyPrice > 0 ? "#F1F5F9" : "#64748B", fontWeight: 500 }}>
                 {monthlyPrice > 0 ? formatNaira(sixMonthPrice) : "—"}
               </span>
-              {/* + right: decreases discount, raises price */}
-              {stepBtn(
-                () => setSixMonthDiscount((d) => Math.max(d - STEP, 0)),
-                sixMonthDiscount === 0 || monthlyPrice === 0,
-                "+"
-              )}
+              {stepBtn(() => setSixMonthDiscount((d) => Math.max(d - STEP, 0)), sixMonthDiscount === 0 || monthlyPrice === 0, "+")}
             </div>
             {monthlyPrice > 0 && sixMonthDiscount > 0 && (
-              <p style={{ fontSize: "11px", color: "#34D399", margin: "6px 0 0", textAlign: "center" }}>
-                saves {formatNaira(sixBase - sixMonthPrice)}
-              </p>
+              <p style={{ fontSize: "11px", color: "#34D399", margin: "6px 0 0", textAlign: "center" }}>saves {formatNaira(sixBase - sixMonthPrice)}</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Save */}
+      {errorMsg && (
+        <p style={{ fontSize: "12px", color: "#EF4444", margin: "16px 0 0" }}>{errorMsg}</p>
+      )}
+
       <div style={{ paddingTop: "24px" }}>
         <button
           onClick={handleSave}
           disabled={saveState === "saving"}
           style={{
-            width: "100%", padding: "11px",
-            borderRadius: "8px", border: "none",
-            backgroundColor: saveState === "saved" ? "#059669" : "#8B5CF6",
+            width: "100%", padding: "11px", borderRadius: "8px", border: "none",
+            backgroundColor: saveState === "saved" ? "#059669" : saveState === "error" ? "#EF4444" : "#8B5CF6",
             color: "#fff", fontSize: "13px", fontWeight: 600,
             cursor: saveState === "saving" ? "not-allowed" : "pointer",
             fontFamily: "'Inter', sans-serif",
@@ -223,7 +247,7 @@ export default function SubscriptionTiersTab() {
         >
           {saveState === "saving" && <Loader2 size={13} style={{ animation: "spin 0.9s linear infinite" }} />}
           {saveState === "saved" && <Check size={13} />}
-          {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Save pricing"}
+          {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved — redirecting…" : saveState === "error" ? "Retry" : "Save pricing"}
         </button>
       </div>
     </div>

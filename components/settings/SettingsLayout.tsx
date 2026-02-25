@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { User, Shield, CreditCard, Lock, Bell, ChevronRight, TrendingUp, Wallet } from "lucide-react";
 import ProfileSettings from "@/components/settings/sections/ProfileSettings";
 import AccountSettings from "@/components/settings/sections/AccountSettings";
@@ -23,16 +24,37 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType; descripti
   { id: "notifications", label: "Notifications", icon: Bell,       description: "Alerts & preferences"       },
 ];
 
-// Inner component that uses useSearchParams — must be wrapped in Suspense
 function SettingsLayoutInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
+  const [username, setUsername] = useState<string>("");
 
+  // Fetch current user's username
   useEffect(() => {
-    if (searchParams.get("panel") === "menu") {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        supabase.from("profiles").select("username").eq("id", user.id).single()
+          .then(({ data }) => { if (data?.username) setUsername(data.username); });
+      }
+    });
+  }, []);
+
+  // Handle ?panel= query param
+  useEffect(() => {
+    const panel = searchParams.get("panel");
+    if (panel === "menu") {
       setMobileView("menu");
+      router.replace("/settings");
+    } else if (panel === "pricing") {
+      setActiveTab("pricing");
+      setMobileView("content");
+      router.replace("/settings");
+    } else if (panel === "subscriptions") {
+      setActiveTab("account");
+      setMobileView("content");
       router.replace("/settings");
     }
   }, [searchParams, router]);
@@ -44,14 +66,19 @@ function SettingsLayoutInner() {
 
   const handleBack = () => setMobileView("menu");
 
+  const handleWithdraw = () => {
+    setActiveTab("payouts");
+    setMobileView("content");
+  };
+
   const renderSection = () => {
     switch (activeTab) {
       case "profile":       return <ProfileSettings onBack={handleBack} />;
       case "account":       return <AccountSettings onBack={handleBack} />;
-      case "pricing":       return <PricingSettings onBack={handleBack} />;
+      case "pricing":       return <PricingSettings onBack={handleBack} username={username} />;
       case "privacy":       return <PrivacySettings onBack={handleBack} />;
       case "notifications": return <NotificationsSettings onBack={handleBack} />;
-      case "earnings":      return <EarningsSettings onBack={handleBack} />;
+      case "earnings":      return <EarningsSettings onBack={handleBack} onWithdraw={handleWithdraw} />;
       case "payouts":       return <PayoutsSettings onBack={handleBack} />;
     }
   };
@@ -142,7 +169,6 @@ function SettingsLayoutInner() {
   );
 }
 
-// Public export wraps inner component in Suspense so useSearchParams is safe
 export function SettingsLayout() {
   return (
     <Suspense fallback={null}>

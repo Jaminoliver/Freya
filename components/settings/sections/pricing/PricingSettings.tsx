@@ -9,12 +9,11 @@ import PPVSettingsTab from "./PPVSettingsTab";
 
 export type PricingTab = "tiers" | "promotions" | "bundles" | "ppv";
 
-export default function PricingSettings({ onBack }: { onBack?: () => void }) {
+export default function PricingSettings({ onBack, username }: { onBack?: () => void; username: string }) {
   const [activeTab, setActiveTab] = useState<PricingTab>("tiers");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", fontFamily: "'Inter', sans-serif" }}>
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
         <button
           onClick={onBack}
@@ -33,7 +32,7 @@ export default function PricingSettings({ onBack }: { onBack?: () => void }) {
       <PricingTabs activeTab={activeTab} onChange={setActiveTab} />
 
       <div style={{ marginTop: "20px" }}>
-        {activeTab === "tiers"      && <SubscriptionTiersTab />}
+        {activeTab === "tiers"      && <SubscriptionTiersTab username={username} />}
         {activeTab === "promotions" && <PromotionsTab />}
         {activeTab === "bundles"    && <BundlesTab />}
         {activeTab === "ppv"        && <PPVSettingsTab />}

@@ -1,17 +1,20 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// 1. ADD '/' to your public routes so your landing page doesn't crash
 const PUBLIC_ROUTES = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/verify-otp', '/terms', '/privacy', '/auth/callback']
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // Let API routes handle their own auth
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.next({ request })
+  }
+
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(route))
 
   let response = NextResponse.next({ request })
 
-  // 2. If it's a public route, don't even talk to Supabase yet. Just serve the page.
-  // This prevents the "fetch failed" error on your landing page.
   if (isPublicRoute && !['/login', '/signup'].includes(pathname)) {
     return response
   }
@@ -31,10 +34,8 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // This is the line that crashes when the network is unstable
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Redirect Logic
   if (!user && !isPublicRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }

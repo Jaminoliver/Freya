@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { User } from "@/lib/types/profile";
 import type {
-  CheckoutType, CheckoutScreen, Currency, PaymentMethodId, SubscriptionTier,
+  CheckoutType, CheckoutScreen, Currency, PaymentMethodId, SubscriptionTier, VirtualAccountDisplay,
 } from "@/lib/types/checkout";
 import SubscriptionScreen from "./screens/SubscriptionScreen";
 import TipScreen from "./screens/TipScreen";
@@ -15,25 +15,31 @@ interface CheckoutModalProps {
   onClose: () => void;
   type: CheckoutType;
   creator: User;
-  // Subscription
   monthlyPrice?: number;
   threeMonthPrice?: number;
   sixMonthPrice?: number;
   initialTier?: SubscriptionTier;
-  // PPV / locked post
+  tierId?: number;
   postPrice?: number;
   postTitle?: string;
-  // Callbacks
+  postId?: number;
   onSuccess?: () => void;
+  onSubscriptionSuccess?: () => void;
   onViewContent?: () => void;
   onGoToSubscriptions?: () => void;
 }
 
+const TIER_LABEL: Record<SubscriptionTier, string> = {
+  monthly: "Basic",
+  three_month: "3 Months",
+  six_month: "6 Months",
+};
+
 export default function CheckoutModal({
   isOpen, onClose, type, creator,
   monthlyPrice = 2000, threeMonthPrice, sixMonthPrice, initialTier = "monthly",
-  postPrice = 0, postTitle,
-  onSuccess, onViewContent, onGoToSubscriptions,
+  tierId, postPrice = 0, postTitle, postId,
+  onSuccess, onSubscriptionSuccess, onViewContent, onGoToSubscriptions,
 }: CheckoutModalProps) {
   const [screen, setScreen] = React.useState<CheckoutScreen>(
     type === "tips" ? "tip_input"
@@ -46,17 +52,32 @@ export default function CheckoutModal({
   const [autoRenew, setAutoRenew] = React.useState(true);
   const [tipAmount, setTipAmount] = React.useState(0);
   const [isClosing, setIsClosing] = React.useState(false);
+  const [walletBalance, setWalletBalance] = React.useState<number>(0);
+  const [virtualAccount, setVirtualAccount] = React.useState<VirtualAccountDisplay | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  // Reset state when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      fetch("/api/wallet/balance")
+        .then((r) => r.json())
+        .then(({ balance }) => setWalletBalance(balance ?? 0))
+        .catch(() => setWalletBalance(0));
+    }
+  }, [isOpen]);
+
   React.useEffect(() => {
     if (isOpen) {
       setScreen(type === "tips" ? "tip_input" : type === "subscription" ? "plan" : "payment");
       setSelectedMethod(null);
+      setVirtualAccount(null);
+      setError(null);
       setIsClosing(false);
+      // FIX: reset selectedTier to initialTier every time modal opens
+      setSelectedTier(initialTier);
     }
-  }, [isOpen, type]);
+  }, [isOpen, type, initialTier]);
 
-  // Lock body scroll when open
   React.useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -74,7 +95,6 @@ export default function CheckoutModal({
     }, 200);
   };
 
-  // Compute amount based on context
   const getAmount = (): number => {
     if (type === "tips") return tipAmount;
     if (type === "subscription") {
@@ -85,23 +105,138 @@ export default function CheckoutModal({
     return postPrice;
   };
 
+  // FIX: return correct label based on selectedTier
   const getPaymentLabel = (): string => {
     if (type === "tips") return creator.display_name || creator.username;
-    if (type === "subscription") return "Basic";
+    if (type === "subscription") return TIER_LABEL[selectedTier];
     return postTitle ?? "Locked Content";
   };
 
-  const handleNext = () => {
-    if (screen === "plan") setScreen("payment");
-    else if (screen === "tip_input") setScreen("payment");
-    else if (screen === "payment") {
-      onSuccess?.();
-      setScreen("success");
+  const handlePaymentSuccess = () => {
+    onSuccess?.();
+    if (type === "subscription") onSubscriptionSuccess?.();
+    setScreen("success");
+  };
+
+  const handleNext = async () => {
+    if (screen === "plan") {
+      if (getAmount() === 0) {
+        // Free subscription — call API directly, skip payment screen
+        setLoading(true);
+        try {
+          const res = await fetch("/api/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "subscription",
+              amount: 0,
+              creatorId: creator.id,
+              tierId,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) { setError(data.message ?? "Subscription failed"); return; }
+          handlePaymentSuccess();
+        } catch {
+          setError("Something went wrong. Please try again.");
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setScreen("payment");
+      }
+      return;
+    }
+    if (screen === "tip_input") { setScreen("payment"); return; }
+
+    if (screen === "payment") {
+      setError(null);
+
+      // ── Freya Wallet payment ──
+      if (selectedMethod === "freya_wallet") {
+        setLoading(true);
+        try {
+          const res = await fetch("/api/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: type === "tips" ? "tip" : type === "subscription" ? "subscription" : "ppv",
+              amount: getAmount(),
+              creatorId: creator.id,
+              tierId: type === "subscription" ? tierId : undefined,
+              postId: type === "ppv" ? postId : undefined,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setError(data.message ?? "Payment failed");
+            return;
+          }
+          handlePaymentSuccess();
+        } catch {
+          setError("Something went wrong. Please try again.");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      // ── Bank Transfer — generate virtual account ──
+      if (selectedMethod === "kyshi_virtual_account") {
+        if (virtualAccount) {
+          handlePaymentSuccess();
+          return;
+        }
+
+        setLoading(true);
+        try {
+          const endpoint = type === "subscription"
+            ? "/api/subscriptions/checkout/virtual-account"
+            : "/api/checkout/virtual-account";
+
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: type === "tips" ? "tip" : type === "ppv" ? "ppv" : undefined,
+              amount: getAmount(),
+              creatorId: creator.id,
+              tierId: type === "subscription" ? tierId : undefined,
+              tierDuration: type === "subscription" ? selectedTier : undefined,
+              postId: type === "ppv" ? postId : undefined,
+              currency,
+            }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            setError(data.message ?? "Failed to generate bank account");
+            return;
+          }
+          setVirtualAccount({
+            accountNumber: data.accountNumber,
+            bankName: data.bankName,
+            accountName: data.accountName,
+            expiresAt: data.expiresAt,
+            amount: data.amount,
+            reference: data.reference,
+          });
+        } catch (err) {
+          console.error("[Checkout] VA fetch error:", err);
+          setError("Something went wrong. Please try again.");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
     }
   };
 
   const handleBack = () => {
     if (screen === "payment") {
+      setVirtualAccount(null);
+      setError(null);
       if (type === "tips") setScreen("tip_input");
       else if (type === "subscription") setScreen("plan");
       else handleClose();
@@ -114,7 +249,6 @@ export default function CheckoutModal({
 
   return (
     <>
-      {/* Backdrop */}
       <div
         onClick={handleClose}
         style={{
@@ -127,14 +261,13 @@ export default function CheckoutModal({
         }}
       />
 
-      {/* Modal */}
       <div
         style={{
           position: "fixed",
           top: "50%", left: "50%",
           transform: isClosing ? "translate(-50%, -48%) scale(0.97)" : "translate(-50%, -50%) scale(1)",
           zIndex: 9999,
-          width: "min(420px, calc(100vw - 32px))",
+          width: "min(460px, calc(100vw - 32px))",
           maxHeight: "min(680px, calc(100vh - 48px))",
           backgroundColor: "#0F0F1A",
           borderRadius: "16px",
@@ -148,7 +281,6 @@ export default function CheckoutModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Screen: Plan selection */}
         {screen === "plan" && (
           <SubscriptionScreen
             creator={creator}
@@ -165,7 +297,6 @@ export default function CheckoutModal({
           />
         )}
 
-        {/* Screen: Tip input */}
         {screen === "tip_input" && (
           <TipScreen
             creator={creator}
@@ -178,24 +309,28 @@ export default function CheckoutModal({
           />
         )}
 
-        {/* Screen: Payment */}
         {screen === "payment" && (
           <PaymentScreen
             type={type}
             currency={currency}
             onCurrencyChange={setCurrency}
             selectedMethod={selectedMethod}
-            onMethodChange={setSelectedMethod}
+            onMethodChange={(id) => { setSelectedMethod(id); setVirtualAccount(null); setError(null); }}
             amount={getAmount()}
             label={getPaymentLabel()}
             tier={type === "subscription" ? selectedTier : undefined}
+            virtualAccount={virtualAccount}
+            walletBalance={walletBalance}
+            loading={loading}
+            error={error}
+            creatorId={creator.id}
             onNext={handleNext}
             onBack={handleBack}
             onClose={handleClose}
+            onPaymentConfirmed={handlePaymentSuccess}
           />
         )}
 
-        {/* Screen: Success */}
         {screen === "success" && (
           <SuccessScreen
             type={type}

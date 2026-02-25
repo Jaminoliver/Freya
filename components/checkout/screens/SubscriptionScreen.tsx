@@ -37,26 +37,34 @@ export default function SubscriptionScreen({
   const currencyOption = CURRENCIES.find((c) => c.code === currency)!;
   const symbol = currencyOption.symbol;
 
+  const monthly = Number(monthlyPrice) || 0;
+  const threeMonth = threeMonthPrice != null ? Number(threeMonthPrice) : undefined;
+  const sixMonth = sixMonthPrice != null ? Number(sixMonthPrice) : undefined;
+
+  const isFree = monthly === 0;
+
   const savingsPercent = (base: number, months: number, bundleTotal: number) =>
     Math.round(((base * months - bundleTotal) / (base * months)) * 100);
 
   const plans: Plan[] = [
-    { key: "monthly", label: "Basic", price: monthlyPrice, months: 1 },
-    ...(threeMonthPrice ? [{ key: "three_month" as SubscriptionTier, label: "3mo", price: threeMonthPrice, months: 3, savings: savingsPercent(monthlyPrice, 3, threeMonthPrice) }] : []),
-    ...(sixMonthPrice ? [{ key: "six_month" as SubscriptionTier, label: "6mo", price: sixMonthPrice, months: 6, savings: savingsPercent(monthlyPrice, 6, sixMonthPrice) }] : []),
+    { key: "monthly", label: "Basic", price: monthly, months: 1 },
+    ...(threeMonth ? [{ key: "three_month" as SubscriptionTier, label: "3mo", price: threeMonth, months: 3, savings: savingsPercent(monthly, 3, threeMonth) }] : []),
+    ...(sixMonth ? [{ key: "six_month" as SubscriptionTier, label: "6mo", price: sixMonth, months: 6, savings: savingsPercent(monthly, 6, sixMonth) }] : []),
   ];
 
-  const activePlan = plans.find((p) => p.key === selectedTier)!;
-  const displayPrice = activePlan.months > 1
-    ? Math.round(activePlan.price / activePlan.months)
-    : activePlan.price;
+  const activePlan = plans.find((p) => p.key === selectedTier) ?? plans[0];
+
+  // FIX: show total price for bundles, monthly price for basic — matching SubscriptionCard
+  const displayPrice = activePlan.price;
+  const displayLabel = activePlan.months === 1
+    ? `${symbol}${displayPrice.toLocaleString()}/month`
+    : `${symbol}${displayPrice.toLocaleString()} for ${activePlan.months} months`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {/* Avatar */}
           <div style={{
             width: "40px", height: "40px", borderRadius: "50%",
             backgroundColor: "#2A2A3D", overflow: "hidden", flexShrink: 0,
@@ -91,10 +99,27 @@ export default function SubscriptionScreen({
         </button>
       </div>
 
-      {/* Plan tabs */}
-      <div style={{ padding: "0 20px 14px" }}>
-        <PlanTab plans={plans} selected={selectedTier} onChange={onTierChange} symbol={symbol} />
-      </div>
+      {/* Plan tabs — hide if free */}
+      {!isFree && (
+        <div style={{ padding: "0 20px 14px" }}>
+          <PlanTab plans={plans} selected={selectedTier} onChange={onTierChange} symbol={symbol} />
+        </div>
+      )}
+
+      {/* Free badge */}
+      {isFree && (
+        <div style={{ padding: "0 20px 14px", display: "flex", justifyContent: "center" }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: "6px",
+            padding: "6px 16px", borderRadius: "999px",
+            background: "rgba(34,197,94,0.12)",
+            border: "1px solid rgba(34,197,94,0.3)",
+          }}>
+            <span style={{ fontSize: "20px", fontWeight: 800, color: "#22C55E" }}>Free</span>
+            <span style={{ fontSize: "12px", color: "#86efac" }}>· No payment needed</span>
+          </div>
+        </div>
+      )}
 
       <div style={{ height: "1px", backgroundColor: "#1E1E2E", margin: "0 20px" }} />
 
@@ -115,46 +140,52 @@ export default function SubscriptionScreen({
 
       <div style={{ height: "1px", backgroundColor: "#1E1E2E", margin: "0 20px" }} />
 
-      {/* Auto-renew toggle */}
-      <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div>
-          <p style={{ margin: 0, fontSize: "13px", fontWeight: 600, color: "#F1F5F9" }}>Auto-renew</p>
-          <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#6B6B8A" }}>Cancel anytime before renewal</p>
+      {/* Auto-renew — hide if free */}
+      {!isFree && (
+        <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <p style={{ margin: 0, fontSize: "13px", fontWeight: 600, color: "#F1F5F9" }}>Auto-renew</p>
+            <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#6B6B8A" }}>Cancel anytime before renewal</p>
+          </div>
+          <button
+            onClick={() => onAutoRenewChange(!autoRenew)}
+            style={{
+              width: "42px", height: "24px", borderRadius: "12px",
+              backgroundColor: autoRenew ? "#8B5CF6" : "#2A2A3D",
+              border: "none", cursor: "pointer", position: "relative",
+              transition: "background-color 0.2s ease", flexShrink: 0,
+            }}
+          >
+            <div style={{
+              position: "absolute", top: "3px",
+              left: autoRenew ? "21px" : "3px",
+              width: "18px", height: "18px", borderRadius: "50%",
+              backgroundColor: "#fff",
+              transition: "left 0.2s ease",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+            }} />
+          </button>
         </div>
-        <button
-          onClick={() => onAutoRenewChange(!autoRenew)}
-          style={{
-            width: "42px", height: "24px", borderRadius: "12px",
-            backgroundColor: autoRenew ? "#8B5CF6" : "#2A2A3D",
-            border: "none", cursor: "pointer", position: "relative",
-            transition: "background-color 0.2s ease", flexShrink: 0,
-          }}
-        >
-          <div style={{
-            position: "absolute", top: "3px",
-            left: autoRenew ? "21px" : "3px",
-            width: "18px", height: "18px", borderRadius: "50%",
-            backgroundColor: "#fff",
-            transition: "left 0.2s ease",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-          }} />
-        </button>
-      </div>
+      )}
 
-      {/* Price display */}
-      <div style={{ padding: "4px 20px 16px", textAlign: "center" }}>
-        <p style={{ margin: 0, fontSize: "28px", fontWeight: 800, color: "#F1F5F9" }}>
-          {symbol}{displayPrice.toLocaleString()} / month
-        </p>
-      </div>
+      {/* Price display — hide if free */}
+      {!isFree && (
+        <div style={{ padding: "4px 20px 16px", textAlign: "center" }}>
+          <p style={{ margin: 0, fontSize: "28px", fontWeight: 800, color: "#F1F5F9" }}>
+            {displayLabel}
+          </p>
+        </div>
+      )}
 
       {/* CTA */}
-      <div style={{ padding: "0 20px 8px" }}>
+      <div style={{ padding: isFree ? "16px 20px 8px" : "0 20px 8px" }}>
         <button
           onClick={onNext}
           style={{
             width: "100%", padding: "13px", borderRadius: "10px",
-            background: "linear-gradient(135deg, #8B5CF6, #7C3AED)",
+            background: isFree
+              ? "linear-gradient(135deg, #22C55E, #16A34A)"
+              : "linear-gradient(135deg, #8B5CF6, #7C3AED)",
             border: "none", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
             fontFamily: "'Inter', sans-serif", transition: "opacity 0.15s ease",
@@ -163,16 +194,19 @@ export default function SubscriptionScreen({
           onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
         >
           <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>
-            Subscribe · {symbol}{displayPrice.toLocaleString()}/month
+            {isFree ? "Subscribe for Free" : `Subscribe · ${displayLabel}`}
           </span>
-          <ChevronRight size={16} color="#fff" />
+          {!isFree && <ChevronRight size={16} color="#fff" />}
         </button>
       </div>
 
       {/* Footer */}
       <div style={{ padding: "6px 20px 18px", textAlign: "center" }}>
         <p style={{ margin: 0, fontSize: "11px", color: "#6B6B8A" }}>
-          Subscription renews automatically. Cancel anytime.{" "}
+          {isFree
+            ? "Free subscription. Cancel anytime."
+            : "Subscription renews automatically. Cancel anytime."
+          }{" "}
           <span style={{ color: "#8B5CF6", cursor: "pointer" }}>Terms of Service</span>
         </p>
       </div>

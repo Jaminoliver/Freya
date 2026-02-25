@@ -60,6 +60,8 @@ export default function ProfilePage() {
   const [viewer, setViewer] = React.useState<User | null>(null);
   const [profile, setProfile] = React.useState<User | null>(null);
   const [subscription, setSubscription] = React.useState<Subscription | null>(null);
+  const [isSubscribed, setIsSubscribed] = React.useState(false);
+  const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(null);
   const [posts, setPosts] = React.useState<Post[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [isFollowing, setIsFollowing] = React.useState(false);
@@ -71,6 +73,10 @@ export default function ProfilePage() {
   const [checkoutTier, setCheckoutTier] = React.useState<SubscriptionTier>("monthly");
   const [lockedPostId, setLockedPostId] = React.useState<string | null>(null);
   const [lockedPostPrice, setLockedPostPrice] = React.useState<number>(0);
+  const [tierId, setTierId] = React.useState<number | undefined>(undefined);
+
+  const profileIdRef = React.useRef<string | null>(null);
+  const viewerIdRef = React.useRef<string | null>(null);
 
   const openCheckout = (type: CheckoutType, tier: SubscriptionTier = "monthly") => {
     setCheckoutType(type); setCheckoutTier(tier); setCheckoutOpen(true);
@@ -83,20 +89,36 @@ export default function ProfilePage() {
 
   React.useEffect(() => { setActiveTab("posts"); }, [username]);
 
+  const fetchSubscriptionStatus = React.useCallback(async (creatorId: string) => {
+    try {
+      const res = await fetch(`/api/subscriptions/status?creatorId=${creatorId}`);
+      const data = await res.json();
+      setIsSubscribed(!!data.active);
+      setSubscriptionPeriodEnd(data.currentPeriodEnd ?? null);
+    } catch (err) {
+      console.error("[Profile] Failed to fetch subscription status:", err);
+    }
+  }, []);
+
   React.useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+
       if (user) {
+        viewerIdRef.current = user.id;
         const { data: viewerData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
         if (viewerData) setViewer(viewerData as User);
       }
+
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
         .eq("username", username).single();
+
       if (profileData) {
+        profileIdRef.current = profileData.id;
         const enriched: User = {
           ...(profileData as User),
           subscriptionPrice: profileData.subscription_price ?? 0,
@@ -106,15 +128,77 @@ export default function ProfilePage() {
           },
         };
         setProfile(enriched);
-        if (user && user.id !== profileData.id && profileData.role === "creator") {
-          const following = await checkIsFollowing(profileData.id);
-          setIsFollowing(following);
+
+        if (profileData.role === "creator") {
+          const { data: tierData } = await supabase
+            .from("subscription_tiers")
+            .select("id")
+            .eq("creator_id", profileData.id)
+            .single();
+          if (tierData) setTierId(tierData.id);
+
+          if (user && user.id !== profileData.id) {
+            await fetchSubscriptionStatus(profileData.id);
+            const following = await checkIsFollowing(profileData.id);
+            setIsFollowing(following);
+          }
         }
       }
       setLoading(false);
     };
     fetchData();
-  }, [username]);
+  }, [username, fetchSubscriptionStatus]);
+
+  React.useEffect(() => {
+    if (!profileIdRef.current || !viewerIdRef.current) return;
+
+    const supabase = createClient();
+    const creatorId = profileIdRef.current;
+    const fanId = viewerIdRef.current;
+
+    const subscriptionChannel = supabase
+      .channel(`sub-status-${creatorId}-${fanId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "subscriptions", filter: `fan_id=eq.${fanId}` },
+        (payload: any) => {
+          const row = payload.new;
+          if (row?.creator_id === creatorId && row?.status === "active") {
+            setIsSubscribed(true);
+            setSubscriptionPeriodEnd(row.current_period_end ?? null);
+          }
+          // Handle cancel via realtime too
+          if (row?.creator_id === creatorId && (row?.status === "cancelled" || row?.status === "expired")) {
+            setIsSubscribed(false);
+          }
+        }
+      )
+      .subscribe();
+
+    const profileChannel = supabase
+      .channel(`creator-profile-${creatorId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${creatorId}` },
+        (payload: any) => {
+          const updated = payload.new;
+          setProfile((prev) =>
+            prev ? { ...prev, subscriber_count: updated.subscriber_count } : prev
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscriptionChannel);
+      supabase.removeChannel(profileChannel);
+    };
+  }, [loading]);
+
+  const handleSubscriptionSuccess = React.useCallback(async () => {
+    setCheckoutOpen(false);
+    if (profile) await fetchSubscriptionStatus(profile.id);
+  }, [profile, fetchSubscriptionStatus]);
 
   const handleFollow = async () => {
     if (!profile || followLoading) return;
@@ -136,7 +220,6 @@ export default function ProfilePage() {
   const isOwnProfile = viewer?.id === profile?.id;
   const isCreatorViewingFan = viewer?.role === "creator" && profile?.role === "fan";
   const isViewingCreator = profile?.role === "creator" && !isOwnProfile && !isCreatorViewingFan;
-  const isSubscribed = subscription?.status === "active";
 
   const goToProfileSettings = () => router.push("/settings");
   const handlePost = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
@@ -148,14 +231,19 @@ export default function ProfilePage() {
 
   const checkoutModal = profile ? (
     <CheckoutModal
-      isOpen={checkoutOpen} onClose={() => setCheckoutOpen(false)}
-      type={checkoutType} creator={profile}
+      isOpen={checkoutOpen}
+      onClose={() => setCheckoutOpen(false)}
+      type={checkoutType}
+      creator={profile}
       monthlyPrice={profile.subscriptionPrice ?? 0}
       threeMonthPrice={profile.bundlePricing?.threeMonths}
       sixMonthPrice={profile.bundlePricing?.sixMonths}
-      initialTier={checkoutTier} postPrice={lockedPostPrice}
+      initialTier={checkoutTier}
+      tierId={tierId}
+      postPrice={lockedPostPrice}
       onViewContent={() => router.push(`/${profile.username}`)}
       onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
+      onSubscriptionSuccess={handleSubscriptionSuccess}
     />
   ) : null;
 
@@ -182,7 +270,20 @@ export default function ProfilePage() {
   const bannerStats = {
     posts: profile.post_count ?? 0,
     media: 0, likes: 0,
-    subscribers: profile.subscriber_count ?? profile.follower_count ?? 0,
+    subscribers: profile.subscriber_count ?? 0,
+  };
+
+  const profileInfoProps = {
+    displayName: profile.display_name || profile.username,
+    username: profile.username,
+    bio: profile.bio || undefined,
+    location: profile.location || undefined,
+    websiteUrl: profile.website_url || undefined,
+    twitterUrl: profile.twitter_url || undefined,
+    instagramUrl: profile.instagram_url || undefined,
+    telegramUrl: (profile as any).telegram_url || undefined,
+    facebookUrl: (profile as any).facebook_url || undefined,
+    isVerified: profile.is_verified,
   };
 
   // ── 1. CREATOR VIEWING OWN PROFILE ────────────────────────────────────────
@@ -215,12 +316,7 @@ export default function ProfilePage() {
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
-          <ProfileInfo
-            displayName={profile.display_name || profile.username} username={profile.username} mode="full"
-            bio={profile.bio || undefined} location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified} isEditable={true}
-          />
+          <ProfileInfo {...profileInfoProps} mode="full" isEditable={true} />
         </div>
         <div style={{ padding: "16px 24px 8px" }}>
           <PostComposer user={profile} onPost={handlePost} onSchedule={handleSchedule} />
@@ -260,12 +356,7 @@ export default function ProfilePage() {
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
-          <ProfileInfo
-            displayName={profile.display_name || profile.username} username={profile.username} mode="full"
-            bio={profile.bio || undefined} location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified} isEditable={true}
-          />
+          <ProfileInfo {...profileInfoProps} mode="full" isEditable={true} />
         </div>
         <div style={{ marginTop: "16px" }}>
           <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
@@ -287,12 +378,7 @@ export default function ProfilePage() {
           <ProfileActions viewContext="creatorViewingFan" onMessage={() => console.log("Message fan")} />
         </div>
         <div style={{ marginTop: "16px" }}>
-          <ProfileInfo
-            displayName={profile.display_name || profile.username} username={profile.username}
-            bio={profile.bio || undefined} location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified}
-          />
+          <ProfileInfo {...profileInfoProps} />
         </div>
         {subscription && <div style={{ marginTop: "24px" }}><FanActivityCard subscription={subscription} /></div>}
       </div>
@@ -305,6 +391,9 @@ export default function ProfilePage() {
       { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
       { label: "Media", key: "media", count: 0 },
     ];
+    const renewalDisplay = subscriptionPeriodEnd
+      ? new Date(subscriptionPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+      : "—";
     return (
       <div style={{ maxWidth: "768px", margin: "0 auto" }}>
         {checkoutModal}
@@ -316,15 +405,14 @@ export default function ProfilePage() {
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
-          <ProfileInfo
-            displayName={profile.display_name || profile.username} username={profile.username} mode="full"
-            bio={profile.bio || undefined} location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified}
-          />
+          <ProfileInfo {...profileInfoProps} mode="full" />
         </div>
         <div style={{ padding: "16px 24px" }}>
-          <SubscribedBanner renewalDate="Mar 15, 2026" onManageSubscription={() => router.push("/settings?panel=subscriptions")} />
+          <SubscribedBanner
+            renewalDate={renewalDisplay}
+            creatorId={profile.id}
+            onCancelled={() => fetchSubscriptionStatus(profile.id)}
+          />
         </div>
         <div style={{ marginTop: "4px" }}>
           <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
@@ -353,12 +441,7 @@ export default function ProfilePage() {
           </div>
         </div>
         <div style={{ padding: "8px 24px 0" }}>
-          <ProfileInfo
-            displayName={profile.display_name || profile.username} username={profile.username} mode="full"
-            bio={profile.bio || undefined} location={profile.location || undefined}
-            websiteUrl={profile.website_url || undefined} twitterUrl={profile.twitter_url || undefined}
-            instagramUrl={profile.instagram_url || undefined} isVerified={profile.is_verified}
-          />
+          <ProfileInfo {...profileInfoProps} mode="full" />
         </div>
         <div style={{ padding: "16px 24px" }}>
           <SubscriptionCard

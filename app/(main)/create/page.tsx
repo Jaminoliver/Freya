@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowLeft, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import React, { useState } from "react";
+import { ArrowLeft, X, Image, Video, BarChart2, HelpCircle, Type } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { MediaUploader } from "@/components/create/MediaUploader";
 import { PollBuilder } from "@/components/create/PollBuilder";
@@ -16,27 +16,34 @@ const CURRENT_USER = {
   avatar_url: "https://i.pravatar.cc/150?img=47",
 };
 
-const POST_TYPES: { key: PostType; label: string; icon: string }[] = [
-  { key: "photo", label: "Photo", icon: "🖼️" },
-  { key: "video", label: "Video", icon: "🎥" },
-  { key: "poll",  label: "Poll",  icon: "📊" },
-  { key: "quiz",  label: "Quiz",  icon: "❓" },
-  { key: "text",  label: "Text",  icon: "Aa" },
+const POST_TYPES: { key: PostType; label: string; icon: React.ReactNode }[] = [
+  { key: "photo", label: "Photo", icon: <Image size={22} strokeWidth={1.6} /> },
+  { key: "video", label: "Video", icon: <Video size={22} strokeWidth={1.6} /> },
+  { key: "poll",  label: "Poll",  icon: <BarChart2 size={22} strokeWidth={1.6} /> },
+  { key: "quiz",  label: "Quiz",  icon: <HelpCircle size={22} strokeWidth={1.6} /> },
+  { key: "text",  label: "Text",  icon: <Type size={22} strokeWidth={1.6} /> },
 ];
+
+function isValidPostType(val: string | null): val is PostType {
+  return ["photo", "video", "poll", "quiz", "text"].includes(val ?? "");
+}
 
 export default function CreatePostPage() {
   const router = useRouter();
-  const [postType,    setPostType]    = useState<PostType>("photo");
-  const [caption,     setCaption]     = useState("");
-  const [files,       setFiles]       = useState<File[]>([]);
-  const [audience,    setAudience]    = useState<"subscribers" | "everyone">("subscribers");
-  const [isPPV,       setIsPPV]       = useState(false);
-  const [ppvPrice,    setPpvPrice]    = useState("");
-  const [isScheduled, setIsScheduled] = useState(false);
-  const [schedDate,   setSchedDate]   = useState("");
-  const [schedTime,   setSchedTime]   = useState("");
-  const [pollOptions, setPollOptions] = useState(["", ""]);
-  const [pollDuration,setPollDuration]= useState("7 days");
+  const searchParams = useSearchParams();
+  const typeParam = searchParams.get("type");
+
+  const [postType,     setPostType]    = useState<PostType>(isValidPostType(typeParam) ? typeParam : "photo");
+  const [caption,      setCaption]     = useState("");
+  const [files,        setFiles]       = useState<File[]>([]);
+  const [audience,     setAudience]    = useState<"subscribers" | "everyone">("subscribers");
+  const [isPPV,        setIsPPV]       = useState(false);
+  const [ppvPrice,     setPpvPrice]    = useState("");
+  const [isScheduled,  setIsScheduled] = useState(false);
+  const [schedDate,    setSchedDate]   = useState("");
+  const [schedTime,    setSchedTime]   = useState("");
+  const [pollOptions,  setPollOptions] = useState(["", ""]);
+  const [pollDuration, setPollDuration]= useState("7 days");
 
   const canPost = caption.trim().length > 0 || files.length > 0 || pollOptions.some(o => o.trim());
 
@@ -121,7 +128,7 @@ export default function CreatePostPage() {
               borderBottom: "1px solid #2A2A3D",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontSize: "18px" }}>{postType === "poll" ? "📊" : "❓"}</span>
+                {postType === "poll" ? <BarChart2 size={18} color="#8B5CF6" /> : <HelpCircle size={18} color="#8B5CF6" />}
                 <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>
                   {postType === "poll" ? "Poll" : "Quiz"}
                 </span>
@@ -175,24 +182,16 @@ export default function CreatePostPage() {
             />
           </div>
 
-          {/* ── Dynamic middle zone — inside same card ── */}
+          {/* Dynamic middle zone */}
           {(postType === "poll" || postType === "quiz") && (
             <div style={{ borderTop: "1px solid #2A2A3D" }}>
-              <PollBuilder
-                type={postType}
-                options={pollOptions}
-                onChange={setPollOptions}
-              />
+              <PollBuilder type={postType} options={pollOptions} onChange={setPollOptions} />
             </div>
           )}
 
           {(postType === "photo" || postType === "video") && (
             <div style={{ padding: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "14px" }}>
-              <MediaUploader
-                type={postType}
-                files={files}
-                onChange={setFiles}
-              />
+              <MediaUploader type={postType} files={files} onChange={setFiles} />
             </div>
           )}
 
@@ -209,34 +208,33 @@ export default function CreatePostPage() {
             </div>
           )}
 
-          {/* ── Type selector row — bottom of card ── */}
+          {/* Type selector row */}
           <div style={{
-            display: "flex", gap: "2px", padding: "8px 12px",
-            borderTop: "1px solid #2A2A3D",
-            overflowX: "auto", scrollbarWidth: "none",
+            display: "flex", alignItems: "center", justifyContent: "space-around",
+            padding: "8px 12px", borderTop: "1px solid #2A2A3D",
           }}>
             {POST_TYPES.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setPostType(t.key)}
+                aria-label={t.label}
                 style={{
-                  display: "flex", alignItems: "center", gap: "5px",
-                  padding: "6px 12px", borderRadius: "8px", border: "none",
+                  width: "44px", height: "44px", borderRadius: "8px", border: "none",
                   backgroundColor: postType === t.key ? "rgba(139,92,246,0.15)" : "transparent",
-                  color: postType === t.key ? "#8B5CF6" : "#8A8AA0",
-                  fontSize: "13px", fontWeight: postType === t.key ? 600 : 400,
-                  cursor: "pointer", fontFamily: "'Inter', sans-serif",
-                  transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0,
+                  color: postType === t.key ? "#8B5CF6" : "#B0B0C8",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.15s",
                 }}
+                onMouseEnter={(e) => { if (postType !== t.key) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1F1F2A"; } }}
+                onMouseLeave={(e) => { if (postType !== t.key) { e.currentTarget.style.color = "#B0B0C8"; e.currentTarget.style.backgroundColor = "transparent"; } }}
               >
-                <span style={{ fontSize: "15px" }}>{t.icon}</span>
-                <span>{t.label}</span>
+                {t.icon}
               </button>
             ))}
           </div>
         </div>
 
-        {/* ── Bottom zone — always visible ── */}
+        {/* Bottom settings */}
         <PostSettings
           audience={audience}
           onAudienceChange={setAudience}

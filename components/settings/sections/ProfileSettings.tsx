@@ -18,6 +18,8 @@ interface ProfileForm {
   website_url: string;
   twitter_url: string;
   instagram_url: string;
+  telegram_url: string;
+  facebook_url: string;
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -29,6 +31,7 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
     display_name: "", username: "", bio: "", location: "",
     country: "", state: "", date_of_birth: "",
     website_url: "", twitter_url: "", instagram_url: "",
+    telegram_url: "", facebook_url: "",
   });
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -52,7 +55,7 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
       setUserId(user.id);
       const { data } = await supabase
         .from("profiles")
-        .select("display_name, username, bio, location, country, state, date_of_birth, website_url, twitter_url, instagram_url, avatar_url, banner_url")
+        .select("display_name, username, bio, location, country, state, date_of_birth, website_url, twitter_url, instagram_url, telegram_url, facebook_url, avatar_url, banner_url")
         .eq("id", user.id)
         .single();
       if (data) {
@@ -67,6 +70,8 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
           website_url: data.website_url ?? "",
           twitter_url: data.twitter_url ?? "",
           instagram_url: data.instagram_url ?? "",
+          telegram_url: data.telegram_url ?? "",
+          facebook_url: data.facebook_url ?? "",
         });
         setAvatarUrl(data.avatar_url);
         setBannerUrl(data.banner_url);
@@ -123,6 +128,8 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
       website_url: form.website_url || null,
       twitter_url: form.twitter_url || null,
       instagram_url: form.instagram_url || null,
+      telegram_url: form.telegram_url || null,
+      facebook_url: form.facebook_url || null,
       updated_at: new Date().toISOString(),
     }).eq("id", userId);
 
@@ -171,6 +178,7 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
           </div>
         </div>
 
+        {/* Banner + Avatar */}
         <div style={{ marginBottom: "16px" }}>
           <div onClick={() => bannerInputRef.current?.click()}
             style={{ width: "100%", height: "120px", borderRadius: "12px", backgroundColor: "#1C1C2E", border: "1.5px solid #2A2A3D", backgroundImage: bannerUrl ? `url(${bannerUrl})` : undefined, backgroundSize: "cover", backgroundPosition: "center", cursor: "pointer", position: "relative", overflow: "hidden" }}>
@@ -195,6 +203,7 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
         <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileSelect("avatar")} />
         <input ref={bannerInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileSelect("banner")} />
 
+        {/* Basic Info */}
         <p style={{ fontSize: "11px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 14px" }}>Basic Info</p>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
@@ -223,12 +232,12 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
           </div>
         </div>
 
+        {/* Location */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "28px 0 14px" }}>
           <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
           <span style={dividerLabel}>Location</span>
           <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
         </div>
-
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label style={labelStyle}>City / Location</label>
@@ -249,12 +258,12 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
           </div>
         </div>
 
+        {/* Social Links */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "28px 0 14px" }}>
           <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
           <span style={dividerLabel}>Social Links</span>
           <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
         </div>
-
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label style={labelStyle}>Website URL</label>
@@ -269,6 +278,16 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
           <div>
             <label style={labelStyle}>Instagram URL</label>
             <input type="url" value={form.instagram_url} onChange={(e) => set("instagram_url", e.target.value)} placeholder="https://instagram.com/yourhandle" style={inputBase}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+          </div>
+          <div>
+            <label style={labelStyle}>Telegram URL</label>
+            <input type="url" value={form.telegram_url} onChange={(e) => set("telegram_url", e.target.value)} placeholder="https://t.me/yourhandle" style={inputBase}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+          </div>
+          <div>
+            <label style={labelStyle}>Facebook URL</label>
+            <input type="url" value={form.facebook_url} onChange={(e) => set("facebook_url", e.target.value)} placeholder="https://facebook.com/yourhandle" style={inputBase}
               onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           </div>
         </div>

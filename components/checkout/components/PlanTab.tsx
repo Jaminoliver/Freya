@@ -20,24 +20,28 @@ interface PlanTabProps {
 
 export default function PlanTab({ plans, selected, onChange, symbol }: PlanTabProps) {
   return (
-    <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px", scrollbarWidth: "none" }}>
-      {plans.map((plan) => {
-        const active = selected === plan.key;
-        const perMonth = plan.months > 1 ? Math.round(plan.price / plan.months) : plan.price;
+    <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+      {plans.filter((p) => p.key !== selected).map((plan) => {
+        const months = parseInt(String(plan.months), 10);
+        const price = typeof plan.price === "string" ? parseFloat(plan.price) : plan.price;
+        // Show total price like SubscriptionCard — no per-month division
+        const label = months === 1
+          ? `Basic · ${symbol}${price.toLocaleString()}/mo`
+          : `${months}mo · ${symbol}${price.toLocaleString()}`;
         return (
           <button
             key={plan.key}
             onClick={() => onChange(plan.key)}
             style={{
               position: "relative", flexShrink: 0,
-              padding: "7px 14px", borderRadius: "8px",
-              backgroundColor: active ? "rgba(139,92,246,0.12)" : "transparent",
-              border: active ? "1px solid #8B5CF6" : "1px solid #2A2A3D",
+              padding: "7px 12px", borderRadius: "8px",
+              backgroundColor: "transparent",
+              border: "1px solid #2A2A3D",
               cursor: "pointer", transition: "all 0.15s ease",
               fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap",
             }}
           >
-            {plan.savings && (
+            {plan.savings && plan.savings > 0 && (
               <span style={{
                 position: "absolute", top: "-8px", left: "50%", transform: "translateX(-50%)",
                 backgroundColor: "#22C55E", color: "#fff",
@@ -47,8 +51,8 @@ export default function PlanTab({ plans, selected, onChange, symbol }: PlanTabPr
                 -{plan.savings}%
               </span>
             )}
-            <span style={{ fontSize: "12px", fontWeight: 600, color: active ? "#A78BFA" : "#6B6B8A" }}>
-              {plan.months === 1 ? "Basic" : `${plan.months}mo`} · {symbol}{perMonth.toLocaleString()}/mo
+            <span style={{ fontSize: "12px", fontWeight: 600, color: "#6B6B8A" }}>
+              {label}
             </span>
           </button>
         );

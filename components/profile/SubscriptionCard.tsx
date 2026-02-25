@@ -86,35 +86,37 @@ export default function SubscriptionCard({
   const selectedTier = tiers.find((t) => t.key === selected)!;
   const displayPrice = selected === "monthly"
     ? `${formatNaira(monthlyPrice)}/mo`
-    : `${formatNaira(Math.round(selectedTier.price / selectedTier.months))}/mo`;
+    : `${formatNaira(selectedTier.price)} for ${selectedTier.months} months`;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%" }}>
 
       {/* Tier tabs */}
-      <div style={{ display: "flex", gap: "6px" }}>
+      <div style={{ display: "flex", gap: "8px" }}>
         {tiers.map((tier) => {
           const isActive = selected === tier.key;
+          const showSavings = tier.savings !== undefined && tier.savings > 0;
           return (
             <button
               key={tier.key}
               onClick={() => setSelected(tier.key)}
               style={{
-                position: "relative", flex: 1, padding: "5px 8px", borderRadius: "6px",
+                position: "relative", flex: 1, padding: "10px 8px", borderRadius: "8px",
                 backgroundColor: isActive ? "rgba(139,92,246,0.15)" : "transparent",
                 border: isActive ? "1px solid #8B5CF6" : "1px solid #2A2A3D",
                 color: isActive ? "#A78BFA" : "#64748B",
-                fontSize: "11px", fontWeight: 600,
+                fontSize: "13px", fontWeight: 600,
                 fontFamily: "'Inter', sans-serif",
                 cursor: "pointer", transition: "all 0.15s ease", whiteSpace: "nowrap",
+                marginTop: showSavings ? "10px" : "0",
               }}
             >
-              {tier.savings && (
+              {showSavings && (
                 <span style={{
-                  position: "absolute", top: "-8px", left: "50%", transform: "translateX(-50%)",
+                  position: "absolute", top: "-10px", left: "50%", transform: "translateX(-50%)",
                   backgroundColor: "#22C55E", color: "#fff",
-                  fontSize: "9px", fontWeight: 700,
-                  padding: "1px 5px", borderRadius: "999px", whiteSpace: "nowrap",
+                  fontSize: "10px", fontWeight: 700,
+                  padding: "2px 6px", borderRadius: "999px", whiteSpace: "nowrap",
                 }}>
                   -{tier.savings}%
                 </span>
@@ -130,7 +132,7 @@ export default function SubscriptionCard({
         onClick={() => onSubscribe?.(selected)}
         style={{
           display: "inline-flex", alignItems: "center", justifyContent: "center",
-          padding: "5px 12px", borderRadius: "6px",
+          padding: "12px 16px", borderRadius: "8px",
           background: "linear-gradient(135deg, #FF6B6B, #FF8E53)",
           border: "none", cursor: "pointer",
           fontFamily: "'Inter', sans-serif", width: "100%",
@@ -138,7 +140,7 @@ export default function SubscriptionCard({
         onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
         onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
       >
-        <span style={{ fontSize: "12px", fontWeight: 700, color: "#FFFFFF" }}>
+        <span style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>
           Subscribe · {displayPrice}
         </span>
       </button>
