@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { ArrowLeft, X, Image, Video, BarChart2, HelpCircle, Type } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
@@ -28,7 +28,7 @@ function isValidPostType(val: string | null): val is PostType {
   return ["photo", "video", "poll", "quiz", "text"].includes(val ?? "");
 }
 
-export default function CreatePostPage() {
+function CreatePostContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const typeParam = searchParams.get("type");
@@ -64,7 +64,6 @@ export default function CreatePostPage() {
       fontFamily: "'Inter', sans-serif",
       minHeight: "100vh",
     }}>
-
       {/* ── Sticky header ── */}
       <div style={{
         position: "sticky", top: 0, zIndex: 20,
@@ -110,16 +109,12 @@ export default function CreatePostPage() {
       </div>
 
       <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-
-        {/* ── Single unified card ── */}
         <div style={{
           backgroundColor: "#0D0D18",
           border: "1.5px solid #2A2A3D",
           borderRadius: "14px",
           overflow: "hidden",
         }}>
-
-          {/* Poll/Quiz active badge */}
           {(postType === "poll" || postType === "quiz") && (
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -157,7 +152,6 @@ export default function CreatePostPage() {
             </div>
           )}
 
-          {/* Caption area */}
           <div style={{ padding: "14px 16px 10px" }}>
             <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
               <Avatar src={CURRENT_USER.avatar_url} alt={CURRENT_USER.name} size="md" showRing />
@@ -182,7 +176,6 @@ export default function CreatePostPage() {
             />
           </div>
 
-          {/* Dynamic middle zone */}
           {(postType === "poll" || postType === "quiz") && (
             <div style={{ borderTop: "1px solid #2A2A3D" }}>
               <PollBuilder type={postType} options={pollOptions} onChange={setPollOptions} />
@@ -208,7 +201,6 @@ export default function CreatePostPage() {
             </div>
           )}
 
-          {/* Type selector row */}
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-around",
             padding: "8px 12px", borderTop: "1px solid #2A2A3D",
@@ -234,7 +226,6 @@ export default function CreatePostPage() {
           </div>
         </div>
 
-        {/* Bottom settings */}
         <PostSettings
           audience={audience}
           onAudienceChange={setAudience}
@@ -250,8 +241,15 @@ export default function CreatePostPage() {
           onSchedTimeChange={setSchedTime}
           onCancel={() => router.back()}
         />
-
       </div>
     </div>
+  );
+}
+
+export default function CreatePostPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", backgroundColor: "#0A0A0F" }} />}>
+      <CreatePostContent />
+    </Suspense>
   );
 }
