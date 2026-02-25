@@ -167,7 +167,6 @@ export default function ProfilePage() {
             setIsSubscribed(true);
             setSubscriptionPeriodEnd(row.current_period_end ?? null);
           }
-          // Handle cancel via realtime too
           if (row?.creator_id === creatorId && (row?.status === "cancelled" || row?.status === "expired")) {
             setIsSubscribed(false);
           }
@@ -306,12 +305,7 @@ export default function ProfilePage() {
             isEditable={true} isOnline={true} userId={profile.id}
             onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
           />
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingBottom: "12px", paddingRight: "8px" }}>
-            <SubscriptionCard
-              monthlyPrice={profile.subscriptionPrice ?? 0} threeMonthPrice={profile.bundlePricing?.threeMonths}
-              sixMonthPrice={profile.bundlePricing?.sixMonths} isEditable={true}
-              onEditPricing={() => router.push("/settings?panel=pricing")}
-            />
+          <div style={{ paddingBottom: "12px", paddingRight: "8px" }}>
             <ProfileActions viewContext="ownCreator" onEditProfile={goToProfileSettings} />
           </div>
         </div>
@@ -398,7 +392,7 @@ export default function ProfilePage() {
       <div style={{ maxWidth: "768px", margin: "0 auto" }}>
         {checkoutModal}
         <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 24px" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 8px 0 8px" }}>
           <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
           <div style={{ paddingBottom: "12px" }}>
             <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={openTip} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />
@@ -434,7 +428,7 @@ export default function ProfilePage() {
       <div style={{ maxWidth: "768px", margin: "0 auto" }}>
         {checkoutModal}
         <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 24px" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 8px 0 8px" }}>
           <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
           <div style={{ paddingBottom: "12px" }}>
             <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={openTip} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />

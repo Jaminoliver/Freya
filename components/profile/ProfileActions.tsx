@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { MessageCircle, Banknote, Share2, UserPlus, UserCheck } from "lucide-react";
+import { MessageCircle, Banknote, UserPlus, UserCheck } from "lucide-react";
 
 interface ProfileActionsProps {
   viewContext: "ownFan" | "ownCreator" | "creatorViewingFan" | "fanViewingCreator";
@@ -18,7 +18,6 @@ export default function ProfileActions({
   onEditProfile,
   onMessage,
   onTip,
-  onShare,
   onFollow,
   isFollowing = false,
 }: ProfileActionsProps) {
@@ -65,22 +64,22 @@ export default function ProfileActions({
   if (viewContext === "fanViewingCreator") {
     const iconBtn: React.CSSProperties = {
       display: "flex", alignItems: "center", justifyContent: "center",
-      width: "44px", height: "44px", borderRadius: "10px",
+      width: "36px", height: "36px", borderRadius: "8px",
       backgroundColor: "#1E1E2E", border: "1px solid #2A2A3D",
       color: "#A3A3C2", cursor: "pointer", transition: "all 0.15s ease",
     };
 
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
         <button
           onClick={onFollow}
           style={{
-            display: "flex", alignItems: "center", gap: "6px",
-            padding: "0 14px", height: "44px", borderRadius: "10px",
+            display: "flex", alignItems: "center", gap: "5px",
+            padding: "0 10px", height: "36px", borderRadius: "8px",
             backgroundColor: isFollowing ? "#1E1E2E" : "#8B5CF6",
             border: isFollowing ? "1px solid #8B5CF6" : "none",
             color: isFollowing ? "#8B5CF6" : "#fff",
-            fontSize: "13px", fontWeight: 600,
+            fontSize: "12px", fontWeight: 600,
             fontFamily: "'Inter', sans-serif", cursor: "pointer",
             transition: "all 0.15s ease",
           }}
@@ -93,26 +92,20 @@ export default function ProfileActions({
             else { e.currentTarget.style.backgroundColor = "#8B5CF6"; }
           }}
         >
-          {isFollowing ? <UserCheck size={17} strokeWidth={1.8} /> : <UserPlus size={17} strokeWidth={1.8} />}
+          {isFollowing ? <UserCheck size={15} strokeWidth={1.8} /> : <UserPlus size={15} strokeWidth={1.8} />}
           {isFollowing ? "Following" : "Follow"}
         </button>
 
         <button onClick={onMessage} style={iconBtn} title="Message"
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.15)"; e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}>
-          <MessageCircle size={20} strokeWidth={1.8} />
+          <MessageCircle size={18} strokeWidth={1.8} />
         </button>
 
         <button onClick={onTip} style={iconBtn} title="Send Tip"
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(236,72,153,0.15)"; e.currentTarget.style.borderColor = "#EC4899"; e.currentTarget.style.color = "#EC4899"; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}>
-          <Banknote size={20} strokeWidth={1.8} />
-        </button>
-
-        <button onClick={onShare} style={iconBtn} title="Share"
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.15)"; e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}>
-          <Share2 size={20} strokeWidth={1.8} />
+          <Banknote size={18} strokeWidth={1.8} />
         </button>
       </div>
     );
