@@ -101,7 +101,7 @@ export default function SubscriptionScreen({
 
       {/* Plan tabs — hide if free */}
       {!isFree && (
-        <div style={{ padding: "0 20px 14px" }}>
+        <div style={{ padding: "0 20px 14px", paddingTop: "14px" }}>
           <PlanTab plans={plans} selected={selectedTier} onChange={onTierChange} symbol={symbol} />
         </div>
       )}

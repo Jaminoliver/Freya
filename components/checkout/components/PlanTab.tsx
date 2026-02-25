@@ -19,15 +19,20 @@ interface PlanTabProps {
 }
 
 export default function PlanTab({ plans, selected, onChange, symbol }: PlanTabProps) {
+  const hasSavings = plans.some((p) => p.key !== selected && p.savings && p.savings > 0);
   return (
-    <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+    <div style={{
+      display: "flex", gap: "6px", overflowX: "auto",
+      paddingBottom: "2px", paddingTop: hasSavings ? "12px" : "0",
+      scrollbarWidth: "none", WebkitOverflowScrolling: "touch",
+    }}>
       {plans.filter((p) => p.key !== selected).map((plan) => {
         const months = parseInt(String(plan.months), 10);
         const price = typeof plan.price === "string" ? parseFloat(plan.price) : plan.price;
-        // Show total price like SubscriptionCard — no per-month division
         const label = months === 1
           ? `Basic · ${symbol}${price.toLocaleString()}/mo`
           : `${months}mo · ${symbol}${price.toLocaleString()}`;
+        const showSavings = plan.savings !== undefined && plan.savings > 0;
         return (
           <button
             key={plan.key}
@@ -41,12 +46,13 @@ export default function PlanTab({ plans, selected, onChange, symbol }: PlanTabPr
               fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap",
             }}
           >
-            {plan.savings && plan.savings > 0 && (
+            {showSavings && (
               <span style={{
-                position: "absolute", top: "-8px", left: "50%", transform: "translateX(-50%)",
+                position: "absolute", top: "-10px", left: "50%", transform: "translateX(-50%)",
                 backgroundColor: "#22C55E", color: "#fff",
                 fontSize: "9px", fontWeight: 700,
                 padding: "1px 5px", borderRadius: "999px",
+                whiteSpace: "nowrap",
               }}>
                 -{plan.savings}%
               </span>
