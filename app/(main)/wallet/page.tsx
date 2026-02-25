@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import WalletTab from "@/components/wallet/WalletTab";
 import CardsTab from "@/components/wallet/CardsTab";
@@ -26,8 +26,6 @@ function mapCategoryToType(category: string): Transaction["type"] {
     default:                    return "topup";
   }
 }
-
-// ─── Checkout Loading Overlay ─────────────────────────────────────────────────
 
 function CheckoutLoadingOverlay() {
   return (
@@ -57,8 +55,6 @@ function CheckoutLoadingOverlay() {
     </div>
   );
 }
-
-// ─── Payment Status Banner ────────────────────────────────────────────────────
 
 function PaymentBanner({ status, onDismiss }: { status: "success" | "failed"; onDismiss: () => void }) {
   const success = status === "success";
@@ -93,9 +89,7 @@ function PaymentBanner({ status, onDismiss }: { status: "success" | "failed"; on
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-export default function WalletPage() {
+function WalletContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -116,7 +110,6 @@ export default function WalletPage() {
     amount: number;
   } | null>(null);
 
-  // Handle return from checkout via ?ref= param
   useEffect(() => {
     const ref = searchParams.get("ref");
     if (ref) {
@@ -175,34 +168,23 @@ export default function WalletPage() {
     fetchWalletData();
   }, [fetchWalletData]);
 
-  // ─── Payment Confirmed (bank transfer polling success) ──────────────────────
-
   const handlePaymentConfirmed = useCallback(async () => {
     await fetchWalletData(true);
     setBankAccount(null);
     setPaymentStatus("success");
   }, [fetchWalletData]);
 
-  // ─── Card Top-Up ────────────────────────────────────────────────────────────
-
   async function handleTopUp(amount: number, cardId?: number) {
     try {
       setRedirecting(true);
       const body = cardId ? { amount, cardId } : { amount };
-
       const res = await fetch("/api/wallet/topup/card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = await res.json();
-
-      if (!res.ok) {
-        setRedirecting(false);
-        setPaymentStatus("failed");
-        return;
-      }
-
+      if (!res.ok) { setRedirecting(false); setPaymentStatus("failed"); return; }
       if (data.authorizationUrl) {
         window.location.href = data.authorizationUrl;
       } else {
@@ -217,25 +199,17 @@ export default function WalletPage() {
     }
   }
 
-  // ─── Bank Transfer Top-Up (PayOnUs Dynamic Account) ────────────────────────
-
   async function handleBankTransfer(amount: number) {
     try {
       setBankTransferLoading(true);
       setBankAccount(null);
-
       const res = await fetch("/api/wallet/topup/virtual-account", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount }),
       });
       const data = await res.json();
-
-      if (!res.ok) {
-        setPaymentStatus("failed");
-        return;
-      }
-
+      if (!res.ok) { setPaymentStatus("failed"); return; }
       setBankAccount({
         accountNumber: data.accountNumber,
         bankName:      data.bankName,
@@ -251,54 +225,39 @@ export default function WalletPage() {
     }
   }
 
-  async function handleAddCard() {
-    await handleTopUp(100);
-  }
+  async function handleAddCard() { await handleTopUp(100); }
 
   async function handleSetDefault(cardId: number) {
     try {
       await fetch("/api/wallet/cards/default", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardId }),
       });
       await fetchWalletData();
-    } catch (error) {
-      console.error("[WalletPage] Set default failed:", error);
-    }
+    } catch (error) { console.error("[WalletPage] Set default failed:", error); }
   }
 
   async function handleRemoveCard(cardId: number) {
     try {
       await fetch("/api/wallet/cards/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardId }),
       });
       await fetchWalletData();
-    } catch (error) {
-      console.error("[WalletPage] Remove card failed:", error);
-    }
+    } catch (error) { console.error("[WalletPage] Remove card failed:", error); }
   }
 
   return (
     <>
       {redirecting && <CheckoutLoadingOverlay />}
-
       <div style={{
         maxWidth: "768px", margin: "0 auto",
         minHeight: "100vh", backgroundColor: "#0A0A0F",
         fontFamily: "'Inter', sans-serif",
       }}>
-        {/* Header */}
         <div style={{ padding: "24px 24px 0", borderBottom: "1px solid #1E1E2E" }}>
-          <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 2px" }}>
-            Wallet
-          </h1>
-          <p style={{ fontSize: "13px", color: "#6B6B8A", margin: "0 0 20px" }}>
-            Freya Credits
-          </p>
-
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 2px" }}>Wallet</h1>
+          <p style={{ fontSize: "13px", color: "#6B6B8A", margin: "0 0 20px" }}>Freya Credits</p>
           <div style={{ display: "flex" }}>
             {TABS.map((tab) => (
               <button
@@ -319,15 +278,10 @@ export default function WalletPage() {
           </div>
         </div>
 
-        {/* Tab content */}
         <div style={{ padding: "20px 24px 100px" }}>
           {paymentStatus && (
-            <PaymentBanner
-              status={paymentStatus}
-              onDismiss={() => setPaymentStatus(null)}
-            />
+            <PaymentBanner status={paymentStatus} onDismiss={() => setPaymentStatus(null)} />
           )}
-
           {loading ? (
             <p style={{ textAlign: "center", color: "#6B6B8A", fontSize: "14px", padding: "40px 0", fontFamily: "'Inter', sans-serif" }}>
               Loading...
@@ -347,7 +301,6 @@ export default function WalletPage() {
                   onPaymentConfirmed={handlePaymentConfirmed}
                 />
               )}
-
               {activeTab === "cards" && (
                 <CardsTab
                   cards={cards.map((c) => ({
@@ -362,7 +315,6 @@ export default function WalletPage() {
                   onRemoveCard={(id) => handleRemoveCard(Number(id))}
                 />
               )}
-
               {activeTab === "history" && (
                 <HistoryTab transactions={transactions} />
               )}
@@ -371,5 +323,13 @@ export default function WalletPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function WalletPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", backgroundColor: "#0A0A0F" }} />}>
+      <WalletContent />
+    </Suspense>
   );
 }
