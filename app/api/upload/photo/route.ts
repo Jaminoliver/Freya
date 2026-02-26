@@ -5,6 +5,15 @@ import { uploadPhotoToBunny } from "@/lib/utils/bunny";
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 const ALLOWED_TYPES  = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "50mb",
+    },
+    responseLimit: false,
+  },
+};
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();

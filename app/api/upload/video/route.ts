@@ -5,6 +5,15 @@ import { createBunnyVideo, uploadVideoToBunny, getBunnyStreamUrls } from "@/lib/
 const MAX_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
 const ALLOWED_TYPES  = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm", "video/mpeg"];
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "2gb",
+    },
+    responseLimit: false,
+  },
+};
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -54,7 +63,7 @@ export async function POST(req: NextRequest) {
         thumbnail_url:     thumbnailUrl,
         mime_type:         file.type,
         file_size_bytes:   file.size,
-        processing_status: "processing", // Bunny transcodes async — will update via webhook
+        processing_status: "processing",
         bunny_video_id:    videoId,
         is_watermarked:    false,
       })
