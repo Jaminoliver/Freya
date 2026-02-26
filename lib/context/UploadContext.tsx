@@ -110,6 +110,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         await new Promise<void>((resolve, reject) => {
           const upload = new tus.Upload(file, {
             endpoint:    tusEndpoint,
+            chunkSize:   5 * 1024 * 1024, // 5MB chunks — required for large files
             retryDelays: [0, 3000, 5000, 10000, 20000],
             headers: {
               AuthorizationSignature: signature,
@@ -123,12 +124,15 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
             },
             onProgress(bytesUploaded, bytesTotal) {
               const pct = Math.round((bytesUploaded / bytesTotal) * 80);
+              console.log(`[TUS] ${bytesUploaded}/${bytesTotal} (${pct}%)`);
               updateUpload(uploadId, { progress: pct });
             },
             onSuccess() {
+              console.log("[TUS] Upload complete");
               resolve();
             },
             onError(err) {
+              console.error("[TUS] Error:", err.message, (err as any).originalResponse?.getBody?.());
               reject(new Error(`TUS upload failed: ${err.message}`));
             },
           });
