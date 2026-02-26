@@ -32,11 +32,10 @@ export default function VideoPlayer({
 
   const [isMobile,    setIsMobile]    = React.useState(false);
   const [posterError, setPosterError] = React.useState(false);
-  // FIX: paused frame — overlaid as <img> so black screen never shows
   const [pausedFrame, setPausedFrame] = React.useState<string | null>(null);
   const [isPlaying,   setIsPlaying]   = React.useState(false);
-  // FIX: detected from video metadata — not hardcoded
-  const [aspectRatio, setAspectRatio] = React.useState<string>("9/16");
+  const [aspectRatio, setAspectRatio] = React.useState<string | null>(null);
+  const isPortrait = aspectRatio === "9/16";
 
   React.useEffect(() => {
     const ua     = navigator.userAgent;
@@ -44,7 +43,6 @@ export default function VideoPlayer({
     setIsMobile(mobile);
   }, []);
 
-  // FIX: Capture current frame to canvas, return as dataURL
   const captureFrame = React.useCallback(() => {
     const video  = videoRef.current;
     const canvas = canvasRef.current;
@@ -57,7 +55,6 @@ export default function VideoPlayer({
     setPausedFrame(canvas.toDataURL("image/jpeg", 0.85));
   }, []);
 
-  // FIX: Pause video + capture frame when scrolled out of view
   React.useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -74,7 +71,6 @@ export default function VideoPlayer({
     return () => observer.disconnect();
   }, [captureFrame, isMobile]);
 
-  // FIX: Detect aspect ratio from video metadata
   const handleLoadedMetadata = React.useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -90,16 +86,15 @@ export default function VideoPlayer({
   }, [captureFrame]);
 
   const handlePlay = React.useCallback(() => {
-    setPausedFrame(null); // clear snapshot — show live video
+    setPausedFrame(null);
     setIsPlaying(true);
   }, []);
 
-  // ── No video yet ──────────────────────────────────────────────────
   if (!bunnyVideoId) {
     return (
       <>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div style={{ width: "100%", aspectRatio: "9/16", backgroundColor: "#000", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px" }}>
+        <div style={{ width: "100%", aspectRatio: "16/9", backgroundColor: "#000", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px" }}>
           <div style={{ width: "36px", height: "36px", borderRadius: "50%", border: "3px solid #2A2A3D", borderTop: "3px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
           <span style={{ fontSize: "13px", color: "#8A8AA0", fontFamily: "'Inter', sans-serif" }}>
             Video processing — check back shortly
@@ -113,21 +108,44 @@ export default function VideoPlayer({
     ? thumbnailUrl
     : getBunnyThumbnail(bunnyVideoId);
 
+  // Shared video styles — Safari fix: min-height: 100% forces object-fit cover on load
+  const videoStyles: React.CSSProperties = {
+    position:   "absolute",
+    top:        0,
+    left:       0,
+    width:      "100%",
+    height:     "100%",
+    minHeight:  "100%",   // ← Safari iOS fix: object-fit cover doesn't apply without this
+    objectFit:  "cover",
+    background: "#000",
+  };
+
+  // Shared paused frame overlay styles
+  const pausedFrameStyles: React.CSSProperties = {
+    position:      "absolute",
+    inset:         0,
+    width:         "100%",
+    height:        "100%",
+    minHeight:     "100%",  // ← same Safari fix applied to overlay
+    objectFit:     "cover",
+    background:    "#000",
+    zIndex:        1,
+    pointerEvents: "none",
+  };
+
   // ── Mobile: native <video> ────────────────────────────────────────
   if (isMobile) {
     return (
       <div
         ref={containerRef}
         style={{
-          // FIX: full bleed — no side constraints
           width:           "100%",
-          aspectRatio,
+          height:          isPortrait ? "520px" : "360px",
           position:        "relative",
           backgroundColor: "#000",
           overflow:        "hidden",
         }}
       >
-        {/* Hidden canvas for frame capture */}
         <canvas ref={canvasRef} style={{ display: "none" }} />
 
         <video
@@ -141,60 +159,47 @@ export default function VideoPlayer({
           onPause={handlePause}
           onPlay={handlePlay}
           onError={() => setPosterError(true)}
-          style={{
-            position:  "absolute",
-            inset:     0,
-            width:     "100%",
-            height:    "100%",
-            objectFit: "contain",
-            background: "#000",
-          }}
+          style={videoStyles}
         />
 
-        {/* FIX: paused frame overlay — prevents black screen on scroll */}
         {pausedFrame && !isPlaying && (
-          <img
-            src={pausedFrame}
-            alt=""
-            aria-hidden
-            style={{
-              position:   "absolute",
-              inset:      0,
-              width:      "100%",
-              height:     "100%",
-              objectFit:  "contain",
-              background: "#000",
-              // Sits above video but below controls
-              zIndex: 1,
-              pointerEvents: "none",
-            }}
-          />
+          <img src={pausedFrame} alt="" aria-hidden style={pausedFrameStyles} />
         )}
       </div>
     );
   }
 
-  // ── Desktop: Bunny iframe player ─────────────────────────────────
-  const iframeSrc = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${bunnyVideoId}?autoplay=false&loop=false&muted=false&preload=true&responsive=true`;
-
+  // ── Desktop: native <video> (not iframe — no CSS control over iframe) ────
   return (
     <div
       ref={containerRef}
       style={{
-        width:       "100%",
-        aspectRatio,
-        position:    "relative",
-        overflow:    "hidden",
+        width:           "100%",
+        height:          isPortrait ? "500px" : "420px",
+        position:        "relative",
+        overflow:        "hidden",
         backgroundColor: "#000",
       }}
     >
-      <iframe
-        src={iframeSrc}
-        loading="lazy"
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
-        allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-        allowFullScreen
+      <canvas ref={canvasRef} style={{ display: "none" }} />
+
+      <video
+        ref={videoRef}
+        src={getBunnyHLS(bunnyVideoId)}
+        poster={posterSrc}
+        controls
+        playsInline
+        preload="metadata"
+        onLoadedMetadata={handleLoadedMetadata}
+        onPause={handlePause}
+        onPlay={handlePlay}
+        onError={() => setPosterError(true)}
+        style={videoStyles}
       />
+
+      {pausedFrame && !isPlaying && (
+        <img src={pausedFrame} alt="" aria-hidden style={pausedFrameStyles} />
+      )}
     </div>
   );
 }
