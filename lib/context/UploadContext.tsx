@@ -10,10 +10,10 @@ export interface UploadItem {
   phase:    "uploading" | "processing" | "done" | "error";
   mediaId?: number;
   error?:   string;
-  file?:        File;
-  _title?:      string;
-  _onMediaId?:  (mediaId: number) => void;
-  _onError?:    (err: string) => void;
+  file?:       File;
+  _title?:     string;
+  _onMediaId?: (mediaId: number) => void;
+  _onError?:   (err: string) => void;
   _thumbnailBlob?: Blob;
 }
 
@@ -83,11 +83,25 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     onError:       (err: string) => void,
   ) => {
     try {
-      // ── Step 1: Get presigned TUS credentials ─────────────────────
+      // ── Step 1: Upload creator-picked thumbnail (if any) ──────────
+      let customThumbnailUrl: string | null = null;
+      if (thumbnailBlob) {
+        try {
+          const formData = new FormData();
+          formData.append("file", thumbnailBlob, "thumbnail.jpg");
+          const res  = await fetch("/api/upload/thumbnail", { method: "POST", body: formData });
+          const data = await res.json();
+          if (res.ok) customThumbnailUrl = data.url;
+        } catch {
+          // non-fatal — fall back to Bunny auto-generated thumbnail
+        }
+      }
+
+      // ── Step 2: Get presigned TUS credentials ─────────────────────
       const initRes  = await fetch("/api/upload/video", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ title }),
+        body:    JSON.stringify({ title, customThumbnailUrl }),
       });
       const initData = await initRes.json();
       if (!initRes.ok) throw new Error(initData.error || "Failed to initialise upload");
@@ -100,7 +114,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         libraryId:   string;
       };
 
-      // ── Step 2: TUS direct browser → Bunny ───────────────────────
+      // ── Step 3: TUS direct browser → Bunny ───────────────────────
       await new Promise<void>((resolve, reject) => {
         const upload = new tus.Upload(file, {
           endpoint:    tusEndpoint,
@@ -117,20 +131,12 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
             updateUpload(uploadId, { progress: Math.round((bytesUploaded / bytesTotal) * 80) });
           },
           onSuccess() {
-            fetch("/api/upload/video/log", {
-              method:  "POST",
-              headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ event: "tus_success", videoId, fileSize: file.size }),
-            }).catch(() => {});
+            fetch("/api/upload/video/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: "tus_success", videoId, fileSize: file.size }) }).catch(() => {});
             resolve();
           },
           onError(err) {
             const responseBody = (err as any).originalResponse?.getBody?.() ?? "no body";
-            fetch("/api/upload/video/log", {
-              method:  "POST",
-              headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody }),
-            }).catch(() => {});
+            fetch("/api/upload/video/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody }) }).catch(() => {});
             reject(new Error(`Upload failed: ${err.message} — ${responseBody}`));
           },
         });
@@ -143,25 +149,11 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
       updateUpload(uploadId, { progress: 82, phase: "processing" });
 
-      // ── Step 3: Push custom thumbnail to Bunny Stream (if picked) ─
-      if (thumbnailBlob) {
-        try {
-          const thumbForm = new FormData();
-          thumbForm.append("file", thumbnailBlob, "thumbnail.jpg");
-          await fetch(`/api/upload/video/${videoId}/thumbnail`, {
-            method: "POST",
-            body:   thumbForm,
-          });
-        } catch {
-          // non-fatal — Bunny will auto-generate a thumbnail
-        }
-      }
-
       // ── Step 4: Save to Supabase ──────────────────────────────────
       const completeRes  = await fetch("/api/upload/video/complete", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size }),
+        body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size, customThumbnailUrl }),
       });
       const completeData = await completeRes.json();
       if (!completeRes.ok) throw new Error(completeData.error || "Failed to save record");
