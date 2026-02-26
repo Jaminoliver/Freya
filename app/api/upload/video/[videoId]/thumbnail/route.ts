@@ -6,14 +6,14 @@ const STREAM_API_KEY = process.env.BUNNY_STREAM_API_KEY!;
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { videoId: string } }
+  { params }: { params: Promise<{ videoId: string }> }
 ) {
   try {
     const supabase = await createServerSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { videoId } = params;
+    const { videoId } = await params;
     if (!videoId) return NextResponse.json({ error: "videoId required" }, { status: 400 });
 
     const formData = await req.formData();

@@ -1,4 +1,8 @@
 import crypto from "crypto";
+import dns from "dns";
+
+// Force Node.js to use Google DNS — bypasses broken OS/ISP DNS resolution
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -97,7 +101,7 @@ export async function uploadPhotoToBunny(
 
 export async function createBunnyVideo(title: string): Promise<string> {
   const MAX_RETRIES = 3;
-  const DELAYS      = [500, 1500, 3000]; // ms between retries
+  const DELAYS      = [500, 1500, 3000];
 
   let lastError: Error | null = null;
 
@@ -112,7 +116,6 @@ export async function createBunnyVideo(title: string): Promise<string> {
         body: JSON.stringify({ title }),
       });
 
-      // Retry on 503 / 502 / 429 (server blips & rate limits)
       if (res.status === 503 || res.status === 502 || res.status === 429) {
         const text = await res.text();
         lastError  = new Error(`Bunny Stream create video failed: ${res.status} — ${text}`);
@@ -132,9 +135,8 @@ export async function createBunnyVideo(title: string): Promise<string> {
       return data.guid as string;
 
     } catch (err) {
-      // Only retry on network errors, not on explicit non-retryable HTTP errors
       if (err instanceof Error && err.message.includes("Bunny Stream create video failed")) {
-        throw err; // non-retryable HTTP error — bubble up immediately
+        throw err;
       }
       lastError = err instanceof Error ? err : new Error(String(err));
       if (attempt < MAX_RETRIES - 1) {
