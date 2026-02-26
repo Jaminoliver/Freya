@@ -10,23 +10,24 @@ export interface UploadItem {
   phase:    "uploading" | "processing" | "done" | "error";
   mediaId?: number;
   error?:   string;
-  // FIX: Store file ref so retry can re-trigger the same upload
   file?:       File;
   _title?:     string;
   _onMediaId?: (mediaId: number) => void;
   _onError?:   (err: string) => void;
+  _thumbnailBlob?: Blob;
 }
 
 interface UploadContextValue {
   uploads:          UploadItem[];
   startVideoUpload: (params: {
-    file:      File;
-    title:     string;
-    onMediaId: (mediaId: number) => void;
-    onError:   (err: string) => void;
+    file:           File;
+    title:          string;
+    thumbnailBlob?: Blob;
+    onMediaId:      (mediaId: number) => void;
+    onError:        (err: string) => void;
   }) => string;
-  dismissUpload: (id: string) => void;   // FIX: per-item dismiss
-  retryUpload:   (id: string) => void;   // FIX: retry failed upload
+  dismissUpload: (id: string) => void;
+  retryUpload:   (id: string) => void;
   clearDone:     () => void;
 }
 
@@ -60,10 +61,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           updateUpload(uploadId, { phase: "error", error: "Processing failed" });
         } else {
           setUploads((prev) =>
-            prev.map((u) => {
-              if (u.id !== uploadId) return u;
-              return { ...u, progress: Math.min(95, u.progress + 2) };
-            })
+            prev.map((u) => u.id !== uploadId ? u : { ...u, progress: Math.min(95, u.progress + 2) })
           );
         }
 
@@ -72,25 +70,38 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           delete pollTimers.current[uploadId];
           updateUpload(uploadId, { phase: "error", error: "Processing timed out" });
         }
-      } catch {
-        // ignore network blips
-      }
+      } catch { /* ignore network blips */ }
     }, 3000);
   }, [updateUpload]);
 
-  // Extracted so both startVideoUpload and retryUpload can call it
   const runUpload = useCallback(async (
-    uploadId:  string,
-    file:      File,
-    title:     string,
-    onMediaId: (mediaId: number) => void,
-    onError:   (err: string) => void,
+    uploadId:      string,
+    file:          File,
+    title:         string,
+    thumbnailBlob: Blob | undefined,
+    onMediaId:     (mediaId: number) => void,
+    onError:       (err: string) => void,
   ) => {
     try {
+      // ── Step 1: Upload creator-picked thumbnail (if any) ──────────
+      let customThumbnailUrl: string | null = null;
+      if (thumbnailBlob) {
+        try {
+          const formData = new FormData();
+          formData.append("file", thumbnailBlob, "thumbnail.jpg");
+          const res  = await fetch("/api/upload/thumbnail", { method: "POST", body: formData });
+          const data = await res.json();
+          if (res.ok) customThumbnailUrl = data.url;
+        } catch {
+          // non-fatal — fall back to Bunny auto-generated thumbnail
+        }
+      }
+
+      // ── Step 2: Get presigned TUS credentials ─────────────────────
       const initRes  = await fetch("/api/upload/video", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ title }),
+        body:    JSON.stringify({ title, customThumbnailUrl }),
       });
       const initData = await initRes.json();
       if (!initRes.ok) throw new Error(initData.error || "Failed to initialise upload");
@@ -103,12 +114,12 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         libraryId:   string;
       };
 
+      // ── Step 3: TUS direct browser → Bunny ───────────────────────
       await new Promise<void>((resolve, reject) => {
         const upload = new tus.Upload(file, {
           endpoint:    tusEndpoint,
           chunkSize:   5 * 1024 * 1024,
-          // FIX: null = fail immediately on Bunny auth errors, no 38s silent retry
-          retryDelays: null,
+          retryDelays: null, // fail fast on auth errors
           headers: {
             AuthorizationSignature: signature,
             AuthorizationExpire:    String(expireTime),
@@ -117,24 +128,15 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           },
           metadata: { filetype: file.type, title },
           onProgress(bytesUploaded, bytesTotal) {
-            const pct = Math.round((bytesUploaded / bytesTotal) * 80);
-            updateUpload(uploadId, { progress: pct });
+            updateUpload(uploadId, { progress: Math.round((bytesUploaded / bytesTotal) * 80) });
           },
           onSuccess() {
-            fetch("/api/upload/video/log", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ event: "tus_success", videoId, fileSize: file.size }),
-            }).catch(() => {});
+            fetch("/api/upload/video/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: "tus_success", videoId, fileSize: file.size }) }).catch(() => {});
             resolve();
           },
           onError(err) {
             const responseBody = (err as any).originalResponse?.getBody?.() ?? "no body";
-            fetch("/api/upload/video/log", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody }),
-            }).catch(() => {});
+            fetch("/api/upload/video/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody }) }).catch(() => {});
             reject(new Error(`Upload failed: ${err.message} — ${responseBody}`));
           },
         });
@@ -147,10 +149,11 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
       updateUpload(uploadId, { progress: 82, phase: "processing" });
 
+      // ── Step 4: Save to Supabase ──────────────────────────────────
       const completeRes  = await fetch("/api/upload/video/complete", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size }),
+        body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size, customThumbnailUrl }),
       });
       const completeData = await completeRes.json();
       if (!completeRes.ok) throw new Error(completeData.error || "Failed to save record");
@@ -168,48 +171,36 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   }, [updateUpload, startPolling]);
 
   const startVideoUpload = useCallback(({
-    file, title, onMediaId, onError,
+    file, title, thumbnailBlob, onMediaId, onError,
   }: {
-    file:      File;
-    title:     string;
-    onMediaId: (mediaId: number) => void;
-    onError:   (err: string) => void;
+    file:           File;
+    title:          string;
+    thumbnailBlob?: Blob;
+    onMediaId:      (mediaId: number) => void;
+    onError:        (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
 
-    setUploads((prev) => [
-      ...prev,
-      {
-        id: uploadId, fileName: file.name, progress: 0, phase: "uploading",
-        // Store file + callbacks so retry works
-        file, _title: title, _onMediaId: onMediaId, _onError: onError,
-      },
-    ]);
+    setUploads((prev) => [...prev, {
+      id: uploadId, fileName: file.name, progress: 0, phase: "uploading",
+      file, _title: title, _onMediaId: onMediaId, _onError: onError, _thumbnailBlob: thumbnailBlob,
+    }]);
 
-    runUpload(uploadId, file, title, onMediaId, onError);
+    runUpload(uploadId, file, title, thumbnailBlob, onMediaId, onError);
     return uploadId;
   }, [runUpload]);
 
-  // FIX: Dismiss a single upload by id — not all done uploads at once
   const dismissUpload = useCallback((id: string) => {
-    if (pollTimers.current[id]) {
-      clearInterval(pollTimers.current[id]);
-      delete pollTimers.current[id];
-    }
+    if (pollTimers.current[id]) { clearInterval(pollTimers.current[id]); delete pollTimers.current[id]; }
     setUploads((prev) => prev.filter((u) => u.id !== id));
   }, []);
 
-  // FIX: Retry a failed upload — resets progress and re-runs with same file + callbacks
   const retryUpload = useCallback((id: string) => {
-    setUploads((prev) => prev.map((u) =>
-      u.id === id ? { ...u, progress: 0, phase: "uploading", error: undefined } : u
-    ));
-
-    // Read the stored file/callbacks and re-run
+    setUploads((prev) => prev.map((u) => u.id === id ? { ...u, progress: 0, phase: "uploading", error: undefined } : u));
     setUploads((prev) => {
       const item = prev.find((u) => u.id === id);
       if (item?.file && item._title && item._onMediaId && item._onError) {
-        runUpload(id, item.file, item._title, item._onMediaId, item._onError);
+        runUpload(id, item.file, item._title, item._thumbnailBlob, item._onMediaId, item._onError);
       }
       return prev;
     });
