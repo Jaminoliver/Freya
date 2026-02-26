@@ -64,7 +64,7 @@ export async function uploadPhotoToBunny(
   return { url: signBunnyUrl(path), path };
 }
 
-// ─── Video Upload ─────────────────────────────────────────────────────────────
+// ─── Video: Create + Get Direct Upload URL ────────────────────────────────────
 
 export async function createBunnyVideo(title: string): Promise<string> {
   const res = await fetch(`${STREAM_BASE_URL}/videos`, {
@@ -83,6 +83,23 @@ export async function createBunnyVideo(title: string): Promise<string> {
 
   const data = await res.json();
   return data.guid as string;
+}
+
+/**
+ * Returns the direct upload URL and required headers for browser-side upload.
+ * The browser PUT's the file directly to Bunny — bypasses Vercel entirely.
+ */
+export function getBunnyUploadUrl(videoId: string): {
+  uploadUrl: string;
+  headers: Record<string, string>;
+} {
+  return {
+    uploadUrl: `https://video.bunnycdn.com/library/${STREAM_LIBRARY}/videos/${videoId}`,
+    headers: {
+      AccessKey:      STREAM_API_KEY,
+      "Content-Type": "video/*",
+    },
+  };
 }
 
 export async function uploadVideoToBunny(
