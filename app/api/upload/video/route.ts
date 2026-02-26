@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createBunnyVideo } from "@/lib/utils/bunny";
+import { createBunnyVideo, getBunnyTusCredentials } from "@/lib/utils/bunny";
 
 export const runtime = "nodejs";
 
 // No file touches Vercel — we only create the Bunny video object
-// and hand back credentials so the client uploads directly to Bunny.
+// and return presigned TUS credentials for direct browser → Bunny upload.
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -14,14 +14,18 @@ export async function POST(req: NextRequest) {
 
     const { title } = await req.json();
 
-    // Create the video object in Bunny Stream
+    // Step 1: Create video object in Bunny Stream
     const videoId = await createBunnyVideo(title || "Untitled");
 
-    // Return everything the client needs to PUT directly to Bunny
+    // Step 2: Generate presigned TUS credentials (API key never leaves server)
+    const { tusEndpoint, expireTime, signature, libraryId } = getBunnyTusCredentials(videoId);
+
     return NextResponse.json({
       videoId,
-      libraryId: process.env.BUNNY_STREAM_LIBRARY_ID!,
-      apiKey:    process.env.BUNNY_STREAM_API_KEY!,
+      tusEndpoint,
+      expireTime,
+      signature,
+      libraryId,
     });
 
   } catch (err) {

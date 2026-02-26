@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useRef, useState, useCallback } from "react";
+import * as tus from "tus-js-client";
 
 export interface UploadItem {
   id:       string;
@@ -87,8 +88,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
-        // ── Step 1: Ask server to create the Bunny video object ───────────
-        // No file is sent here — Vercel only sees a tiny JSON body.
+        // ── Step 1: Get presigned TUS credentials from server ─────────────
         const initRes  = await fetch("/api/upload/video", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -97,36 +97,47 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         const initData = await initRes.json();
         if (!initRes.ok) throw new Error(initData.error || "Failed to initialise upload");
 
-        const { videoId, libraryId, apiKey } = initData as {
-          videoId:   string;
-          libraryId: string;
-          apiKey:    string;
+        const { videoId, tusEndpoint, expireTime, signature, libraryId } = initData as {
+          videoId:     string;
+          tusEndpoint: string;
+          expireTime:  number;
+          signature:   string;
+          libraryId:   string;
         };
 
-        // ── Step 2: Upload directly from browser → Bunny (no Vercel proxy) ──
+        // ── Step 2: Upload directly browser → Bunny via TUS ──────────────
+        // TUS is resumable — survives network drops, works on mobile
         await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", `https://video.bunnycdn.com/library/${libraryId}/videos/${videoId}`);
-          xhr.setRequestHeader("AccessKey", apiKey);
-          xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              // 0–80%: raw browser → Bunny upload progress
-              const pct = Math.round((e.loaded / e.total) * 80);
+          const upload = new tus.Upload(file, {
+            endpoint:    tusEndpoint,
+            retryDelays: [0, 3000, 5000, 10000, 20000],
+            headers: {
+              AuthorizationSignature: signature,
+              AuthorizationExpire:    String(expireTime),
+              VideoId:                videoId,
+              LibraryId:              libraryId,
+            },
+            metadata: {
+              filetype: file.type,
+              title,
+            },
+            onProgress(bytesUploaded, bytesTotal) {
+              const pct = Math.round((bytesUploaded / bytesTotal) * 80);
               updateUpload(uploadId, { progress: pct });
-            }
-          };
-
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
+            },
+            onSuccess() {
               resolve();
-            } else {
-              reject(new Error(`Bunny upload failed: ${xhr.status}`));
-            }
-          };
-          xhr.onerror = () => reject(new Error("Network error during upload"));
-          xhr.send(file); // send raw File — no FormData overhead
+            },
+            onError(err) {
+              reject(new Error(`TUS upload failed: ${err.message}`));
+            },
+          });
+
+          // Resume interrupted uploads automatically
+          upload.findPreviousUploads().then((prev) => {
+            if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
+            upload.start();
+          });
         });
 
         updateUpload(uploadId, { progress: 82, phase: "processing" });
@@ -143,7 +154,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         const mediaId: number = completeData.mediaId;
         updateUpload(uploadId, { mediaId, progress: 85, phase: "processing" });
 
-        // Notify caller so they can create the post immediately
         onMediaId(mediaId);
 
         // ── Step 4: Poll for Bunny processing ─────────────────────────────
