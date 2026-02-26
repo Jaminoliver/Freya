@@ -34,6 +34,7 @@ export default function VideoPlayer({
   const [posterError, setPosterError] = React.useState(false);
   const [pausedFrame, setPausedFrame] = React.useState<string | null>(null);
   const [isPlaying,   setIsPlaying]   = React.useState(false);
+  const [isBuffering, setIsBuffering] = React.useState(false);
   const [aspectRatio, setAspectRatio] = React.useState<string | null>(null);
   const isPortrait = aspectRatio === "9/16";
 
@@ -80,15 +81,11 @@ export default function VideoPlayer({
     else            setAspectRatio("1/1");
   }, []);
 
-  const handlePause = React.useCallback(() => {
-    captureFrame();
-    setIsPlaying(false);
-  }, [captureFrame]);
-
-  const handlePlay = React.useCallback(() => {
-    setPausedFrame(null);
-    setIsPlaying(true);
-  }, []);
+  const handlePause   = React.useCallback(() => { captureFrame(); setIsPlaying(false); }, [captureFrame]);
+  const handlePlay    = React.useCallback(() => { setPausedFrame(null); setIsPlaying(true); setIsBuffering(false); }, []);
+  const handleWaiting = React.useCallback(() => { setIsBuffering(true); }, []);
+  const handlePlaying = React.useCallback(() => { setIsBuffering(false); }, []);
+  const handleCanPlay = React.useCallback(() => { setIsBuffering(false); }, []);
 
   if (!bunnyVideoId) {
     return (
@@ -112,86 +109,119 @@ export default function VideoPlayer({
     ? (isPortrait ? "520px" : "360px")
     : (isPortrait ? "500px" : "420px");
 
-  // Portrait videos get narrower width so blurred bg is visible on sides
   const videoWidth = isPortrait ? "72%" : "100%";
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        width:           "100%",
-        height:          containerHeight,
-        position:        "relative",
-        overflow:        "hidden",
-        display:         "flex",
-        alignItems:      "center",
-        justifyContent:  "center",
-        backgroundColor: "#000",
-      }}
-    >
-      {/* Blurred thumbnail background — always visible behind the video */}
-      <img
-        src={posterSrc}
-        alt=""
-        aria-hidden
-        onError={() => setPosterError(true)}
+    <>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div
+        ref={containerRef}
         style={{
-          position:  "absolute",
-          inset:     0,
-          width:     "100%",
-          height:    "100%",
-          objectFit: "cover",
-          filter:    "blur(20px) brightness(0.45)",
-          transform: "scale(1.1)",
-          zIndex:    1,
+          width:           "100%",
+          height:          containerHeight,
+          position:        "relative",
+          overflow:        "hidden",
+          display:         "flex",
+          alignItems:      "center",
+          justifyContent:  "center",
+          backgroundColor: "#000",
         }}
-      />
-
-      <canvas ref={canvasRef} style={{ display: "none" }} />
-
-      {/* Main video — centered, reduced width for portrait */}
-      <video
-        ref={videoRef}
-        src={getBunnyHLS(bunnyVideoId)}
-        poster={posterSrc}
-        controls
-        playsInline
-        preload="auto"
-        onLoadedMetadata={handleLoadedMetadata}
-        onPause={handlePause}
-        onPlay={handlePlay}
-        onError={() => setPosterError(true)}
-        style={{
-          position:  "relative",
-          zIndex:    2,
-          width:     videoWidth,
-          height:    "100%",
-          minHeight: "100%",   // Safari iOS fix
-          objectFit: "cover",
-          flexShrink: 0,
-        }}
-      />
-
-      {/* Paused frame overlay */}
-      {pausedFrame && !isPlaying && (
+      >
+        {/* Blurred thumbnail background */}
         <img
-          src={pausedFrame}
+          src={posterSrc}
           alt=""
           aria-hidden
+          onError={() => setPosterError(true)}
           style={{
-            position:      "absolute",
-            top:           0,
-            left:          "50%",
-            transform:     "translateX(-50%)",
-            width:         videoWidth,
-            height:        "100%",
-            minHeight:     "100%",
-            objectFit:     "cover",
-            zIndex:        3,
-            pointerEvents: "none",
+            position:  "absolute",
+            inset:     0,
+            width:     "100%",
+            height:    "100%",
+            objectFit: "cover",
+            filter:    "blur(20px) brightness(0.45)",
+            transform: "scale(1.1)",
+            zIndex:    1,
           }}
         />
-      )}
-    </div>
+
+        <canvas ref={canvasRef} style={{ display: "none" }} />
+
+        {/* Main video */}
+        <video
+          ref={videoRef}
+          src={getBunnyHLS(bunnyVideoId)}
+          poster={posterSrc}
+          controls
+          playsInline
+          preload="auto"
+          onLoadedMetadata={handleLoadedMetadata}
+          onPause={handlePause}
+          onPlay={handlePlay}
+          onWaiting={handleWaiting}
+          onPlaying={handlePlaying}
+          onCanPlay={handleCanPlay}
+          onError={() => setPosterError(true)}
+          style={{
+            position:   "relative",
+            zIndex:     2,
+            width:      videoWidth,
+            height:     "100%",
+            minHeight:  "100%",
+            objectFit:  "cover",
+            flexShrink: 0,
+          }}
+        />
+
+        {/* Paused frame overlay */}
+        {pausedFrame && !isPlaying && (
+          <img
+            src={pausedFrame}
+            alt=""
+            aria-hidden
+            style={{
+              position:      "absolute",
+              top:           0,
+              left:          "50%",
+              transform:     "translateX(-50%)",
+              width:         videoWidth,
+              height:        "100%",
+              minHeight:     "100%",
+              objectFit:     "cover",
+              zIndex:        3,
+              pointerEvents: "none",
+            }}
+          />
+        )}
+
+        {/* Buffering overlay — covers native browser spinner, shows our own */}
+        {isBuffering && (
+          <div
+            style={{
+              position:       "absolute",
+              inset:          0,
+              zIndex:         9,
+              pointerEvents:  "none",
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "center",
+              // Semi-transparent overlay hides the native OS spinner underneath
+              backgroundColor: "rgba(0,0,0,0.35)",
+            }}
+          >
+            <div
+              style={{
+                width:        "44px",
+                height:       "44px",
+                borderRadius: "50%",
+                border:       "3px solid rgba(255,255,255,0.2)",
+                borderTop:    "3px solid rgba(255,255,255,0.9)",
+                animation:    "spin 0.8s linear infinite",
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </>
   );
 }
