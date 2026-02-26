@@ -26,11 +26,12 @@ export default function VideoPlayer({
   processingStatus,
   rawVideoUrl,
 }: VideoPlayerProps) {
-  const [isMobile, setIsMobile] = React.useState(false);
+  const [isMobile, setIsMobile]     = React.useState(false);
+  const [posterLoaded, setPosterLoaded] = React.useState(false);
+  const [posterError, setPosterError]   = React.useState(false);
 
   React.useEffect(() => {
-    // Detect iOS/Android — iframe is broken on iOS Safari
-    const ua = navigator.userAgent;
+    const ua     = navigator.userAgent;
     const mobile = /iPhone|iPad|iPod|Android/i.test(ua) || window.innerWidth < 768;
     setIsMobile(mobile);
   }, []);
@@ -62,19 +63,34 @@ export default function VideoPlayer({
     );
   }
 
-  // ── Mobile: native <video> + HLS (iOS Safari natively supports .m3u8) ──
+  // ── Mobile: native <video> + HLS + thumbnail poster ──────────────
   if (isMobile) {
-    const hlsSrc       = getBunnyHLS(bunnyVideoId);
-    const posterSrc    = thumbnailUrl || getBunnyThumbnail(bunnyVideoId);
+    const hlsSrc    = getBunnyHLS(bunnyVideoId);
+    // Prefer DB thumbnail, fall back to Bunny auto-generated one
+    const posterSrc = (!posterError && thumbnailUrl)
+      ? thumbnailUrl
+      : getBunnyThumbnail(bunnyVideoId);
 
     return (
       <div style={containerStyle}>
+        {/* Preload poster so it's ready before video element mounts */}
+        {!posterLoaded && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={posterSrc}
+            alt=""
+            aria-hidden
+            onLoad={() => setPosterLoaded(true)}
+            onError={() => { setPosterError(true); setPosterLoaded(true); }}
+            style={{ display: "none" }}
+          />
+        )}
         <video
           src={hlsSrc}
-          poster={posterSrc}
+          poster={posterLoaded ? posterSrc : undefined}
           controls
-          playsInline          // required on iOS — prevents fullscreen hijack
-          preload="metadata"
+          playsInline          // critical for iPhone — prevents black screen
+          preload="metadata"   // loads poster + duration without buffering whole file
           style={{
             position:   "absolute",
             inset:      0,

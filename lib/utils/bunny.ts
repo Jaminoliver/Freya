@@ -19,6 +19,12 @@ export interface UploadPhotoResult {
   path: string;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ─── Signed URL Generator ─────────────────────────────────────────────────────
 
 export function signBunnyUrl(path: string, expiresInSeconds = 86400): string {
@@ -37,18 +43,13 @@ export function signBunnyUrl(path: string, expiresInSeconds = 86400): string {
 
 // ─── TUS Signature Generator ──────────────────────────────────────────────────
 
-/**
- * Generates a signed TUS upload credential for Bunny Stream.
- * The browser uses these headers to upload directly via tus-js-client.
- * Signature = SHA256(libraryId + apiKey + expireTime + videoId)
- */
 export function getBunnyTusCredentials(videoId: string): {
   tusEndpoint:  string;
   expireTime:   number;
   signature:    string;
   libraryId:    string;
 } {
-  const expireTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+  const expireTime = Math.floor(Date.now() / 1000) + 3600;
   const signature  = crypto
     .createHash("sha256")
     .update(STREAM_LIBRARY + STREAM_API_KEY + expireTime + videoId)
@@ -91,25 +92,57 @@ export async function uploadPhotoToBunny(
   return { url: signBunnyUrl(path), path };
 }
 
-// ─── Video: Create ────────────────────────────────────────────────────────────
+// ─── Video: Create (with retry) ───────────────────────────────────────────────
 
 export async function createBunnyVideo(title: string): Promise<string> {
-  const res = await fetch(`${STREAM_BASE_URL}/videos`, {
-    method:  "POST",
-    headers: {
-      AccessKey:      STREAM_API_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ title }),
-  });
+  const MAX_RETRIES = 3;
+  const DELAYS      = [500, 1500, 3000]; // ms between retries
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Bunny Stream create video failed: ${res.status} — ${text}`);
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(`${STREAM_BASE_URL}/videos`, {
+        method:  "POST",
+        headers: {
+          AccessKey:      STREAM_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title }),
+      });
+
+      // Retry on 503 / 502 / 429 (server blips & rate limits)
+      if (res.status === 503 || res.status === 502 || res.status === 429) {
+        const text = await res.text();
+        lastError  = new Error(`Bunny Stream create video failed: ${res.status} — ${text}`);
+        if (attempt < MAX_RETRIES - 1) {
+          await sleep(DELAYS[attempt]);
+          continue;
+        }
+        throw lastError;
+      }
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Bunny Stream create video failed: ${res.status} — ${text}`);
+      }
+
+      const data = await res.json();
+      return data.guid as string;
+
+    } catch (err) {
+      // Only retry on network errors, not on explicit non-retryable HTTP errors
+      if (err instanceof Error && err.message.includes("Bunny Stream create video failed")) {
+        throw err; // non-retryable HTTP error — bubble up immediately
+      }
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_RETRIES - 1) {
+        await sleep(DELAYS[attempt]);
+      }
+    }
   }
 
-  const data = await res.json();
-  return data.guid as string;
+  throw lastError ?? new Error("createBunnyVideo failed after retries");
 }
 
 /**
