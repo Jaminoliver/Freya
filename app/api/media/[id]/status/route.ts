@@ -43,6 +43,7 @@ export async function GET(
 
         if (bunnyRes.ok) {
           const video = await bunnyRes.json();
+          console.log("[Bunny Status] Raw response:", JSON.stringify(video));
 
           // Bunny status: 0=Created, 1=Uploaded, 2=Processing, 3=Transcoding, 4=Finished, 5=Error, 6=UploadFailed
           // availableResolutions being non-empty also means it's playable
