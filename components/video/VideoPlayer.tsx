@@ -29,19 +29,19 @@ export default function VideoPlayer({
   const [isMobile, setIsMobile] = React.useState(false);
 
   React.useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
+    // Detect iOS/Android — iframe is broken on iOS Safari
+    const ua = navigator.userAgent;
+    const mobile = /iPhone|iPad|iPod|Android/i.test(ua) || window.innerWidth < 768;
+    setIsMobile(mobile);
   }, []);
 
   const containerStyle: React.CSSProperties = {
-    width:         isMobile ? "100vw" : "100%",
-    marginLeft:    isMobile ? "calc(-50vw + 50%)" : "0",
-    position:      "relative",
-    height:        isMobile ? "500px" : "480px",
-    overflow:      "hidden",
-    marginBottom:  "4px",
+    width:           isMobile ? "100vw" : "100%",
+    marginLeft:      isMobile ? "calc(-50vw + 50%)" : "0",
+    position:        "relative",
+    height:          isMobile ? "500px" : "480px",
+    overflow:        "hidden",
+    marginBottom:    "4px",
     backgroundColor: "#000",
   };
 
@@ -62,7 +62,33 @@ export default function VideoPlayer({
     );
   }
 
-  // ── Bunny iframe player — handles everything ──────────────────────
+  // ── Mobile: native <video> + HLS (iOS Safari natively supports .m3u8) ──
+  if (isMobile) {
+    const hlsSrc       = getBunnyHLS(bunnyVideoId);
+    const posterSrc    = thumbnailUrl || getBunnyThumbnail(bunnyVideoId);
+
+    return (
+      <div style={containerStyle}>
+        <video
+          src={hlsSrc}
+          poster={posterSrc}
+          controls
+          playsInline          // required on iOS — prevents fullscreen hijack
+          preload="metadata"
+          style={{
+            position:   "absolute",
+            inset:      0,
+            width:      "100%",
+            height:     "100%",
+            objectFit:  "contain",
+            background: "#000",
+          }}
+        />
+      </div>
+    );
+  }
+
+  // ── Desktop: Bunny iframe player ─────────────────────────────────
   const iframeSrc = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${bunnyVideoId}?autoplay=false&loop=false&muted=false&preload=true&responsive=true`;
 
   return (
