@@ -56,13 +56,11 @@ async function handleCollection(payload: PayOnUsWebhookPayload) {
     return;
   }
 
-  // Idempotency guard
   if (existing.status === "completed") {
     console.log("[PayOnUs Webhook] Already processed:", payload.merchantReference);
     return;
   }
 
-  // Mark transaction completed first
   const { error: updateError } = await supabase
     .from("transactions")
     .update({
@@ -89,6 +87,14 @@ async function handleCollection(payload: PayOnUsWebhookPayload) {
       payload.transactionAmount,
       payload.merchantReference,
       payload.onusReference,
+      existing.metadata,
+      existing.id
+    );
+  } else if (existing.purpose === "TIP") {
+    await handleTipPayment(
+      existing.fan_id,
+      payload.transactionAmount,
+      payload.merchantReference,
       existing.metadata,
       existing.id
     );
@@ -131,13 +137,11 @@ async function handleSubscriptionPayment(
     return;
   }
 
-  // Calculate period dates
   const now = new Date();
   const monthsToAdd = tierDuration === "three_month" ? 3 : tierDuration === "six_month" ? 6 : 1;
   const nextRenewal = new Date();
   nextRenewal.setMonth(nextRenewal.getMonth() + monthsToAdd);
 
-  // Upsert subscription
   const { data: subscription, error: subError } = await supabase
     .from("subscriptions")
     .upsert(
@@ -165,18 +169,14 @@ async function handleSubscriptionPayment(
 
   console.log("[PayOnUs Webhook] Subscription activated:", subscription.id);
 
-  // Link subscription back to transaction
   await supabase
     .from("transactions")
     .update({ subscription_id: subscription.id })
     .eq("id", transactionId);
 
-  // Platform fee split (18% platform, 82% creator)
   const platformFee    = Math.floor(amount * 0.18);
   const creatorEarning = amount - platformFee;
 
-  // Fan paid via direct bank transfer (virtual account) — wallet was never topped up
-  // so we do NOT debit the fan wallet. Only credit the creator.
   await creditWallet({
     userId:            subscription.creator_id,
     amount:            creatorEarning,
@@ -189,8 +189,59 @@ async function handleSubscriptionPayment(
 
   console.log("[PayOnUs Webhook] Creator credited:", creatorEarning, "for creator:", subscription.creator_id);
 
-  // Increment subscriber count
   await supabase.rpc("increment_subscriber_count", { creator_id: subscription.creator_id });
+}
+
+async function handleTipPayment(
+  fanId: string,
+  amount: number,
+  merchantReference: string,
+  metadata: Record<string, string> | null,
+  transactionId: number
+) {
+  const supabase = createServiceSupabaseClient();
+
+  const creatorId = metadata?.creator_id;
+  const message   = metadata?.message ?? null;
+
+  if (!creatorId) {
+    console.error("[PayOnUs Webhook] Missing creator_id in tip metadata for:", merchantReference);
+    return;
+  }
+
+  const platformFee    = Math.floor(amount * 0.18);
+  const creatorEarning = amount - platformFee;
+
+  const { data: tip, error: tipError } = await supabase
+    .from("tips")
+    .insert({
+      tipper_id:    fanId,
+      recipient_id: creatorId,
+      amount,
+      message,
+    })
+    .select("id")
+    .single();
+
+  if (tipError || !tip) {
+    console.error("[PayOnUs Webhook] Failed to insert tip:", tipError?.message);
+    return;
+  }
+
+  console.log("[PayOnUs Webhook] Tip recorded:", tip.id);
+
+  await creditWallet({
+    userId:            creatorId,
+    amount:            creatorEarning,
+    category:          "CREATOR_EARNING",
+    provider:          "PAYONUS",
+    providerReference: merchantReference,
+    description:       "Tip received via bank transfer",
+    referenceId:       String(transactionId),
+    useServiceRole:    true,
+  });
+
+  console.log("[PayOnUs Webhook] Creator tip credited:", creatorEarning, "for creator:", creatorId);
 }
 
 async function handlePayout(payload: PayOnUsWebhookPayload) {
@@ -199,16 +250,16 @@ async function handlePayout(payload: PayOnUsWebhookPayload) {
   const { data: payout } = await supabase
     .from("payout_requests")
     .select("id, creator_id, amount, status")
-    .eq("payonus_transfer_reference", payload.merchantReference)
+    .eq("kyshi_transfer_code", payload.merchantReference)
     .maybeSingle();
 
-  if (!payout || payout.status === "completed") return;
+  if (!payout || payout.status === "COMPLETED") return;
 
   if (payload.paymentStatus === "SUCCESSFUL") {
     await supabase
       .from("payout_requests")
       .update({
-        status:       "completed",
+        status:       "COMPLETED",
         completed_at: new Date().toISOString(),
       })
       .eq("id", payout.id);
@@ -225,7 +276,7 @@ async function handlePayout(payload: PayOnUsWebhookPayload) {
   } else if (payload.paymentStatus === "FAILED") {
     await supabase
       .from("payout_requests")
-      .update({ status: "failed" })
+      .update({ status: "FAILED" })
       .eq("id", payout.id);
   }
 }

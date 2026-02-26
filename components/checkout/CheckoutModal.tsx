@@ -73,7 +73,6 @@ export default function CheckoutModal({
       setVirtualAccount(null);
       setError(null);
       setIsClosing(false);
-      // FIX: reset selectedTier to initialTier every time modal opens
       setSelectedTier(initialTier);
     }
   }, [isOpen, type, initialTier]);
@@ -105,7 +104,6 @@ export default function CheckoutModal({
     return postPrice;
   };
 
-  // FIX: return correct label based on selectedTier
   const getPaymentLabel = (): string => {
     if (type === "tips") return creator.display_name || creator.username;
     if (type === "subscription") return TIER_LABEL[selectedTier];
@@ -121,7 +119,6 @@ export default function CheckoutModal({
   const handleNext = async () => {
     if (screen === "plan") {
       if (getAmount() === 0) {
-        // Free subscription — call API directly, skip payment screen
         setLoading(true);
         try {
           const res = await fetch("/api/checkout", {
@@ -190,20 +187,20 @@ export default function CheckoutModal({
 
         setLoading(true);
         try {
-          const endpoint = type === "subscription"
-            ? "/api/subscriptions/checkout/virtual-account"
-            : "/api/checkout/virtual-account";
+          const endpoint =
+            type === "subscription" ? "/api/subscriptions/checkout/virtual-account" :
+            type === "tips"         ? "/api/tips/checkout/virtual-account" :
+                                      "/api/ppv/checkout/virtual-account";
 
           const res = await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              type: type === "tips" ? "tip" : type === "ppv" ? "ppv" : undefined,
-              amount: getAmount(),
-              creatorId: creator.id,
-              tierId: type === "subscription" ? tierId : undefined,
+              amount:       getAmount(),
+              creatorId:    creator.id,
+              tierId:       type === "subscription" ? tierId : undefined,
               tierDuration: type === "subscription" ? selectedTier : undefined,
-              postId: type === "ppv" ? postId : undefined,
+              postId:       type === "ppv" ? postId : undefined,
               currency,
             }),
           });
@@ -216,11 +213,11 @@ export default function CheckoutModal({
           }
           setVirtualAccount({
             accountNumber: data.accountNumber,
-            bankName: data.bankName,
-            accountName: data.accountName,
-            expiresAt: data.expiresAt,
-            amount: data.amount,
-            reference: data.reference,
+            bankName:      data.bankName,
+            accountName:   data.accountName,
+            expiresAt:     data.expiresAt,
+            amount:        data.amount,
+            reference:     data.reference,
           });
         } catch (err) {
           console.error("[Checkout] VA fetch error:", err);

@@ -24,6 +24,26 @@ interface ProfileForm {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0"));
+const currentYear = new Date().getFullYear();
+const YEARS = Array.from({ length: 100 }, (_, i) => String(currentYear - 18 - i));
+
+function parseDOB(dob: string): { day: string; month: string; year: string } {
+  if (!dob) return { day: "", month: "", year: "" };
+  const [y, m, d] = dob.split("-");
+  return { day: d ?? "", month: m ?? "", year: y ?? "" };
+}
+
+function buildDOB(day: string, month: string, year: string): string {
+  if (!day || !month || !year) return "";
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
 export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
   const router = useRouter();
 
@@ -33,6 +53,10 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
     website_url: "", twitter_url: "", instagram_url: "",
     telegram_url: "", facebook_url: "",
   });
+
+  const [dobDay,   setDobDay]   = useState("");
+  const [dobMonth, setDobMonth] = useState("");
+  const [dobYear,  setDobYear]  = useState("");
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
@@ -75,6 +99,10 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
         });
         setAvatarUrl(data.avatar_url);
         setBannerUrl(data.banner_url);
+        const { day, month, year } = parseDOB(data.date_of_birth ?? "");
+        setDobDay(day);
+        setDobMonth(month);
+        setDobYear(year);
       }
     };
     load();
@@ -118,13 +146,14 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
     setSaveState("saving");
     setErrorMsg(null);
     const supabase = createClient();
+    const dob = buildDOB(dobDay, dobMonth, dobYear);
     const { error } = await supabase.from("profiles").update({
       display_name: form.display_name || null,
       bio: form.bio || null,
       location: form.location || null,
       country: form.country || null,
       state: form.state || null,
-      date_of_birth: form.date_of_birth || null,
+      date_of_birth: dob || null,
       website_url: form.website_url || null,
       twitter_url: form.twitter_url || null,
       instagram_url: form.instagram_url || null,
@@ -143,6 +172,18 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
     border: "1.5px solid #2A2A3D", color: "#F1F5F9",
     boxSizing: "border-box", fontFamily: "'Inter', sans-serif",
     transition: "border-color 0.2s",
+  };
+
+  const selectBase: React.CSSProperties = {
+    flex: 1, borderRadius: "10px", padding: "11px 10px",
+    fontSize: "13px", outline: "none", backgroundColor: "#141420",
+    border: "1.5px solid #2A2A3D", color: "#F1F5F9",
+    boxSizing: "border-box", fontFamily: "'Inter', sans-serif",
+    appearance: "none", cursor: "pointer",
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236B6B8A' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "right 10px center",
+    paddingRight: "28px",
   };
 
   const labelStyle: React.CSSProperties = {
@@ -223,11 +264,24 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
               onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
             <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", textAlign: "right" }}>{form.bio.length}/200</span>
           </div>
+
+          {/* Date of Birth — three dropdowns */}
           <div>
             <label style={labelStyle}>Date of Birth</label>
-            <input type="date" value={form.date_of_birth} onChange={(e) => set("date_of_birth", e.target.value)}
-              style={{ ...inputBase, colorScheme: "dark" }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+            <div style={{ display: "flex", gap: "8px" }}>
+              <select value={dobDay} onChange={(e) => setDobDay(e.target.value)} style={selectBase}>
+                <option value="" style={{ backgroundColor: "#0D0D18" }}>Day</option>
+                {DAYS.map((d) => <option key={d} value={d} style={{ backgroundColor: "#0D0D18" }}>{d}</option>)}
+              </select>
+              <select value={dobMonth} onChange={(e) => setDobMonth(e.target.value)} style={selectBase}>
+                <option value="" style={{ backgroundColor: "#0D0D18" }}>Month</option>
+                {MONTHS.map((m, i) => <option key={m} value={String(i + 1).padStart(2, "0")} style={{ backgroundColor: "#0D0D18" }}>{m}</option>)}
+              </select>
+              <select value={dobYear} onChange={(e) => setDobYear(e.target.value)} style={selectBase}>
+                <option value="" style={{ backgroundColor: "#0D0D18" }}>Year</option>
+                {YEARS.map((y) => <option key={y} value={y} style={{ backgroundColor: "#0D0D18" }}>{y}</option>)}
+              </select>
+            </div>
             <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", fontStyle: "italic" }}>Not shown publicly — used for age verification</span>
           </div>
         </div>

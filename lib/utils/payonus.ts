@@ -32,7 +32,6 @@ export interface PayOnUsDynamicAccountRequest {
   customer: PayOnUsCustomer;
 }
 
-// Matches real API response exactly
 export interface PayOnUsDynamicAccountResponse {
   accountName: string;
   accountNumber: string;
@@ -42,7 +41,6 @@ export interface PayOnUsDynamicAccountResponse {
   merchantReference: string;
 }
 
-// Matches real webhook payload exactly
 export interface PayOnUsWebhookPayload {
   id: string;
   type: "COLLECTION" | "PAYOUT";
@@ -68,9 +66,11 @@ let tokenExpiresAt: number = 0;
 async function getAccessToken(): Promise<string> {
   const now = Date.now();
 
-  if (cachedToken && now < tokenExpiresAt - 60_000) {
-    return cachedToken;
+  if (false && cachedToken && now < tokenExpiresAt - 60_000) {
+    return cachedToken!;
   }
+
+  console.log("[PayOnUs] Fetching new access token...");
 
   const res = await fetch(`${PAYONUS_BASE_URL}/api/v1/access-token`, {
     method: "POST",
@@ -81,17 +81,25 @@ async function getAccessToken(): Promise<string> {
     }),
   });
 
-  const data = await res.json();
-  const tokenData = data.data ?? data;
+  const rawTokenText = await res.text();
+  console.log("[PayOnUs] Token response status:", res.status);
+  console.log("[PayOnUs] Token response body:", rawTokenText);
+
+  let data: Record<string, unknown>;
+  try { data = JSON.parse(rawTokenText); }
+  catch { throw new Error("PayOnUs: Failed to parse token response"); }
+
+  const tokenData = (data.data ?? data) as Record<string, unknown>;
 
   if (!res.ok || !tokenData.access_token) {
-    throw new Error(data.message || "PayOnUs: Failed to get access token");
+    throw new Error((data.message as string) || "PayOnUs: Failed to get access token");
   }
 
   cachedToken = tokenData.access_token as string;
-  tokenExpiresAt = now + (tokenData.expires_in ?? 86399) * 1000;
+  tokenExpiresAt = now + ((tokenData.expires_in as number) ?? 86399) * 1000;
+  console.log("[PayOnUs] Token obtained:", (cachedToken as string).slice(0, 30) + "...");
 
-  return cachedToken;
+  return cachedToken!;
 }
 
 // ─── Base Fetcher ─────────────────────────────────────────────────────────────
@@ -117,13 +125,20 @@ async function payonusFetch<T>(
     throw new Error("PayOnUs API returned empty response — status: " + res.status);
   }
 
-  const data = JSON.parse(text);
-
-  if (!res.ok) {
-    throw new Error(data.message || "PayOnUs API error");
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    console.error("[PayOnUs] Failed to parse response:", text);
+    throw new Error("PayOnUs API returned invalid JSON — status: " + res.status);
   }
 
-  return data.data as T;
+  if (!res.ok) {
+    console.error("[PayOnUs] Error response:", res.status, JSON.stringify(data, null, 2));
+    throw new Error((data?.data as Record<string, string>)?.error || (data.message as string) || `PayOnUs API error: ${res.status}`);
+  }
+
+  return (data.data ?? data) as T;
 }
 
 // ─── Dynamic Account (Virtual Account) ───────────────────────────────────────
@@ -146,8 +161,6 @@ export async function createDynamicAccount(
 }
 
 // ─── Webhook Verification ─────────────────────────────────────────────────────
-// Concatenate: accountNumber + onusReference + paymentStatus + verificationKey
-// SHA-256 hash the result → compare with "hash" header (constant-time)
 
 export function verifyPayOnUsWebhook(
   payload: PayOnUsWebhookPayload,
@@ -168,7 +181,6 @@ export function verifyPayOnUsWebhook(
     .update(verificationString)
     .digest("hex");
 
-  // Constant-time comparison to prevent timing attacks
   try {
     return crypto.timingSafeEqual(
       Buffer.from(computed),
@@ -210,17 +222,17 @@ export async function initiateBankTransfer(
     {
       method: "POST",
       body: JSON.stringify({
-        reference: payload.reference,
-        amount: payload.amount,
+        reference:                payload.reference,
+        amount:                   payload.amount,
         beneficiaryAccountNumber: payload.beneficiaryAccountNumber,
-        beneficiaryAccountName: payload.beneficiaryAccountName,
-        beneficiaryBankCode: payload.beneficiaryBankCode,
-        transferType: "WALLET_TO_BANK_ACCOUNT",
-        countryCode: payload.countryCode ?? "NG",
-        currency: payload.currency ?? "NGN",
-        businessId: process.env.PAYONUS_BUSINESS_ID!,
-        email: payload.email,
-        notificationUrl: payload.notificationUrl,
+        beneficiaryAccountName:   payload.beneficiaryAccountName,
+        beneficiaryBankCode:      payload.beneficiaryBankCode,
+        transferType:             "WALLET_TO_BANK_ACCOUNT",
+        countryCode:              payload.countryCode ?? "NG",
+        currency:                 payload.currency ?? "NGN",
+        businessId:               process.env.PAYONUS_BUSINESS_ID!,
+        email:                    payload.email,
+        notificationUrl:          payload.notificationUrl,
       }),
     }
   );

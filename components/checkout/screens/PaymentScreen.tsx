@@ -52,6 +52,7 @@ export default function PaymentScreen({
 
   const pollRef    = React.useRef<NodeJS.Timeout | null>(null);
   const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const vaRef      = React.useRef<VirtualAccountDisplay | null>(null);
 
   const currencyOption = CURRENCIES.find((c) => c.code === currency)!;
   const symbol = currencyOption.symbol;
@@ -71,10 +72,12 @@ export default function PaymentScreen({
   React.useEffect(() => {
     if (!virtualAccount) {
       stopPolling();
+      vaRef.current = null;
       if (transferStatus === "waiting") setTransferStatus("idle");
       return;
     }
 
+    vaRef.current = virtualAccount;
     setTransferStatus("waiting");
     startPolling();
 
@@ -90,14 +93,30 @@ export default function PaymentScreen({
     stopPolling();
     pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/subscriptions/status?creatorId=${creatorId}`);
-        if (!res.ok) return;
-        const { active } = await res.json();
-        if (active) {
-          stopPolling();
-          setTransferStatus("success");
-          onPaymentConfirmed?.();
-          setTimeout(() => onClose(), 2500);
+        // Tips: poll transaction status by reference
+        // Subscriptions: poll subscription status by creatorId
+        if (type === "tips") {
+          const ref = vaRef.current?.reference;
+          if (!ref) return;
+          const res = await fetch(`/api/tips/status?reference=${ref}`);
+          if (!res.ok) return;
+          const { completed } = await res.json();
+          if (completed) {
+            stopPolling();
+            setTransferStatus("success");
+            onPaymentConfirmed?.();
+            setTimeout(() => onClose(), 2500);
+          }
+        } else {
+          const res = await fetch(`/api/subscriptions/status?creatorId=${creatorId}`);
+          if (!res.ok) return;
+          const { active } = await res.json();
+          if (active) {
+            stopPolling();
+            setTransferStatus("success");
+            onPaymentConfirmed?.();
+            setTimeout(() => onClose(), 2500);
+          }
         }
       } catch {
         // silently retry
@@ -123,6 +142,8 @@ export default function PaymentScreen({
     if (isBankTransfer) return "Generate Bank Account";
     return "Pay Now";
   };
+
+  const successMessage = type === "tips" ? "Tip sent successfully!" : "You are now subscribed";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
@@ -204,7 +225,7 @@ export default function PaymentScreen({
         </div>
       )}
 
-      {/* Virtual account details — only shown here, NOT inside PaymentMethodCard */}
+      {/* Virtual account details */}
       {isBankTransfer && virtualAccount && (
         <div style={{
           margin: "0 20px 16px",
@@ -217,7 +238,6 @@ export default function PaymentScreen({
           transition: "border-color 0.3s",
         }}>
 
-          {/* Status bar */}
           {transferStatus === "waiting" && (
             <div style={{
               display: "flex", alignItems: "center", gap: "10px",
@@ -254,9 +274,7 @@ export default function PaymentScreen({
                 <p style={{ fontSize: "12px", fontWeight: 600, color: "#22C55E", margin: "0 0 1px" }}>
                   Payment received!
                 </p>
-                <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>
-                  You are now subscribed
-                </p>
+                <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>{successMessage}</p>
               </div>
             </div>
           )}
@@ -270,12 +288,8 @@ export default function PaymentScreen({
             }}>
               <span style={{ fontSize: "20px" }}>⏱</span>
               <div>
-                <p style={{ fontSize: "12px", fontWeight: 600, color: "#EF4444", margin: "0 0 1px" }}>
-                  Session expired
-                </p>
-                <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>
-                  Generate a new account to continue
-                </p>
+                <p style={{ fontSize: "12px", fontWeight: 600, color: "#EF4444", margin: "0 0 1px" }}>Session expired</p>
+                <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>Generate a new account to continue</p>
               </div>
             </div>
           )}
