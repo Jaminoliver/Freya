@@ -108,97 +108,89 @@ export default function VideoPlayer({
     ? thumbnailUrl
     : getBunnyThumbnail(bunnyVideoId);
 
-  // Shared video styles — Safari fix: min-height: 100% forces object-fit cover on load
-  const videoStyles: React.CSSProperties = {
-    position:   "absolute",
-    top:        0,
-    left:       0,
-    width:      "100%",
-    height:     "100%",
-    minHeight:  "100%",   // ← Safari iOS fix: object-fit cover doesn't apply without this
-    objectFit:  "cover",
-    background: "#000",
-  };
+  const containerHeight = isMobile
+    ? (isPortrait ? "520px" : "360px")
+    : (isPortrait ? "500px" : "420px");
 
-  // Shared paused frame overlay styles
-  const pausedFrameStyles: React.CSSProperties = {
-    position:      "absolute",
-    inset:         0,
-    width:         "100%",
-    height:        "100%",
-    minHeight:     "100%",  // ← same Safari fix applied to overlay
-    objectFit:     "cover",
-    background:    "#000",
-    zIndex:        1,
-    pointerEvents: "none",
-  };
+  // Portrait videos get narrower width so blurred bg is visible on sides
+  const videoWidth = isPortrait ? "72%" : "100%";
 
-  // ── Mobile: native <video> ────────────────────────────────────────
-  if (isMobile) {
-    return (
-      <div
-        ref={containerRef}
-        style={{
-          width:           "100%",
-          height:          isPortrait ? "520px" : "360px",
-          position:        "relative",
-          backgroundColor: "#000",
-          overflow:        "hidden",
-        }}
-      >
-        <canvas ref={canvasRef} style={{ display: "none" }} />
-
-        <video
-          ref={videoRef}
-          src={getBunnyHLS(bunnyVideoId)}
-          poster={posterSrc}
-          controls
-          playsInline
-          preload="metadata"
-          onLoadedMetadata={handleLoadedMetadata}
-          onPause={handlePause}
-          onPlay={handlePlay}
-          onError={() => setPosterError(true)}
-          style={videoStyles}
-        />
-
-        {pausedFrame && !isPlaying && (
-          <img src={pausedFrame} alt="" aria-hidden style={pausedFrameStyles} />
-        )}
-      </div>
-    );
-  }
-
-  // ── Desktop: native <video> (not iframe — no CSS control over iframe) ────
   return (
     <div
       ref={containerRef}
       style={{
         width:           "100%",
-        height:          isPortrait ? "500px" : "420px",
+        height:          containerHeight,
         position:        "relative",
         overflow:        "hidden",
+        display:         "flex",
+        alignItems:      "center",
+        justifyContent:  "center",
         backgroundColor: "#000",
       }}
     >
+      {/* Blurred thumbnail background — always visible behind the video */}
+      <img
+        src={posterSrc}
+        alt=""
+        aria-hidden
+        onError={() => setPosterError(true)}
+        style={{
+          position:  "absolute",
+          inset:     0,
+          width:     "100%",
+          height:    "100%",
+          objectFit: "cover",
+          filter:    "blur(20px) brightness(0.45)",
+          transform: "scale(1.1)",
+          zIndex:    1,
+        }}
+      />
+
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
+      {/* Main video — centered, reduced width for portrait */}
       <video
         ref={videoRef}
         src={getBunnyHLS(bunnyVideoId)}
         poster={posterSrc}
         controls
         playsInline
-        preload="metadata"
+        preload="auto"
         onLoadedMetadata={handleLoadedMetadata}
         onPause={handlePause}
         onPlay={handlePlay}
         onError={() => setPosterError(true)}
-        style={videoStyles}
+        style={{
+          position:  "relative",
+          zIndex:    2,
+          width:     videoWidth,
+          height:    "100%",
+          minHeight: "100%",   // Safari iOS fix
+          objectFit: "cover",
+          flexShrink: 0,
+        }}
       />
 
+      {/* Paused frame overlay */}
       {pausedFrame && !isPlaying && (
-        <img src={pausedFrame} alt="" aria-hidden style={pausedFrameStyles} />
+        <img
+          src={pausedFrame}
+          alt=""
+          aria-hidden
+          style={{
+            position:      "absolute",
+            top:           0,
+            left:          "50%",
+            transform:     "translateX(-50%)",
+            width:         videoWidth,
+            height:        "100%",
+            minHeight:     "100%",
+            objectFit:     "cover",
+            zIndex:        3,
+            pointerEvents: "none",
+          }}
+        />
       )}
     </div>
   );
