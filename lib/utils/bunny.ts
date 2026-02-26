@@ -8,6 +8,7 @@ const CDN_URL         = process.env.BUNNY_CDN_URL!;
 const CDN_TOKEN_KEY   = process.env.BUNNY_CDN_TOKEN_KEY!;
 const STREAM_LIBRARY  = process.env.BUNNY_STREAM_LIBRARY_ID!;
 const STREAM_API_KEY  = process.env.BUNNY_STREAM_API_KEY!;
+const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME!;
 
 const STORAGE_BASE_URL = `https://storage.bunnycdn.com/${STORAGE_ZONE}`;
 const STREAM_BASE_URL  = `https://video.bunnycdn.com/library/${STREAM_LIBRARY}`;
@@ -186,12 +187,12 @@ export function getBunnyStreamUrls(videoId: string): {
 } {
   return {
     hlsUrl:       `https://iframe.mediadelivery.net/play/${STREAM_LIBRARY}/${videoId}/playlist.m3u8`,
-    thumbnailUrl: `https://vz-${STREAM_LIBRARY}.b-cdn.net/${videoId}/thumbnail.jpg`,
+    thumbnailUrl: `https://${STREAM_CDN_HOST}/${videoId}/thumbnail.jpg`,
   };
 }
 
 export function getBunnyRawVideoUrl(videoId: string): string {
-  return `https://vz-${STREAM_LIBRARY}.b-cdn.net/${videoId}/original`;
+  return `https://${STREAM_CDN_HOST}/${videoId}/original`;
 }
 
 export async function deleteBunnyPhoto(path: string): Promise<void> {
