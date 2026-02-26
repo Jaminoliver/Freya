@@ -87,18 +87,32 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
-        // ── Step 1: Send file to our server proxy (server uploads to Bunny) ──
-        const formData = new FormData();
-        formData.append("file",  file);
-        formData.append("title", title);
+        // ── Step 1: Ask server to create the Bunny video object ───────────
+        // No file is sent here — Vercel only sees a tiny JSON body.
+        const initRes  = await fetch("/api/upload/video", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ title }),
+        });
+        const initData = await initRes.json();
+        if (!initRes.ok) throw new Error(initData.error || "Failed to initialise upload");
 
-        const videoId = await new Promise<string>((resolve, reject) => {
+        const { videoId, libraryId, apiKey } = initData as {
+          videoId:   string;
+          libraryId: string;
+          apiKey:    string;
+        };
+
+        // ── Step 2: Upload directly from browser → Bunny (no Vercel proxy) ──
+        await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.open("POST", "/api/upload/video");
+          xhr.open("PUT", `https://video.bunnycdn.com/library/${libraryId}/videos/${videoId}`);
+          xhr.setRequestHeader("AccessKey", apiKey);
+          xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
 
           xhr.upload.onprogress = (e) => {
             if (e.lengthComputable) {
-              // 0–80%: browser → your server
+              // 0–80%: raw browser → Bunny upload progress
               const pct = Math.round((e.loaded / e.total) * 80);
               updateUpload(uploadId, { progress: pct });
             }
@@ -106,28 +120,18 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                const data = JSON.parse(xhr.responseText);
-                resolve(data.videoId);
-              } catch {
-                reject(new Error("Invalid response from server"));
-              }
+              resolve();
             } else {
-              try {
-                const data = JSON.parse(xhr.responseText);
-                reject(new Error(data.error || `Upload failed: ${xhr.status}`));
-              } catch {
-                reject(new Error(`Upload failed: ${xhr.status}`));
-              }
+              reject(new Error(`Bunny upload failed: ${xhr.status}`));
             }
           };
           xhr.onerror = () => reject(new Error("Network error during upload"));
-          xhr.send(formData);
+          xhr.send(file); // send raw File — no FormData overhead
         });
 
         updateUpload(uploadId, { progress: 82, phase: "processing" });
 
-        // ── Step 2: Save record to Supabase ───────────────────────────────
+        // ── Step 3: Save record to Supabase ──────────────────────────────
         const completeRes  = await fetch("/api/upload/video/complete", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -142,7 +146,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         // Notify caller so they can create the post immediately
         onMediaId(mediaId);
 
-        // ── Step 3: Poll for Bunny processing ─────────────────────────────
+        // ── Step 4: Poll for Bunny processing ─────────────────────────────
         startPolling(uploadId, mediaId);
 
       } catch (err) {
