@@ -128,11 +128,20 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
               updateUpload(uploadId, { progress: pct });
             },
             onSuccess() {
-              console.log("[TUS] Upload complete");
+              fetch("/api/upload/video/log", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ event: "tus_success", videoId, fileSize: file.size }),
+              }).catch(() => {});
               resolve();
             },
             onError(err) {
-              console.error("[TUS] Error:", err.message, (err as any).originalResponse?.getBody?.());
+              const responseBody = (err as any).originalResponse?.getBody?.() ?? "no body";
+              fetch("/api/upload/video/log", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody }),
+              }).catch(() => {});
               reject(new Error(`TUS upload failed: ${err.message}`));
             },
           });
