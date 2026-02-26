@@ -48,6 +48,9 @@ function CreatePostContent() {
     name: string; username: string; avatar_url: string;
   }>({ name: "", username: "", avatar_url: "" });
 
+  // FIX: Track when user has loaded so redirect uses real username
+  const [userLoaded, setUserLoaded] = useState(false);
+
   React.useEffect(() => {
     const loadUser = async () => {
       const supabase = createClient();
@@ -61,6 +64,7 @@ function CreatePostContent() {
           avatar_url: data.avatar_url || "",
         });
       }
+      setUserLoaded(true);
     };
     loadUser();
   }, []);
@@ -102,6 +106,10 @@ function CreatePostContent() {
 
   const handlePost = async () => {
     if (!canPost || posting) return;
+
+    // FIX: Don't post if username hasn't loaded yet — avoids redirect to "/"
+    if (!userLoaded) return;
+
     setPosting(true);
     setError(null);
 
@@ -110,7 +118,6 @@ function CreatePostContent() {
       const isVideo = file?.type.startsWith("video/");
 
       if (file && isVideo) {
-        // ── Video: start background upload, create post with placeholder, redirect immediately ──
         startVideoUpload({
           file,
           title: caption || file.name,
@@ -124,12 +131,11 @@ function CreatePostContent() {
           onError: (err) => console.error("[CreatePost] Upload error:", err),
         });
 
-        // Redirect immediately — upload continues in background
+        // FIX: username is guaranteed to exist here because of userLoaded guard above
         router.push(`/${currentUser.username}`);
         return;
       }
 
-      // ── Photo / text: upload inline as before ──
       const mediaIds: number[] = [];
 
       if (file && !isVideo) {
@@ -172,8 +178,8 @@ function CreatePostContent() {
           >CLEAR</button>
           <button
             onClick={handlePost}
-            disabled={!canPost || posting}
-            style={{ padding: "7px 18px", borderRadius: "20px", border: "none", backgroundColor: canPost && !posting ? "#8B5CF6" : "#2A2A3D", color: canPost && !posting ? "#fff" : "#6B6B8A", fontSize: "13px", fontWeight: 600, cursor: canPost && !posting ? "pointer" : "default", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", minWidth: "64px" }}
+            disabled={!canPost || posting || !userLoaded}
+            style={{ padding: "7px 18px", borderRadius: "20px", border: "none", backgroundColor: canPost && !posting && userLoaded ? "#8B5CF6" : "#2A2A3D", color: canPost && !posting && userLoaded ? "#fff" : "#6B6B8A", fontSize: "13px", fontWeight: 600, cursor: canPost && !posting && userLoaded ? "pointer" : "default", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", minWidth: "64px" }}
           >
             {posting ? "…" : "POST"}
           </button>

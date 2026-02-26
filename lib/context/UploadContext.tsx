@@ -6,10 +6,15 @@ import * as tus from "tus-js-client";
 export interface UploadItem {
   id:       string;
   fileName: string;
-  progress: number;   // 0–100
+  progress: number;
   phase:    "uploading" | "processing" | "done" | "error";
   mediaId?: number;
   error?:   string;
+  // FIX: Store file ref so retry can re-trigger the same upload
+  file?:       File;
+  _title?:     string;
+  _onMediaId?: (mediaId: number) => void;
+  _onError?:   (err: string) => void;
 }
 
 interface UploadContextValue {
@@ -20,7 +25,9 @@ interface UploadContextValue {
     onMediaId: (mediaId: number) => void;
     onError:   (err: string) => void;
   }) => string;
-  clearDone: () => void;
+  dismissUpload: (id: string) => void;   // FIX: per-item dismiss
+  retryUpload:   (id: string) => void;   // FIX: retry failed upload
+  clearDone:     () => void;
 }
 
 const UploadContext = createContext<UploadContextValue | null>(null);
@@ -35,7 +42,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
   const startPolling = useCallback((uploadId: string, mediaId: number) => {
     let attempts = 0;
-    const MAX_ATTEMPTS = 60; // 3 mins
+    const MAX_ATTEMPTS = 60;
 
     pollTimers.current[uploadId] = setInterval(async () => {
       attempts++;
@@ -71,6 +78,95 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }, 3000);
   }, [updateUpload]);
 
+  // Extracted so both startVideoUpload and retryUpload can call it
+  const runUpload = useCallback(async (
+    uploadId:  string,
+    file:      File,
+    title:     string,
+    onMediaId: (mediaId: number) => void,
+    onError:   (err: string) => void,
+  ) => {
+    try {
+      const initRes  = await fetch("/api/upload/video", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ title }),
+      });
+      const initData = await initRes.json();
+      if (!initRes.ok) throw new Error(initData.error || "Failed to initialise upload");
+
+      const { videoId, tusEndpoint, expireTime, signature, libraryId } = initData as {
+        videoId:     string;
+        tusEndpoint: string;
+        expireTime:  number;
+        signature:   string;
+        libraryId:   string;
+      };
+
+      await new Promise<void>((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint:    tusEndpoint,
+          chunkSize:   5 * 1024 * 1024,
+          // FIX: null = fail immediately on Bunny auth errors, no 38s silent retry
+          retryDelays: null,
+          headers: {
+            AuthorizationSignature: signature,
+            AuthorizationExpire:    String(expireTime),
+            VideoId:                videoId,
+            LibraryId:              libraryId,
+          },
+          metadata: { filetype: file.type, title },
+          onProgress(bytesUploaded, bytesTotal) {
+            const pct = Math.round((bytesUploaded / bytesTotal) * 80);
+            updateUpload(uploadId, { progress: pct });
+          },
+          onSuccess() {
+            fetch("/api/upload/video/log", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ event: "tus_success", videoId, fileSize: file.size }),
+            }).catch(() => {});
+            resolve();
+          },
+          onError(err) {
+            const responseBody = (err as any).originalResponse?.getBody?.() ?? "no body";
+            fetch("/api/upload/video/log", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody }),
+            }).catch(() => {});
+            reject(new Error(`Upload failed: ${err.message} — ${responseBody}`));
+          },
+        });
+
+        upload.findPreviousUploads().then((prev) => {
+          if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
+          upload.start();
+        });
+      });
+
+      updateUpload(uploadId, { progress: 82, phase: "processing" });
+
+      const completeRes  = await fetch("/api/upload/video/complete", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size }),
+      });
+      const completeData = await completeRes.json();
+      if (!completeRes.ok) throw new Error(completeData.error || "Failed to save record");
+
+      const mediaId: number = completeData.mediaId;
+      updateUpload(uploadId, { mediaId, progress: 85, phase: "processing" });
+      onMediaId(mediaId);
+      startPolling(uploadId, mediaId);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      updateUpload(uploadId, { phase: "error", error: msg });
+      onError(msg);
+    }
+  }, [updateUpload, startPolling]);
+
   const startVideoUpload = useCallback(({
     file, title, onMediaId, onError,
   }: {
@@ -83,111 +179,48 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
     setUploads((prev) => [
       ...prev,
-      { id: uploadId, fileName: file.name, progress: 0, phase: "uploading" },
+      {
+        id: uploadId, fileName: file.name, progress: 0, phase: "uploading",
+        // Store file + callbacks so retry works
+        file, _title: title, _onMediaId: onMediaId, _onError: onError,
+      },
     ]);
 
-    (async () => {
-      try {
-        // ── Step 1: Get presigned TUS credentials from server ─────────────
-        const initRes  = await fetch("/api/upload/video", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ title }),
-        });
-        const initData = await initRes.json();
-        if (!initRes.ok) throw new Error(initData.error || "Failed to initialise upload");
-
-        const { videoId, tusEndpoint, expireTime, signature, libraryId } = initData as {
-          videoId:     string;
-          tusEndpoint: string;
-          expireTime:  number;
-          signature:   string;
-          libraryId:   string;
-        };
-
-        // ── Step 2: Upload directly browser → Bunny via TUS ──────────────
-        // TUS is resumable — survives network drops, works on mobile
-        await new Promise<void>((resolve, reject) => {
-          const upload = new tus.Upload(file, {
-            endpoint:    tusEndpoint,
-            chunkSize:   5 * 1024 * 1024, // 5MB chunks — required for large files
-            retryDelays: [0, 3000, 5000, 10000, 20000],
-            headers: {
-              AuthorizationSignature: signature,
-              AuthorizationExpire:    String(expireTime),
-              VideoId:                videoId,
-              LibraryId:              libraryId,
-            },
-            metadata: {
-              filetype: file.type,
-              title,
-            },
-            onProgress(bytesUploaded, bytesTotal) {
-              const pct = Math.round((bytesUploaded / bytesTotal) * 80);
-              console.log(`[TUS] ${bytesUploaded}/${bytesTotal} (${pct}%)`);
-              updateUpload(uploadId, { progress: pct });
-            },
-            onSuccess() {
-              fetch("/api/upload/video/log", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ event: "tus_success", videoId, fileSize: file.size }),
-              }).catch(() => {});
-              resolve();
-            },
-            onError(err) {
-              const responseBody = (err as any).originalResponse?.getBody?.() ?? "no body";
-              fetch("/api/upload/video/log", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody }),
-              }).catch(() => {});
-              reject(new Error(`TUS upload failed: ${err.message}`));
-            },
-          });
-
-          // Resume interrupted uploads automatically
-          upload.findPreviousUploads().then((prev) => {
-            if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
-            upload.start();
-          });
-        });
-
-        updateUpload(uploadId, { progress: 82, phase: "processing" });
-
-        // ── Step 3: Save record to Supabase ──────────────────────────────
-        const completeRes  = await fetch("/api/upload/video/complete", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size }),
-        });
-        const completeData = await completeRes.json();
-        if (!completeRes.ok) throw new Error(completeData.error || "Failed to save record");
-
-        const mediaId: number = completeData.mediaId;
-        updateUpload(uploadId, { mediaId, progress: 85, phase: "processing" });
-
-        onMediaId(mediaId);
-
-        // ── Step 4: Poll for Bunny processing ─────────────────────────────
-        startPolling(uploadId, mediaId);
-
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Upload failed";
-        updateUpload(uploadId, { phase: "error", error: msg });
-        onError(msg);
-      }
-    })();
-
+    runUpload(uploadId, file, title, onMediaId, onError);
     return uploadId;
-  }, [updateUpload, startPolling]);
+  }, [runUpload]);
+
+  // FIX: Dismiss a single upload by id — not all done uploads at once
+  const dismissUpload = useCallback((id: string) => {
+    if (pollTimers.current[id]) {
+      clearInterval(pollTimers.current[id]);
+      delete pollTimers.current[id];
+    }
+    setUploads((prev) => prev.filter((u) => u.id !== id));
+  }, []);
+
+  // FIX: Retry a failed upload — resets progress and re-runs with same file + callbacks
+  const retryUpload = useCallback((id: string) => {
+    setUploads((prev) => prev.map((u) =>
+      u.id === id ? { ...u, progress: 0, phase: "uploading", error: undefined } : u
+    ));
+
+    // Read the stored file/callbacks and re-run
+    setUploads((prev) => {
+      const item = prev.find((u) => u.id === id);
+      if (item?.file && item._title && item._onMediaId && item._onError) {
+        runUpload(id, item.file, item._title, item._onMediaId, item._onError);
+      }
+      return prev;
+    });
+  }, [runUpload]);
 
   const clearDone = useCallback(() => {
     setUploads((prev) => prev.filter((u) => u.phase !== "done"));
   }, []);
 
   return (
-    <UploadContext.Provider value={{ uploads, startVideoUpload, clearDone }}>
+    <UploadContext.Provider value={{ uploads, startVideoUpload, dismissUpload, retryUpload, clearDone }}>
       {children}
     </UploadContext.Provider>
   );

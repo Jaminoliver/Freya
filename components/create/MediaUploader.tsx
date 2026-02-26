@@ -1,48 +1,82 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { Upload, X, ImageIcon, Film } from "lucide-react";
 
 type MediaType = "photo" | "video";
 
 interface MediaUploaderProps {
-  type: MediaType;
-  files: File[];
+  type:     MediaType;
+  files:    File[];
   onChange: (files: File[]) => void;
 }
 
+const MAX_SIZE_BYTES = 3 * 1024 * 1024 * 1024; // 3GB
+
 const CONFIG: Record<MediaType, {
-  accept: string;
-  label: string;
-  hint: string;
-  icon: React.ReactNode;
+  accept:    string;
+  mimeTypes: string[];
+  label:     string;
+  hint:      string;
+  icon:      React.ReactNode;
 }> = {
   photo: {
-    accept: "image/jpeg,image/png,image/webp,image/gif",
-    label: "Drag & drop your photos here",
-    hint: "Supported: JPG, PNG, WEBP, GIF · Max 3GB",
-    icon: <ImageIcon size={28} strokeWidth={1.5} />,
+    accept:    "image/jpeg,image/png,image/webp,image/gif",
+    mimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+    label:     "Drag & drop your photos here",
+    hint:      "Supported: JPG, PNG, WEBP, GIF · Max 3GB",
+    icon:      <ImageIcon size={28} strokeWidth={1.5} />,
   },
   video: {
-    accept: "video/mp4,video/quicktime,video/webm",
-    label: "Drag & drop your video here",
-    hint: "Supported: MP4, MOV, WEBM · Max 3GB",
-    icon: <Film size={28} strokeWidth={1.5} />,
+    accept:    "video/mp4,video/quicktime,video/webm",
+    mimeTypes: ["video/mp4", "video/quicktime", "video/webm"],
+    label:     "Drag & drop your video here",
+    hint:      "Supported: MP4, MOV, WEBM · Max 3GB",
+    icon:      <Film size={28} strokeWidth={1.5} />,
   },
 };
 
 export function MediaUploader({ type, files, onChange }: MediaUploaderProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef               = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const config = CONFIG[type];
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const config                 = CONFIG[type];
+
+  // FIX: Track blob URLs so we can revoke them on unmount — prevents RAM leak
+  const blobUrlsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    return () => {
+      blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
 
   const addFiles = useCallback((incoming: FileList | null) => {
     if (!incoming) return;
-    const next = [...files, ...Array.from(incoming)];
-    onChange(next);
-  }, [files, onChange]);
+    setValidationError(null);
+
+    const incomingArr = Array.from(incoming);
+
+    // FIX: Validate format and size before accepting
+    for (const f of incomingArr) {
+      if (!config.mimeTypes.includes(f.type)) {
+        setValidationError(`"${f.name}" is not a supported format.`);
+        return;
+      }
+      if (f.size > MAX_SIZE_BYTES) {
+        setValidationError(`"${f.name}" exceeds the 3GB limit.`);
+        return;
+      }
+    }
+
+    onChange([...files, ...incomingArr]);
+  }, [files, onChange, config.mimeTypes]);
 
   const removeFile = (index: number) => {
+    // Revoke the blob URL for the removed file
+    const url = blobUrlsRef.current[index];
+    if (url) URL.revokeObjectURL(url);
+    blobUrlsRef.current.splice(index, 1);
     onChange(files.filter((_, i) => i !== index));
   };
 
@@ -52,16 +86,36 @@ export function MediaUploader({ type, files, onChange }: MediaUploaderProps) {
     addFiles(e.dataTransfer.files);
   };
 
-  const previews = files.map((f) => ({
-    name: f.name,
-    url: URL.createObjectURL(f),
-    isImage: f.type.startsWith("image/"),
-    isVideo: f.type.startsWith("video/"),
-    size: (f.size / (1024 * 1024)).toFixed(1) + " MB",
-  }));
+  // FIX: Create blob URLs once and track them for cleanup
+  const previews = files.map((f, i) => {
+    if (!blobUrlsRef.current[i]) {
+      blobUrlsRef.current[i] = URL.createObjectURL(f);
+    }
+    return {
+      name:    f.name,
+      url:     blobUrlsRef.current[i],
+      isImage: f.type.startsWith("image/"),
+      isVideo: f.type.startsWith("video/"),
+      size:    (f.size / (1024 * 1024)).toFixed(1) + " MB",
+    };
+  });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+
+      {/* Validation error */}
+      {validationError && (
+        <div style={{
+          padding:         "10px 14px",
+          borderRadius:    "10px",
+          backgroundColor: "rgba(239,68,68,0.08)",
+          border:          "1.5px solid rgba(239,68,68,0.2)",
+          color:           "#EF4444",
+          fontSize:        "13px",
+        }}>
+          {validationError}
+        </div>
+      )}
 
       {/* Drop zone */}
       <div
@@ -71,21 +125,18 @@ export function MediaUploader({ type, files, onChange }: MediaUploaderProps) {
         onClick={() => inputRef.current?.click()}
         style={{
           backgroundColor: isDragging ? "rgba(139,92,246,0.08)" : "#0D0D18",
-          border: `1.5px dashed ${isDragging ? "#8B5CF6" : "#2A2A3D"}`,
-          borderRadius: "14px",
-          padding: "36px 20px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "10px",
-          cursor: "pointer",
-          transition: "all 0.2s",
+          border:          `1.5px dashed ${isDragging ? "#8B5CF6" : "#2A2A3D"}`,
+          borderRadius:    "14px",
+          padding:         "36px 20px",
+          display:         "flex",
+          flexDirection:   "column",
+          alignItems:      "center",
+          gap:             "10px",
+          cursor:          "pointer",
+          transition:      "all 0.2s",
         }}
       >
-        <div style={{
-          color: isDragging ? "#8B5CF6" : "#6B6B8A",
-          transition: "color 0.2s",
-        }}>
+        <div style={{ color: isDragging ? "#8B5CF6" : "#6B6B8A", transition: "color 0.2s" }}>
           {files.length === 0 ? config.icon : <Upload size={28} strokeWidth={1.5} />}
         </div>
 
@@ -98,24 +149,20 @@ export function MediaUploader({ type, files, onChange }: MediaUploaderProps) {
         <button
           onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
           style={{
-            marginTop: "4px",
-            padding: "8px 22px",
-            borderRadius: "20px",
-            border: "1.5px solid #8B5CF6",
+            marginTop:       "4px",
+            padding:         "8px 22px",
+            borderRadius:    "20px",
+            border:          "1.5px solid #8B5CF6",
             backgroundColor: "transparent",
-            color: "#8B5CF6",
-            fontSize: "13px",
-            fontWeight: 600,
-            cursor: "pointer",
-            fontFamily: "'Inter', sans-serif",
-            transition: "all 0.2s",
+            color:           "#8B5CF6",
+            fontSize:        "13px",
+            fontWeight:      600,
+            cursor:          "pointer",
+            fontFamily:      "'Inter', sans-serif",
+            transition:      "all 0.2s",
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(139,92,246,0.12)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
-          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(139,92,246,0.12)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
         >
           Browse files
         </button>
@@ -137,37 +184,37 @@ export function MediaUploader({ type, files, onChange }: MediaUploaderProps) {
             <div
               key={i}
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
+                display:         "flex",
+                alignItems:      "center",
+                gap:             "12px",
                 backgroundColor: "#0D0D18",
-                border: "1px solid #2A2A3D",
-                borderRadius: "10px",
-                padding: "10px 12px",
+                border:          "1px solid #2A2A3D",
+                borderRadius:    "10px",
+                padding:         "10px 12px",
               }}
             >
               {/* Thumbnail */}
               <div style={{
                 width: "44px", height: "44px",
-                borderRadius: "8px",
-                overflow: "hidden",
+                borderRadius:    "8px",
+                overflow:        "hidden",
                 backgroundColor: "#1C1C2E",
-                flexShrink: 0,
-                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink:      0,
+                display:         "flex",
+                alignItems:      "center",
+                justifyContent:  "center",
               }}>
                 {p.isImage ? (
                   <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 ) : p.isVideo ? (
-                  <video src={p.url} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted />
+                  // FIX: preload="metadata" ensures first frame renders on mobile
+                  <video src={p.url} preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} muted playsInline />
                 ) : null}
               </div>
 
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: "13px", fontWeight: 500, color: "#E2E8F0",
-                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                }}>
+                <div style={{ fontSize: "13px", fontWeight: 500, color: "#E2E8F0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {p.name}
                 </div>
                 <div style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "2px" }}>{p.size}</div>
@@ -177,10 +224,15 @@ export function MediaUploader({ type, files, onChange }: MediaUploaderProps) {
               <button
                 onClick={() => removeFile(i)}
                 style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  color: "#6B6B8A", display: "flex", padding: "4px",
-                  borderRadius: "6px", transition: "color 0.15s",
-                  flexShrink: 0,
+                  background:  "none",
+                  border:      "none",
+                  cursor:      "pointer",
+                  color:       "#6B6B8A",
+                  display:     "flex",
+                  padding:     "4px",
+                  borderRadius:"6px",
+                  transition:  "color 0.15s",
+                  flexShrink:  0,
                 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#F87171"; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#6B6B8A"; }}
