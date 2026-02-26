@@ -35,6 +35,33 @@ export function signBunnyUrl(path: string, expiresInSeconds = 86400): string {
   return `${CDN_URL}${path}?token=${token}&expires=${expires}`;
 }
 
+// ─── TUS Signature Generator ──────────────────────────────────────────────────
+
+/**
+ * Generates a signed TUS upload credential for Bunny Stream.
+ * The browser uses these headers to upload directly via tus-js-client.
+ * Signature = SHA256(libraryId + apiKey + expireTime + videoId)
+ */
+export function getBunnyTusCredentials(videoId: string): {
+  tusEndpoint:  string;
+  expireTime:   number;
+  signature:    string;
+  libraryId:    string;
+} {
+  const expireTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+  const signature  = crypto
+    .createHash("sha256")
+    .update(STREAM_LIBRARY + STREAM_API_KEY + expireTime + videoId)
+    .digest("hex");
+
+  return {
+    tusEndpoint: "https://video.bunnycdn.com/tusupload",
+    expireTime,
+    signature,
+    libraryId:   STREAM_LIBRARY,
+  };
+}
+
 // ─── Photo / GIF Upload ───────────────────────────────────────────────────────
 
 export async function uploadPhotoToBunny(
@@ -64,7 +91,7 @@ export async function uploadPhotoToBunny(
   return { url: signBunnyUrl(path), path };
 }
 
-// ─── Video: Create + Get Direct Upload URL ────────────────────────────────────
+// ─── Video: Create ────────────────────────────────────────────────────────────
 
 export async function createBunnyVideo(title: string): Promise<string> {
   const res = await fetch(`${STREAM_BASE_URL}/videos`, {
@@ -86,8 +113,7 @@ export async function createBunnyVideo(title: string): Promise<string> {
 }
 
 /**
- * Returns the direct upload URL and required headers for browser-side upload.
- * The browser PUT's the file directly to Bunny — bypasses Vercel entirely.
+ * @deprecated Use getBunnyTusCredentials instead — TUS is resumable and more reliable.
  */
 export function getBunnyUploadUrl(videoId: string): {
   uploadUrl: string;
@@ -129,6 +155,10 @@ export function getBunnyStreamUrls(videoId: string): {
     hlsUrl:       `https://iframe.mediadelivery.net/play/${STREAM_LIBRARY}/${videoId}/playlist.m3u8`,
     thumbnailUrl: `https://vz-${STREAM_LIBRARY}.b-cdn.net/${videoId}/thumbnail.jpg`,
   };
+}
+
+export function getBunnyRawVideoUrl(videoId: string): string {
+  return `https://vz-${STREAM_LIBRARY}.b-cdn.net/${videoId}/original`;
 }
 
 export async function deleteBunnyPhoto(path: string): Promise<void> {

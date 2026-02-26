@@ -8,6 +8,7 @@ import type { Post } from "@/lib/types/profile";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
+import { useUpload } from "@/lib/context/UploadContext";
 
 export interface ContentFeedProps {
   posts: Post[];
@@ -48,6 +49,7 @@ interface ApiPost {
     media_type: string;
     file_url: string | null;
     thumbnail_url: string | null;
+    raw_video_url: string | null;
     locked: boolean;
     display_order: number;
     processing_status: string | null;
@@ -60,6 +62,7 @@ interface ApiMedia {
   media_type: string;
   file_url: string | null;
   thumbnail_url: string | null;
+  raw_video_url: string | null;
   post_id: number;
   processing_status: string | null;
   bunny_video_id: string | null;
@@ -162,7 +165,7 @@ function PostRow({
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E" }}>
 
-      {/* Header — padded */}
+      {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <img src={post.profiles?.avatar_url || ""} alt="" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
@@ -180,7 +183,7 @@ function PostRow({
         </div>
       </div>
 
-      {/* Caption — padded */}
+      {/* Caption */}
       {post.caption && (
         <p
           onClick={navigateToPost}
@@ -190,7 +193,7 @@ function PostRow({
         </p>
       )}
 
-      {/* Media — full width, edge to edge, no constraints */}
+      {/* Media */}
       {firstMedia && (
         isLocked ? (
           <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
@@ -224,6 +227,7 @@ function PostRow({
                 bunnyVideoId={firstMedia.bunny_video_id ?? null}
                 thumbnailUrl={firstMedia.thumbnail_url ?? null}
                 processingStatus={firstMedia.processing_status ?? null}
+                rawVideoUrl={firstMedia.raw_video_url ?? null}
               />
             ) : (
               <img
@@ -236,7 +240,7 @@ function PostRow({
         )
       )}
 
-      {/* Actions — padded */}
+      {/* Actions */}
       {!isLocked && (
         <div style={{ padding: "4px 16px" }}>
           <PostActions
@@ -252,7 +256,7 @@ function PostRow({
         </div>
       )}
 
-      {/* Comments — padded */}
+      {/* Comments */}
       <div style={{ padding: "0 16px" }}>
         <CommentSection
           postId={String(post.id)}
@@ -288,6 +292,7 @@ export default function ContentFeed({
   className,
 }: ContentFeedProps) {
   const router = useRouter();
+  const { uploads } = useUpload();
 
   const [apiPosts,        setApiPosts]        = React.useState<ApiPost[]>([]);
   const [apiMedia,        setApiMedia]        = React.useState<ApiMedia[]>([]);
@@ -312,31 +317,46 @@ export default function ContentFeed({
     load();
   }, []);
 
-  React.useEffect(() => {
+  const fetchPosts = React.useCallback(async () => {
     if (!creatorUsername) return;
-    const fetchPosts = async () => {
-      setLoading(true);
-      try {
-        const res  = await fetch(`/api/posts/creator/${creatorUsername}`);
-        const data = await res.json();
-        if (res.ok) {
-          setApiPosts(data.posts || []);
-          const allMedia: ApiMedia[] = [];
-          for (const p of (data.posts || []) as ApiPost[]) {
-            for (const m of p.media || []) {
-              if (!p.locked) allMedia.push({ ...m, post_id: p.id });
-            }
+    setLoading(true);
+    try {
+      const res  = await fetch(`/api/posts/creator/${creatorUsername}`);
+      const data = await res.json();
+      if (res.ok) {
+        setApiPosts(data.posts || []);
+        const allMedia: ApiMedia[] = [];
+        for (const p of (data.posts || []) as ApiPost[]) {
+          for (const m of p.media || []) {
+            if (!p.locked) allMedia.push({ ...m, post_id: p.id });
           }
-          setApiMedia(allMedia);
         }
-      } catch (err) {
-        console.error("[ContentFeed] fetch error:", err);
-      } finally {
-        setLoading(false);
+        setApiMedia(allMedia);
       }
-    };
-    fetchPosts();
+    } catch (err) {
+      console.error("[ContentFeed] fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [creatorUsername]);
+
+  // Initial fetch
+  React.useEffect(() => {
+    fetchPosts();
+  }, [fetchPosts]);
+
+  // Re-fetch when any upload finishes processing
+  const prevUploadStates = React.useRef<Record<string, string>>({});
+  React.useEffect(() => {
+    for (const u of uploads) {
+      const prev = prevUploadStates.current[u.id];
+      if (prev && prev !== "done" && u.phase === "done") {
+        fetchPosts();
+        break;
+      }
+      prevUploadStates.current[u.id] = u.phase;
+    }
+  }, [uploads, fetchPosts]);
 
   const handleDeletePost = (id: string) => {
     setApiPosts((prev) => prev.filter((p) => String(p.id) !== id));
@@ -394,8 +414,6 @@ export default function ContentFeed({
   if (activeTab === "posts") {
     return (
       <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
-
-        {/* Toolbar — padded */}
         <div style={{ padding: "12px 16px 4px" }}>
           <div style={{ display: "flex", gap: "6px", overflowX: "auto", scrollbarWidth: "none", marginBottom: "8px" }}>
             {CATEGORIES.map((cat) => (

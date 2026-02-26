@@ -8,6 +8,7 @@ import { MediaUploader } from "@/components/create/MediaUploader";
 import { PollBuilder } from "@/components/create/PollBuilder";
 import { PostSettings } from "@/components/create/PostSettings";
 import { createClient } from "@/lib/supabase/client";
+import { useUpload } from "@/lib/context/UploadContext";
 
 type PostType = "photo" | "video" | "poll" | "quiz" | "text";
 
@@ -24,25 +25,24 @@ function isValidPostType(val: string | null): val is PostType {
 }
 
 function CreatePostContent() {
-  const router       = useRouter();
-  const searchParams = useSearchParams();
-  const typeParam    = searchParams.get("type");
+  const router        = useRouter();
+  const searchParams  = useSearchParams();
+  const typeParam     = searchParams.get("type");
+  const { startVideoUpload } = useUpload();
 
-  const [postType,      setPostType]     = useState<PostType>(isValidPostType(typeParam) ? typeParam : "photo");
-  const [caption,       setCaption]      = useState("");
-  const [files,         setFiles]        = useState<File[]>([]);
-  const [audience,      setAudience]     = useState<"subscribers" | "everyone">("subscribers");
-  const [isPPV,         setIsPPV]        = useState(false);
-  const [ppvPrice,      setPpvPrice]     = useState("");
-  const [isScheduled,   setIsScheduled]  = useState(false);
-  const [schedDate,     setSchedDate]    = useState("");
-  const [schedTime,     setSchedTime]    = useState("");
-  const [pollOptions,   setPollOptions]  = useState(["", ""]);
-  const [pollDuration,  setPollDuration] = useState("7 days");
-  const [posting,        setPosting]       = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [success,        setSuccess]        = useState(false);
-  const [error,          setError]          = useState<string | null>(null);
+  const [postType,     setPostType]    = useState<PostType>(isValidPostType(typeParam) ? typeParam : "photo");
+  const [caption,      setCaption]     = useState("");
+  const [files,        setFiles]       = useState<File[]>([]);
+  const [audience,     setAudience]    = useState<"subscribers" | "everyone">("subscribers");
+  const [isPPV,        setIsPPV]       = useState(false);
+  const [ppvPrice,     setPpvPrice]    = useState("");
+  const [isScheduled,  setIsScheduled] = useState(false);
+  const [schedDate,    setSchedDate]   = useState("");
+  const [schedTime,    setSchedTime]   = useState("");
+  const [pollOptions,  setPollOptions] = useState(["", ""]);
+  const [pollDuration, setPollDuration] = useState("7 days");
+  const [posting,      setPosting]     = useState(false);
+  const [error,        setError]       = useState<string | null>(null);
 
   const [currentUser, setCurrentUser] = useState<{
     name: string; username: string; avatar_url: string;
@@ -68,15 +68,36 @@ function CreatePostContent() {
   const canPost = caption.trim().length > 0 || files.length > 0 || pollOptions.some((o) => o.trim());
 
   const handleClear = () => {
-    setCaption("");
-    setFiles([]);
-    setPollOptions(["", ""]);
-    setIsPPV(false);
-    setPpvPrice("");
-    setIsScheduled(false);
-    setSchedDate("");
-    setSchedTime("");
-    setError(null);
+    setCaption(""); setFiles([]); setPollOptions(["", ""]);
+    setIsPPV(false); setPpvPrice(""); setIsScheduled(false);
+    setSchedDate(""); setSchedTime(""); setError(null);
+  };
+
+  const createPost = async (mediaIds: number[]) => {
+    let content_type: string = postType;
+    if (postType === "poll" || postType === "quiz") content_type = "text";
+
+    let scheduled_for: string | null = null;
+    if (isScheduled && schedDate && schedTime) {
+      scheduled_for = new Date(`${schedDate}T${schedTime}`).toISOString();
+    }
+
+    const res     = await fetch("/api/posts", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content_type,
+        caption:       caption || null,
+        is_free:       audience === "everyone",
+        is_ppv:        isPPV,
+        ppv_price:     isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null,
+        media_ids:     mediaIds,
+        scheduled_for,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to create post");
+    return data;
   };
 
   const handlePost = async () => {
@@ -85,109 +106,47 @@ function CreatePostContent() {
     setError(null);
 
     try {
+      const file    = files[0];
+      const isVideo = file?.type.startsWith("video/");
+
+      if (file && isVideo) {
+        // ── Video: start background upload, create post with placeholder, redirect immediately ──
+        startVideoUpload({
+          file,
+          title: caption || file.name,
+          onMediaId: async (mediaId) => {
+            try {
+              await createPost([mediaId]);
+            } catch (err) {
+              console.error("[CreatePost] Post create error:", err);
+            }
+          },
+          onError: (err) => console.error("[CreatePost] Upload error:", err),
+        });
+
+        // Redirect immediately — upload continues in background
+        router.push(`/${currentUser.username}`);
+        return;
+      }
+
+      // ── Photo / text: upload inline as before ──
       const mediaIds: number[] = [];
 
-      if (files.length > 0) {
-        for (let i = 0; i < files.length; i++) {
-          const file    = files[i];
-          const isVideo = file.type.startsWith("video/");
-
-          if (isVideo) {
-            // ── Step 1: Ask API to create video in Bunny, get direct upload URL ──
-            const initRes  = await fetch("/api/upload/video", {
-              method:  "POST",
-              headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ title: caption || file.name }),
-            });
-            const initData = await initRes.json();
-            if (!initRes.ok) throw new Error(initData.error || "Failed to init video upload");
-
-            const { videoId, uploadUrl, headers } = initData;
-
-            // ── Step 2: Upload file directly from browser to Bunny (bypasses Vercel) ──
-            const bunnyRes = await fetch(uploadUrl, {
-              method:  "PUT",
-              headers: { ...headers, "Content-Type": file.type },
-              body:    file,
-            });
-            if (!bunnyRes.ok) {
-              const text = await bunnyRes.text();
-              throw new Error(`Bunny upload failed: ${bunnyRes.status} — ${text}`);
-            }
-
-            setUploadProgress(Math.round(((i + 0.9) / files.length) * 80));
-
-            // ── Step 3: Tell API to save record to Supabase ──
-            const completeRes  = await fetch("/api/upload/video/complete", {
-              method:  "POST",
-              headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size }),
-            });
-            const completeData = await completeRes.json();
-            if (!completeRes.ok) throw new Error(completeData.error || "Failed to complete video upload");
-
-            mediaIds.push(completeData.mediaId);
-
-          } else {
-            // ── Photo: still goes through Vercel (photos are small) ──
-            const formData = new FormData();
-            formData.append("file", file);
-
-            setUploadProgress(Math.round(((i) / files.length) * 80));
-
-            const res  = await fetch("/api/upload/photo", { method: "POST", body: formData });
-            const text = await res.text();
-            let data: any = {};
-            try { data = JSON.parse(text); } catch { /* non-JSON response */ }
-            if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
-            mediaIds.push(data.mediaId);
-          }
-
-          setUploadProgress(Math.round(((i + 1) / files.length) * 80));
-        }
+      if (file && !isVideo) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res  = await fetch("/api/upload/photo", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Photo upload failed");
+        mediaIds.push(data.mediaId);
       }
 
-      setUploadProgress(90);
-
-      // Determine content_type
-      let content_type: string = postType;
-      if (postType === "poll" || postType === "quiz") content_type = "text";
-
-      // Determine scheduled_for
-      let scheduled_for: string | null = null;
-      if (isScheduled && schedDate && schedTime) {
-        scheduled_for = new Date(`${schedDate}T${schedTime}`).toISOString();
-      }
-
-      const res     = await fetch("/api/posts", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content_type,
-          caption:       caption || null,
-          is_free:       audience === "everyone",
-          is_ppv:        isPPV,
-          ppv_price:     isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null,
-          media_ids:     mediaIds,
-          scheduled_for,
-        }),
-      });
-      const resText = await res.text();
-      let data: any = {};
-      try { data = JSON.parse(resText); } catch { /* non-JSON — likely a 500 HTML page */ }
-      if (!res.ok) throw new Error(data.error || `Failed to create post (${res.status}: ${resText.slice(0, 120)})`);
-
-      setUploadProgress(100);
-      setSuccess(true);
-
-      setTimeout(() => {
-        router.push(`/${currentUser.username}`);
-      }, 800);
+      await createPost(mediaIds);
+      router.push(`/${currentUser.username}`);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setPosting(false);
-      setUploadProgress(0);
     }
   };
 
@@ -214,19 +173,12 @@ function CreatePostContent() {
           <button
             onClick={handlePost}
             disabled={!canPost || posting}
-            style={{ padding: "7px 18px", borderRadius: "20px", border: "none", backgroundColor: success ? "#22C55E" : (canPost && !posting ? "#8B5CF6" : "#2A2A3D"), color: canPost && !posting ? "#fff" : "#6B6B8A", fontSize: "13px", fontWeight: 600, cursor: canPost && !posting ? "pointer" : "default", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", minWidth: "64px" }}
+            style={{ padding: "7px 18px", borderRadius: "20px", border: "none", backgroundColor: canPost && !posting ? "#8B5CF6" : "#2A2A3D", color: canPost && !posting ? "#fff" : "#6B6B8A", fontSize: "13px", fontWeight: 600, cursor: canPost && !posting ? "pointer" : "default", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", minWidth: "64px" }}
           >
-            {success ? "✓" : posting ? `${uploadProgress}%` : "POST"}
+            {posting ? "…" : "POST"}
           </button>
         </div>
       </div>
-
-      {/* Progress bar */}
-      {(posting || success) && (
-        <div style={{ height: "2px", backgroundColor: "#1F1F2A" }}>
-          <div style={{ height: "100%", backgroundColor: success ? "#22C55E" : "#8B5CF6", width: `${uploadProgress}%`, transition: "width 0.3s, background-color 0.3s" }} />
-        </div>
-      )}
 
       <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
         {error && (
@@ -278,21 +230,7 @@ function CreatePostContent() {
           )}
 
           {(postType === "photo" || postType === "video") && (
-            <div style={{ padding: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "14px", position: "relative" }}>
-              {posting && (
-                <div style={{
-                  position: "absolute", inset: 0, zIndex: 10,
-                  backgroundColor: "rgba(10,10,15,0.75)",
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px",
-                  borderRadius: "8px",
-                }}>
-                  <div style={{ width: "36px", height: "36px", borderRadius: "50%", border: "3px solid #2A2A3D", borderTop: "3px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
-                  <span style={{ fontSize: "13px", color: "#A3A3C2", fontFamily: "'Inter', sans-serif" }}>
-                    {uploadProgress < 80 ? "Uploading…" : uploadProgress < 100 ? "Creating post…" : "Done!"}
-                  </span>
-                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                </div>
-              )}
+            <div style={{ padding: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "14px" }}>
               <MediaUploader type={postType} files={files} onChange={setFiles} />
             </div>
           )}
@@ -303,7 +241,7 @@ function CreatePostContent() {
             </div>
           )}
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", padding: "8px 12px", borderTop: "1px solid #2A2A3D", opacity: posting ? 0.4 : 1, pointerEvents: posting ? "none" : "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", padding: "8px 12px", borderTop: "1px solid #2A2A3D" }}>
             {POST_TYPES.map((t) => (
               <button
                 key={t.key}

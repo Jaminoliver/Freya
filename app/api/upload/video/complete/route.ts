@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
-import { getBunnyStreamUrls } from "@/lib/utils/bunny";
+import { getBunnyStreamUrls, getBunnyRawVideoUrl } from "@/lib/utils/bunny";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { hlsUrl, thumbnailUrl } = getBunnyStreamUrls(videoId);
+    const rawVideoUrl = getBunnyRawVideoUrl(videoId);
 
     const service = createServiceSupabaseClient();
     const { data: mediaRow, error: insertError } = await service
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
         creator_id:        user.id,
         media_type:        "video",
         file_url:          hlsUrl,
+        raw_video_url:     rawVideoUrl,
         thumbnail_url:     thumbnailUrl,
         mime_type:         mimeType || "video/mp4",
         file_size_bytes:   fileSizeBytes || null,
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
         bunny_video_id:    videoId,
         is_watermarked:    false,
       })
-      .select("id, file_url, thumbnail_url, bunny_video_id")
+      .select("id, file_url, raw_video_url, thumbnail_url, bunny_video_id")
       .single();
 
     if (insertError) {
@@ -43,6 +45,7 @@ export async function POST(req: NextRequest) {
       mediaId:      mediaRow.id,
       videoId:      mediaRow.bunny_video_id,
       url:          mediaRow.file_url,
+      rawVideoUrl:  mediaRow.raw_video_url,
       thumbnailUrl: mediaRow.thumbnail_url,
       status:       "processing",
     });
