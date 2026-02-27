@@ -64,7 +64,7 @@ export function RightPanel() {
   // ── Subscriptions stats panel ──────────────────────────────────────────────
   if (isSubscriptions) {
     return (
-      <div style={{ width: "280px", flexShrink: 0, backgroundColor: "#13131F", borderLeft: "1px solid #1F1F2A", padding: "24px 20px", display: "flex", flexDirection: "column", gap: "20px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", fontFamily: "'Inter', sans-serif", scrollbarWidth: "none" }}>
+      <div style={{ width: "380px", flexShrink: 0, backgroundColor: "#13131F", borderLeft: "1px solid #1F1F2A", padding: "24px 20px", display: "flex", flexDirection: "column", gap: "20px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", fontFamily: "'Inter', sans-serif", scrollbarWidth: "none" }}>
         <div>
           <p style={{ fontSize: "10px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 6px" }}>Subscriptions</p>
           <p style={{ fontSize: "26px", fontWeight: 700, color: "#F1F5F9", margin: 0 }}>{SAMPLE_STATS.active} Active</p>
@@ -104,7 +104,7 @@ export function RightPanel() {
 
   // ── Default right panel ────────────────────────────────────────────────────
   return (
-    <div style={{ width: "320px", flexShrink: 0, minHeight: "100vh", backgroundColor: "#13131F", borderLeft: "1px solid #1F1F2A", padding: "24px 20px", display: "flex", flexDirection: "column", gap: "24px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", fontFamily: "'Inter', sans-serif", scrollbarWidth: "none" }}>
+    <div style={{ width: "380px", flexShrink: 0, minHeight: "100vh", backgroundColor: "#13131F", borderLeft: "1px solid #1F1F2A", padding: "24px 20px", display: "flex", flexDirection: "column", gap: "24px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", fontFamily: "'Inter', sans-serif", scrollbarWidth: "none" }}>
 
       {/* Search */}
       <div style={{ position: "relative" }}>

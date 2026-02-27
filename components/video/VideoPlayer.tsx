@@ -31,10 +31,11 @@ export default function VideoPlayer({
   rawVideoUrl,
   fillParent = false,
 }: VideoPlayerProps) {
-  const videoRef     = React.useRef<HTMLVideoElement>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
+  const videoRef        = React.useRef<HTMLVideoElement>(null);
+  const containerRef    = React.useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hlsRef       = React.useRef<any>(null);
+  const hlsRef          = React.useRef<any>(null);
+  const hasInitialized  = React.useRef(false);
 
   const [showPoster,  setShowPoster]  = React.useState(true);
   const [posterError, setPosterError] = React.useState(false);
@@ -44,6 +45,10 @@ export default function VideoPlayer({
 
   const isPortrait = aspectRatio === "9/16";
 
+  // Use raw original while Bunny is still transcoding — it's full quality.
+  // Only switch to HLS once processing is confirmed complete.
+  const useRawFallback = processingStatus !== "completed" && !!rawVideoUrl;
+
   // ── Poster source ──────────────────────────────────────────────────────────
   const posterSrc = (!posterError && thumbnailUrl)
     ? thumbnailUrl
@@ -51,15 +56,23 @@ export default function VideoPlayer({
       ? getBunnyThumbnail(bunnyVideoId)
       : "";
 
-  // ── Video initialisation (runs once when user taps play) ─────────────────
-  // Always use HLS — Bunny's HLS segments each start with a keyframe,
-  // guaranteeing full quality from frame 1 and on every seek.
-  // MP4 from Bunny has variable bitrate baked into the first few seconds
-  // which causes a permanent quality dip at the start regardless of replay.
-  const initHLS = React.useCallback(async () => {
+  // ── Video initialisation (runs once when user taps play) ──────────────────
+  const initVideo = React.useCallback(async () => {
     const video = videoRef.current;
     if (!video || !bunnyVideoId) return;
 
+    // Only initialise source once — prevents re-download on replay or scroll-back
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
+    // ── Raw fallback: processing not done yet — play original directly ────
+    if (useRawFallback) {
+      video.src = rawVideoUrl!;
+      video.load();
+      return;
+    }
+
+    // ── HLS: transcoding complete — use adaptive stream ───────────────────
     const hlsSrc = getBunnyHLS(bunnyVideoId);
 
     // iOS Safari supports HLS natively
@@ -108,7 +121,7 @@ export default function VideoPlayer({
     } catch {
       video.src = hlsSrc;
     }
-  }, [bunnyVideoId]);
+  }, [bunnyVideoId, useRawFallback, rawVideoUrl]);
 
   // ── Cleanup HLS on unmount ─────────────────────────────────────────────────
   React.useEffect(() => {
@@ -151,12 +164,19 @@ export default function VideoPlayer({
   const handlePosterPlay = React.useCallback(async () => {
     setShowPoster(false);
     setIsBuffering(true);
-    await initHLS();
     const video = videoRef.current;
+    if (hasInitialized.current) {
+      // Source already loaded — just play, no re-download
+      if (video) {
+        try { await video.play(); } catch { /* autoplay blocked */ }
+      }
+      return;
+    }
+    await initVideo();
     if (video) {
       try { await video.play(); } catch { /* autoplay blocked */ }
     }
-  }, [initHLS]);
+  }, [initVideo]);
 
   const handlePlay    = React.useCallback(() => { setIsPlaying(true);  setIsBuffering(false); }, []);
   const handlePause   = React.useCallback(() => { setIsPlaying(false); }, []);
@@ -281,12 +301,12 @@ export default function VideoPlayer({
               }}
             >
               <div style={{
-                width:       0,
-                height:      0,
-                borderTop:   "10px solid transparent",
-                borderBottom:"10px solid transparent",
-                borderLeft:  "18px solid rgba(255,255,255,0.95)",
-                marginLeft:  "4px",
+                width:        0,
+                height:       0,
+                borderTop:    "10px solid transparent",
+                borderBottom: "10px solid transparent",
+                borderLeft:   "18px solid rgba(255,255,255,0.95)",
+                marginLeft:   "4px",
               }} />
             </div>
           </div>

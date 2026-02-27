@@ -3,12 +3,12 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string; commentId: string }> }
 ) {
   try {
-    const { id }       = await params;
-    const commentId    = Number(id);
-    if (isNaN(commentId)) return NextResponse.json({ error: "Invalid comment ID" }, { status: 400 });
+    const { commentId } = await params;
+    const commentIdNum  = Number(commentId);
+    if (isNaN(commentIdNum)) return NextResponse.json({ error: "Invalid comment ID" }, { status: 400 });
 
     const supabase = await createServerSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -16,28 +16,24 @@ export async function DELETE(
 
     const service = createServiceSupabaseClient();
 
-    // Verify ownership
     const { data: comment } = await service
       .from("comments")
       .select("id, user_id, post_id")
-      .eq("id", commentId)
+      .eq("id", commentIdNum)
       .maybeSingle();
 
     if (!comment || comment.user_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Soft delete
     await service
       .from("comments")
       .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-      .eq("id", commentId);
+      .eq("id", commentIdNum);
 
-    // Decrement comment_count on post
     await service.rpc("decrement_comment_count", { post_id: comment.post_id });
 
     return NextResponse.json({ success: true });
-
   } catch (err) {
     console.error("[Delete Comment] Error:", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });

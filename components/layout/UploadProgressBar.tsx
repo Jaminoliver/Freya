@@ -39,11 +39,11 @@ function CircleProgress({ pct, size = 36 }: { pct: number; size?: number }) {
 
 export default function UploadProgressBar() {
   const { uploads, dismissUpload, retryUpload } = useUpload();
+  const [mounted, setMounted] = React.useState(false);
 
-  // FIX: Only show active uploads + errors. Done items auto-dismiss after 3s (handled in context).
-  const visible = uploads.filter((u) => u.phase !== "done" || u.progress < 100);
+  React.useEffect(() => { setMounted(true); }, []);
 
-  if (uploads.length === 0) return null;
+  if (!mounted || uploads.length === 0) return null;
 
   return (
     <div style={{
@@ -89,14 +89,14 @@ export default function UploadProgressBar() {
               {u.fileName}
             </div>
             <div style={{ fontSize: "11px", color: u.phase === "error" ? "#EF4444" : "#6B6B8A", marginTop: "2px" }}>
-              {u.phase === "error"        ? (u.error || "Upload failed")
-               : u.phase === "done"      ? "Ready to play ✓"
-               : u.phase === "processing"? "Processing video…"
+              {u.phase === "error"         ? (u.error || "Upload failed")
+               : u.phase === "done"       ? "Ready to play ✓"
+               : u.phase === "processing" ? "Processing video…"
                : "Uploading…"}
             </div>
           </div>
 
-          {/* FIX: Retry button on error */}
+          {/* Retry button on error */}
           {u.phase === "error" && u.file && (
             <button
               onClick={() => retryUpload(u.id)}
@@ -117,7 +117,7 @@ export default function UploadProgressBar() {
             </button>
           )}
 
-          {/* FIX: Per-item dismiss by id — not bulk clearDone */}
+          {/* Dismiss button */}
           {(u.phase === "done" || u.phase === "error") && (
             <button
               onClick={() => dismissUpload(u.id)}

@@ -69,7 +69,8 @@ export async function GET(
           thumbnail_url,
           display_order,
           processing_status,
-          bunny_video_id
+          bunny_video_id,
+          raw_video_url
         )
       `)
       .eq("creator_id", creator.id)
@@ -96,29 +97,41 @@ export async function GET(
       likedSet = new Set((likes ?? []).map((l: { post_id: number }) => l.post_id));
     }
 
-    const processed = (posts ?? []).map((post: Record<string, unknown>) => {
-      const isFree      = post.is_free as boolean;
-      const isPpv       = post.is_ppv as boolean;
-      const canAccess   = isFree || (isSubscribed && !isPpv) || isOwnProfile;
-      const mediaItems  = (post.media as Record<string, unknown>[] ?? [])
-        .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
-          (a.display_order as number) - (b.display_order as number)
-        )
-        .map((m: Record<string, unknown>) => ({
-          ...m,
-          file_url:      canAccess ? m.file_url : null,
-          thumbnail_url: m.thumbnail_url,
-          locked:        !canAccess,
-        }));
+    const processed = (posts ?? [])
+      .filter((post: Record<string, unknown>) => {
+        const mediaItems = post.media as Record<string, unknown>[] ?? [];
+        // Hide post entirely if ANY video media is still processing
+        const hasUnreadyVideo = mediaItems.some(
+          (m) =>
+            m.media_type === "video" &&
+            m.processing_status !== "completed" &&
+            m.processing_status !== null
+        );
+        return !hasUnreadyVideo;
+      })
+      .map((post: Record<string, unknown>) => {
+        const isFree      = post.is_free as boolean;
+        const isPpv       = post.is_ppv as boolean;
+        const canAccess   = isFree || (isSubscribed && !isPpv) || isOwnProfile;
+        const mediaItems  = (post.media as Record<string, unknown>[] ?? [])
+          .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+            (a.display_order as number) - (b.display_order as number)
+          )
+          .map((m: Record<string, unknown>) => ({
+            ...m,
+            file_url:      canAccess ? m.file_url : null,
+            thumbnail_url: m.thumbnail_url,
+            locked:        !canAccess,
+          }));
 
-      return {
-        ...post,
-        media:      mediaItems,
-        liked:      likedSet.has(post.id as number),
-        can_access: canAccess,
-        locked:     !canAccess,
-      };
-    });
+        return {
+          ...post,
+          media:      mediaItems,
+          liked:      likedSet.has(post.id as number),
+          can_access: canAccess,
+          locked:     !canAccess,
+        };
+      });
 
     return NextResponse.json({ posts: processed });
 

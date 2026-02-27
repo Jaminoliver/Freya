@@ -108,14 +108,12 @@ export function PostCard({ post }: { post: Post }) {
       {post.media.length > 0 && (
         <>
           {post.isLocked ? (
-            // Locked — padded + rounded, aspectRatio instead of fixed maxHeight
             <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden", position: "relative" }}>
               <img
                 src={firstMedia.url}
                 alt="Locked content"
                 style={{
                   width:      "100%",
-                  // FIX: was maxHeight: "380px" — now aspect ratio fills screen on mobile, capped on desktop
                   aspectRatio: "4/5",
                   maxHeight:   "520px",
                   objectFit:  "cover",
@@ -137,8 +135,6 @@ export function PostCard({ post }: { post: Post }) {
             </div>
 
           ) : isVideoPost ? (
-            // Video — full bleed, VideoPlayer handles its own sizing.
-            // Outer div caps height on desktop so portrait videos don't stretch huge.
             <div style={{ marginTop: "4px" }}>
               <VideoPlayer
                 bunnyVideoId={firstMedia.bunnyVideoId ?? null}
@@ -147,14 +143,12 @@ export function PostCard({ post }: { post: Post }) {
             </div>
 
           ) : post.media.length === 1 ? (
-            // Single image — padded + rounded, aspectRatio instead of fixed maxHeight
             <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden" }}>
               <img
                 src={firstMedia.url}
                 alt="Post media"
                 style={{
                   width:      "100%",
-                  // FIX: was maxHeight: "420px" — now fills screen on mobile, capped on desktop
                   aspectRatio: "4/5",
                   maxHeight:   "520px",
                   objectFit:  "cover",
@@ -166,7 +160,6 @@ export function PostCard({ post }: { post: Post }) {
             </div>
 
           ) : (
-            // Multi image grid
             <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px" }}>
                 {post.media.slice(0, 4).map((m, i) => (
@@ -219,7 +212,7 @@ export function PostCard({ post }: { post: Post }) {
           comments={[]}
           viewer={VIEWER}
           isOpen={commentOpen}
-          onAddComment={(id, text) => console.log("Comment on", id, ":", text)}
+          onAddComment={async (id, text) => { console.log("Comment on", id, ":", text); }}
         />
       </div>
     </div>

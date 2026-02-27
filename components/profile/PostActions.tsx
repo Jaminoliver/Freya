@@ -7,6 +7,7 @@ interface PostActionsProps {
   likes: number;
   comments: number;
   tips?: number;
+  liked?: boolean;
   isSubscribed: boolean;
   isOwnProfile?: boolean;
   onLike?: () => void;
@@ -16,12 +17,19 @@ interface PostActionsProps {
 }
 
 export default function PostActions({
-  likes, comments, tips = 0, isSubscribed, isOwnProfile = false,
+  likes, comments, tips = 0, liked: likedProp = false,
+  isSubscribed, isOwnProfile = false,
   onLike, onComment, onTip, onBookmark,
 }: PostActionsProps) {
-  const [liked,     setLiked]     = React.useState(false);
+  const [liked,      setLiked]      = React.useState(likedProp);
   const [bookmarked, setBookmarked] = React.useState(false);
-  const [likeCount, setLikeCount] = React.useState(likes);
+  const [likeCount,  setLikeCount]  = React.useState(likes);
+
+  // Sync if prop changes (e.g. after refresh)
+  React.useEffect(() => {
+    setLiked(likedProp);
+    setLikeCount(likes);
+  }, [likedProp, likes]);
 
   const handleLike = () => {
     if (!isSubscribed && !isOwnProfile) return;
@@ -39,7 +47,7 @@ export default function PostActions({
   const canLike = isSubscribed || isOwnProfile;
 
   return (
-    <div style={{ padding: "12px 0 4px", fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ padding: "4px 0 4px", fontFamily: "'Inter', sans-serif" }}>
 
       {/* ── Icon row ── */}
       <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -134,7 +142,7 @@ export default function PostActions({
         )}
       </div>
 
-      {/* Subscribe nudge for non-subscribers */}
+      {/* Subscribe nudge */}
       {!isSubscribed && !isOwnProfile && (
         <p style={{ margin: "8px 0 0 4px", fontSize: "12px", color: "#4A4A6A", fontFamily: "'Inter', sans-serif" }}>
           Subscribe to like this post

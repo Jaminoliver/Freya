@@ -17,41 +17,6 @@ import CheckoutModal from "@/components/checkout/CheckoutModal";
 import type { User, Subscription, Post } from "@/lib/types/profile";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 
-type Tab = { label: string; key: string; count?: number };
-
-function TabBar({ tabs, active, onChange }: { tabs: Tab[]; active: string; onChange: (key: string) => void }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "center", borderBottom: "1px solid #1E1E2E", padding: "0 24px", overflowX: "auto", scrollbarWidth: "none" }}>
-      {tabs.map((tab) => (
-        <button
-          key={tab.key}
-          onClick={() => onChange(tab.key)}
-          style={{
-            padding: "12px 20px", fontSize: "15px", fontWeight: 500,
-            fontFamily: "'Inter', sans-serif", background: "none", border: "none",
-            cursor: "pointer", color: active === tab.key ? "#8B5CF6" : "#64748B",
-            borderBottom: active === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
-            marginBottom: "-1px", textTransform: "capitalize", transition: "color 0.15s ease",
-            display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", flexShrink: 0,
-          }}
-        >
-          {tab.label}
-          {tab.count !== undefined && (
-            <span style={{
-              fontSize: "12px", fontWeight: 600,
-              color: active === tab.key ? "#8B5CF6" : "#475569",
-              backgroundColor: active === tab.key ? "rgba(139,92,246,0.15)" : "#1E1E2E",
-              padding: "1px 7px", borderRadius: "20px", transition: "all 0.15s ease",
-            }}>
-              {tab.count}
-            </span>
-          )}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function ProfilePage() {
   const params   = useParams();
   const router   = useRouter();
@@ -66,7 +31,7 @@ export default function ProfilePage() {
   const [loading,               setLoading]               = React.useState(true);
   const [isFollowing,           setIsFollowing]           = React.useState(false);
   const [followLoading,         setFollowLoading]         = React.useState(false);
-  const [activeTab,             setActiveTab]             = React.useState("posts");
+  const [totalLikes,            setTotalLikes]            = React.useState(0);
 
   const [checkoutOpen,     setCheckoutOpen]     = React.useState(false);
   const [checkoutType,     setCheckoutType]     = React.useState<CheckoutType>("subscription");
@@ -86,8 +51,6 @@ export default function ProfilePage() {
     setLockedPostId(postId); setLockedPostPrice(price);
     setCheckoutType("locked_post"); setCheckoutOpen(true);
   };
-
-  React.useEffect(() => { setActiveTab("posts"); }, [username]);
 
   const fetchSubscriptionStatus = React.useCallback(async (creatorId: string) => {
     try {
@@ -128,6 +91,13 @@ export default function ProfilePage() {
           },
         };
         setProfile(enriched);
+
+        // Fetch total likes by joining through posts to filter by creator
+        const { count: likesCount } = await supabase
+          .from("likes")
+          .select("id, posts!inner(creator_id)", { count: "exact", head: true })
+          .eq("posts.creator_id", profileData.id);
+        setTotalLikes(likesCount ?? 0);
 
         if (profileData.role === "creator") {
           const { data: tierData } = await supabase
@@ -256,7 +226,7 @@ export default function ProfilePage() {
   }
 
   const bannerStats = {
-    posts: profile.post_count ?? 0, media: 0, likes: 0,
+    posts: profile.post_count ?? 0, media: 0, likes: totalLikes,
     subscribers: profile.subscriber_count ?? 0,
   };
 
@@ -273,18 +243,10 @@ export default function ProfilePage() {
     isVerified:   profile.is_verified,
   };
 
-  // Shared feed wrapper — no horizontal padding so video goes edge-to-edge on mobile
-  const feedWrapper: React.CSSProperties = { padding: "0" };
-
-  // Shared padded section — for everything except the feed
   const padded: React.CSSProperties = { padding: "0 16px" };
 
   // ── 1. CREATOR VIEWING OWN PROFILE ────────────────────────────────────────
   if (isOwnProfile && profile.role === "creator") {
-    const tabs: Tab[] = [
-      { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
-      { label: "Media", key: "media", count: 0 },
-    ];
     return (
       <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
         {checkoutModal}
@@ -309,28 +271,20 @@ export default function ProfilePage() {
         <div style={{ padding: "16px 16px 8px" }}>
           <PostComposer user={profile} onPost={handlePost} onSchedule={handleSchedule} />
         </div>
-        <div style={{ marginTop: "8px" }}>
-          <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
-        </div>
-        <div style={feedWrapper}>
-          <ContentFeed
-            posts={posts} isSubscribed={true} isOwnProfile={true}
-            creatorUsername={profile.username} activeTab={activeTab}
-            onLike={handleLike} onComment={handleComment}
-            onTip={handleTip} onUnlock={handleUnlock}
-          />
-        </div>
+        <ContentFeed
+          posts={posts} isSubscribed={true} isOwnProfile={true}
+          postCount={profile.post_count ?? 0}
+          creatorUsername={profile.username}
+          onLike={handleLike} onComment={handleComment}
+          onTip={handleTip} onUnlock={handleUnlock}
+        />
       </div>
     );
   }
 
   // ── 2. FAN VIEWING OWN PROFILE ────────────────────────────────────────────
   if (isOwnProfile && profile.role === "fan") {
-    const tabs: Tab[] = [
-      { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
-      { label: "Media", key: "media", count: 0 },
-    ];
-    const fanStats = { posts: profile.post_count ?? 0, media: 0, likes: 0, subscribers: profile.subscriber_count ?? 0 };
+    const fanStats = { posts: profile.post_count ?? 0, media: 0, likes: totalLikes, subscribers: profile.subscriber_count ?? 0 };
     return (
       <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
         {checkoutModal}
@@ -351,17 +305,13 @@ export default function ProfilePage() {
         <div style={{ padding: "8px 16px 0" }}>
           <ProfileInfo {...profileInfoProps} mode="full" isEditable={true} />
         </div>
-        <div style={{ marginTop: "16px" }}>
-          <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
-        </div>
-        <div style={feedWrapper}>
-          <ContentFeed
-            posts={posts} isSubscribed={true}
-            creatorUsername={profile.username} activeTab={activeTab}
-            onLike={handleLike} onComment={handleComment}
-            onTip={handleTip} onUnlock={handleUnlock}
-          />
-        </div>
+        <ContentFeed
+          posts={posts} isSubscribed={true}
+          postCount={profile.post_count ?? 0}
+          creatorUsername={profile.username}
+          onLike={handleLike} onComment={handleComment}
+          onTip={handleTip} onUnlock={handleUnlock}
+        />
       </div>
     );
   }
@@ -385,10 +335,6 @@ export default function ProfilePage() {
 
   // ── 4. ANYONE VIEWING A CREATOR (SUBSCRIBED) ──────────────────────────────
   if (isViewingCreator && isSubscribed) {
-    const tabs: Tab[] = [
-      { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
-      { label: "Media", key: "media", count: 0 },
-    ];
     const renewalDisplay = subscriptionPeriodEnd
       ? new Date(subscriptionPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
       : "—";
@@ -408,27 +354,19 @@ export default function ProfilePage() {
         <div style={{ padding: "16px 16px" }}>
           <SubscribedBanner renewalDate={renewalDisplay} creatorId={profile.id} onCancelled={() => fetchSubscriptionStatus(profile.id)} />
         </div>
-        <div style={{ marginTop: "4px" }}>
-          <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
-        </div>
-        <div style={feedWrapper}>
-          <ContentFeed
-            posts={posts} isSubscribed={true}
-            creatorUsername={profile.username} activeTab={activeTab}
-            onLike={handleLike} onComment={handleComment}
-            onTip={handleTip} onUnlock={handleUnlock}
-          />
-        </div>
+        <ContentFeed
+          posts={posts} isSubscribed={true}
+          postCount={profile.post_count ?? 0}
+          creatorUsername={profile.username}
+          onLike={handleLike} onComment={handleComment}
+          onTip={handleTip} onUnlock={handleUnlock}
+        />
       </div>
     );
   }
 
   // ── 5. ANYONE VIEWING A CREATOR (NOT SUBSCRIBED) ──────────────────────────
   if (isViewingCreator && !isSubscribed) {
-    const tabs: Tab[] = [
-      { label: "Posts", key: "posts", count: profile.post_count ?? 0 },
-      { label: "Media", key: "media", count: 0 },
-    ];
     return (
       <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
         {checkoutModal}
@@ -451,17 +389,13 @@ export default function ProfilePage() {
             onSubscribe={(tier) => openCheckout("subscription", tier)}
           />
         </div>
-        <div style={{ marginTop: "4px" }}>
-          <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
-        </div>
-        <div style={feedWrapper}>
-          <ContentFeed
-            posts={posts} isSubscribed={false}
-            creatorUsername={profile.username} activeTab={activeTab}
-            onLike={handleLike} onComment={handleComment}
-            onTip={handleTip} onUnlock={handleUnlock}
-          />
-        </div>
+        <ContentFeed
+          posts={posts} isSubscribed={false}
+          postCount={profile.post_count ?? 0}
+          creatorUsername={profile.username}
+          onLike={handleLike} onComment={handleComment}
+          onTip={handleTip} onUnlock={handleUnlock}
+        />
       </div>
     );
   }

@@ -14,11 +14,11 @@ import { useUpload } from "@/lib/context/UploadContext";
 type PostType = "photo" | "video" | "poll" | "quiz" | "text";
 
 const POST_TYPES: { key: PostType; label: string; icon: React.ReactNode }[] = [
-  { key: "photo", label: "Photo", icon: <Image  size={22} strokeWidth={1.6} /> },
-  { key: "video", label: "Video", icon: <Video  size={22} strokeWidth={1.6} /> },
+  { key: "photo", label: "Photo", icon: <Image     size={22} strokeWidth={1.6} /> },
+  { key: "video", label: "Video", icon: <Video     size={22} strokeWidth={1.6} /> },
   { key: "poll",  label: "Poll",  icon: <BarChart2  size={22} strokeWidth={1.6} /> },
   { key: "quiz",  label: "Quiz",  icon: <HelpCircle size={22} strokeWidth={1.6} /> },
-  { key: "text",  label: "Text",  icon: <Type   size={22} strokeWidth={1.6} /> },
+  { key: "text",  label: "Text",  icon: <Type       size={22} strokeWidth={1.6} /> },
 ];
 
 function isValidPostType(val: string | null): val is PostType {
@@ -29,23 +29,22 @@ function CreatePostContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const typeParam    = searchParams.get("type");
-  const { startVideoUpload } = useUpload();
+  const { startVideoUpload, startPhotoUpload } = useUpload();
 
-  const [postType,     setPostType]    = useState<PostType>(isValidPostType(typeParam) ? typeParam : "photo");
-  const [caption,      setCaption]     = useState("");
-  const [files,        setFiles]       = useState<File[]>([]);
-  const [audience,     setAudience]    = useState<"subscribers" | "everyone">("subscribers");
-  const [isPPV,        setIsPPV]       = useState(false);
-  const [ppvPrice,     setPpvPrice]    = useState("");
-  const [isScheduled,  setIsScheduled] = useState(false);
-  const [schedDate,    setSchedDate]   = useState("");
-  const [schedTime,    setSchedTime]   = useState("");
-  const [pollOptions,  setPollOptions] = useState(["", ""]);
+  const [postType,     setPostType]     = useState<PostType>(isValidPostType(typeParam) ? typeParam : "photo");
+  const [caption,      setCaption]      = useState("");
+  const [files,        setFiles]        = useState<File[]>([]);
+  const [audience,     setAudience]     = useState<"subscribers" | "everyone">("subscribers");
+  const [isPPV,        setIsPPV]        = useState(false);
+  const [ppvPrice,     setPpvPrice]     = useState("");
+  const [isScheduled,  setIsScheduled]  = useState(false);
+  const [schedDate,    setSchedDate]    = useState("");
+  const [schedTime,    setSchedTime]    = useState("");
+  const [pollOptions,  setPollOptions]  = useState(["", ""]);
   const [pollDuration, setPollDuration] = useState("7 days");
-  const [posting,      setPosting]     = useState(false);
-  const [error,        setError]       = useState<string | null>(null);
+  const [posting,      setPosting]      = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
 
-  // FIX: creator-picked thumbnail
   const [thumbnailBlob,    setThumbnailBlob]    = useState<Blob | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
 
@@ -84,7 +83,19 @@ function CreatePostContent() {
     if (postType === "poll" || postType === "quiz") content_type = "text";
     let scheduled_for: string | null = null;
     if (isScheduled && schedDate && schedTime) scheduled_for = new Date(`${schedDate}T${schedTime}`).toISOString();
-    const res  = await fetch("/api/posts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content_type, caption: caption || null, is_free: audience === "everyone", is_ppv: isPPV, ppv_price: isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null, media_ids: mediaIds, scheduled_for }) });
+    const res  = await fetch("/api/posts", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        content_type,
+        caption:      caption || null,
+        is_free:      audience === "everyone",
+        is_ppv:       isPPV,
+        ppv_price:    isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null,
+        media_ids:    mediaIds,
+        scheduled_for,
+      }),
+    });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to create post");
     return data;
@@ -99,8 +110,8 @@ function CreatePostContent() {
       const file    = files[0];
       const isVideo = file?.type.startsWith("video/");
 
+      // ── Video — redirect immediately, upload in background ────────
       if (file && isVideo) {
-        // FIX: pass thumbnailBlob — UploadContext uploads it before TUS starts
         startVideoUpload({
           file,
           title:         caption || file.name,
@@ -115,17 +126,22 @@ function CreatePostContent() {
         return;
       }
 
-      const mediaIds: number[] = [];
+      // ── Photo — redirect immediately, upload in background ────────
       if (file && !isVideo) {
-        const formData = new FormData();
-        formData.append("file", file);
-        const res  = await fetch("/api/upload/photo", { method: "POST", body: formData });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Photo upload failed");
-        mediaIds.push(data.mediaId);
+        startPhotoUpload({
+          file,
+          onMediaId: async (mediaId) => {
+            try { await createPost([mediaId]); }
+            catch (err) { console.error("[CreatePost] Photo post create error:", err); }
+          },
+          onError: (err) => console.error("[CreatePost] Photo upload error:", err),
+        });
+        router.push(`/${currentUser.username}`);
+        return;
       }
 
-      await createPost(mediaIds);
+      // ── Text / poll / quiz — no media ─────────────────────────────
+      await createPost([]);
       router.push(`/${currentUser.username}`);
 
     } catch (err) {
@@ -145,14 +161,22 @@ function CreatePostContent() {
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
           <button onClick={handleClear} style={{ padding: "7px 18px", borderRadius: "20px", border: "1.5px solid #8B5CF6", backgroundColor: "transparent", color: "#8B5CF6", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>CLEAR</button>
-          <button onClick={handlePost} disabled={!canPost || posting || !userLoaded} style={{ padding: "7px 18px", borderRadius: "20px", border: "none", backgroundColor: canPost && !posting && userLoaded ? "#8B5CF6" : "#2A2A3D", color: canPost && !posting && userLoaded ? "#fff" : "#6B6B8A", fontSize: "13px", fontWeight: 600, cursor: canPost && !posting && userLoaded ? "pointer" : "default", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", minWidth: "64px" }}>
+          <button
+            onClick={handlePost}
+            disabled={!canPost || posting || !userLoaded}
+            style={{ padding: "7px 18px", borderRadius: "20px", border: "none", backgroundColor: canPost && !posting && userLoaded ? "#8B5CF6" : "#2A2A3D", color: canPost && !posting && userLoaded ? "#fff" : "#6B6B8A", fontSize: "13px", fontWeight: 600, cursor: canPost && !posting && userLoaded ? "pointer" : "default", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", minWidth: "64px" }}
+          >
             {posting ? "…" : "POST"}
           </button>
         </div>
       </div>
 
       <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-        {error && <div style={{ padding: "12px 14px", borderRadius: "10px", backgroundColor: "rgba(239,68,68,0.08)", border: "1.5px solid rgba(239,68,68,0.2)", color: "#EF4444", fontSize: "13px" }}>{error}</div>}
+        {error && (
+          <div style={{ padding: "12px 14px", borderRadius: "10px", backgroundColor: "rgba(239,68,68,0.08)", border: "1.5px solid rgba(239,68,68,0.2)", color: "#EF4444", fontSize: "13px" }}>
+            {error}
+          </div>
+        )}
 
         <div style={{ backgroundColor: "#0D0D18", border: "1.5px solid #2A2A3D", borderRadius: "14px", overflow: "hidden" }}>
           {(postType === "poll" || postType === "quiz") && (
@@ -178,15 +202,23 @@ function CreatePostContent() {
                 <span style={{ fontSize: "12px", color: "#8A8AA0" }}>@{currentUser.username}</span>
               </div>
             </div>
-            <textarea value={caption} onChange={(e) => setCaption(e.target.value)} placeholder={postType === "poll" || postType === "quiz" ? "Add a question or context..." : "Write a caption…"} style={{ width: "100%", minHeight: "70px", backgroundColor: "transparent", border: "none", outline: "none", color: "#E2E8F0", fontSize: "15px", lineHeight: 1.6, resize: "none", fontFamily: "'Inter', sans-serif", marginTop: "12px", boxSizing: "border-box" }} />
+            <textarea
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder={postType === "poll" || postType === "quiz" ? "Add a question or context..." : "Write a caption…"}
+              style={{ width: "100%", minHeight: "70px", backgroundColor: "transparent", border: "none", outline: "none", color: "#E2E8F0", fontSize: "15px", lineHeight: 1.6, resize: "none", fontFamily: "'Inter', sans-serif", marginTop: "12px", boxSizing: "border-box" }}
+            />
           </div>
 
-          {(postType === "poll" || postType === "quiz") && <div style={{ borderTop: "1px solid #2A2A3D" }}><PollBuilder type={postType} options={pollOptions} onChange={setPollOptions} /></div>}
+          {(postType === "poll" || postType === "quiz") && (
+            <div style={{ borderTop: "1px solid #2A2A3D" }}>
+              <PollBuilder type={postType} options={pollOptions} onChange={setPollOptions} />
+            </div>
+          )}
 
           {(postType === "photo" || postType === "video") && (
             <div style={{ padding: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "14px" }}>
               <MediaUploader type={postType} files={files} onChange={setFiles} />
-              {/* FIX: Thumbnail picker appears after video selected */}
               {videoFile && (
                 <div style={{ marginTop: "12px", padding: "12px 14px", borderRadius: "10px", backgroundColor: "#0A0A14", border: "1px solid #2A2A3D" }}>
                   <ThumbnailPicker
@@ -201,20 +233,43 @@ function CreatePostContent() {
             </div>
           )}
 
-          {postType === "text" && <div style={{ margin: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "14px", textAlign: "center", color: "#4A4A6A", fontSize: "13px" }}>Text-only post — just write your caption above and hit Post.</div>}
+          {postType === "text" && (
+            <div style={{ margin: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "14px", textAlign: "center", color: "#4A4A6A", fontSize: "13px" }}>
+              Text-only post — just write your caption above and hit Post.
+            </div>
+          )}
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", padding: "8px 12px", borderTop: "1px solid #2A2A3D" }}>
             {POST_TYPES.map((t) => (
-              <button key={t.key} onClick={() => setPostType(t.key)} aria-label={t.label}
+              <button
+                key={t.key}
+                onClick={() => setPostType(t.key)}
+                aria-label={t.label}
                 style={{ width: "44px", height: "44px", borderRadius: "8px", border: "none", backgroundColor: postType === t.key ? "rgba(139,92,246,0.15)" : "transparent", color: postType === t.key ? "#8B5CF6" : "#B0B0C8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}
                 onMouseEnter={(e) => { if (postType !== t.key) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1F1F2A"; } }}
                 onMouseLeave={(e) => { if (postType !== t.key) { e.currentTarget.style.color = "#B0B0C8"; e.currentTarget.style.backgroundColor = "transparent"; } }}
-              >{t.icon}</button>
+              >
+                {t.icon}
+              </button>
             ))}
           </div>
         </div>
 
-        <PostSettings audience={audience} onAudienceChange={setAudience} isPPV={isPPV} onPPVChange={setIsPPV} ppvPrice={ppvPrice} onPPVPriceChange={setPpvPrice} isScheduled={isScheduled} onScheduledChange={setIsScheduled} schedDate={schedDate} onSchedDateChange={setSchedDate} schedTime={schedTime} onSchedTimeChange={setSchedTime} onCancel={() => router.back()} />
+        <PostSettings
+          audience={audience}
+          onAudienceChange={setAudience}
+          isPPV={isPPV}
+          onPPVChange={setIsPPV}
+          ppvPrice={ppvPrice}
+          onPPVPriceChange={setPpvPrice}
+          isScheduled={isScheduled}
+          onScheduledChange={setIsScheduled}
+          schedDate={schedDate}
+          onSchedDateChange={setSchedDate}
+          schedTime={schedTime}
+          onSchedTimeChange={setSchedTime}
+          onCancel={() => router.back()}
+        />
       </div>
     </div>
   );

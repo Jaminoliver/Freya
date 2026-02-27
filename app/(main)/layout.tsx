@@ -23,14 +23,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <main
           className={`main-scroll md:pb-0${!isDashboard ? " no-topbar" : ""}`}
           style={{
-            flex: 1, minWidth: 0, height: "100vh",
+            flex: 1,
+            minWidth: 0,
+            maxWidth: "720px", // ← match OnlyFans center column width
+            height: "100vh",
             borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
-            overflowY: "auto", overflowX: "hidden",
-            paddingBottom: "72px", paddingTop: "0px",
-            scrollbarWidth: "none", msOverflowStyle: "none",
+            overflowY: "auto",
+            overflowX: "hidden",
+            paddingBottom: "72px",
+            paddingTop: "0px",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            WebkitOverflowScrolling: "touch",
           } as React.CSSProperties}
         >
           <style>{`
+            main::-webkit-scrollbar { display: none; }
             @media (min-width: 768px) { .main-scroll { padding-top: 0 !important; } }
             @media (max-width: 767px) { .main-scroll { padding-top: 56px; } .main-scroll.no-topbar { padding-top: 0 !important; } }
           `}</style>
@@ -38,7 +46,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </main>
 
         {showRightPanel && (
-          <div className="hidden lg:block" style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", width: "320px", flexShrink: 0 }}>
+          <div className="hidden lg:block" style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", width: "380px", flexShrink: 0 }}>
+            {/* ↑ 320px → 380px to match OnlyFans right panel */}
             <RightPanel />
           </div>
         )}

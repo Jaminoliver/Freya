@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useRef, useState, useCallback } from "react";
+import React, { createContext, useContext, useRef, useState, useCallback, useEffect } from "react";
 import * as tus from "tus-js-client";
 
 export interface UploadItem {
@@ -10,11 +10,42 @@ export interface UploadItem {
   phase:    "uploading" | "processing" | "done" | "error";
   mediaId?: number;
   error?:   string;
-  file?:       File;
-  _title?:     string;
-  _onMediaId?: (mediaId: number) => void;
-  _onError?:   (err: string) => void;
+  file?:          File;
+  _title?:        string;
+  _onMediaId?:    (mediaId: number) => void;
+  _onError?:      (err: string) => void;
   _thumbnailBlob?: Blob;
+  _isPhoto?:      boolean;
+}
+
+// Serialisable shape stored in sessionStorage (no File/Blob/callbacks)
+interface PersistedUpload {
+  id:       string;
+  fileName: string;
+  progress: number;
+  phase:    UploadItem["phase"];
+  mediaId?: number;
+  error?:   string;
+}
+
+const SESSION_KEY = "freya_uploads";
+
+function loadPersistedUploads(): PersistedUpload[] {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as PersistedUpload[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePersistedUploads(uploads: UploadItem[]) {
+  try {
+    const serialisable: PersistedUpload[] = uploads.map(({ id, fileName, progress, phase, mediaId, error }) => ({
+      id, fileName, progress, phase, mediaId, error,
+    }));
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(serialisable));
+  } catch { /* quota exceeded — silently ignore */ }
 }
 
 interface UploadContextValue {
@@ -26,6 +57,11 @@ interface UploadContextValue {
     onMediaId:      (mediaId: number) => void;
     onError:        (err: string) => void;
   }) => string;
+  startPhotoUpload: (params: {
+    file:      File;
+    onMediaId: (mediaId: number) => void;
+    onError:   (err: string) => void;
+  }) => string;
   dismissUpload: (id: string) => void;
   retryUpload:   (id: string) => void;
   clearDone:     () => void;
@@ -34,8 +70,34 @@ interface UploadContextValue {
 const UploadContext = createContext<UploadContextValue | null>(null);
 
 export function UploadProvider({ children }: { children: React.ReactNode }) {
-  const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const [uploads, setUploads] = useState<UploadItem[]>(() => {
+    return loadPersistedUploads().map((u) => ({
+      ...u,
+      phase:    u.phase === "uploading" || u.phase === "processing" ? "error" : u.phase,
+      error:    u.phase === "uploading" || u.phase === "processing" ? "Upload interrupted — please retry" : u.error,
+    }));
+  });
+
   const pollTimers = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+
+  useEffect(() => {
+    savePersistedUploads(uploads);
+  }, [uploads]);
+
+  const didResumePoll = useRef(false);
+  useEffect(() => {
+    if (didResumePoll.current) return;
+    didResumePoll.current = true;
+    setUploads((prev) => {
+      for (const u of prev) {
+        if (u.phase === "processing" && u.mediaId && !pollTimers.current[u.id]) {
+          startPolling(u.id, u.mediaId);
+        }
+      }
+      return prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateUpload = useCallback((id: string, patch: Partial<UploadItem>) => {
     setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
@@ -74,6 +136,56 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }, 3000);
   }, [updateUpload]);
 
+  // ── Photo upload ──────────────────────────────────────────────────────────
+  const runPhotoUpload = useCallback(async (
+    uploadId:  string,
+    file:      File,
+    onMediaId: (mediaId: number) => void,
+    onError:   (err: string) => void,
+  ) => {
+    try {
+      // Simulate progress — photo uploads are fast but we want visual feedback
+      updateUpload(uploadId, { progress: 30 });
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      updateUpload(uploadId, { progress: 60 });
+
+      const res  = await fetch("/api/upload/photo", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Photo upload failed");
+
+      updateUpload(uploadId, { progress: 100, phase: "done", mediaId: data.mediaId });
+      onMediaId(data.mediaId);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      updateUpload(uploadId, { phase: "error", error: msg });
+      onError(msg);
+    }
+  }, [updateUpload]);
+
+  const startPhotoUpload = useCallback(({
+    file, onMediaId, onError,
+  }: {
+    file:      File;
+    onMediaId: (mediaId: number) => void;
+    onError:   (err: string) => void;
+  }): string => {
+    const uploadId = `upload_${Date.now()}_${Math.random()}`;
+
+    setUploads((prev) => [...prev, {
+      id: uploadId, fileName: file.name, progress: 0, phase: "uploading",
+      file, _onMediaId: onMediaId, _onError: onError, _isPhoto: true,
+    }]);
+
+    runPhotoUpload(uploadId, file, onMediaId, onError);
+    return uploadId;
+  }, [runPhotoUpload]);
+
+  // ── Video upload ──────────────────────────────────────────────────────────
   const runUpload = useCallback(async (
     uploadId:      string,
     file:          File,
@@ -119,7 +231,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         const upload = new tus.Upload(file, {
           endpoint:    tusEndpoint,
           chunkSize:   5 * 1024 * 1024,
-          retryDelays: null,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          storeFingerprintForResuming: true,
           headers: {
             AuthorizationSignature: signature,
             AuthorizationExpire:    String(expireTime),
@@ -199,19 +312,21 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     setUploads((prev) => prev.map((u) => u.id === id ? { ...u, progress: 0, phase: "uploading", error: undefined } : u));
     setUploads((prev) => {
       const item = prev.find((u) => u.id === id);
-      if (item?.file && item._title && item._onMediaId && item._onError) {
+      if (item?._isPhoto && item.file && item._onMediaId && item._onError) {
+        runPhotoUpload(id, item.file, item._onMediaId, item._onError);
+      } else if (item?.file && item._title && item._onMediaId && item._onError) {
         runUpload(id, item.file, item._title, item._thumbnailBlob, item._onMediaId, item._onError);
       }
       return prev;
     });
-  }, [runUpload]);
+  }, [runUpload, runPhotoUpload]);
 
   const clearDone = useCallback(() => {
     setUploads((prev) => prev.filter((u) => u.phase !== "done"));
   }, []);
 
   return (
-    <UploadContext.Provider value={{ uploads, startVideoUpload, dismissUpload, retryUpload, clearDone }}>
+    <UploadContext.Provider value={{ uploads, startVideoUpload, startPhotoUpload, dismissUpload, retryUpload, clearDone }}>
       {children}
     </UploadContext.Provider>
   );
