@@ -54,7 +54,7 @@ export function PostCard({ post }: { post: Post }) {
   return (
     <div style={{ borderBottom: "1px solid #2E2E42", paddingBottom: 0, fontFamily: "'Inter', sans-serif" }}>
 
-      {/* ── Header + Caption — keep padding ── */}
+      {/* ── Header + Caption ── */}
       <div style={{ padding: "14px 20px 0" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => router.push(`/${post.creator.username}`)}>
@@ -70,17 +70,26 @@ export function PostCard({ post }: { post: Post }) {
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <span style={{ fontSize: "13px", color: "#94A3B8" }}>{post.timestamp}</span>
             <div style={{ position: "relative" }}>
-              <button onClick={() => setMenuOpen(!menuOpen)} style={{ width: "28px", height: "28px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              <button
+                onClick={() => setMenuOpen(!menuOpen)}
+                style={{ width: "28px", height: "28px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-              ><MoreHorizontal size={15} /></button>
+              >
+                <MoreHorizontal size={15} />
+              </button>
               {menuOpen && (
                 <div style={{ position: "absolute", right: 0, top: "36px", zIndex: 50, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", overflow: "hidden", minWidth: "160px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
                   {["Add to list", "Hide post", "Report", "Block creator"].map((item, i) => (
-                    <button key={i} onClick={() => setMenuOpen(false)} style={{ width: "100%", padding: "10px 14px", border: "none", backgroundColor: "transparent", color: i === 3 ? "#EF4444" : "#A3A3C2", fontSize: "13px", textAlign: "left", cursor: "pointer", fontFamily: "'Inter', sans-serif", borderBottom: i < 3 ? "1px solid #2A2A3D" : "none" }}
+                    <button
+                      key={i}
+                      onClick={() => setMenuOpen(false)}
+                      style={{ width: "100%", padding: "10px 14px", border: "none", backgroundColor: "transparent", color: i === 3 ? "#EF4444" : "#A3A3C2", fontSize: "13px", textAlign: "left", cursor: "pointer", fontFamily: "'Inter', sans-serif", borderBottom: i < 3 ? "1px solid #2A2A3D" : "none" }}
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                    >{item}</button>
+                    >
+                      {item}
+                    </button>
                   ))}
                 </div>
               )}
@@ -95,14 +104,26 @@ export function PostCard({ post }: { post: Post }) {
         )}
       </div>
 
-      {/* ── Media — FIX: video goes full bleed, images keep rounded card ── */}
+      {/* ── Media ── */}
       {post.media.length > 0 && (
         <>
           {post.isLocked ? (
-            // Locked — always padded + rounded
+            // Locked — padded + rounded, aspectRatio instead of fixed maxHeight
             <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden", position: "relative" }}>
-              <img src={firstMedia.url} alt="Locked content"
-                style={{ width: "100%", maxHeight: "380px", objectFit: "cover", display: "block", filter: "blur(18px)", transform: "scale(1.05)" }} />
+              <img
+                src={firstMedia.url}
+                alt="Locked content"
+                style={{
+                  width:      "100%",
+                  // FIX: was maxHeight: "380px" — now aspect ratio fills screen on mobile, capped on desktop
+                  aspectRatio: "4/5",
+                  maxHeight:   "520px",
+                  objectFit:  "cover",
+                  display:    "block",
+                  filter:     "blur(18px)",
+                  transform:  "scale(1.05)",
+                }}
+              />
               <div style={{ position: "absolute", inset: 0, background: "rgba(10,10,15,0.55)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                 <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Lock size={18} color="#8B5CF6" />
@@ -116,13 +137,9 @@ export function PostCard({ post }: { post: Post }) {
             </div>
 
           ) : isVideoPost ? (
-            // FIX: Video — full bleed, no side padding, no border radius clipping it
-            <div style={{
-              // Break out of parent padding
-              marginLeft:  "-0px",
-              marginRight: "-0px",
-              marginTop:   "4px",
-            }}>
+            // Video — full bleed, VideoPlayer handles its own sizing.
+            // Outer div caps height on desktop so portrait videos don't stretch huge.
+            <div style={{ marginTop: "4px" }}>
               <VideoPlayer
                 bunnyVideoId={firstMedia.bunnyVideoId ?? null}
                 thumbnailUrl={firstMedia.thumbnailUrl}
@@ -130,22 +147,36 @@ export function PostCard({ post }: { post: Post }) {
             </div>
 
           ) : post.media.length === 1 ? (
-            // Single image — padded + rounded
+            // Single image — padded + rounded, aspectRatio instead of fixed maxHeight
             <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden" }}>
-              <img src={firstMedia.url} alt="Post media"
-                style={{ width: "100%", maxHeight: "420px", objectFit: "cover", display: "block", cursor: "pointer" }}
-                onClick={() => router.push(`/posts/${post.id}`)} />
+              <img
+                src={firstMedia.url}
+                alt="Post media"
+                style={{
+                  width:      "100%",
+                  // FIX: was maxHeight: "420px" — now fills screen on mobile, capped on desktop
+                  aspectRatio: "4/5",
+                  maxHeight:   "520px",
+                  objectFit:  "cover",
+                  display:    "block",
+                  cursor:     "pointer",
+                }}
+                onClick={() => router.push(`/posts/${post.id}`)}
+              />
             </div>
 
           ) : (
-            // Multi image grid — padded + rounded
+            // Multi image grid
             <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px" }}>
                 {post.media.slice(0, 4).map((m, i) => (
                   <div key={i} style={{ position: "relative" }}>
-                    <img src={m.url} alt={`Media ${i + 1}`}
+                    <img
+                      src={m.url}
+                      alt={`Media ${i + 1}`}
                       style={{ width: "100%", height: "200px", objectFit: "cover", display: "block", cursor: "pointer" }}
-                      onClick={() => router.push(`/posts/${post.id}`)} />
+                      onClick={() => router.push(`/posts/${post.id}`)}
+                    />
                     {i === 3 && post.media.length > 4 && (
                       <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "22px", fontWeight: 700 }}>
                         +{post.media.length - 4}
@@ -174,15 +205,19 @@ export function PostCard({ post }: { post: Post }) {
       {/* ── Actions + Comments ── */}
       <div style={{ padding: "0 20px" }}>
         <PostActions
-          likes={post.likes} comments={post.comments}
-          isSubscribed={true} isOwnProfile={false}
+          likes={post.likes}
+          comments={post.comments}
+          isSubscribed={true}
+          isOwnProfile={false}
           onLike={() => console.log("liked", post.id)}
           onComment={() => setCommentOpen((prev) => !prev)}
           onTip={() => console.log("tip", post.id)}
           onBookmark={() => console.log("bookmarked", post.id)}
         />
         <CommentSection
-          postId={post.id} comments={[]} viewer={VIEWER}
+          postId={post.id}
+          comments={[]}
+          viewer={VIEWER}
           isOpen={commentOpen}
           onAddComment={(id, text) => console.log("Comment on", id, ":", text)}
         />
@@ -193,7 +228,8 @@ export function PostCard({ post }: { post: Post }) {
 
 function TaggedCreatorCard({ creator, onClick }: { creator: TaggedCreator; onClick: () => void }) {
   return (
-    <div onClick={onClick}
+    <div
+      onClick={onClick}
       style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "12px", border: "1px solid #2A2A3D", backgroundColor: "#0D0D18", cursor: "pointer", transition: "background 0.15s" }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "#1C1C2E"; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "#0D0D18"; }}

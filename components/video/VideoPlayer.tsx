@@ -3,7 +3,6 @@
 import * as React from "react";
 
 const BUNNY_PULL_ZONE  = "vz-8bc100f4-3c0.b-cdn.net";
-const BUNNY_LIBRARY_ID = process.env.NEXT_PUBLIC_BUNNY_STREAM_LIBRARY_ID;
 
 export function getBunnyThumbnail(videoId: string) {
   return `https://${BUNNY_PULL_ZONE}/${videoId}/thumbnail.jpg`;
@@ -13,11 +12,16 @@ export function getBunnyHLS(videoId: string) {
   return `https://${BUNNY_PULL_ZONE}/${videoId}/playlist.m3u8`;
 }
 
+export function getBunnyMP4(videoId: string, resolution: "1080" | "720" | "480" = "1080") {
+  return `https://${BUNNY_PULL_ZONE}/${videoId}/play_${resolution}p.mp4`;
+}
+
 interface VideoPlayerProps {
   bunnyVideoId:      string | null;
   thumbnailUrl?:     string | null;
   processingStatus?: string | null;
   rawVideoUrl?:      string | null;
+  fillParent?:       boolean;
 }
 
 export default function VideoPlayer({
@@ -25,52 +29,114 @@ export default function VideoPlayer({
   thumbnailUrl,
   processingStatus,
   rawVideoUrl,
+  fillParent = false,
 }: VideoPlayerProps) {
   const videoRef     = React.useRef<HTMLVideoElement>(null);
-  const canvasRef    = React.useRef<HTMLCanvasElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hlsRef       = React.useRef<any>(null);
 
-  const [isMobile,    setIsMobile]    = React.useState(false);
+  const [showPoster,  setShowPoster]  = React.useState(true);
   const [posterError, setPosterError] = React.useState(false);
-  const [pausedFrame, setPausedFrame] = React.useState<string | null>(null);
   const [isPlaying,   setIsPlaying]   = React.useState(false);
   const [isBuffering, setIsBuffering] = React.useState(false);
   const [aspectRatio, setAspectRatio] = React.useState<string | null>(null);
+
   const isPortrait = aspectRatio === "9/16";
 
+  // ── Poster source ──────────────────────────────────────────────────────────
+  const posterSrc = (!posterError && thumbnailUrl)
+    ? thumbnailUrl
+    : bunnyVideoId
+      ? getBunnyThumbnail(bunnyVideoId)
+      : "";
+
+  // ── Video initialisation (runs once when user taps play) ─────────────────
+  // Always use HLS — Bunny's HLS segments each start with a keyframe,
+  // guaranteeing full quality from frame 1 and on every seek.
+  // MP4 from Bunny has variable bitrate baked into the first few seconds
+  // which causes a permanent quality dip at the start regardless of replay.
+  const initHLS = React.useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || !bunnyVideoId) return;
+
+    const hlsSrc = getBunnyHLS(bunnyVideoId);
+
+    // iOS Safari supports HLS natively
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = hlsSrc;
+      video.load();
+      return;
+    }
+
+    // Android Chrome / other browsers — use hls.js
+    try {
+      const Hls = (await import("hls.js")).default;
+      if (Hls.isSupported()) {
+        let savedBandwidth = 8_000_000;
+        try {
+          const cached = sessionStorage.getItem("hlsBandwidth");
+          if (cached) savedBandwidth = Math.max(Number(cached), 2_000_000);
+        } catch { /* sessionStorage blocked */ }
+
+        const hls = new Hls({
+          startLevel:             -1,
+          lowLatencyMode:         false,
+          abrEwmaDefaultEstimate: savedBandwidth,
+          abrEwmaFastVoD:         3,
+          abrEwmaSlowVoD:         9,
+        });
+        hlsRef.current = hls;
+
+        // Force highest quality level immediately after manifest loads
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        hls.on(Hls.Events.MANIFEST_PARSED, (_evt: any, data: any) => {
+          hls.currentLevel = data.levels.length - 1;
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        hls.on(Hls.Events.FRAG_LOADED, (_evt: any, _data: any) => {
+          try {
+            const bw = hls.bandwidthEstimate;
+            if (bw && bw > 0) sessionStorage.setItem("hlsBandwidth", String(Math.round(bw)));
+          } catch { /* ignore */ }
+        });
+
+        hls.loadSource(hlsSrc);
+        hls.attachMedia(video);
+      }
+    } catch {
+      video.src = hlsSrc;
+    }
+  }, [bunnyVideoId]);
+
+  // ── Cleanup HLS on unmount ─────────────────────────────────────────────────
   React.useEffect(() => {
-    const ua     = navigator.userAgent;
-    const mobile = /iPhone|iPad|iPod|Android/i.test(ua) || window.innerWidth < 768;
-    setIsMobile(mobile);
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
   }, []);
 
-  const captureFrame = React.useCallback(() => {
-    const video  = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas || video.readyState < 2) return;
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    setPausedFrame(canvas.toDataURL("image/jpeg", 0.85));
-  }, []);
-
+  // ── Pause when scrolled out of view ───────────────────────────────────────
   React.useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry.isIntersecting && !video.paused) {
-          captureFrame();
           video.pause();
+          setIsPlaying(false);
+          setShowPoster(true);
         }
       },
       { threshold: 0.2 }
     );
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, [captureFrame, isMobile]);
+  }, []);
 
   const handleLoadedMetadata = React.useCallback(() => {
     const video = videoRef.current;
@@ -81,12 +147,54 @@ export default function VideoPlayer({
     else            setAspectRatio("1/1");
   }, []);
 
-  const handlePause   = React.useCallback(() => { captureFrame(); setIsPlaying(false); }, [captureFrame]);
-  const handlePlay    = React.useCallback(() => { setPausedFrame(null); setIsPlaying(true); setIsBuffering(false); }, []);
+  // ── User taps play on poster ───────────────────────────────────────────────
+  const handlePosterPlay = React.useCallback(async () => {
+    setShowPoster(false);
+    setIsBuffering(true);
+    await initHLS();
+    const video = videoRef.current;
+    if (video) {
+      try { await video.play(); } catch { /* autoplay blocked */ }
+    }
+  }, [initHLS]);
+
+  const handlePlay    = React.useCallback(() => { setIsPlaying(true);  setIsBuffering(false); }, []);
+  const handlePause   = React.useCallback(() => { setIsPlaying(false); }, []);
   const handleWaiting = React.useCallback(() => { setIsBuffering(true); }, []);
   const handlePlaying = React.useCallback(() => { setIsBuffering(false); }, []);
   const handleCanPlay = React.useCallback(() => { setIsBuffering(false); }, []);
 
+  const containerStyle: React.CSSProperties = fillParent ? {
+    width:           "100%",
+    height:          "100%",
+    position:        "relative",
+    overflow:        "hidden",
+    display:         "flex",
+    alignItems:      "center",
+    justifyContent:  "center",
+    backgroundColor: "#000",
+  } : {
+    width:           "100%",
+    position:        "relative",
+    overflow:        "hidden",
+    display:         "flex",
+    alignItems:      "center",
+    justifyContent:  "center",
+    backgroundColor: "#000",
+    aspectRatio:     isPortrait ? "9/16" : "16/9",
+    maxHeight:       isPortrait ? "min(75svh, 520px)" : "520px",
+  };
+
+  const videoStyle: React.CSSProperties = {
+    position:  "relative",
+    zIndex:    2,
+    width:     (isPortrait && typeof window !== "undefined" && window.innerWidth >= 768) ? "68%" : "100%",
+    height:    "100%",
+    objectFit: "cover",
+    display:   "block",
+  };
+
+  // ── No bunnyVideoId ────────────────────────────────────────────────────────
   if (!bunnyVideoId) {
     return (
       <>
@@ -101,33 +209,16 @@ export default function VideoPlayer({
     );
   }
 
-  const posterSrc = (!posterError && thumbnailUrl)
-    ? thumbnailUrl
-    : getBunnyThumbnail(bunnyVideoId);
-
-  const containerHeight = isMobile
-    ? (isPortrait ? "520px" : "360px")
-    : (isPortrait ? "500px" : "420px");
-
-  const videoWidth = isPortrait ? "72%" : "100%";
-
   return (
     <>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <div
-        ref={containerRef}
-        style={{
-          width:           "100%",
-          height:          containerHeight,
-          position:        "relative",
-          overflow:        "hidden",
-          display:         "flex",
-          alignItems:      "center",
-          justifyContent:  "center",
-          backgroundColor: "#000",
-        }}
-      >
-        {/* Blurred thumbnail background */}
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      `}</style>
+
+      <div ref={containerRef} style={containerStyle}>
+
+        {/* ── Blurred background (always rendered) ── */}
         <img
           src={posterSrc}
           alt=""
@@ -139,86 +230,110 @@ export default function VideoPlayer({
             width:     "100%",
             height:    "100%",
             objectFit: "cover",
-            filter:    "blur(20px) brightness(0.45)",
+            filter:    "blur(20px) brightness(0.4)",
             transform: "scale(1.1)",
             zIndex:    1,
           }}
         />
 
-        <canvas ref={canvasRef} style={{ display: "none" }} />
+        {/* ── Poster overlay (visible until user taps play) ── */}
+        {showPoster && (
+          <div
+            style={{
+              position:       "absolute",
+              inset:          0,
+              zIndex:         5,
+              display:        "flex",
+              alignItems:     "center",
+              justifyContent: "center",
+              cursor:         "pointer",
+            }}
+            onClick={handlePosterPlay}
+          >
+            <img
+              src={posterSrc}
+              alt=""
+              onError={() => setPosterError(true)}
+              style={{
+                position:  "absolute",
+                inset:     0,
+                width:     "100%",
+                height:    "100%",
+                objectFit: "cover",
+                display:   "block",
+              }}
+            />
 
-        {/* Main video */}
+            <div
+              style={{
+                position:        "relative",
+                zIndex:          2,
+                width:           "56px",
+                height:          "56px",
+                borderRadius:    "50%",
+                backgroundColor: "rgba(0,0,0,0.55)",
+                border:          "2px solid rgba(255,255,255,0.85)",
+                display:         "flex",
+                alignItems:      "center",
+                justifyContent:  "center",
+                backdropFilter:  "blur(4px)",
+                transition:      "transform 0.15s, background-color 0.15s",
+              }}
+            >
+              <div style={{
+                width:       0,
+                height:      0,
+                borderTop:   "10px solid transparent",
+                borderBottom:"10px solid transparent",
+                borderLeft:  "18px solid rgba(255,255,255,0.95)",
+                marginLeft:  "4px",
+              }} />
+            </div>
+          </div>
+        )}
+
+        {/* ── The actual video (hidden behind poster until tap) ── */}
         <video
           ref={videoRef}
-          src={getBunnyHLS(bunnyVideoId)}
-          poster={posterSrc}
-          controls
+          controls={!showPoster}
           playsInline
-          preload="auto"
+          preload="none"
+          poster={posterSrc}
           onLoadedMetadata={handleLoadedMetadata}
           onPause={handlePause}
           onPlay={handlePlay}
           onWaiting={handleWaiting}
           onPlaying={handlePlaying}
           onCanPlay={handleCanPlay}
-          onError={() => setPosterError(true)}
           style={{
-            position:   "relative",
-            zIndex:     2,
-            width:      videoWidth,
-            height:     "100%",
-            minHeight:  "100%",
-            objectFit:  "cover",
-            flexShrink: 0,
+            ...videoStyle,
+            visibility: showPoster ? "hidden" : "visible",
+            animation:  !showPoster ? "fadeIn 0.2s ease" : undefined,
           }}
         />
 
-        {/* Paused frame overlay */}
-        {pausedFrame && !isPlaying && (
-          <img
-            src={pausedFrame}
-            alt=""
-            aria-hidden
-            style={{
-              position:      "absolute",
-              top:           0,
-              left:          "50%",
-              transform:     "translateX(-50%)",
-              width:         videoWidth,
-              height:        "100%",
-              minHeight:     "100%",
-              objectFit:     "cover",
-              zIndex:        3,
-              pointerEvents: "none",
-            }}
-          />
-        )}
-
-        {/* Buffering overlay — covers native browser spinner, shows our own */}
-        {isBuffering && (
+        {/* ── Buffering spinner ── */}
+        {isBuffering && !showPoster && (
           <div
             style={{
-              position:       "absolute",
-              inset:          0,
-              zIndex:         9,
-              pointerEvents:  "none",
-              display:        "flex",
-              alignItems:     "center",
-              justifyContent: "center",
-              // Semi-transparent overlay hides the native OS spinner underneath
-              backgroundColor: "rgba(0,0,0,0.35)",
+              position:        "absolute",
+              inset:           0,
+              zIndex:          9,
+              pointerEvents:   "none",
+              display:         "flex",
+              alignItems:      "center",
+              justifyContent:  "center",
+              backgroundColor: "rgba(0,0,0,0.3)",
             }}
           >
-            <div
-              style={{
-                width:        "44px",
-                height:       "44px",
-                borderRadius: "50%",
-                border:       "3px solid rgba(255,255,255,0.2)",
-                borderTop:    "3px solid rgba(255,255,255,0.9)",
-                animation:    "spin 0.8s linear infinite",
-              }}
-            />
+            <div style={{
+              width:        "44px",
+              height:       "44px",
+              borderRadius: "50%",
+              border:       "3px solid rgba(255,255,255,0.2)",
+              borderTop:    "3px solid rgba(255,255,255,0.9)",
+              animation:    "spin 0.8s linear infinite",
+            }} />
           </div>
         )}
       </div>

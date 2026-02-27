@@ -70,6 +70,19 @@ interface ApiMedia {
 
 const CATEGORIES = ["All", "TV", "Coffee Break", "Eye to Eye", "Routine", "Kittens"];
 
+function useMediaHeight() {
+  const [height, setHeight] = React.useState("calc(100svh - 180px)");
+  React.useEffect(() => {
+    const update = () => {
+      setHeight(window.innerWidth >= 768 ? "520px" : "calc(100svh - 260px)");
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return height;
+}
+
 // ── PostMenu ─────────────────────────────────────────────────────────────────
 function PostMenu({ onEdit, onDelete, onShare }: { onEdit: () => void; onDelete: () => void; onShare: () => void }) {
   const [open, setOpen] = React.useState(false);
@@ -131,11 +144,19 @@ function PostRow({
   viewer: { username: string; display_name: string; avatar_url: string } | null;
   onDelete?: (id: string) => void;
 }) {
-  const isLocked = post.locked;
+  const isLocked    = post.locked;
+  const mediaHeight = useMediaHeight();
   const [commentOpen, setCommentOpen] = React.useState(false);
-  const [liked, setLiked] = React.useState(post.liked);
-  const [likeCount, setLikeCount] = React.useState(post.like_count);
+  const [liked,       setLiked]       = React.useState(post.liked);
+  const [likeCount,   setLikeCount]   = React.useState(post.like_count);
   const router = useRouter();
+
+  // ── Thumbnail-ready gate ──────────────────────────────────────────────────
+  // Posts with media stay invisible until the thumbnail image fires onLoad.
+  // Posts without media (text-only) are always visible.
+  const firstMedia  = post.media?.[0];
+  const hasMedia    = !!firstMedia;
+  const [thumbReady, setThumbReady] = React.useState(!hasMedia);
 
   const navigateToPost = () => router.push(`/posts/${post.id}`);
 
@@ -154,8 +175,6 @@ function PostRow({
     if (res.ok) onDelete?.(String(post.id));
   };
 
-  const firstMedia = post.media?.[0];
-
   const lockedThumb = firstMedia
     ? firstMedia.media_type === "video" && firstMedia.bunny_video_id
       ? getBunnyThumbnail(firstMedia.bunny_video_id)
@@ -163,8 +182,13 @@ function PostRow({
     : "";
 
   return (
-    <div style={{ borderBottom: "1px solid #1A1A2E" }}>
-
+    <div
+      style={{
+        borderBottom:  "1px solid #1A1A2E",
+        opacity:       thumbReady ? 1 : 0,
+        transition:    "opacity 0.2s ease",
+      }}
+    >
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -200,7 +224,9 @@ function PostRow({
             <img
               src={lockedThumb}
               alt=""
-              style={{ width: "100%", height: "480px", objectFit: "cover", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }}
+              onLoad={() => setThumbReady(true)}
+              onError={() => setThumbReady(true)}
+              style={{ width: "100%", height: mediaHeight, objectFit: "cover", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }}
             />
             <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px" }}>
               <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -223,17 +249,32 @@ function PostRow({
             style={{ width: "100%", cursor: firstMedia.media_type !== "video" ? "pointer" : "default" }}
           >
             {firstMedia.media_type === "video" ? (
-              <VideoPlayer
-                bunnyVideoId={firstMedia.bunny_video_id ?? null}
-                thumbnailUrl={firstMedia.thumbnail_url ?? null}
-                processingStatus={firstMedia.processing_status ?? null}
-                rawVideoUrl={firstMedia.raw_video_url ?? null}
-              />
+              <div style={{ height: mediaHeight, overflow: "hidden", position: "relative" }}>
+                {/* For video, load the thumbnail img off-screen to fire onLoad, then show player */}
+                {!thumbReady && (
+                  <img
+                    src={firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")}
+                    alt=""
+                    onLoad={() => setThumbReady(true)}
+                    onError={() => setThumbReady(true)}
+                    style={{ position: "absolute", width: "1px", height: "1px", opacity: 0, pointerEvents: "none" }}
+                  />
+                )}
+                <VideoPlayer
+                  bunnyVideoId={firstMedia.bunny_video_id ?? null}
+                  thumbnailUrl={firstMedia.thumbnail_url ?? null}
+                  processingStatus={firstMedia.processing_status ?? null}
+                  rawVideoUrl={firstMedia.raw_video_url ?? null}
+                  fillParent={true}
+                />
+              </div>
             ) : (
               <img
                 src={firstMedia.file_url || ""}
                 alt=""
-                style={{ width: "100%", height: "480px", objectFit: "cover", display: "block" }}
+                onLoad={() => setThumbReady(true)}
+                onError={() => setThumbReady(true)}
+                style={{ width: "100%", height: mediaHeight, objectFit: "cover", display: "block" }}
               />
             )}
           </div>
@@ -340,12 +381,10 @@ export default function ContentFeed({
     }
   }, [creatorUsername]);
 
-  // Initial fetch
   React.useEffect(() => {
     fetchPosts();
   }, [fetchPosts]);
 
-  // Re-fetch when any upload finishes processing
   const prevUploadStates = React.useRef<Record<string, string>>({});
   React.useEffect(() => {
     for (const u of uploads) {
@@ -516,7 +555,7 @@ export default function ContentFeed({
               return (
                 <div key={item.id} style={{ borderBottom: "1px solid #1A1A2E", cursor: "pointer" }}>
                   <div style={{ position: "relative" }}>
-                    <img src={thumb} alt="" style={{ width: "100%", maxHeight: "300px", objectFit: "cover", display: "block" }} />
+                    <img src={thumb} alt="" style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" }} />
                     {item.media_type === "video" && (
                       <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
                         <Film size={32} color="#fff" style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.8))" }} />
