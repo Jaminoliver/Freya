@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { videoId, mimeType, fileSizeBytes } = await req.json();
+    const { videoId, mimeType, fileSizeBytes, customThumbnailUrl } = await req.json();
 
     if (!videoId) {
       return NextResponse.json({ error: "videoId is required" }, { status: 400 });
@@ -16,6 +16,9 @@ export async function POST(req: NextRequest) {
 
     const { hlsUrl, thumbnailUrl } = getBunnyStreamUrls(videoId);
     const rawVideoUrl = getBunnyRawVideoUrl(videoId);
+
+    // Use creator-picked thumbnail if provided, otherwise fall back to Bunny auto-generated
+    const finalThumbnailUrl = customThumbnailUrl || thumbnailUrl;
 
     const service = createServiceSupabaseClient();
     const { data: mediaRow, error: insertError } = await service
@@ -25,7 +28,7 @@ export async function POST(req: NextRequest) {
         media_type:        "video",
         file_url:          hlsUrl,
         raw_video_url:     rawVideoUrl,
-        thumbnail_url:     thumbnailUrl,
+        thumbnail_url:     finalThumbnailUrl,
         mime_type:         mimeType || "video/mp4",
         file_size_bytes:   fileSizeBytes || null,
         processing_status: "processing",

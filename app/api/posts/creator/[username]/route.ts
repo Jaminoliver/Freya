@@ -34,7 +34,7 @@ export async function GET(
         .select("id")
         .eq("fan_id", user.id)
         .eq("creator_id", creator.id)
-        .eq("status", "ACTIVE")
+        .eq("status", "active")
         .maybeSingle();
       isSubscribed = !!sub;
     }
@@ -100,7 +100,6 @@ export async function GET(
     const processed = (posts ?? [])
       .filter((post: Record<string, unknown>) => {
         const mediaItems = post.media as Record<string, unknown>[] ?? [];
-        // Hide post entirely if ANY video media is still processing
         const hasUnreadyVideo = mediaItems.some(
           (m) =>
             m.media_type === "video" &&
@@ -110,10 +109,10 @@ export async function GET(
         return !hasUnreadyVideo;
       })
       .map((post: Record<string, unknown>) => {
-        const isFree      = post.is_free as boolean;
-        const isPpv       = post.is_ppv as boolean;
-        const canAccess   = isFree || (isSubscribed && !isPpv) || isOwnProfile;
-        const mediaItems  = (post.media as Record<string, unknown>[] ?? [])
+        const isFree    = post.is_free as boolean;
+        const isPpv     = post.is_ppv as boolean;
+        const canAccess = isFree || (isSubscribed && !isPpv) || isOwnProfile;
+        const mediaItems = (post.media as Record<string, unknown>[] ?? [])
           .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
             (a.display_order as number) - (b.display_order as number)
           )

@@ -128,7 +128,6 @@ export default function SinglePostPage() {
 
   const commentRef = React.useRef<HTMLDivElement>(null);
 
-  // Scroll to top on mount
   React.useEffect(() => {
     const main = document.querySelector("main");
     if (main) main.scrollTop = 0;
@@ -292,7 +291,12 @@ export default function SinglePostPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <div style={{ position: "relative" }}>
-              <img src={post.profiles?.avatar_url || ""} alt="" style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", display: "block" }} />
+              {post.profiles?.avatar_url
+                ? <img src={post.profiles.avatar_url} alt="" style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", display: "block" }} />
+                : <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ fontSize: "18px", fontWeight: 700, color: "#8B5CF6" }}>{(post.profiles?.display_name || post.profiles?.username || "?").charAt(0).toUpperCase()}</span>
+                  </div>
+              }
               <div style={{ position: "absolute", bottom: 1, right: 1, width: 10, height: 10, borderRadius: "50%", backgroundColor: "#22C55E", border: "2px solid #13131F" }} />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
@@ -320,13 +324,21 @@ export default function SinglePostPage() {
         if (!firstMedia) return null;
 
         if (post.locked) {
-          const lockedThumb = firstMedia.media_type === "video" && firstMedia.bunny_video_id
+          // FIX: use null instead of "" to avoid empty src warning
+          const lockedThumb: string | null = firstMedia.media_type === "video" && firstMedia.bunny_video_id
             ? getBunnyThumbnail(firstMedia.bunny_video_id)
-            : (firstMedia.thumbnail_url || "");
+            : (firstMedia.thumbnail_url || null);
+
           return (
             <div style={{ position: "relative", overflow: "hidden", margin: "12px 0 0" }}>
-              <img src={lockedThumb} alt="" style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }} />
-              <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+              {lockedThumb && (
+                <img
+                  src={lockedThumb}
+                  alt=""
+                  style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }}
+                />
+              )}
+              <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", minHeight: lockedThumb ? undefined : "280px" }}>
                 <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Lock size={18} color="#8B5CF6" />
                 </div>
@@ -358,9 +370,13 @@ export default function SinglePostPage() {
 
         return (
           <div style={{ margin: "12px 0 0", overflow: "hidden", position: "relative", backgroundColor: "#000" }}>
-            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url || ""})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-            <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url || ""})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-            <img src={firstMedia.file_url || ""} alt="" style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "clamp(400px, 85vh, 680px)", objectFit: "contain", display: "block" }} />
+            {firstMedia.file_url && (
+              <>
+                <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
+                <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
+                <img src={firstMedia.file_url} alt="" style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "clamp(400px, 85vh, 680px)", objectFit: "contain", display: "block" }} />
+              </>
+            )}
           </div>
         );
       })()}

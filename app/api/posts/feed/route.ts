@@ -11,15 +11,14 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
-    const cursor  = searchParams.get("cursor");   // last post published_at for pagination
+    const cursor  = searchParams.get("cursor");
     const service = createServiceSupabaseClient();
 
-    // Get creator IDs the user is subscribed to (active subscriptions)
     const { data: subs } = await service
       .from("subscriptions")
       .select("creator_id")
       .eq("fan_id", user.id)
-      .eq("status", "ACTIVE");
+      .eq("status", "active");
 
     const creatorIds = (subs ?? []).map((s: { creator_id: string }) => s.creator_id);
 
@@ -27,7 +26,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ posts: [], nextCursor: null });
     }
 
-    // Fetch posts from subscribed creators
+    // Build set of subscribed creator IDs for access control
+    const subscribedSet = new Set<string>(creatorIds);
+
     let query = service
       .from("posts")
       .select(`
@@ -76,7 +77,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch feed" }, { status: 500 });
     }
 
-    // Check which posts the user has liked
     const postIds = (posts ?? []).map((p: { id: number }) => p.id);
     const { data: userLikes } = await service
       .from("likes")
@@ -86,45 +86,46 @@ export async function GET(req: NextRequest) {
 
     const likedSet = new Set((userLikes ?? []).map((l: { post_id: number }) => l.post_id));
 
-    // Process posts — apply paywall and re-sign CDN URLs
-    const processed = (posts ?? []).map((post: Record<string, unknown>) => {
-      const isSubscriber  = true; // they are in creatorIds so they're subscribed
-      const isPpv         = post.is_ppv as boolean;
-      const isFree        = post.is_free as boolean;
-      const canAccess     = isFree || (isSubscriber && !isPpv);
-      const mediaItems    = (post.media as Record<string, unknown>[] ?? [])
-        .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
-          (a.display_order as number) - (b.display_order as number)
-        )
-        .map((m: Record<string, unknown>) => {
-          if (!canAccess) {
-            // Return blurred/locked placeholder — no real URL
-            return {
-              ...m,
-              file_url:      null,
-              thumbnail_url: null,
-              locked:        true,
-            };
-          }
-          return {
+    const processed = (posts ?? [])
+      .filter((post: Record<string, unknown>) => {
+        const mediaItems = post.media as Record<string, unknown>[] ?? [];
+        // Hide post if any video is still processing
+        const hasUnreadyVideo = mediaItems.some(
+          (m) =>
+            m.media_type === "video" &&
+            m.processing_status !== "completed" &&
+            m.processing_status !== null
+        );
+        return !hasUnreadyVideo;
+      })
+      .map((post: Record<string, unknown>) => {
+        const isPpv       = post.is_ppv as boolean;
+        const isFree      = post.is_free as boolean;
+        const isSubscribed = subscribedSet.has(post.creator_id as string);
+        const canAccess   = isFree || (isSubscribed && !isPpv);
+
+        const mediaItems = (post.media as Record<string, unknown>[] ?? [])
+          .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+            (a.display_order as number) - (b.display_order as number)
+          )
+          .map((m: Record<string, unknown>) => ({
             ...m,
-            file_url:      m.file_url,
+            file_url:      canAccess ? m.file_url : null,
             thumbnail_url: m.thumbnail_url,
-            locked:        false,
-          };
-        });
+            locked:        !canAccess,
+          }));
 
-      return {
-        ...post,
-        media:      mediaItems,
-        liked:      likedSet.has(post.id as number),
-        can_access: canAccess,
-        locked:     !canAccess,
-      };
-    });
+        return {
+          ...post,
+          media:      mediaItems,
+          liked:      likedSet.has(post.id as number),
+          can_access: canAccess,
+          locked:     !canAccess,
+        };
+      });
 
-    const lastPost    = processed[processed.length - 1] as Record<string, unknown> | undefined;
-    const nextCursor  = processed.length === PAGE_SIZE ? (lastPost?.published_at ?? null) : null;
+    const lastPost   = processed[processed.length - 1] as Record<string, unknown> | undefined;
+    const nextCursor = processed.length === PAGE_SIZE ? (lastPost?.published_at ?? null) : null;
 
     return NextResponse.json({ posts: processed, nextCursor });
 

@@ -1,18 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MoreHorizontal, BadgeCheck, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
-import VideoPlayer from "@/components/video/VideoPlayer";
+import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 
 interface MediaItem {
-  type:          "image" | "video";
-  url:           string;
-  bunnyVideoId?: string | null;
-  thumbnailUrl?: string | null;
+  type:             "image" | "video";
+  url:              string;
+  bunnyVideoId?:    string | null;
+  thumbnailUrl?:    string | null;
+  processingStatus?: string | null;
 }
 
 interface TaggedCreator {
@@ -29,15 +30,42 @@ interface Post {
   price:           number | null;
   likes:           number;
   comments:        number;
+  liked:           boolean;
   taggedCreators?: TaggedCreator[];
 }
 
 const VIEWER = { username: "freya", display_name: "Freya", avatar_url: "https://i.pravatar.cc/150?img=36" };
 
-export function PostCard({ post }: { post: Post }) {
+export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: string) => void; }) {
   const router = useRouter();
   const [commentOpen, setCommentOpen] = useState(false);
   const [menuOpen,    setMenuOpen]    = useState(false);
+  const [liked,       setLiked]       = useState(post.liked);
+  const [likeCount,   setLikeCount]   = useState(post.likes);
+  const [thumbReady,  setThumbReady]  = useState(!post.media[0]);
+  const [isMobile,    setIsMobile]    = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    setLiked(post.liked);
+    setLikeCount(post.likes);
+  }, [post.liked, post.likes]);
+
+  const handleLike = async () => {
+    const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      setLiked(data.liked);
+      setLikeCount((c) => data.liked ? c + 1 : Math.max(0, c - 1));
+      onLike?.(post.id);
+    }
+  };
 
   const renderCaption = (text: string) => {
     const parts = text.split(/(@\w+|https?:\/\/\S+)/g);
@@ -48,8 +76,17 @@ export function PostCard({ post }: { post: Post }) {
     });
   };
 
-  const firstMedia = post.media[0];
+  const firstMedia  = post.media[0];
   const isVideoPost = firstMedia?.type === "video";
+
+  // For locked state: use thumbnailUrl or bunny thumbnail as blur background
+  const lockedThumb: string | null = firstMedia
+    ? firstMedia.type === "video" && firstMedia.bunnyVideoId
+      ? getBunnyThumbnail(firstMedia.bunnyVideoId)
+      : (firstMedia.thumbnailUrl || null)
+    : null;
+
+  const mediaHeight = isMobile ? "auto" : "460px";
 
   return (
     <div style={{ borderBottom: "1px solid #2E2E42", paddingBottom: 0, fontFamily: "'Inter', sans-serif" }}>
@@ -108,21 +145,16 @@ export function PostCard({ post }: { post: Post }) {
       {post.media.length > 0 && (
         <>
           {post.isLocked ? (
-            <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden", position: "relative" }}>
-              <img
-                src={firstMedia.url}
-                alt="Locked content"
-                style={{
-                  width:      "100%",
-                  aspectRatio: "4/5",
-                  maxHeight:   "520px",
-                  objectFit:  "cover",
-                  display:    "block",
-                  filter:     "blur(18px)",
-                  transform:  "scale(1.05)",
-                }}
-              />
-              <div style={{ position: "absolute", inset: 0, background: "rgba(10,10,15,0.55)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+            // Locked state — blur thumbnail behind lock icon
+            <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
+              {lockedThumb && (
+                <img
+                  src={lockedThumb}
+                  alt=""
+                  style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(18px)", transform: "scale(1.05)", display: "block" }}
+                />
+              )}
+              <div style={{ position: "absolute", inset: 0, background: "rgba(10,10,15,0.55)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", minHeight: lockedThumb ? undefined : "280px" }}>
                 <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Lock size={18} color="#8B5CF6" />
                 </div>
@@ -135,31 +167,58 @@ export function PostCard({ post }: { post: Post }) {
             </div>
 
           ) : isVideoPost ? (
-            <div style={{ marginTop: "4px" }}>
-              <VideoPlayer
-                bunnyVideoId={firstMedia.bunnyVideoId ?? null}
-                thumbnailUrl={firstMedia.thumbnailUrl}
-              />
+            // Video — matches ContentFeed layout exactly
+            <div style={{
+              height:          mediaHeight === "auto" ? undefined : mediaHeight,
+              aspectRatio:     mediaHeight === "auto" ? "9/16" : undefined,
+              maxHeight:       "75vh",
+              overflow:        "hidden",
+              position:        "relative",
+              backgroundColor: "#000",
+              width:           "100%",
+            }}>
+              {/* Side blur bars (mobile only) */}
+              {mediaHeight === "auto" && (
+                <>
+                  <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
+                  <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
+                </>
+              )}
+              {/* Thumbnail while loading */}
+              {!thumbReady && (
+                <img
+                  src={firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")}
+                  alt=""
+                  onLoad={() => setThumbReady(true)}
+                  onError={() => setThumbReady(true)}
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
+                />
+              )}
+              <div style={{ position: "absolute", inset: mediaHeight === "auto" ? "0 28px" : 0, zIndex: 1 }}>
+                <VideoPlayer
+                  bunnyVideoId={firstMedia.bunnyVideoId ?? null}
+                  thumbnailUrl={firstMedia.thumbnailUrl ?? null}
+                  processingStatus={firstMedia.processingStatus ?? null}
+                  fillParent={true}
+                />
+              </div>
             </div>
 
           ) : post.media.length === 1 ? (
-            <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden" }}>
+            // Single image
+            <div style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%" }}>
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
+              <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
               <img
                 src={firstMedia.url}
                 alt="Post media"
-                style={{
-                  width:      "100%",
-                  aspectRatio: "4/5",
-                  maxHeight:   "520px",
-                  objectFit:  "cover",
-                  display:    "block",
-                  cursor:     "pointer",
-                }}
+                style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block", cursor: "pointer" }}
                 onClick={() => router.push(`/posts/${post.id}`)}
               />
             </div>
 
           ) : (
+            // Multi image grid
             <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px" }}>
                 {post.media.slice(0, 4).map((m, i) => (
@@ -198,11 +257,12 @@ export function PostCard({ post }: { post: Post }) {
       {/* ── Actions + Comments ── */}
       <div style={{ padding: "0 20px" }}>
         <PostActions
-          likes={post.likes}
+          likes={likeCount}
           comments={post.comments}
+          liked={liked}
           isSubscribed={true}
           isOwnProfile={false}
-          onLike={() => console.log("liked", post.id)}
+          onLike={handleLike}
           onComment={() => setCommentOpen((prev) => !prev)}
           onTip={() => console.log("tip", post.id)}
           onBookmark={() => console.log("bookmarked", post.id)}

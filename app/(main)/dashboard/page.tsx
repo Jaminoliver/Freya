@@ -29,6 +29,9 @@ interface FeedPost {
     media_type: string;
     file_url: string | null;
     thumbnail_url: string | null;
+    bunny_video_id: string | null;
+    processing_status: string | null;
+    raw_video_url: string | null;
     locked: boolean;
     display_order: number;
   }[];
@@ -58,29 +61,33 @@ function adaptPost(p: FeedPost) {
     timestamp: getRelativeTime(p.published_at),
     caption:   p.caption || "",
     media:     (p.media || []).map((m) => ({
-      type: (m.media_type === "video" ? "video" : "image") as "image" | "video",
-      url:  m.file_url || "",
+      type:             (m.media_type === "video" ? "video" : "image") as "image" | "video",
+      url:              m.file_url || "",
+      thumbnailUrl:     m.thumbnail_url || null,
+      bunnyVideoId:     m.bunny_video_id || null,
+      processingStatus: m.processing_status || null,
+      rawVideoUrl:      m.raw_video_url || null,
     })),
-    isLocked:        p.locked,
-    price:           p.is_ppv ? p.ppv_price : null,
-    likes:           p.like_count,
-    comments:        p.comment_count,
-    liked:           p.liked,
-    taggedCreators:  [],
+    isLocked:       p.locked,
+    price:          p.is_ppv ? p.ppv_price : null,
+    likes:          p.like_count,
+    comments:       p.comment_count,
+    liked:          p.liked,
+    taggedCreators: [],
   };
 }
 
 export default function HomePage() {
-  const [activeTab,  setActiveTab]  = useState<"feed" | "spotlight">("feed");
-  const [posts,      setPosts]      = useState<FeedPost[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [activeTab,   setActiveTab]   = useState<"feed" | "spotlight">("feed");
+  const [posts,       setPosts]       = useState<FeedPost[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [nextCursor,  setNextCursor]  = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
+  const [error,       setError]       = useState<string | null>(null);
 
   const fetchFeed = useCallback(async (cursor?: string) => {
     try {
-      const url = cursor ? `/api/posts/feed?cursor=${cursor}` : "/api/posts/feed";
+      const url  = cursor ? `/api/posts/feed?cursor=${cursor}` : "/api/posts/feed";
       const res  = await fetch(url);
       const data = await res.json();
 
@@ -195,6 +202,7 @@ export default function HomePage() {
               <PostCard
                 key={post.id}
                 post={adaptPost(post)}
+                onLike={handleLikeToggle}
               />
             ))}
 

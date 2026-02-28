@@ -232,7 +232,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           endpoint:    tusEndpoint,
           chunkSize:   5 * 1024 * 1024,
           retryDelays: [0, 3000, 5000, 10000, 20000],
-          storeFingerprintForResuming: true,
+          storeFingerprintForResuming: false, // ← FIXED: Bunny uses presigned URLs per upload; stale fingerprints cause silent failure
           headers: {
             AuthorizationSignature: signature,
             AuthorizationExpire:    String(expireTime),
@@ -254,10 +254,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           },
         });
 
-        upload.findPreviousUploads().then((prev) => {
-          if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
-          upload.start();
-        });
+        // ← FIXED: removed findPreviousUploads/resumeFromPreviousUpload — always start fresh
+        upload.start();
       });
 
       updateUpload(uploadId, { progress: 82, phase: "processing" });

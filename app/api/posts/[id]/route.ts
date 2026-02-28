@@ -64,12 +64,13 @@ export async function GET(
     let canAccess = post.is_free;
 
     if (user && !canAccess) {
+      // Match both "active" and "ACTIVE" to handle case inconsistencies in DB
       const { data: sub } = await service
         .from("subscriptions")
         .select("id")
         .eq("fan_id", user.id)
         .eq("creator_id", post.creator_id)
-        .eq("status", "ACTIVE")
+        .in("status", ["active", "ACTIVE"])
         .maybeSingle();
 
       if (sub && !post.is_ppv) canAccess = true;
@@ -99,12 +100,12 @@ export async function GET(
       )
       .map((m: Record<string, unknown>) => ({
         ...m,
-        file_url:         canAccess ? m.file_url : null,
-        raw_video_url:    canAccess ? m.raw_video_url : null,
-        bunny_video_id:   canAccess ? m.bunny_video_id : null,
-        thumbnail_url:    m.thumbnail_url,
+        file_url:          canAccess ? m.file_url : null,
+        raw_video_url:     canAccess ? m.raw_video_url : null,
+        bunny_video_id:    canAccess ? m.bunny_video_id : null,
+        thumbnail_url:     m.thumbnail_url,
         processing_status: m.processing_status,
-        locked:           !canAccess,
+        locked:            !canAccess,
       }));
 
     return NextResponse.json({

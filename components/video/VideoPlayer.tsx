@@ -61,31 +61,20 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
     try {
       const Hls = (await import("hls.js")).default;
       if (Hls.isSupported()) {
-        let savedBandwidth = 8_000_000;
-        try {
-          const cached = sessionStorage.getItem("hlsBandwidth");
-          if (cached) savedBandwidth = Math.max(Number(cached), 2_000_000);
-        } catch { }
-
         const hls = new Hls({
-          startLevel:             999,   // clamps to highest available — max quality from first segment
-          capLevelToPlayerSize:   false, // don't downgrade based on element display size
+          startLevel:             -1,    // let manifest load first, then we lock to max
+          capLevelToPlayerSize:   false, // never downgrade based on element size
           lowLatencyMode:         false,
-          abrEwmaDefaultEstimate: savedBandwidth,
+          abrEwmaDefaultEstimate: 8_000_000,
           abrEwmaFastVoD:         3,
           abrEwmaSlowVoD:         9,
         });
         hlsRef.current = hls;
 
         hls.on(Hls.Events.MANIFEST_PARSED, (_evt: any, data: any) => {
-          hls.currentLevel = data.levels.length - 1; // lock to highest after manifest
-        });
-
-        hls.on(Hls.Events.FRAG_LOADED, (_evt: any, _data: any) => {
-          try {
-            const bw = hls.bandwidthEstimate;
-            if (bw > 0) sessionStorage.setItem("hlsBandwidth", String(Math.round(bw)));
-          } catch { }
+          // Lock to highest level and disable ABR so it never downgrades
+          // Setting currentLevel to a fixed value implicitly disables ABR
+          hls.currentLevel = data.levels.length - 1;
         });
 
         hls.loadSource(hlsSrc);

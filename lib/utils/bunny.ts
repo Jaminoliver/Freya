@@ -12,7 +12,7 @@ const CDN_URL         = process.env.BUNNY_CDN_URL!;
 const CDN_TOKEN_KEY   = process.env.BUNNY_CDN_TOKEN_KEY!;
 const STREAM_LIBRARY  = process.env.BUNNY_STREAM_LIBRARY_ID!;
 const STREAM_API_KEY  = process.env.BUNNY_STREAM_API_KEY!;
-const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME!;
+const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
 
 const STORAGE_BASE_URL = `https://storage.bunnycdn.com/${STORAGE_ZONE}`;
 const STREAM_BASE_URL  = `https://video.bunnycdn.com/library/${STREAM_LIBRARY}`;
