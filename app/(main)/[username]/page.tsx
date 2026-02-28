@@ -17,31 +17,44 @@ import CheckoutModal from "@/components/checkout/CheckoutModal";
 import type { User, Subscription, Post } from "@/lib/types/profile";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 
+interface ProfileCache {
+  viewer: User | null;
+  profile: User | null;
+  totalLikes: number;
+  tierId: number | undefined;
+  isFollowing: boolean;
+  isSubscribed: boolean;
+  subscriptionPeriodEnd: string | null;
+}
+const profileCache = new Map<string, ProfileCache>();
+
 export default function ProfilePage() {
   const params   = useParams();
   const router   = useRouter();
   const username = params.username as string;
 
-  const [viewer,                setViewer]                = React.useState<User | null>(null);
-  const [profile,               setProfile]               = React.useState<User | null>(null);
+  const cached = profileCache.get(username);
+
+  const [viewer,                setViewer]                = React.useState<User | null>(cached?.viewer ?? null);
+  const [profile,               setProfile]               = React.useState<User | null>(cached?.profile ?? null);
   const [subscription,          setSubscription]          = React.useState<Subscription | null>(null);
-  const [isSubscribed,          setIsSubscribed]          = React.useState(false);
-  const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(null);
+  const [isSubscribed,          setIsSubscribed]          = React.useState(cached?.isSubscribed ?? false);
+  const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(cached?.subscriptionPeriodEnd ?? null);
   const [posts,                 setPosts]                 = React.useState<Post[]>([]);
-  const [loading,               setLoading]               = React.useState(true);
-  const [isFollowing,           setIsFollowing]           = React.useState(false);
+  const [loading,               setLoading]               = React.useState(!cached);
+  const [isFollowing,           setIsFollowing]           = React.useState(cached?.isFollowing ?? false);
   const [followLoading,         setFollowLoading]         = React.useState(false);
-  const [totalLikes,            setTotalLikes]            = React.useState(0);
+  const [totalLikes,            setTotalLikes]            = React.useState(cached?.totalLikes ?? 0);
 
-  const [checkoutOpen,     setCheckoutOpen]     = React.useState(false);
-  const [checkoutType,     setCheckoutType]     = React.useState<CheckoutType>("subscription");
-  const [checkoutTier,     setCheckoutTier]     = React.useState<SubscriptionTier>("monthly");
-  const [lockedPostId,     setLockedPostId]     = React.useState<string | null>(null);
-  const [lockedPostPrice,  setLockedPostPrice]  = React.useState<number>(0);
-  const [tierId,           setTierId]           = React.useState<number | undefined>(undefined);
+  const [checkoutOpen,    setCheckoutOpen]    = React.useState(false);
+  const [checkoutType,    setCheckoutType]    = React.useState<CheckoutType>("subscription");
+  const [checkoutTier,    setCheckoutTier]    = React.useState<SubscriptionTier>("monthly");
+  const [lockedPostId,    setLockedPostId]    = React.useState<string | null>(null);
+  const [lockedPostPrice, setLockedPostPrice] = React.useState<number>(0);
+  const [tierId,          setTierId]          = React.useState<number | undefined>(cached?.tierId);
 
-  const profileIdRef = React.useRef<string | null>(null);
-  const viewerIdRef  = React.useRef<string | null>(null);
+  const profileIdRef = React.useRef<string | null>(cached?.profile?.id ?? null);
+  const viewerIdRef  = React.useRef<string | null>(cached?.viewer?.id ?? null);
 
   const openCheckout = (type: CheckoutType, tier: SubscriptionTier = "monthly") => {
     setCheckoutType(type); setCheckoutTier(tier); setCheckoutOpen(true);
@@ -64,15 +77,18 @@ export default function ProfilePage() {
   }, []);
 
   React.useEffect(() => {
+    if (cached) return;
+
     const fetchData = async () => {
       setLoading(true);
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
+      let viewerData: User | null = null;
       if (user) {
         viewerIdRef.current = user.id;
-        const { data: viewerData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-        if (viewerData) setViewer(viewerData as User);
+        const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+        if (data) { viewerData = data as User; setViewer(viewerData); }
       }
 
       const { data: profileData } = await supabase
@@ -80,9 +96,16 @@ export default function ProfilePage() {
         .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
         .eq("username", username).single();
 
+      let enriched: User | null = null;
+      let likesCount = 0;
+      let tierIdVal: number | undefined;
+      let followingVal = false;
+      let subscribedVal = false;
+      let periodEndVal: string | null = null;
+
       if (profileData) {
         profileIdRef.current = profileData.id;
-        const enriched: User = {
+        enriched = {
           ...(profileData as User),
           subscriptionPrice: profileData.subscription_price ?? 0,
           bundlePricing: {
@@ -92,12 +115,12 @@ export default function ProfilePage() {
         };
         setProfile(enriched);
 
-        // Fetch total likes by joining through posts to filter by creator
-        const { count: likesCount } = await supabase
+        const { count } = await supabase
           .from("likes")
           .select("id, posts!inner(creator_id)", { count: "exact", head: true })
           .eq("posts.creator_id", profileData.id);
-        setTotalLikes(likesCount ?? 0);
+        likesCount = count ?? 0;
+        setTotalLikes(likesCount);
 
         if (profileData.role === "creator") {
           const { data: tierData } = await supabase
@@ -105,19 +128,37 @@ export default function ProfilePage() {
             .select("id")
             .eq("creator_id", profileData.id)
             .single();
-          if (tierData) setTierId(tierData.id);
+          if (tierData) { tierIdVal = tierData.id; setTierId(tierIdVal); }
 
           if (user && user.id !== profileData.id) {
-            await fetchSubscriptionStatus(profileData.id);
-            const following = await checkIsFollowing(profileData.id);
-            setIsFollowing(following);
+            const res  = await fetch(`/api/subscriptions/status?creatorId=${profileData.id}`);
+            const data = await res.json();
+            subscribedVal  = !!data.active;
+            periodEndVal   = data.currentPeriodEnd ?? null;
+            setIsSubscribed(subscribedVal);
+            setSubscriptionPeriodEnd(periodEndVal);
+
+            followingVal = await checkIsFollowing(profileData.id);
+            setIsFollowing(followingVal);
           }
         }
       }
+
+      profileCache.set(username, {
+        viewer:                viewerData,
+        profile:               enriched,
+        totalLikes:            likesCount,
+        tierId:                tierIdVal,
+        isFollowing:           followingVal,
+        isSubscribed:          subscribedVal,
+        subscriptionPeriodEnd: periodEndVal,
+      });
+
       setLoading(false);
     };
+
     fetchData();
-  }, [username, fetchSubscriptionStatus]);
+  }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (!profileIdRef.current || !viewerIdRef.current) return;
@@ -132,9 +173,11 @@ export default function ProfilePage() {
         if (row?.creator_id === creatorId && row?.status === "active") {
           setIsSubscribed(true);
           setSubscriptionPeriodEnd(row.current_period_end ?? null);
+          profileCache.delete(username);
         }
         if (row?.creator_id === creatorId && (row?.status === "cancelled" || row?.status === "expired")) {
           setIsSubscribed(false);
+          profileCache.delete(username);
         }
       })
       .subscribe();
@@ -151,12 +194,13 @@ export default function ProfilePage() {
       supabase.removeChannel(subscriptionChannel);
       supabase.removeChannel(profileChannel);
     };
-  }, [loading]);
+  }, [loading, username]);
 
   const handleSubscriptionSuccess = React.useCallback(async () => {
     setCheckoutOpen(false);
+    profileCache.delete(username);
     if (profile) await fetchSubscriptionStatus(profile.id);
-  }, [profile, fetchSubscriptionStatus]);
+  }, [profile, fetchSubscriptionStatus, username]);
 
   const handleFollow = async () => {
     if (!profile || followLoading) return;
@@ -171,6 +215,7 @@ export default function ProfilePage() {
         setIsFollowing(true);
         setProfile((prev) => prev ? { ...prev, follower_count: (prev.follower_count ?? 0) + 1 } : prev);
       }
+      profileCache.delete(username);
     } catch (err) { console.error("Follow error:", err); }
     finally { setFollowLoading(false); }
   };
@@ -273,7 +318,6 @@ export default function ProfilePage() {
         </div>
         <ContentFeed
           posts={posts} isSubscribed={true} isOwnProfile={true}
-          postCount={profile.post_count ?? 0}
           creatorUsername={profile.username}
           onLike={handleLike} onComment={handleComment}
           onTip={handleTip} onUnlock={handleUnlock}
@@ -307,7 +351,6 @@ export default function ProfilePage() {
         </div>
         <ContentFeed
           posts={posts} isSubscribed={true}
-          postCount={profile.post_count ?? 0}
           creatorUsername={profile.username}
           onLike={handleLike} onComment={handleComment}
           onTip={handleTip} onUnlock={handleUnlock}
@@ -356,7 +399,6 @@ export default function ProfilePage() {
         </div>
         <ContentFeed
           posts={posts} isSubscribed={true}
-          postCount={profile.post_count ?? 0}
           creatorUsername={profile.username}
           onLike={handleLike} onComment={handleComment}
           onTip={handleTip} onUnlock={handleUnlock}
@@ -391,7 +433,6 @@ export default function ProfilePage() {
         </div>
         <ContentFeed
           posts={posts} isSubscribed={false}
-          postCount={profile.post_count ?? 0}
           creatorUsername={profile.username}
           onLike={handleLike} onComment={handleComment}
           onTip={handleTip} onUnlock={handleUnlock}

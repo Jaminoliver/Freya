@@ -42,6 +42,9 @@ export async function GET(
           media_type,
           file_url,
           thumbnail_url,
+          raw_video_url,
+          bunny_video_id,
+          processing_status,
           duration_seconds,
           width,
           height,
@@ -61,7 +64,6 @@ export async function GET(
     let canAccess = post.is_free;
 
     if (user && !canAccess) {
-      // Check if user is subscribed to creator
       const { data: sub } = await service
         .from("subscriptions")
         .select("id")
@@ -71,12 +73,9 @@ export async function GET(
         .maybeSingle();
 
       if (sub && !post.is_ppv) canAccess = true;
-
-      // Check if user is the creator
       if (user.id === post.creator_id) canAccess = true;
     }
 
-    // Check like status
     let liked = false;
     if (user) {
       const { data: likeRow } = await service
@@ -88,7 +87,6 @@ export async function GET(
       liked = !!likeRow;
     }
 
-    // Record view (unique per user)
     if (user) {
       await service
         .from("post_views")
@@ -101,9 +99,12 @@ export async function GET(
       )
       .map((m: Record<string, unknown>) => ({
         ...m,
-        file_url:      canAccess ? m.file_url : null,
-        thumbnail_url: m.thumbnail_url, // thumbnail always visible for preview
-        locked:        !canAccess,
+        file_url:         canAccess ? m.file_url : null,
+        raw_video_url:    canAccess ? m.raw_video_url : null,
+        bunny_video_id:   canAccess ? m.bunny_video_id : null,
+        thumbnail_url:    m.thumbnail_url,
+        processing_status: m.processing_status,
+        locked:           !canAccess,
       }));
 
     return NextResponse.json({
@@ -137,7 +138,6 @@ export async function DELETE(
 
     const service = createServiceSupabaseClient();
 
-    // Verify ownership
     const { data: post } = await service
       .from("posts")
       .select("creator_id")
@@ -148,13 +148,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Soft delete
     await service
       .from("posts")
       .update({ is_deleted: true, deleted_at: new Date().toISOString() })
       .eq("id", postId);
 
-    // Decrement post_count
     await service.rpc("decrement_post_count", { user_id: user.id });
 
     return NextResponse.json({ success: true });

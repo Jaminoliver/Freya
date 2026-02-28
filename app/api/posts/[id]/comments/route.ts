@@ -11,6 +11,9 @@ export async function GET(
     const postId   = Number(id);
     if (isNaN(postId)) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
     const service = createServiceSupabaseClient();
 
     const { data: comments, error } = await service
@@ -39,7 +42,25 @@ export async function GET(
       return NextResponse.json({ error: "Failed to fetch comments" }, { status: 500 });
     }
 
-    return NextResponse.json({ comments: comments ?? [] });
+    // If viewer is logged in, fetch which comments they've liked
+    let likedCommentIds = new Set<number>();
+    if (user && comments && comments.length > 0) {
+      const commentIds = comments.map((c) => c.id);
+      const { data: likes } = await service
+        .from("comment_likes")
+        .select("comment_id")
+        .eq("user_id", user.id)
+        .in("comment_id", commentIds);
+
+      if (likes) likedCommentIds = new Set(likes.map((l) => l.comment_id));
+    }
+
+    const enriched = (comments ?? []).map((c) => ({
+      ...c,
+      viewer_has_liked: likedCommentIds.has(c.id),
+    }));
+
+    return NextResponse.json({ comments: enriched });
 
   } catch (err) {
     console.error("[Comments GET] Error:", err);
@@ -104,7 +125,7 @@ export async function POST(
     // Increment comment_count on post
     await service.rpc("increment_comment_count", { post_id: postId });
 
-    return NextResponse.json({ comment });
+    return NextResponse.json({ comment: { ...comment, viewer_has_liked: false } });
 
   } catch (err) {
     console.error("[Comments POST] Error:", err);

@@ -12,8 +12,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const isSettings      = pathname.startsWith("/settings");
   const isSubscriptions = pathname.startsWith("/subscriptions");
   const isDashboard     = pathname === "/dashboard";
+  const isPostPage      = pathname.startsWith("/posts/");
 
   const showRightPanel = !isSettings && !isSubscriptions;
+  const noTopbar       = !isDashboard || isPostPage;
 
   return (
     <UploadProvider>
@@ -21,11 +23,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <Sidebar />
 
         <main
-          className={`main-scroll md:pb-0${!isDashboard ? " no-topbar" : ""}`}
+          className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}`}
           style={{
             flex: 1,
             minWidth: 0,
-            maxWidth: "720px", // ← match OnlyFans center column width
+            maxWidth: "720px",
             height: "100vh",
             borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
             overflowY: "auto",
@@ -47,7 +49,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
         {showRightPanel && (
           <div className="hidden lg:block" style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", width: "380px", flexShrink: 0 }}>
-            {/* ↑ 320px → 380px to match OnlyFans right panel */}
             <RightPanel />
           </div>
         )}
