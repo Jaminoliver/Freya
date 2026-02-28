@@ -12,13 +12,19 @@ export function MobileBottomNav() {
 
   return (
     <>
+      <style>{`
+        .mobile-bottom-nav { display: flex !important; }
+        @media (min-width: 768px) { .mobile-bottom-nav { display: none !important; } }
+      `}</style>
+
       <nav
-        className="md:hidden flex items-center justify-around"
+        className="mobile-bottom-nav"
         style={{
           position: "fixed", bottom: 0, left: 0, right: 0, height: "64px",
           backgroundColor: "#13131F", borderTop: "1px solid #1F1F2A",
           zIndex: 101, fontFamily: "'Inter', sans-serif",
           paddingBottom: "env(safe-area-inset-bottom)",
+          alignItems: "center", justifyContent: "space-evenly",
         }}
       >
         <Link
