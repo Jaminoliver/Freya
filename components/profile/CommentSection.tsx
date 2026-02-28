@@ -172,6 +172,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const [text,          setText]          = React.useState("");
   const [localComments, setLocalComments] = React.useState<ApiComment[]>(propComments);
   const [visible,       setVisible]       = React.useState(false);
+  const [animateIn,     setAnimateIn]     = React.useState(false);
   const [mounted,       setMounted]       = React.useState(false);
   const inputRef   = React.useRef<HTMLInputElement>(null);
   const sheetRef   = React.useRef<HTMLDivElement>(null);
@@ -181,26 +182,37 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   React.useEffect(() => { setMounted(true); }, []);
 
-  React.useEffect(() => { setLocalComments(propComments); }, [propComments]);
+  // Sync comments from parent but preserve optimistic ones
+  React.useEffect(() => {
+    setLocalComments(propComments);
+  }, [propComments]);
 
+  // FIX: two-step open — mount first, then animate in next tick
   React.useEffect(() => {
     if (isOpen) {
       setVisible(true);
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (sheetRef.current) sheetRef.current.style.transform = "translateY(0)";
-      }));
       document.body.style.overflow = "hidden";
-      setTimeout(() => inputRef.current?.focus(), 350);
+      // Wait for visible=true to mount the portal, then trigger animation
+      const t = setTimeout(() => {
+        setAnimateIn(true);
+        setTimeout(() => inputRef.current?.focus(), 350);
+      }, 16);
+      return () => clearTimeout(t);
     } else {
-      if (sheetRef.current) sheetRef.current.style.transform = "translateY(100%)";
+      setAnimateIn(false);
       document.body.style.overflow = "";
-      setTimeout(() => setVisible(false), 320);
+      const t = setTimeout(() => setVisible(false), 320);
+      return () => clearTimeout(t);
     }
-    return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
 
+  // Cleanup on unmount
+  React.useEffect(() => {
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
   const handleClose = React.useCallback(() => {
-    if (sheetRef.current) sheetRef.current.style.transform = "translateY(100%)";
+    setAnimateIn(false);
     document.body.style.overflow = "";
     setTimeout(() => { setVisible(false); onClose?.(); }, 320);
   }, [onClose]);
@@ -240,6 +252,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     setLocalComments((prev) => [optimistic, ...prev]);
     setText("");
     await onAddComment?.(postId, trimmed);
+    // propComments will update from parent fetchComments and sync via useEffect above
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -251,7 +264,18 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
       {/* Backdrop */}
-      <div onClick={handleClose} style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)", WebkitBackdropFilter: "blur(2px)" }} />
+      <div
+        onClick={handleClose}
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundColor: "rgba(0,0,0,0.65)",
+          backdropFilter: "blur(2px)",
+          WebkitBackdropFilter: "blur(2px)",
+          opacity: animateIn ? 1 : 0,
+          transition: "opacity 0.32s cubic-bezier(0.32, 0.72, 0, 1)",
+        }}
+      />
 
       {/* Sheet */}
       <div
@@ -263,7 +287,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
           maxHeight: "80vh",
           display: "flex",
           flexDirection: "column",
-          transform: "translateY(100%)",
+          transform: animateIn ? "translateY(0)" : "translateY(100%)",
           transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)",
           boxShadow: "0 -4px 40px rgba(0,0,0,0.6)",
         }}

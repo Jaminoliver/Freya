@@ -14,6 +14,7 @@ import FanActivityCard from "@/components/profile/FanActivityCard";
 import ContentFeed from "@/components/profile/ContentFeed";
 import PostComposer from "@/components/profile/PostComposer";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
+import { postSyncStore } from "@/lib/store/postSyncStore";
 import type { User, Subscription, Post } from "@/lib/types/profile";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 
@@ -227,10 +228,14 @@ export default function ProfilePage() {
   const goToProfileSettings = () => router.push("/settings");
   const handlePost          = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule      = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
-  const handleLike          = (id: string) => console.log("Like:", id);
-  const handleComment       = (id: string) => console.log("Comment:", id);
-  const handleTip           = (_id: string) => openTip();
-  const handleUnlock        = (id: string) => openUnlock(id);
+
+  // PostRow handles the API call, local state update, and store emit itself.
+  // This is intentionally a no-op to prevent double API calls and double-toggle.
+  const handleLike = (_postId: string) => {};
+
+  const handleComment = (id: string) => console.log("Comment:", id);
+  const handleTip     = (_id: string) => openTip();
+  const handleUnlock  = (id: string) => openUnlock(id);
 
   const checkoutModal = profile ? (
     <CheckoutModal

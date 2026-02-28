@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { PostCard } from "@/components/feed/PostCard";
 import { StoryBar } from "@/components/feed/StoryBar";
+import { postSyncStore } from "@/lib/store/postSyncStore";
 
 interface FeedPost {
   id: number;
@@ -96,7 +97,12 @@ export default function HomePage() {
         return;
       }
 
-      setPosts((prev) => cursor ? [...prev, ...data.posts] : data.posts);
+      const merged = data.posts.map((p: FeedPost) => {
+        const cached = postSyncStore.get(String(p.id));
+        if (!cached) return p;
+        return { ...p, liked: cached.liked, like_count: cached.like_count };
+      });
+      setPosts((prev) => cursor ? [...prev, ...merged] : merged);
       setNextCursor(data.nextCursor);
     } catch (err) {
       setError("Failed to load feed");
@@ -108,23 +114,28 @@ export default function HomePage() {
 
   useEffect(() => { fetchFeed(); }, [fetchFeed]);
 
+  // Sync store events so PostCard gets correct initial values if it remounts
+  useEffect(() => {
+    return postSyncStore.subscribe((event) => {
+      setPosts((prev) =>
+        prev.map((p) =>
+          String(p.id) === event.postId
+            ? { ...p, liked: event.liked, like_count: event.like_count, comment_count: event.comment_count ?? p.comment_count }
+            : p
+        )
+      );
+    });
+  }, []);
+
   const handleLoadMore = () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
     fetchFeed(nextCursor);
   };
 
-  const handleLikeToggle = async (postId: string) => {
-    const res  = await fetch(`/api/posts/${postId}/like`, { method: "POST" });
-    const data = await res.json();
-    if (res.ok) {
-      setPosts((prev) => prev.map((p) =>
-        String(p.id) === postId
-          ? { ...p, liked: data.liked, like_count: data.liked ? p.like_count + 1 : Math.max(0, p.like_count - 1) }
-          : p
-      ));
-    }
-  };
+  // PostCard handles the API call and store emit directly.
+  // onLike here is just a no-op callback kept for compatibility.
+  const handleLikeToggle = (_postId: string) => {};
 
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>

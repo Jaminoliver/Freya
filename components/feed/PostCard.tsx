@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { MoreHorizontal, BadgeCheck, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import { createClient } from "@/lib/supabase/client";
+import { postSyncStore } from "@/lib/store/postSyncStore";
 
 interface MediaItem {
   type:              "image" | "video";
@@ -53,7 +54,6 @@ function useMediaHeight() {
   return height;
 }
 
-// Shared viewer cache so we only fetch once per session
 let cachedViewer: Viewer | null = null;
 
 function useViewer() {
@@ -98,11 +98,17 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
   const [comments,     setComments]     = useState<any[]>([]);
   const [thumbReady,   setThumbReady]   = useState(!post.media[0]);
 
+  // Only sync from props when navigating back (post.id changes = new mount context)
+  // Do NOT include post.liked/post.likes — would fight local state on same post
+  const prevPostId = useRef(post.id);
   useEffect(() => {
-    setLiked(post.liked);
-    setLikeCount(post.likes);
-    setCommentCount(post.comments);
-  }, [post.liked, post.likes, post.comments]);
+    if (prevPostId.current !== post.id) {
+      prevPostId.current = post.id;
+      setLiked(post.liked);
+      setLikeCount(post.likes);
+      setCommentCount(post.comments);
+    }
+  }, [post.id, post.liked, post.likes, post.comments]);
 
   // Fetch comments when section opens
   useEffect(() => {
@@ -122,7 +128,8 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
     const data = await res.json();
     if (res.ok) {
       setLiked(data.liked);
-      setLikeCount((c) => data.liked ? c + 1 : Math.max(0, c - 1));
+      setLikeCount(data.like_count);
+      postSyncStore.emit({ postId: post.id, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
       onLike?.(post.id);
     }
   };
@@ -137,8 +144,9 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
     if (d.comments) {
       setComments(d.comments);
       setCommentCount(d.comments.length);
+      postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: d.comments.length });
     }
-  }, []);
+  }, [liked, likeCount]);
 
   const firstMedia  = post.media[0];
   const isVideoPost = firstMedia?.type === "video";

@@ -214,11 +214,14 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
     setCommentCount(post.comment_count);
   }, [post.liked, post.like_count, post.comment_count]);
 
+  // Only fetch comments when the section is opened — not on every mount
   React.useEffect(() => {
+    if (!commentOpen) return;
     fetch(`/api/posts/${post.id}/comments`)
-      .then((r) => r.json())
-      .then((d) => { if (d.comments) { setComments(d.comments); setCommentCount(d.comments.length); } });
-  }, [post.id]);
+      .then((r) => { if (!r.ok) throw new Error("Failed"); return r.json(); })
+      .then((d) => { if (d.comments) { setComments(d.comments); setCommentCount(d.comments.length); } })
+      .catch((err) => console.error("[Comments] Fetch error:", err));
+  }, [commentOpen, post.id]);
 
   const handleAddComment = React.useCallback(async (id: string, text: string) => {
     await fetch(`/api/posts/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: text }) });
@@ -229,7 +232,7 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
   const handleLike = async () => {
     const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
     const data = await res.json();
-    if (res.ok) { setLiked(data.liked); setLikeCount((c) => data.liked ? c + 1 : Math.max(0, c - 1)); onLike?.(String(post.id)); }
+    if (res.ok) { setLiked(data.liked); setLikeCount(data.like_count); onLike?.(String(post.id)); }
   };
 
   const handleDelete = async () => {
@@ -255,7 +258,6 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {/* FIX: use undefined instead of "" so browser never gets an empty src */}
           {post.profiles?.avatar_url
             ? <img src={post.profiles.avatar_url} alt="" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
             : <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

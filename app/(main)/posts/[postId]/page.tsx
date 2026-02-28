@@ -9,6 +9,7 @@ import { Lock } from "lucide-react";
 import CommentSection from "@/components/profile/CommentSection";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import { createClient } from "@/lib/supabase/client";
+import { postSyncStore } from "@/lib/store/postSyncStore";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 import type { User } from "@/lib/types/profile";
 
@@ -127,6 +128,9 @@ export default function SinglePostPage() {
   const [checkoutTier, setCheckoutTier] = React.useState<SubscriptionTier>("monthly");
 
   const commentRef = React.useRef<HTMLDivElement>(null);
+  // Keep a ref to latest post so handleAddComment can read current count without stale closure
+  const postRef = React.useRef<PostData | null>(null);
+  React.useEffect(() => { postRef.current = post; }, [post]);
 
   React.useEffect(() => {
     const main = document.querySelector("main");
@@ -152,7 +156,15 @@ export default function SinglePostPage() {
         const res  = await fetch(`/api/posts/${postId}`);
         const data = await res.json();
         if (!res.ok) { setError(data.error || "Post not found"); return; }
-        setPost(data.post);
+
+        const cached = postSyncStore.get(postId);
+        const post   = data.post as PostData;
+        if (cached) {
+          post.liked         = cached.liked;
+          post.like_count    = cached.like_count;
+          post.comment_count = cached.comment_count ?? post.comment_count;
+        }
+        setPost(post);
       } catch {
         setError("Failed to load post");
       } finally {
@@ -162,12 +174,28 @@ export default function SinglePostPage() {
     load();
   }, [postId]);
 
+  React.useEffect(() => {
+    if (!postId) return;
+    return postSyncStore.subscribe((event) => {
+      if (event.postId !== postId) return;
+      setPost((p) =>
+        p ? {
+          ...p,
+          liked:         event.liked,
+          like_count:    event.like_count,
+          comment_count: event.comment_count ?? p.comment_count,
+        } : p
+      );
+    });
+  }, [postId]);
+
   const fetchComments = React.useCallback(async () => {
     if (!postId) return;
     try {
-      const res  = await fetch(`/api/posts/${postId}/comments`);
+      const res = await fetch(`/api/posts/${postId}/comments`);
+      if (!res.ok) throw new Error("Failed to fetch comments");
       const data = await res.json();
-      if (res.ok) setComments(data.comments || []);
+      setComments(data.comments || []);
     } catch (err) {
       console.error("Failed to fetch comments:", err);
     }
@@ -181,10 +209,17 @@ export default function SinglePostPage() {
     if (!post) return;
     const wasLiked = post.liked;
     setPost((p) => p ? { ...p, liked: !wasLiked, like_count: !wasLiked ? p.like_count + 1 : Math.max(0, p.like_count - 1) } : p);
+
     const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
     const data = await res.json();
+
     if (res.ok) {
-      setPost((p) => p ? { ...p, liked: data.liked, like_count: data.liked ? p.like_count + 1 : Math.max(0, p.like_count - 1) } : p);
+      setPost((p) => {
+        if (!p) return p;
+        const updated = { ...p, liked: data.liked, like_count: data.like_count };
+        postSyncStore.emit({ postId: String(post.id), liked: updated.liked, like_count: updated.like_count, comment_count: updated.comment_count });
+        return updated;
+      });
     } else {
       setPost((p) => p ? { ...p, liked: wasLiked, like_count: wasLiked ? p.like_count + 1 : Math.max(0, p.like_count - 1) } : p);
     }
@@ -208,8 +243,22 @@ export default function SinglePostPage() {
       body: JSON.stringify({ content: text }),
     });
     if (res.ok) {
+      // Step 1: increment count locally
       setPost((p) => p ? { ...p, comment_count: p.comment_count + 1 } : p);
+
+      // Step 2: fetch real comments from server
       await fetchComments();
+
+      // Step 3: emit to sync store AFTER fetch, using the latest count from ref
+      const current = postRef.current;
+      if (current) {
+        postSyncStore.emit({
+          postId:        String(current.id),
+          liked:         current.liked,
+          like_count:    current.like_count,
+          comment_count: current.comment_count,
+        });
+      }
     }
   };
 
@@ -324,7 +373,6 @@ export default function SinglePostPage() {
         if (!firstMedia) return null;
 
         if (post.locked) {
-          // FIX: use null instead of "" to avoid empty src warning
           const lockedThumb: string | null = firstMedia.media_type === "video" && firstMedia.bunny_video_id
             ? getBunnyThumbnail(firstMedia.bunny_video_id)
             : (firstMedia.thumbnail_url || null);

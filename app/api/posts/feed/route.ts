@@ -26,7 +26,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ posts: [], nextCursor: null });
     }
 
-    // Build set of subscribed creator IDs for access control
     const subscribedSet = new Set<string>(creatorIds);
 
     let query = service
@@ -77,19 +76,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch feed" }, { status: 500 });
     }
 
-    const postIds = (posts ?? []).map((p: { id: number }) => p.id);
+    const postIds = (posts ?? []).map((p: { id: number }) => Number(p.id));
+
     const { data: userLikes } = await service
       .from("likes")
       .select("post_id")
       .eq("user_id", user.id)
       .in("post_id", postIds);
 
-    const likedSet = new Set((userLikes ?? []).map((l: { post_id: number }) => l.post_id));
+    // Cast to Number — Supabase returns bigint as string, post.id is number
+    const likedSet = new Set((userLikes ?? []).map((l: { post_id: number | string }) => Number(l.post_id)));
 
     const processed = (posts ?? [])
       .filter((post: Record<string, unknown>) => {
         const mediaItems = post.media as Record<string, unknown>[] ?? [];
-        // Hide post if any video is still processing
         const hasUnreadyVideo = mediaItems.some(
           (m) =>
             m.media_type === "video" &&
@@ -99,10 +99,10 @@ export async function GET(req: NextRequest) {
         return !hasUnreadyVideo;
       })
       .map((post: Record<string, unknown>) => {
-        const isPpv       = post.is_ppv as boolean;
-        const isFree      = post.is_free as boolean;
+        const isPpv        = post.is_ppv as boolean;
+        const isFree       = post.is_free as boolean;
         const isSubscribed = subscribedSet.has(post.creator_id as string);
-        const canAccess   = isFree || (isSubscribed && !isPpv);
+        const canAccess    = isFree || (isSubscribed && !isPpv);
 
         const mediaItems = (post.media as Record<string, unknown>[] ?? [])
           .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
         return {
           ...post,
           media:      mediaItems,
-          liked:      likedSet.has(post.id as number),
+          liked:      likedSet.has(Number(post.id)),
           can_access: canAccess,
           locked:     !canAccess,
         };
