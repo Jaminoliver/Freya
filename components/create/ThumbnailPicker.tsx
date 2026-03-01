@@ -12,12 +12,13 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
   const videoRef  = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // FIX: use state instead of ref so the video src is reactive
-  const [blobUrl,     setBlobUrl]     = useState<string | null>(null);
-  const [duration,    setDuration]    = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [preview,     setPreview]     = useState<string | null>(null);
-  const [picked,      setPicked]      = useState(false);
+  const [blobUrl,      setBlobUrl]      = useState<string | null>(null);
+  const [duration,     setDuration]     = useState(0);
+  const [currentTime,  setCurrentTime]  = useState(0);
+  const [preview,      setPreview]      = useState<string | null>(null);
+  const [picked,       setPicked]       = useState(false);
+  const [aspectRatio,  setAspectRatio]  = useState<string>("16/9");
+  const [isPortrait,   setIsPortrait]   = useState(false);
 
   useEffect(() => {
     const url = URL.createObjectURL(file);
@@ -34,7 +35,7 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.9);
+    return canvas.toDataURL("image/jpeg", 0.95);
   }, []);
 
   const handleSeeked = useCallback(() => {
@@ -58,12 +59,12 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
     setPreview(dataUrl);
     setPicked(true);
     canvas.toBlob((blob) => {
       if (blob) onPicked(blob, dataUrl);
-    }, "image/jpeg", 0.9);
+    }, "image/jpeg", 0.95);
   }, [onPicked]);
 
   const formatTime = (t: number) => {
@@ -86,6 +87,18 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
           const v = videoRef.current;
           if (!v) return;
           setDuration(v.duration);
+
+          // Auto-detect orientation and set exact aspect ratio
+          const w = v.videoWidth;
+          const h = v.videoHeight;
+          const portrait = h > w;
+          setIsPortrait(portrait);
+
+          // Reduce to a clean ratio string
+          const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
+          const d   = gcd(w, h);
+          setAspectRatio(`${w / d}/${h / d}`);
+
           v.currentTime = 0;
         }}
         onSeeked={handleSeeked}
@@ -105,41 +118,48 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
         )}
       </div>
 
-      {/* Large preview */}
+      {/* Preview — constrained so portrait videos don't overflow */}
       <div style={{
         width: "100%",
-        aspectRatio: "16/9",
-        borderRadius: "10px",
-        overflow: "hidden",
-        backgroundColor: "#0A0A14",
-        border: picked ? "2px solid #8B5CF6" : "1.5px solid #2A2A3D",
-        transition: "border-color 0.2s",
-        position: "relative",
+        display: "flex",
+        justifyContent: "center",
       }}>
-        {preview ? (
-          <img
-            src={preview}
-            alt="Thumbnail preview"
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
-        ) : (
-          <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-            <Film size={24} color="#2A2A3D" />
-            <span style={{ fontSize: "12px", color: "#4A4A6A" }}>Scrub to preview a frame</span>
-          </div>
-        )}
+        <div style={{
+          // Portrait: cap width so it doesn't stretch across the full container
+          width:        isPortrait ? "min(100%, 220px)" : "100%",
+          aspectRatio,
+          borderRadius: "10px",
+          overflow:     "hidden",
+          backgroundColor: "#0A0A14",
+          border:       picked ? "2px solid #8B5CF6" : "1.5px solid #2A2A3D",
+          transition:   "border-color 0.2s",
+          position:     "relative",
+        }}>
+          {preview ? (
+            <img
+              src={preview}
+              alt="Thumbnail preview"
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          ) : (
+            <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+              <Film size={24} color="#2A2A3D" />
+              <span style={{ fontSize: "12px", color: "#4A4A6A" }}>Scrub to preview a frame</span>
+            </div>
+          )}
 
-        {/* Time badge */}
-        {duration > 0 && (
-          <div style={{
-            position: "absolute", bottom: "8px", right: "8px",
-            backgroundColor: "rgba(0,0,0,0.7)", borderRadius: "6px",
-            padding: "2px 7px", fontSize: "11px", color: "#fff", fontWeight: 600,
-            backdropFilter: "blur(4px)",
-          }}>
-            {formatTime(currentTime)}
-          </div>
-        )}
+          {/* Time badge */}
+          {duration > 0 && (
+            <div style={{
+              position: "absolute", bottom: "8px", right: "8px",
+              backgroundColor: "rgba(0,0,0,0.7)", borderRadius: "6px",
+              padding: "2px 7px", fontSize: "11px", color: "#fff", fontWeight: 600,
+              backdropFilter: "blur(4px)",
+            }}>
+              {formatTime(currentTime)}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Scrubber + button */}

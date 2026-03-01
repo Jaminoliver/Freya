@@ -39,6 +39,8 @@ export interface ApiPost {
     display_order: number;
     processing_status: string | null;
     bunny_video_id: string | null;
+    width?: number | null;
+    height?: number | null;
   }[];
 }
 
@@ -51,6 +53,28 @@ function useMediaHeight() {
     return () => window.removeEventListener("resize", update);
   }, []);
   return height;
+}
+
+// Detect aspect ratio from a thumbnail image URL
+function useThumbAspectRatio(src: string | undefined): { ratio: string; isPortrait: boolean } {
+  const [ratio,      setRatio]      = React.useState("9/16");
+  const [isPortrait, setIsPortrait] = React.useState(true);
+
+  React.useEffect(() => {
+    if (!src) return;
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      if (w && h) {
+        setRatio(`${w}/${h}`);
+        setIsPortrait(h > w);
+      }
+    };
+    img.src = src;
+  }, [src]);
+
+  return { ratio, isPortrait };
 }
 
 function PostMenu({ onEdit, onDelete, onShare }: {
@@ -123,6 +147,25 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
   const [commentCount, setCommentCount] = React.useState(post.comment_count);
   const [thumbReady,   setThumbReady]   = React.useState(!post.media?.[0]);
 
+  const firstMedia   = post.media?.[0];
+  const isLocked     = post.locked;
+  const isVideo      = firstMedia?.media_type === "video";
+  const isMultiPhoto = !isVideo && (post.media?.length ?? 0) > 1;
+  const photoMedia   = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
+
+  const videoThumbUrl: string | undefined = firstMedia?.bunny_video_id
+    ? getBunnyThumbnail(firstMedia.bunny_video_id)
+    : (firstMedia?.thumbnail_url ?? undefined);
+
+  const lockedThumb: string | undefined = firstMedia
+    ? firstMedia.media_type === "video" && firstMedia.bunny_video_id
+      ? getBunnyThumbnail(firstMedia.bunny_video_id)
+      : ((firstMedia as any).locked_preview_url ?? undefined)
+    : undefined;
+
+  // Auto-detect aspect ratio from thumbnail
+  const { ratio: videoRatio, isPortrait } = useThumbAspectRatio(videoThumbUrl);
+
   React.useEffect(() => {
     setLiked(post.liked);
     setLikeCount(post.like_count);
@@ -154,21 +197,28 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
     if (res.ok) onDelete?.(String(post.id));
   };
 
-  const firstMedia   = post.media?.[0];
-  const isLocked     = post.locked;
-  const isVideo      = firstMedia?.media_type === "video";
-  const isMultiPhoto = !isVideo && (post.media?.length ?? 0) > 1;
-  const photoMedia   = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
-
-  const lockedThumb: string | undefined = firstMedia
-    ? firstMedia.media_type === "video" && firstMedia.bunny_video_id
-      ? getBunnyThumbnail(firstMedia.bunny_video_id)
-      : ((firstMedia as any).locked_preview_url ?? undefined)
-    : undefined;
-
-  const videoThumbUrl: string | undefined = firstMedia?.bunny_video_id
-    ? getBunnyThumbnail(firstMedia.bunny_video_id)
-    : (firstMedia?.thumbnail_url ?? undefined);
+  // Portrait: centered narrow column with blur sides
+  // Landscape: natural 16/9 aspect ratio, full width, no blur needed
+  const videoContainerStyle: React.CSSProperties = isPortrait
+    ? {
+        position: "relative",
+        overflow: "hidden",
+        backgroundColor: "#000",
+        width: "100%",
+        aspectRatio: "9/16",
+        maxHeight: "min(75svh, 520px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }
+    : {
+        position: "relative",
+        overflow: "hidden",
+        backgroundColor: "#000",
+        width: "100%",
+        aspectRatio: "16/9",
+        maxHeight: "520px",
+      };
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E" }}>
@@ -233,25 +283,14 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
           </div>
 
         ) : isVideo ? (
-          <div style={{ height: mediaHeight === "auto" ? undefined : mediaHeight, aspectRatio: mediaHeight === "auto" ? "9/16" : undefined, maxHeight: "75vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
-            {mediaHeight === "auto" && videoThumbUrl && (
-              <>
-                <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${videoThumbUrl})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-                <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${videoThumbUrl})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-              </>
-            )}
-            {!thumbReady && videoThumbUrl && (
-              <img src={videoThumbUrl} alt="" onLoad={() => setThumbReady(true)} onError={() => setThumbReady(true)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />
-            )}
-            <div style={{ position: "absolute", inset: mediaHeight === "auto" ? "0 28px" : 0, zIndex: 1 }}>
-              <VideoPlayer
-                bunnyVideoId={firstMedia.bunny_video_id ?? null}
-                thumbnailUrl={firstMedia.thumbnail_url ?? null}
-                processingStatus={firstMedia.processing_status ?? null}
-                rawVideoUrl={firstMedia.raw_video_url ?? null}
-                fillParent={true}
-              />
-            </div>
+          <div style={videoContainerStyle}>
+            <VideoPlayer
+              bunnyVideoId={firstMedia.bunny_video_id ?? null}
+              thumbnailUrl={firstMedia.thumbnail_url ?? null}
+              processingStatus={firstMedia.processing_status ?? null}
+              rawVideoUrl={firstMedia.raw_video_url ?? null}
+              fillParent={isPortrait}
+            />
           </div>
 
         ) : isMultiPhoto ? (

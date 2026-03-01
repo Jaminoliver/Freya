@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import * as ReactDOM from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 
 export interface LightboxPost {
@@ -35,7 +36,6 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   const activeMedia    = images[mediaIndex] ?? images[0];
   const [isMobile, setIsMobile] = React.useState(false);
 
-  // Reset mediaIndex when post changes
   React.useEffect(() => {
     setMediaIndex(initialMediaIndex);
   }, [post.id, initialMediaIndex]);
@@ -70,47 +70,52 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   const hasPrev = hasPrevImage || hasPrevPost;
   const hasNext = hasNextImage || hasNextPost;
 
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
+
   if (isMobile) {
-    return (
-      <div style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", flexDirection: "column" }}>
+    return ReactDOM.createPortal(
+      <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", flexDirection: "column" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, display: "flex", justifyContent: "flex-end", padding: "16px" }}>
-          <button onClick={onClose} style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.15)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={(e) => { e.stopPropagation(); onClose(); }} style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.15)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <X size={20} />
           </button>
         </div>
         {images.length > 1 && (
-          <div style={{ position: "absolute", top: "20px", left: "50%", transform: "translateX(-50%)", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", top: "20px", left: "50%", transform: "translateX(-50%)", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
             {mediaIndex + 1} / {images.length}
           </div>
         )}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
           {activeMedia?.file_url && (
-            <img src={activeMedia.file_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+            <img src={activeMedia.file_url} alt="" onClick={(e) => e.stopPropagation()} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
           )}
           {hasPrev && (
-            <button onClick={goPrev} style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={(e) => { e.stopPropagation(); goPrev(); }} style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <ChevronLeft size={20} />
             </button>
           )}
           {hasNext && (
-            <button onClick={goNext} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={(e) => { e.stopPropagation(); goNext(); }} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <ChevronRight size={20} />
             </button>
           )}
         </div>
         {images.length > 1 && (
-          <div style={{ display: "flex", justifyContent: "center", gap: "5px", padding: "12px" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", justifyContent: "center", gap: "5px", padding: "12px" }}>
             {images.map((_, i) => (
-              <button key={i} onClick={() => setMediaIndex(i)} style={{ width: i === mediaIndex ? "18px" : "6px", height: "6px", borderRadius: "3px", border: "none", backgroundColor: i === mediaIndex ? "#fff" : "rgba(255,255,255,0.45)", cursor: "pointer", padding: 0, transition: "all 0.25s", flexShrink: 0 }} />
+              <button key={i} onClick={(e) => { e.stopPropagation(); setMediaIndex(i); }} style={{ width: i === mediaIndex ? "18px" : "6px", height: "6px", borderRadius: "3px", border: "none", backgroundColor: i === mediaIndex ? "#fff" : "rgba(255,255,255,0.45)", cursor: "pointer", padding: 0, transition: "all 0.25s", flexShrink: 0 }} />
             ))}
           </div>
         )}
-      </div>
+      </div>,
+      document.body
     );
   }
 
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingTop: "40px" }}>
+  return ReactDOM.createPortal(
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingTop: "40px" }}>
       <button onClick={onClose} style={{ position: "absolute", top: "20px", right: "24px", background: "none", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", zIndex: 10 }}>
         <X size={24} strokeWidth={2} />
       </button>
@@ -133,7 +138,6 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
         <img
           src={activeMedia.file_url}
           alt=""
-          onClick={(e) => e.stopPropagation()}
           style={{ maxWidth: "600px", width: "100%", maxHeight: "calc(100vh - 40px)", objectFit: "contain", display: "block", objectPosition: "bottom" }}
         />
       )}
@@ -144,6 +148,7 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
           ))}
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
