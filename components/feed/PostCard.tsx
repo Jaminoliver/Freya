@@ -106,6 +106,27 @@ function toLightboxPost(post: Post): LightboxPost {
   };
 }
 
+/** Scroll-aware tap handler hook — only fires onTap if finger didn't scroll */
+function useTapWithScrollGuard(onTap: () => void) {
+  const startX  = useRef<number>(0);
+  const startY  = useRef<number>(0);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const movedX = Math.abs(e.changedTouches[0].clientX - startX.current);
+    const movedY = Math.abs(e.changedTouches[0].clientY - startY.current);
+    // If finger moved more than 10px in any direction it's a scroll — ignore
+    if (movedX > 10 || movedY > 10) return;
+    onTap();
+  };
+
+  return { onTouchStart, onTouchEnd };
+}
+
 // ── PostCard ──────────────────────────────────────────────────────────────────
 export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: string) => void }) {
   const router      = useRouter();
@@ -170,6 +191,9 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
     setLightboxOpen(true);
   };
 
+  // Scroll-aware tap handlers for the single photo div
+  const singlePhotoTap = useTapWithScrollGuard(() => openLightbox(0));
+
   const firstMedia   = post.media[0];
   const isVideoPost  = firstMedia?.type === "video";
   const isMultiPhoto = !isVideoPost && post.media.length > 1;
@@ -180,7 +204,6 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
       : (firstMedia.thumbnailUrl || null)
     : null;
 
-  // Convert media for ImageCarousel (expects MediaItem shape from profile)
   const carouselMedia = post.media
     .filter((m) => m.type === "image")
     .map((m, i) => ({
@@ -316,8 +339,11 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
           />
 
         ) : (
+          // Single photo — scroll-aware tap handler prevents lightbox opening during page scroll
           <div
-            onClick={() => openLightbox(0)}
+            onTouchStart={singlePhotoTap.onTouchStart}
+            onTouchEnd={singlePhotoTap.onTouchEnd}
+            onClick={() => openLightbox(0)}  // desktop fallback
             style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%", cursor: "zoom-in" }}
           >
             <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
