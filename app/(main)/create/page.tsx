@@ -29,7 +29,7 @@ function CreatePostContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const typeParam    = searchParams.get("type");
-  const { startVideoUpload, startPhotoUpload } = useUpload();
+  const { startVideoUpload, startPhotoUpload, startMultiPhotoUpload } = useUpload();
 
   const [postType,     setPostType]     = useState<PostType>(isValidPostType(typeParam) ? typeParam : "photo");
   const [caption,      setCaption]      = useState("");
@@ -83,7 +83,7 @@ function CreatePostContent() {
     if (postType === "poll" || postType === "quiz") content_type = "text";
     let scheduled_for: string | null = null;
     if (isScheduled && schedDate && schedTime) scheduled_for = new Date(`${schedDate}T${schedTime}`).toISOString();
-    const res  = await fetch("/api/posts", {
+    const res = await fetch("/api/posts", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
@@ -107,14 +107,14 @@ function CreatePostContent() {
     setError(null);
 
     try {
-      const file    = files[0];
-      const isVideo = file?.type.startsWith("video/");
+      const firstFile = files[0];
+      const isVideo   = firstFile?.type.startsWith("video/");
 
       // ── Video — redirect immediately, upload in background ────────
-      if (file && isVideo) {
+      if (firstFile && isVideo) {
         startVideoUpload({
-          file,
-          title:         caption || file.name,
+          file:          firstFile,
+          title:         caption || firstFile.name,
           thumbnailBlob: thumbnailBlob ?? undefined,
           onMediaId: async (mediaId) => {
             try { await createPost([mediaId]); }
@@ -126,15 +126,29 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Photo — redirect immediately, upload in background ────────
-      if (file && !isVideo) {
+      // ── Single photo — redirect immediately, upload in background ──
+      if (files.length === 1 && !isVideo) {
         startPhotoUpload({
-          file,
+          file: firstFile,
           onMediaId: async (mediaId) => {
             try { await createPost([mediaId]); }
             catch (err) { console.error("[CreatePost] Photo post create error:", err); }
           },
           onError: (err) => console.error("[CreatePost] Photo upload error:", err),
+        });
+        router.push(`/${currentUser.username}`);
+        return;
+      }
+
+      // ── Multiple photos — redirect immediately, upload in background
+      if (files.length > 1 && !isVideo) {
+        startMultiPhotoUpload({
+          files,
+          onMediaIds: async (mediaIds) => {
+            try { await createPost(mediaIds); }
+            catch (err) { console.error("[CreatePost] Multi photo post create error:", err); }
+          },
+          onError: (err) => console.error("[CreatePost] Multi photo upload error:", err),
         });
         router.push(`/${currentUser.username}`);
         return;
@@ -160,13 +174,18 @@ function CreatePostContent() {
           <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>NEW POST</span>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          {files.length > 1 && (
+            <span style={{ fontSize: "12px", color: "#8B5CF6", fontWeight: 600 }}>
+              {files.length} photos
+            </span>
+          )}
           <button onClick={handleClear} style={{ padding: "7px 18px", borderRadius: "20px", border: "1.5px solid #8B5CF6", backgroundColor: "transparent", color: "#8B5CF6", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>CLEAR</button>
           <button
             onClick={handlePost}
             disabled={!canPost || posting || !userLoaded}
             style={{ padding: "7px 18px", borderRadius: "20px", border: "none", backgroundColor: canPost && !posting && userLoaded ? "#8B5CF6" : "#2A2A3D", color: canPost && !posting && userLoaded ? "#fff" : "#6B6B8A", fontSize: "13px", fontWeight: 600, cursor: canPost && !posting && userLoaded ? "pointer" : "default", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", minWidth: "64px" }}
           >
-            {posting ? "…" : "POST"}
+            {posting ? "Uploading…" : "POST"}
           </button>
         </div>
       </div>

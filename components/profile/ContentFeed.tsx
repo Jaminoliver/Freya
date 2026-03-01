@@ -191,6 +191,147 @@ function Lightbox({ post, allPosts, onClose, onNavigate }: {
   );
 }
 
+// ── Image Carousel ────────────────────────────────────────────────────────────
+function ImageCarousel({ media, onImageClick }: {
+  media: ApiPost["media"];
+  onImageClick?: () => void;
+}) {
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const [isDesktop,   setIsDesktop]   = React.useState(false);
+  const trackRef   = React.useRef<HTMLDivElement>(null);
+  const startXRef  = React.useRef<number | null>(null);
+  const isDragging = React.useRef(false);
+
+  React.useEffect(() => {
+    const check = () => setIsDesktop(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const goTo = (index: number) => {
+    if (!trackRef.current) return;
+    setActiveIndex(index);
+    trackRef.current.scrollTo({ left: trackRef.current.offsetWidth * index, behavior: "smooth" });
+  };
+
+  const onScroll = () => {
+    if (!trackRef.current) return;
+    const index = Math.round(trackRef.current.scrollLeft / trackRef.current.offsetWidth);
+    setActiveIndex(index);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => { startXRef.current = e.touches[0].clientX; };
+  const handleTouchEnd   = (e: React.TouchEvent) => {
+    if (startXRef.current === null) return;
+    const diff = startXRef.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
+      if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
+    }
+    startXRef.current = null;
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => { startXRef.current = e.clientX; isDragging.current = false; };
+  const handleMouseMove = (e: React.MouseEvent) => { if (startXRef.current !== null && Math.abs(e.clientX - startXRef.current) > 5) isDragging.current = true; };
+  const handleMouseUp   = (e: React.MouseEvent) => {
+    if (startXRef.current === null) return;
+    const diff = startXRef.current - e.clientX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
+      if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
+    } else if (!isDragging.current) {
+      onImageClick?.();
+    }
+    startXRef.current = null;
+    isDragging.current = false;
+  };
+
+  const arrowStyle = (side: "left" | "right"): React.CSSProperties => ({
+    position:        "absolute",
+    [side]:          "10px",
+    top:             "50%",
+    transform:       "translateY(-50%)",
+    zIndex:          10,
+    width:           "32px",
+    height:          "32px",
+    borderRadius:    "50%",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    backdropFilter:  "blur(4px)",
+    border:          "none",
+    color:           "#fff",
+    cursor:          "pointer",
+    display:         "flex",
+    alignItems:      "center",
+    justifyContent:  "center",
+  });
+
+  return (
+    <div style={{ position: "relative", width: "100%", backgroundColor: "#000", userSelect: "none" }}>
+      <div
+        ref={trackRef}
+        onScroll={onScroll}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        style={{ display: "flex", overflowX: "scroll", scrollSnapType: "x mandatory", scrollbarWidth: "none", WebkitOverflowScrolling: "touch", cursor: media.length > 1 ? "grab" : "pointer" }}
+      >
+        {media.map((item, i) => (
+          <div key={i} style={{ flexShrink: 0, width: "100%", scrollSnapAlign: "start", position: "relative", backgroundColor: "#000" }}>
+            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${item.file_url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9, pointerEvents: "none" }} />
+            <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${item.file_url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9, pointerEvents: "none" }} />
+            <img src={item.file_url ?? ""} alt="" draggable={false} style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block", pointerEvents: "none" }} />
+          </div>
+        ))}
+      </div>
+
+      {/* Counter badge — top right */}
+      {media.length > 1 && (
+        <div style={{ position: "absolute", top: "10px", right: "10px", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+          {activeIndex + 1} / {media.length}
+        </div>
+      )}
+
+      {/* Desktop arrows — left/right overlaid on image */}
+      {isDesktop && media.length > 1 && activeIndex > 0 && (
+        <button onClick={() => goTo(activeIndex - 1)} style={arrowStyle("left")}>
+          <ChevronLeft size={18} />
+        </button>
+      )}
+      {isDesktop && media.length > 1 && activeIndex < media.length - 1 && (
+        <button onClick={() => goTo(activeIndex + 1)} style={arrowStyle("right")}>
+          <ChevronRight size={18} />
+        </button>
+      )}
+
+      {/* Dot indicators — overlaid inside image at bottom center */}
+      {media.length > 1 && (
+        <div style={{ position: "absolute", bottom: "10px", left: "50%", transform: "translateX(-50%)", zIndex: 10, display: "flex", alignItems: "center", gap: "5px" }}>
+          {media.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              style={{
+                width:           i === activeIndex ? "18px" : "6px",
+                height:          "6px",
+                borderRadius:    "3px",
+                border:          "none",
+                backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.45)",
+                cursor:          "pointer",
+                padding:         0,
+                transition:      "all 0.25s",
+                flexShrink:      0,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, onUnlock, viewer, onDelete, onImageClick }: {
   post: ApiPost; isOwnProfile?: boolean; isSubscribed: boolean;
   onLike?: (id: string) => void; onComment?: (id: string) => void;
@@ -214,7 +355,6 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
     setCommentCount(post.comment_count);
   }, [post.liked, post.like_count, post.comment_count]);
 
-  // Only fetch comments when the section is opened — not on every mount
   React.useEffect(() => {
     if (!commentOpen) return;
     fetch(`/api/posts/${post.id}/comments`)
@@ -240,8 +380,11 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
     if (res.ok) onDelete?.(String(post.id));
   };
 
-  const firstMedia = post.media?.[0];
-  const isLocked   = post.locked;
+  const firstMedia   = post.media?.[0];
+  const isLocked     = post.locked;
+  const isVideo      = firstMedia?.media_type === "video";
+  const isMultiPhoto = !isVideo && (post.media?.length ?? 0) > 1;
+  const photoMedia   = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
 
   const lockedThumb: string | undefined = firstMedia
     ? firstMedia.media_type === "video" && firstMedia.bunny_video_id
@@ -282,7 +425,7 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
 
       {/* Caption */}
       {post.caption && (
-        <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", cursor: "default" }}>
+        <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0", padding: "0 16px 10px" }}>
           {post.caption}
         </p>
       )}
@@ -292,13 +435,7 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
         isLocked ? (
           <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
             {lockedThumb && (
-              <img
-                src={lockedThumb}
-                alt=""
-                onLoad={() => setThumbReady(true)}
-                onError={() => setThumbReady(true)}
-                style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }}
-              />
+              <img src={lockedThumb} alt="" onLoad={() => setThumbReady(true)} onError={() => setThumbReady(true)} style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }} />
             )}
             <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", minHeight: lockedThumb ? undefined : "200px" }}>
               <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -309,7 +446,8 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
               </button>
             </div>
           </div>
-        ) : firstMedia.media_type === "video" ? (
+
+        ) : isVideo ? (
           <div style={{ height: mediaHeight === "auto" ? undefined : mediaHeight, aspectRatio: mediaHeight === "auto" ? "9/16" : undefined, maxHeight: "75vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
             {mediaHeight === "auto" && videoThumbUrl && (
               <>
@@ -324,6 +462,10 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
               <VideoPlayer bunnyVideoId={firstMedia.bunny_video_id ?? null} thumbnailUrl={firstMedia.thumbnail_url ?? null} processingStatus={firstMedia.processing_status ?? null} rawVideoUrl={firstMedia.raw_video_url ?? null} fillParent={true} />
             </div>
           </div>
+
+        ) : isMultiPhoto ? (
+          <ImageCarousel media={photoMedia} onImageClick={() => onImageClick?.(post)} />
+
         ) : (
           <div onClick={() => onImageClick?.(post)} style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%", cursor: "zoom-in" }}>
             {firstMedia.file_url && (
@@ -364,7 +506,7 @@ function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, o
   );
 }
 
-// Module-level cache — survives back navigation
+// Module-level cache
 const feedLayoutCache = new Map<string, { activeTab: string; isPostsGridView: boolean; isMediaGridView: boolean }>();
 const feedPostsCache  = new Map<string, { posts: ApiPost[]; media: ApiMedia[] }>();
 
@@ -456,9 +598,6 @@ export default function ContentFeed({
   const photoCount = apiMedia.filter((m) => m.media_type !== "video").length;
   const videoCount = apiMedia.filter((m) => m.media_type === "video").length;
 
-  const realPostCount  = apiPosts.length;
-  const realMediaCount = apiMedia.length;
-
   return (
     <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
       {lightboxPost && (
@@ -471,8 +610,8 @@ export default function ContentFeed({
       )}
 
       <TabBar
-        postCount={realPostCount}
-        mediaCount={realMediaCount}
+        postCount={apiPosts.length}
+        mediaCount={apiMedia.length}
         active={activeTab}
         onChange={(key) => { setActiveTab(key); setShowSearch(false); setSearchQuery(""); }}
       />
@@ -512,13 +651,14 @@ export default function ContentFeed({
                     : (m.thumbnail_url || m.file_url || undefined)
                   : undefined;
                 return (
-                  <div
-                    key={post.id}
-                    onClick={() => router.push(`/posts/${post.id}`)}
-                    style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}
-                  >
+                  <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
                     {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
                     {post.locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}><Lock size={16} color="#fff" /></div>}
+                    {!post.locked && (post.media?.length ?? 0) > 1 && (
+                      <div style={{ position: "absolute", top: "5px", right: "5px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "4px", padding: "2px 6px", fontSize: "10px", fontWeight: 700, color: "#fff" }}>
+                        1/{post.media.length}
+                      </div>
+                    )}
                     <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
                       {m?.media_type === "video" ? <Film size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} /> : <ImageIcon size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />}
                     </div>
@@ -551,11 +691,7 @@ export default function ContentFeed({
                   : (item.thumbnail_url || item.file_url || undefined);
                 const parentPost = apiPosts.find((p) => p.id === item.post_id);
                 return (
-                  <div
-                    key={item.id}
-                    onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined}
-                    style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}
-                  >
+                  <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
                     {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
                     <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
                       {item.media_type === "video" ? <Film size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} /> : <ImageIcon size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />}
@@ -572,11 +708,7 @@ export default function ContentFeed({
                   : (item.thumbnail_url || item.file_url || undefined);
                 const parentPost = apiPosts.find((p) => p.id === item.post_id);
                 return (
-                  <div
-                    key={item.id}
-                    onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined}
-                    style={{ borderBottom: "1px solid #1A1A2E", cursor: "pointer" }}
-                  >
+                  <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ borderBottom: "1px solid #1A1A2E", cursor: "pointer" }}>
                     <div style={{ position: "relative" }}>
                       {thumb && <img src={thumb} alt="" style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" }} />}
                       {item.media_type === "video" && (

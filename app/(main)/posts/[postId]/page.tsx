@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Share2, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, Share2, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import PostActions from "@/components/profile/PostActions";
 import { Lock } from "lucide-react";
@@ -60,6 +60,147 @@ interface PostData {
     locked: boolean;
     display_order: number;
   }[];
+}
+
+// ── Image Carousel ────────────────────────────────────────────────────────────
+function ImageCarousel({ media }: { media: PostData["media"] }) {
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const [isDesktop,   setIsDesktop]   = React.useState(false);
+  const trackRef   = React.useRef<HTMLDivElement>(null);
+  const startXRef  = React.useRef<number | null>(null);
+  const isDragging = React.useRef(false);
+
+  React.useEffect(() => {
+    const check = () => setIsDesktop(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const goTo = (index: number) => {
+    if (!trackRef.current) return;
+    setActiveIndex(index);
+    trackRef.current.scrollTo({ left: trackRef.current.offsetWidth * index, behavior: "smooth" });
+  };
+
+  const onScroll = () => {
+    if (!trackRef.current) return;
+    const index = Math.round(trackRef.current.scrollLeft / trackRef.current.offsetWidth);
+    setActiveIndex(index);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => { startXRef.current = e.touches[0].clientX; };
+  const handleTouchEnd   = (e: React.TouchEvent) => {
+    if (startXRef.current === null) return;
+    const diff = startXRef.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
+      if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
+    }
+    startXRef.current = null;
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => { startXRef.current = e.clientX; isDragging.current = false; };
+  const handleMouseMove = (e: React.MouseEvent) => { if (startXRef.current !== null && Math.abs(e.clientX - startXRef.current) > 5) isDragging.current = true; };
+  const handleMouseUp   = (e: React.MouseEvent) => {
+    if (startXRef.current === null) return;
+    const diff = startXRef.current - e.clientX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
+      if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
+    }
+    startXRef.current = null;
+    isDragging.current = false;
+  };
+
+  const arrowStyle = (side: "left" | "right"): React.CSSProperties => ({
+    position:        "absolute",
+    [side]:          "10px",
+    top:             "50%",
+    transform:       "translateY(-50%)",
+    zIndex:          10,
+    width:           "32px",
+    height:          "32px",
+    borderRadius:    "50%",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    backdropFilter:  "blur(4px)",
+    border:          "none",
+    color:           "#fff",
+    cursor:          "pointer",
+    display:         "flex",
+    alignItems:      "center",
+    justifyContent:  "center",
+  });
+
+  return (
+    <div style={{ position: "relative", width: "100%", backgroundColor: "#000", userSelect: "none", margin: "12px 0 0" }}>
+      <div
+        ref={trackRef}
+        onScroll={onScroll}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        style={{ display: "flex", overflowX: "scroll", scrollSnapType: "x mandatory", scrollbarWidth: "none", WebkitOverflowScrolling: "touch", cursor: media.length > 1 ? "grab" : "default" }}
+      >
+        {media.map((item, i) => (
+          <div key={i} style={{ flexShrink: 0, width: "100%", scrollSnapAlign: "start", position: "relative", backgroundColor: "#000" }}>
+            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${item.file_url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9, pointerEvents: "none" }} />
+            <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${item.file_url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9, pointerEvents: "none" }} />
+            <img
+              src={item.file_url ?? ""}
+              alt=""
+              draggable={false}
+              style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "clamp(400px, 85vh, 680px)", objectFit: "contain", display: "block", pointerEvents: "none" }}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Counter badge — top right */}
+      {media.length > 1 && (
+        <div style={{ position: "absolute", top: "10px", right: "10px", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+          {activeIndex + 1} / {media.length}
+        </div>
+      )}
+
+      {/* Desktop arrows */}
+      {isDesktop && media.length > 1 && activeIndex > 0 && (
+        <button onClick={() => goTo(activeIndex - 1)} style={arrowStyle("left")}>
+          <ChevronLeft size={18} />
+        </button>
+      )}
+      {isDesktop && media.length > 1 && activeIndex < media.length - 1 && (
+        <button onClick={() => goTo(activeIndex + 1)} style={arrowStyle("right")}>
+          <ChevronRight size={18} />
+        </button>
+      )}
+
+      {/* Dot indicators — overlaid inside image at bottom center */}
+      {media.length > 1 && (
+        <div style={{ position: "absolute", bottom: "10px", left: "50%", transform: "translateX(-50%)", zIndex: 10, display: "flex", alignItems: "center", gap: "5px" }}>
+          {media.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              style={{
+                width:           i === activeIndex ? "18px" : "6px",
+                height:          "6px",
+                borderRadius:    "3px",
+                border:          "none",
+                backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.45)",
+                cursor:          "pointer",
+                padding:         0,
+                transition:      "all 0.25s",
+                flexShrink:      0,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function PostMenu({ isOwnPost, onDelete }: { isOwnPost: boolean; onDelete: () => void }) {
@@ -128,8 +269,7 @@ export default function SinglePostPage() {
   const [checkoutTier, setCheckoutTier] = React.useState<SubscriptionTier>("monthly");
 
   const commentRef = React.useRef<HTMLDivElement>(null);
-  // Keep a ref to latest post so handleAddComment can read current count without stale closure
-  const postRef = React.useRef<PostData | null>(null);
+  const postRef    = React.useRef<PostData | null>(null);
   React.useEffect(() => { postRef.current = post; }, [post]);
 
   React.useEffect(() => {
@@ -156,7 +296,6 @@ export default function SinglePostPage() {
         const res  = await fetch(`/api/posts/${postId}`);
         const data = await res.json();
         if (!res.ok) { setError(data.error || "Post not found"); return; }
-
         const cached = postSyncStore.get(postId);
         const post   = data.post as PostData;
         if (cached) {
@@ -179,12 +318,7 @@ export default function SinglePostPage() {
     return postSyncStore.subscribe((event) => {
       if (event.postId !== postId) return;
       setPost((p) =>
-        p ? {
-          ...p,
-          liked:         event.liked,
-          like_count:    event.like_count,
-          comment_count: event.comment_count ?? p.comment_count,
-        } : p
+        p ? { ...p, liked: event.liked, like_count: event.like_count, comment_count: event.comment_count ?? p.comment_count } : p
       );
     });
   }, [postId]);
@@ -193,7 +327,7 @@ export default function SinglePostPage() {
     if (!postId) return;
     try {
       const res = await fetch(`/api/posts/${postId}/comments`);
-      if (!res.ok) throw new Error("Failed to fetch comments");
+      if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setComments(data.comments || []);
     } catch (err) {
@@ -201,18 +335,14 @@ export default function SinglePostPage() {
     }
   }, [postId]);
 
-  React.useEffect(() => {
-    fetchComments();
-  }, [fetchComments]);
+  React.useEffect(() => { fetchComments(); }, [fetchComments]);
 
   const handleLike = async () => {
     if (!post) return;
     const wasLiked = post.liked;
     setPost((p) => p ? { ...p, liked: !wasLiked, like_count: !wasLiked ? p.like_count + 1 : Math.max(0, p.like_count - 1) } : p);
-
     const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
     const data = await res.json();
-
     if (res.ok) {
       setPost((p) => {
         if (!p) return p;
@@ -243,21 +373,11 @@ export default function SinglePostPage() {
       body: JSON.stringify({ content: text }),
     });
     if (res.ok) {
-      // Step 1: increment count locally
       setPost((p) => p ? { ...p, comment_count: p.comment_count + 1 } : p);
-
-      // Step 2: fetch real comments from server
       await fetchComments();
-
-      // Step 3: emit to sync store AFTER fetch, using the latest count from ref
       const current = postRef.current;
       if (current) {
-        postSyncStore.emit({
-          postId:        String(current.id),
-          liked:         current.liked,
-          like_count:    current.like_count,
-          comment_count: current.comment_count,
-        });
+        postSyncStore.emit({ postId: String(current.id), liked: current.liked, like_count: current.like_count, comment_count: current.comment_count });
       }
     }
   };
@@ -294,6 +414,10 @@ export default function SinglePostPage() {
 
   const isOwnPost    = viewerId === post.creator_id;
   const isSubscribed = post.can_access;
+  const firstMedia   = post.media?.[0];
+  const isVideo      = firstMedia?.media_type === "video";
+  const photoMedia   = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
+  const isMultiPhoto = !isVideo && photoMedia.length > 1;
 
   const creatorForCheckout = {
     id: post.creator_id,
@@ -368,55 +492,40 @@ export default function SinglePostPage() {
       </div>
 
       {/* Media */}
-      {(() => {
-        const firstMedia = post.media?.[0];
-        if (!firstMedia) return null;
-
-        if (post.locked) {
-          const lockedThumb: string | null = firstMedia.media_type === "video" && firstMedia.bunny_video_id
-            ? getBunnyThumbnail(firstMedia.bunny_video_id)
-            : (firstMedia.thumbnail_url || null);
-
-          return (
-            <div style={{ position: "relative", overflow: "hidden", margin: "12px 0 0" }}>
-              {lockedThumb && (
-                <img
-                  src={lockedThumb}
-                  alt=""
-                  style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }}
-                />
-              )}
-              <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", minHeight: lockedThumb ? undefined : "280px" }}>
-                <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Lock size={18} color="#8B5CF6" />
-                </div>
-                <button onClick={openUnlock} style={{ padding: "8px 20px", borderRadius: "8px", backgroundColor: "#8B5CF6", border: "none", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                  {post.ppv_price ? `Unlock for ₦${(post.ppv_price / 100).toLocaleString("en-NG")}` : "Subscribe to unlock"}
-                </button>
+      {firstMedia && (
+        post.locked ? (
+          <div style={{ position: "relative", overflow: "hidden", margin: "12px 0 0" }}>
+            {(() => {
+              const lockedThumb = firstMedia.media_type === "video" && firstMedia.bunny_video_id
+                ? getBunnyThumbnail(firstMedia.bunny_video_id)
+                : (firstMedia.thumbnail_url || null);
+              return lockedThumb ? (
+                <img src={lockedThumb} alt="" style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }} />
+              ) : null;
+            })()}
+            <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", minHeight: "280px" }}>
+              <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Lock size={18} color="#8B5CF6" />
               </div>
+              <button onClick={openUnlock} style={{ padding: "8px 20px", borderRadius: "8px", backgroundColor: "#8B5CF6", border: "none", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                {post.ppv_price ? `Unlock for ₦${(post.ppv_price / 100).toLocaleString("en-NG")}` : "Subscribe to unlock"}
+              </button>
             </div>
-          );
-        }
+          </div>
 
-        if (firstMedia.media_type === "video") {
-          return (
-            <div style={{ margin: "12px 0 0", aspectRatio: "9/16", maxHeight: "67vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
-              <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-              <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-              <div style={{ position: "absolute", inset: "0 28px", zIndex: 1 }}>
-                <VideoPlayer
-                  bunnyVideoId={firstMedia.bunny_video_id ?? null}
-                  thumbnailUrl={firstMedia.thumbnail_url ?? null}
-                  processingStatus={firstMedia.processing_status ?? null}
-                  rawVideoUrl={firstMedia.raw_video_url ?? null}
-                  fillParent={true}
-                />
-              </div>
+        ) : isVideo ? (
+          <div style={{ margin: "12px 0 0", aspectRatio: "9/16", maxHeight: "67vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
+            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
+            <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
+            <div style={{ position: "absolute", inset: "0 28px", zIndex: 1 }}>
+              <VideoPlayer bunnyVideoId={firstMedia.bunny_video_id ?? null} thumbnailUrl={firstMedia.thumbnail_url ?? null} processingStatus={firstMedia.processing_status ?? null} rawVideoUrl={firstMedia.raw_video_url ?? null} fillParent={true} />
             </div>
-          );
-        }
+          </div>
 
-        return (
+        ) : isMultiPhoto ? (
+          <ImageCarousel media={photoMedia} />
+
+        ) : (
           <div style={{ margin: "12px 0 0", overflow: "hidden", position: "relative", backgroundColor: "#000" }}>
             {firstMedia.file_url && (
               <>
@@ -426,8 +535,8 @@ export default function SinglePostPage() {
               </>
             )}
           </div>
-        );
-      })()}
+        )
+      )}
 
       {/* Actions */}
       <div style={{ margin: "0 16px" }}>
@@ -456,7 +565,6 @@ export default function SinglePostPage() {
           onAddComment={handleAddComment}
         />
       </div>
-
     </div>
   );
 }

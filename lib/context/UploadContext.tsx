@@ -11,11 +11,14 @@ export interface UploadItem {
   mediaId?: number;
   error?:   string;
   file?:          File;
+  files?:         File[];
   _title?:        string;
   _onMediaId?:    (mediaId: number) => void;
+  _onMediaIds?:   (mediaIds: number[]) => void;
   _onError?:      (err: string) => void;
   _thumbnailBlob?: Blob;
   _isPhoto?:      boolean;
+  _isMultiPhoto?: boolean;
 }
 
 // Serialisable shape stored in sessionStorage (no File/Blob/callbacks)
@@ -49,18 +52,23 @@ function savePersistedUploads(uploads: UploadItem[]) {
 }
 
 interface UploadContextValue {
-  uploads:          UploadItem[];
-  startVideoUpload: (params: {
+  uploads:             UploadItem[];
+  startVideoUpload:    (params: {
     file:           File;
     title:          string;
     thumbnailBlob?: Blob;
     onMediaId:      (mediaId: number) => void;
     onError:        (err: string) => void;
   }) => string;
-  startPhotoUpload: (params: {
+  startPhotoUpload:    (params: {
     file:      File;
     onMediaId: (mediaId: number) => void;
     onError:   (err: string) => void;
+  }) => string;
+  startMultiPhotoUpload: (params: {
+    files:      File[];
+    onMediaIds: (mediaIds: number[]) => void;
+    onError:    (err: string) => void;
   }) => string;
   dismissUpload: (id: string) => void;
   retryUpload:   (id: string) => void;
@@ -136,7 +144,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }, 3000);
   }, [updateUpload]);
 
-  // ── Photo upload ──────────────────────────────────────────────────────────
+  // ── Single photo upload ───────────────────────────────────────────────────
   const runPhotoUpload = useCallback(async (
     uploadId:  string,
     file:      File,
@@ -144,7 +152,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     onError:   (err: string) => void,
   ) => {
     try {
-      // Simulate progress — photo uploads are fast but we want visual feedback
       updateUpload(uploadId, { progress: 30 });
 
       const formData = new FormData();
@@ -157,8 +164,11 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
       if (!res.ok) throw new Error(data.error || "Photo upload failed");
 
-      updateUpload(uploadId, { progress: 100, phase: "done", mediaId: data.mediaId });
-      onMediaId(data.mediaId);
+      const mediaId = data.results?.[0]?.mediaId;
+      if (!mediaId) throw new Error("No media ID returned from upload");
+
+      updateUpload(uploadId, { progress: 100, phase: "done", mediaId });
+      onMediaId(mediaId);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed";
@@ -184,6 +194,58 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     runPhotoUpload(uploadId, file, onMediaId, onError);
     return uploadId;
   }, [runPhotoUpload]);
+
+  // ── Multi photo upload ────────────────────────────────────────────────────
+  const runMultiPhotoUpload = useCallback(async (
+    uploadId:   string,
+    files:      File[],
+    onMediaIds: (mediaIds: number[]) => void,
+    onError:    (err: string) => void,
+  ) => {
+    try {
+      updateUpload(uploadId, { progress: 20 });
+
+      const formData = new FormData();
+      for (const f of files) formData.append("file", f);
+
+      updateUpload(uploadId, { progress: 50 });
+
+      const res  = await fetch("/api/upload/photo", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Photo upload failed");
+
+      const mediaIds: number[] = (data.results as { mediaId: number }[]).map((r) => r.mediaId);
+      if (!mediaIds.length) throw new Error("No media IDs returned from upload");
+
+      updateUpload(uploadId, { progress: 100, phase: "done" });
+      onMediaIds(mediaIds);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      updateUpload(uploadId, { phase: "error", error: msg });
+      onError(msg);
+    }
+  }, [updateUpload]);
+
+  const startMultiPhotoUpload = useCallback(({
+    files, onMediaIds, onError,
+  }: {
+    files:      File[];
+    onMediaIds: (mediaIds: number[]) => void;
+    onError:    (err: string) => void;
+  }): string => {
+    const uploadId = `upload_${Date.now()}_${Math.random()}`;
+    const label    = `${files.length} photos`;
+
+    setUploads((prev) => [...prev, {
+      id: uploadId, fileName: label, progress: 0, phase: "uploading",
+      files, _onMediaIds: onMediaIds, _onError: onError, _isMultiPhoto: true,
+    }]);
+
+    runMultiPhotoUpload(uploadId, files, onMediaIds, onError);
+    return uploadId;
+  }, [runMultiPhotoUpload]);
 
   // ── Video upload ──────────────────────────────────────────────────────────
   const runUpload = useCallback(async (
@@ -232,7 +294,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           endpoint:    tusEndpoint,
           chunkSize:   5 * 1024 * 1024,
           retryDelays: [0, 3000, 5000, 10000, 20000],
-          storeFingerprintForResuming: false, // ← FIXED: Bunny uses presigned URLs per upload; stale fingerprints cause silent failure
+          storeFingerprintForResuming: false,
           headers: {
             AuthorizationSignature: signature,
             AuthorizationExpire:    String(expireTime),
@@ -254,7 +316,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           },
         });
 
-        // ← FIXED: removed findPreviousUploads/resumeFromPreviousUpload — always start fresh
         upload.start();
       });
 
@@ -310,21 +371,23 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     setUploads((prev) => prev.map((u) => u.id === id ? { ...u, progress: 0, phase: "uploading", error: undefined } : u));
     setUploads((prev) => {
       const item = prev.find((u) => u.id === id);
-      if (item?._isPhoto && item.file && item._onMediaId && item._onError) {
+      if (item?._isMultiPhoto && item.files && item._onMediaIds && item._onError) {
+        runMultiPhotoUpload(id, item.files, item._onMediaIds, item._onError);
+      } else if (item?._isPhoto && item.file && item._onMediaId && item._onError) {
         runPhotoUpload(id, item.file, item._onMediaId, item._onError);
       } else if (item?.file && item._title && item._onMediaId && item._onError) {
         runUpload(id, item.file, item._title, item._thumbnailBlob, item._onMediaId, item._onError);
       }
       return prev;
     });
-  }, [runUpload, runPhotoUpload]);
+  }, [runUpload, runPhotoUpload, runMultiPhotoUpload]);
 
   const clearDone = useCallback(() => {
     setUploads((prev) => prev.filter((u) => u.phase !== "done"));
   }, []);
 
   return (
-    <UploadContext.Provider value={{ uploads, startVideoUpload, startPhotoUpload, dismissUpload, retryUpload, clearDone }}>
+    <UploadContext.Provider value={{ uploads, startVideoUpload, startPhotoUpload, startMultiPhotoUpload, dismissUpload, retryUpload, clearDone }}>
       {children}
     </UploadContext.Provider>
   );

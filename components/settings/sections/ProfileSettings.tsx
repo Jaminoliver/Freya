@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Loader2, Check, AlertCircle } from "lucide-react";
+import { Camera, Loader2, Check, AlertCircle, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { uploadImage } from "@/lib/utils/uploadImage";
@@ -23,6 +23,7 @@ interface ProfileForm {
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid" | "own";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -54,22 +55,29 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
     telegram_url: "", facebook_url: "",
   });
 
+  const [originalUsername, setOriginalUsername] = useState("");
+  const [usernameInput,    setUsernameInput]    = useState("");
+  const [usernameStatus,   setUsernameStatus]   = useState<UsernameStatus>("idle");
+  const [usernameMsg,      setUsernameMsg]       = useState<string | null>(null);
+  const [suggestions,      setSuggestions]       = useState<string[]>([]);
+
   const [dobDay,   setDobDay]   = useState("");
   const [dobMonth, setDobMonth] = useState("");
   const [dobYear,  setDobYear]  = useState("");
 
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [avatarUrl,       setAvatarUrl]       = useState<string | null>(null);
+  const [bannerUrl,       setBannerUrl]       = useState<string | null>(null);
+  const [saveState,       setSaveState]       = useState<SaveState>("idle");
+  const [errorMsg,        setErrorMsg]        = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
-  const [cropType, setCropType] = useState<"avatar" | "banner">("avatar");
+  const [userId,          setUserId]          = useState<string | null>(null);
+  const [cropImageSrc,    setCropImageSrc]    = useState<string | null>(null);
+  const [cropType,        setCropType]        = useState<"avatar" | "banner">("avatar");
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const debounceTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -84,19 +92,21 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
         .single();
       if (data) {
         setForm({
-          display_name: data.display_name ?? "",
-          username: data.username ?? "",
-          bio: data.bio ?? "",
-          location: data.location ?? "",
-          country: data.country ?? "",
-          state: data.state ?? "",
+          display_name:  data.display_name ?? "",
+          username:      data.username ?? "",
+          bio:           data.bio ?? "",
+          location:      data.location ?? "",
+          country:       data.country ?? "",
+          state:         data.state ?? "",
           date_of_birth: data.date_of_birth ?? "",
-          website_url: data.website_url ?? "",
-          twitter_url: data.twitter_url ?? "",
+          website_url:   data.website_url ?? "",
+          twitter_url:   data.twitter_url ?? "",
           instagram_url: data.instagram_url ?? "",
-          telegram_url: data.telegram_url ?? "",
-          facebook_url: data.facebook_url ?? "",
+          telegram_url:  data.telegram_url ?? "",
+          facebook_url:  data.facebook_url ?? "",
         });
+        setOriginalUsername(data.username ?? "");
+        setUsernameInput(data.username ?? "");
         setAvatarUrl(data.avatar_url);
         setBannerUrl(data.banner_url);
         const { day, month, year } = parseDOB(data.date_of_birth ?? "");
@@ -107,6 +117,62 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
     };
     load();
   }, []);
+
+  // ── Debounced username check ──────────────────────────────────────────────
+  const checkUsername = useCallback(async (value: string) => {
+    const trimmed = value.toLowerCase().trim();
+
+    if (!trimmed) { setUsernameStatus("idle"); setUsernameMsg(null); setSuggestions([]); return; }
+
+    // Same as original — no check needed
+    if (trimmed === originalUsername.toLowerCase()) {
+      setUsernameStatus("own");
+      setUsernameMsg(null);
+      setSuggestions([]);
+      return;
+    }
+
+    // Client-side format check before hitting API
+    if (!/^[a-z0-9_]{3,30}$/.test(trimmed)) {
+      setUsernameStatus("invalid");
+      setUsernameMsg("3–30 characters. Letters, numbers, and underscores only.");
+      setSuggestions([]);
+      return;
+    }
+
+    setUsernameStatus("checking");
+    setUsernameMsg(null);
+    setSuggestions([]);
+
+    try {
+      const res  = await fetch(`/api/check-username?username=${encodeURIComponent(trimmed)}`);
+      const data = await res.json();
+
+      if (data.available) {
+        setUsernameStatus("available");
+        setUsernameMsg("Username available");
+        setSuggestions([]);
+      } else {
+        setUsernameStatus("taken");
+        setUsernameMsg(data.reason || "Username not available");
+        setSuggestions(data.suggestions ?? []);
+      }
+    } catch {
+      setUsernameStatus("idle");
+      setUsernameMsg("Could not check availability");
+      setSuggestions([]);
+    }
+  }, [originalUsername]);
+
+  const handleUsernameChange = (value: string) => {
+    setUsernameInput(value);
+    setUsernameStatus("idle");
+    setUsernameMsg(null);
+    setSuggestions([]);
+
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => checkUsername(value), 500);
+  };
 
   const set = (key: keyof ProfileForm, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -141,31 +207,54 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
     }
   };
 
+  const canSave =
+    saveState !== "saving" &&
+    (usernameStatus === "available" || usernameStatus === "own" || usernameStatus === "idle");
+
   const handleSave = async () => {
-    if (!userId) return;
+    if (!userId || !canSave) return;
+
+    // Block save if username is actively being changed but status isn't resolved
+    if (usernameInput.toLowerCase() !== originalUsername.toLowerCase() && usernameStatus !== "available") return;
+
     setSaveState("saving");
     setErrorMsg(null);
     const supabase = createClient();
     const dob = buildDOB(dobDay, dobMonth, dobYear);
-    const { error } = await supabase.from("profiles").update({
-      display_name: form.display_name || null,
-      bio: form.bio || null,
-      location: form.location || null,
-      country: form.country || null,
-      state: form.state || null,
-      date_of_birth: dob || null,
-      website_url: form.website_url || null,
-      twitter_url: form.twitter_url || null,
-      instagram_url: form.instagram_url || null,
-      telegram_url: form.telegram_url || null,
-      facebook_url: form.facebook_url || null,
-      updated_at: new Date().toISOString(),
-    }).eq("id", userId);
 
-    if (error) { setSaveState("error"); setErrorMsg(error.message); }
-    else { setSaveState("saved"); setTimeout(() => { router.push(`/${form.username}`); }, 1000); }
+    const updates: Record<string, unknown> = {
+      display_name:  form.display_name || null,
+      bio:           form.bio || null,
+      location:      form.location || null,
+      country:       form.country || null,
+      state:         form.state || null,
+      date_of_birth: dob || null,
+      website_url:   form.website_url || null,
+      twitter_url:   form.twitter_url || null,
+      instagram_url: form.instagram_url || null,
+      telegram_url:  form.telegram_url || null,
+      facebook_url:  form.facebook_url || null,
+      updated_at:    new Date().toISOString(),
+    };
+
+    // Only include username if it changed and is available
+    if (usernameStatus === "available" && usernameInput.trim() !== originalUsername) {
+      updates.username = usernameInput.toLowerCase().trim();
+    }
+
+    const { error } = await supabase.from("profiles").update(updates).eq("id", userId);
+
+    if (error) {
+      setSaveState("error");
+      setErrorMsg(error.message);
+    } else {
+      const finalUsername = (updates.username as string) ?? form.username;
+      setSaveState("saved");
+      setTimeout(() => { router.push(`/${finalUsername}`); }, 1000);
+    }
   };
 
+  // ── Styles ────────────────────────────────────────────────────────────────
   const inputBase: React.CSSProperties = {
     width: "100%", borderRadius: "10px", padding: "12px 14px",
     fontSize: "14px", outline: "none", backgroundColor: "#141420",
@@ -181,9 +270,7 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
     boxSizing: "border-box", fontFamily: "'Inter', sans-serif",
     appearance: "none", cursor: "pointer",
     backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236B6B8A' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-    backgroundRepeat: "no-repeat",
-    backgroundPosition: "right 10px center",
-    paddingRight: "28px",
+    backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center", paddingRight: "28px",
   };
 
   const labelStyle: React.CSSProperties = {
@@ -194,6 +281,14 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
   const dividerLabel: React.CSSProperties = {
     fontSize: "11px", color: "#6B6B8A", letterSpacing: "0.08em",
     textTransform: "uppercase", fontWeight: 600,
+  };
+
+  // Username border color based on status
+  const usernameBorderColor = () => {
+    if (usernameStatus === "available") return "#22C55E";
+    if (usernameStatus === "taken" || usernameStatus === "invalid") return "#EF4444";
+    if (usernameStatus === "checking") return "#8B5CF6";
+    return "#2A2A3D";
   };
 
   return (
@@ -247,16 +342,72 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
         {/* Basic Info */}
         <p style={{ fontSize: "11px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 14px" }}>Basic Info</p>
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+
+          {/* Display Name */}
           <div>
             <label style={labelStyle}>Display Name</label>
             <input type="text" value={form.display_name} onChange={(e) => set("display_name", e.target.value)} placeholder="Your public name" style={inputBase}
               onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           </div>
+
+          {/* Username */}
           <div>
             <label style={labelStyle}>Username</label>
-            <input type="text" value={form.username} readOnly style={{ ...inputBase, color: "#6B6B8A", cursor: "not-allowed" }} />
-            <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", fontStyle: "italic" }}>Change username in Account settings</span>
+            <div style={{ position: "relative" }}>
+              <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif", pointerEvents: "none", zIndex: 1 }}>@</span>
+              <input
+                type="text"
+                value={usernameInput}
+                onChange={(e) => handleUsernameChange(e.target.value)}
+                placeholder="yourhandle"
+                maxLength={30}
+                style={{ ...inputBase, paddingLeft: "28px", paddingRight: "40px", borderColor: usernameBorderColor() }}
+              />
+              {/* Status icon */}
+              <div style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center" }}>
+                {usernameStatus === "checking" && (
+                  <Loader2 size={16} color="#8B5CF6" style={{ animation: "spin 0.9s linear infinite" }} />
+                )}
+                {usernameStatus === "available" && (
+                  <Check size={16} color="#22C55E" strokeWidth={2.5} />
+                )}
+                {(usernameStatus === "taken" || usernameStatus === "invalid") && (
+                  <X size={16} color="#EF4444" strokeWidth={2.5} />
+                )}
+              </div>
+            </div>
+
+            {/* Status message */}
+            {usernameMsg && (
+              <span style={{ fontSize: "12px", marginTop: "5px", display: "block", color: usernameStatus === "available" ? "#22C55E" : "#EF4444", fontFamily: "'Inter', sans-serif" }}>
+                {usernameMsg}
+              </span>
+            )}
+
+            {/* Suggestions */}
+            {suggestions.length > 0 && (
+              <div style={{ marginTop: "8px", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "11px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>Try:</span>
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => { setUsernameInput(s); handleUsernameChange(s); }}
+                    style={{ padding: "3px 10px", borderRadius: "20px", border: "1px solid #2A2A3D", backgroundColor: "#1C1C2E", color: "#8B5CF6", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.15)"; e.currentTarget.style.borderColor = "#8B5CF6"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1C1C2E"; e.currentTarget.style.borderColor = "#2A2A3D"; }}
+                  >
+                    @{s}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "5px", display: "block", fontStyle: "italic" }}>
+              Changing your username will update your profile URL.
+            </span>
           </div>
+
+          {/* Bio */}
           <div>
             <label style={labelStyle}>Bio</label>
             <textarea value={form.bio} onChange={(e) => set("bio", e.target.value)} placeholder="Tell people about yourself..." maxLength={200} rows={3}
@@ -265,7 +416,7 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
             <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "4px", display: "block", textAlign: "right" }}>{form.bio.length}/200</span>
           </div>
 
-          {/* Date of Birth — three dropdowns */}
+          {/* Date of Birth */}
           <div>
             <label style={labelStyle}>Date of Birth</label>
             <div style={{ display: "flex", gap: "8px" }}>
@@ -354,10 +505,14 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
         )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "28px" }}>
-          <button type="button" onClick={handleSave} disabled={saveState === "saving"}
-            style={{ display: "flex", alignItems: "center", gap: "8px", padding: "11px 24px", borderRadius: "8px", fontSize: "14px", fontWeight: 600, border: "none", cursor: saveState === "saving" ? "not-allowed" : "pointer", backgroundColor: saveState === "saved" ? "#059669" : "#8B5CF6", color: "#FFFFFF", boxShadow: "0 4px 20px rgba(139,92,246,0.3)", fontFamily: "'Inter', sans-serif", transition: "background-color 0.2s", opacity: saveState === "saving" ? 0.7 : 1 }}>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!canSave}
+            style={{ display: "flex", alignItems: "center", gap: "8px", padding: "11px 24px", borderRadius: "8px", fontSize: "14px", fontWeight: 600, border: "none", cursor: canSave ? "pointer" : "not-allowed", backgroundColor: saveState === "saved" ? "#059669" : "#8B5CF6", color: "#FFFFFF", boxShadow: "0 4px 20px rgba(139,92,246,0.3)", fontFamily: "'Inter', sans-serif", transition: "background-color 0.2s", opacity: canSave ? 1 : 0.5 }}
+          >
             {saveState === "saving" && <Loader2 size={14} style={{ animation: "spin 0.9s linear infinite" }} />}
-            {saveState === "saved" && <Check size={14} />}
+            {saveState === "saved"  && <Check size={14} />}
             {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : "Save Changes"}
           </button>
         </div>
