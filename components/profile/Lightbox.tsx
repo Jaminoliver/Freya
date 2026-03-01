@@ -67,6 +67,22 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
     return () => document.removeEventListener("keydown", handler);
   }, [hasPrevImage, hasNextImage, hasPrevPost, hasNextPost, mediaIndex]);
 
+  const touchStartX = React.useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) goNext();
+      else goPrev();
+    }
+    touchStartX.current = null;
+  };
+
   const hasPrev = hasPrevImage || hasPrevPost;
   const hasNext = hasNextImage || hasNextPost;
 
@@ -76,10 +92,15 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
 
   if (isMobile) {
     return ReactDOM.createPortal(
-      <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", flexDirection: "column" }}>
+      <div
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", flexDirection: "column" }}
+      >
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, display: "flex", justifyContent: "flex-end", padding: "16px" }}>
-          <button onClick={(e) => { e.stopPropagation(); onClose(); }} style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.15)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <X size={20} />
+          <button onClick={(e) => { e.stopPropagation(); onClose(); }} style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#fff", border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
+            <X size={20} strokeWidth={2.5} />
           </button>
         </div>
         {images.length > 1 && (
@@ -115,9 +136,14 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   }
 
   return ReactDOM.createPortal(
-    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingTop: "40px" }}>
-      <button onClick={onClose} style={{ position: "absolute", top: "20px", right: "24px", background: "none", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", zIndex: 10 }}>
-        <X size={24} strokeWidth={2} />
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingTop: "40px" }}
+    >
+      <button onClick={onClose} style={{ position: "absolute", top: "20px", right: "24px", backgroundColor: "#fff", border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "40px", height: "40px", borderRadius: "50%", boxShadow: "0 2px 8px rgba(0,0,0,0.5)", zIndex: 10 }}>
+        <X size={20} strokeWidth={2.5} />
       </button>
       {images.length > 1 && (
         <div style={{ position: "absolute", top: "20px", left: "50%", transform: "translateX(-50%)", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
