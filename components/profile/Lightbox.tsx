@@ -42,6 +42,20 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
 
   React.useEffect(() => { setMounted(true); }, []);
 
+  // Lock body scroll when lightbox is open, restore on close
+  React.useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    // Also prevent iOS Safari rubber-band scroll on the body
+    document.body.style.position = "fixed";
+    document.body.style.width    = "100%";
+    return () => {
+      document.body.style.overflow = prev;
+      document.body.style.position = "";
+      document.body.style.width    = "";
+    };
+  }, []);
+
   React.useEffect(() => { setMediaIndex(initialMediaIndex); }, [post.id, initialMediaIndex]);
 
   const goPrev = React.useCallback(() => {
@@ -71,6 +85,8 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    // Prevent the page behind from scrolling while lightbox is open
+    e.stopPropagation();
     if (!dragging.current || touchStartX.current === null) return;
     const diff = e.touches[0].clientX - touchStartX.current;
     touchCurrentX.current = e.touches[0].clientX;
@@ -102,7 +118,7 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", overflow: "hidden" }}
+      style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", overflow: "hidden", touchAction: "none" }}
     >
       {/* Top bar */}
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", pointerEvents: "none" }}>

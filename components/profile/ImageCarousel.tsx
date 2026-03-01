@@ -21,9 +21,14 @@ export default function ImageCarousel({ media, onImageClick }: {
 }) {
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [isDesktop,   setIsDesktop]   = React.useState(false);
-  const trackRef   = React.useRef<HTMLDivElement>(null);
-  const startXRef  = React.useRef<number | null>(null);
-  const isDragging = React.useRef(false);
+  const trackRef      = React.useRef<HTMLDivElement>(null);
+  const startXRef     = React.useRef<number | null>(null);
+  const isDragging    = React.useRef(false);
+  // Double-tap detection for lightbox — single tap opens it, double tap cancels
+  const lastTapTime   = React.useRef<number>(0);
+  const tapTimer      = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Blocks synthetic mouseup the browser fires after touchend
+  const touchWasUsed  = React.useRef(false);
 
   React.useEffect(() => {
     const check = () => setIsDesktop(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -44,21 +49,62 @@ export default function ImageCarousel({ media, onImageClick }: {
     setActiveIndex(index);
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => { startXRef.current = e.touches[0].clientX; };
-  const handleTouchEnd   = (e: React.TouchEvent) => {
-    if (startXRef.current === null) return;
-    const diff = startXRef.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 40) {
-      if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
-      if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
-    }
-    startXRef.current = null;
+  const handleTouchStart = (e: React.TouchEvent) => {
+    startXRef.current = e.touches[0].clientX;
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => { startXRef.current = e.clientX; isDragging.current = false; };
-  const handleMouseMove = (e: React.MouseEvent) => { if (startXRef.current !== null && Math.abs(e.clientX - startXRef.current) > 5) isDragging.current = true; };
-  const handleMouseUp   = (e: React.MouseEvent) => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    // Block synthetic mouseup/click the browser fires after touchend
+    touchWasUsed.current = true;
+    setTimeout(() => { touchWasUsed.current = false; }, 500);
+
     if (startXRef.current === null) return;
+    const diff = startXRef.current - e.changedTouches[0].clientX;
+    startXRef.current = null;
+
+    if (Math.abs(diff) > 40) {
+      // Swipe — navigate carousel, don't open lightbox
+      if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
+      if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
+      if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
+      return;
+    }
+
+    // It's a tap — use double-tap detection so lightbox doesn't open on double-tap
+    const now     = Date.now();
+    const tapDiff = now - lastTapTime.current;
+    lastTapTime.current = now;
+
+    if (tapDiff < 300 && tapDiff > 0) {
+      // Double tap — cancel pending single-tap lightbox open (parent DoubleTapLike handles the like)
+      if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
+    } else {
+      // Single tap — delay to confirm no second tap is coming
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+      const capturedIndex = activeIndex;
+      tapTimer.current = setTimeout(() => {
+        tapTimer.current = null;
+        onImageClick?.(capturedIndex);
+      }, 300);
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (touchWasUsed.current) return;
+    startXRef.current = e.clientX;
+    isDragging.current = false;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (touchWasUsed.current) return;
+    if (startXRef.current !== null && Math.abs(e.clientX - startXRef.current) > 5) isDragging.current = true;
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    // Skip if this mouseup was synthetically generated after a touchend
+    if (touchWasUsed.current) return;
+    if (startXRef.current === null) return;
+
     const diff = startXRef.current - e.clientX;
     if (Math.abs(diff) > 40) {
       if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
@@ -66,7 +112,7 @@ export default function ImageCarousel({ media, onImageClick }: {
     } else if (!isDragging.current) {
       onImageClick?.(activeIndex);
     }
-    startXRef.current = null;
+    startXRef.current  = null;
     isDragging.current = false;
   };
 

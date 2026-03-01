@@ -20,6 +20,8 @@ export default function DoubleTapLike({ onSingleTap, onDoubleTap, children, styl
   const lastTap      = React.useRef<number>(0);
   const timer        = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const idRef        = React.useRef(0);
+  // Tracks whether last interaction was touch, to suppress synthetic mouse click
+  const touchActive  = React.useRef(false);
   const [bursts, setBursts] = React.useState<HeartBurst[]>([]);
 
   const triggerHeart = React.useCallback((x: number, y: number) => {
@@ -34,12 +36,16 @@ export default function DoubleTapLike({ onSingleTap, onDoubleTap, children, styl
     if (!el) return;
 
     const handleTouchEnd = (e: TouchEvent) => {
+      touchActive.current = true;
+      // Reset after synthetic click window has passed
+      setTimeout(() => { touchActive.current = false; }, 500);
+
       const now  = Date.now();
       const diff = now - lastTap.current;
       lastTap.current = now;
 
       if (diff < 300 && diff > 0) {
-        // Double tap — prevent ALL default behavior (lightbox, fullscreen, play)
+        // Double tap — prevent synthetic click from also firing
         e.preventDefault();
         e.stopPropagation();
         if (timer.current) { clearTimeout(timer.current); timer.current = null; }
@@ -47,7 +53,6 @@ export default function DoubleTapLike({ onSingleTap, onDoubleTap, children, styl
         const rect  = el.getBoundingClientRect();
         triggerHeart(touch.clientX - rect.left, touch.clientY - rect.top);
       } else {
-        // Single tap — wait to confirm it's not a double tap
         if (timer.current) clearTimeout(timer.current);
         timer.current = setTimeout(() => {
           timer.current = null;
@@ -56,16 +61,19 @@ export default function DoubleTapLike({ onSingleTap, onDoubleTap, children, styl
       }
     };
 
-    // { passive: false } is required — without it, preventDefault() is silently ignored
+    // passive: false required so e.preventDefault() is respected
     el.addEventListener("touchend", handleTouchEnd, { passive: false });
     return () => el.removeEventListener("touchend", handleTouchEnd);
   }, [triggerHeart, onSingleTap]);
 
-  // Mouse fallback for desktop
+  // Desktop mouse double-click fallback
   const lastClickTime = React.useRef<number>(0);
   const clickTimer    = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleClick = (e: React.MouseEvent) => {
+    // Always suppress synthetic mouse clicks generated after touchend
+    if (touchActive.current) return;
+
     const now  = Date.now();
     const diff = now - lastClickTime.current;
     lastClickTime.current = now;
@@ -86,7 +94,18 @@ export default function DoubleTapLike({ onSingleTap, onDoubleTap, children, styl
   };
 
   return (
-    <div ref={containerRef} style={{ position: "relative", ...style }} onClick={handleClick}>
+    <div
+      ref={containerRef}
+      style={{
+        position: "relative",
+        // Eliminates 300ms tap delay + prevents double-tap zoom on this element.
+        // This stops the browser from generating synthetic mouse events after touchend,
+        // which was causing lightbox to open on double-tap.
+        touchAction: "manipulation",
+        ...style,
+      }}
+      onClick={handleClick}
+    >
       {children}
 
       {bursts.map((burst) => (
