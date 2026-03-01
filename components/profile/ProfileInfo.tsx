@@ -54,12 +54,12 @@ export default function ProfileInfo({
   const showHeader = mode === "header" || mode === "full";
   const showBody   = mode === "body"   || mode === "full";
 
-  const displayBio      = bio      || "Bringing you late-night gameplay, spicy energy, and behind the scenes fun 😏\nSubscribe for uncensored gaming moments & real connection 🔥🕹️";
-  const displayLocation = location || "Lagos, Nigeria";
-  const displayTwitter   = twitterUrl   || "https://twitter.com";
-  const displayInstagram = instagramUrl || "https://instagram.com";
-  const displayTelegram  = telegramUrl  || "https://t.me";
-  const displayFacebook  = facebookUrl  || "https://facebook.com";
+  const displayBio      = bio;
+  const displayLocation = location;
+  const displayTwitter   = twitterUrl;
+  const displayInstagram = instagramUrl;
+  const displayTelegram  = telegramUrl;
+  const displayFacebook  = facebookUrl;
 
   // Measure real rendered height to detect overflow (handles single-paragraph long bios)
   React.useEffect(() => {
@@ -97,32 +97,34 @@ export default function ProfileInfo({
       {showBody && (
         <div style={{ marginTop: "8px" }}>
           {/* Bio */}
-          <div style={{ position: "relative" }}>
-            <p
-              ref={bioRef}
-              style={{
-                fontSize: "14px",
-                lineHeight: `${LINE_HEIGHT_PX}px`,
-                color: "#E2E8F0",
-                margin: 0,
-                whiteSpace: "pre-wrap",
-                overflow: "hidden",
-                maxHeight: expanded ? "none" : `${LINE_HEIGHT_PX * MAX_LINES}px`,
-                transition: "max-height 0.2s ease",
-              }}
-            >
-              {displayBio}
-            </p>
+          {displayBio && (
+            <div style={{ position: "relative" }}>
+              <p
+                ref={bioRef}
+                style={{
+                  fontSize: "14px",
+                  lineHeight: `${LINE_HEIGHT_PX}px`,
+                  color: "#E2E8F0",
+                  margin: 0,
+                  whiteSpace: "pre-wrap",
+                  overflow: "hidden",
+                  maxHeight: expanded ? "none" : `${LINE_HEIGHT_PX * MAX_LINES}px`,
+                  transition: "max-height 0.2s ease",
+                }}
+              >
+                {displayBio}
+              </p>
 
-            {isOverflowing && !expanded && (
-              <div style={{
-                position: "absolute", bottom: 0, left: 0, right: 0,
-                height: "28px",
-                background: "linear-gradient(to bottom, transparent, #0A0A0F)",
-                pointerEvents: "none",
-              }} />
-            )}
-          </div>
+              {isOverflowing && !expanded && (
+                <div style={{
+                  position: "absolute", bottom: 0, left: 0, right: 0,
+                  height: "28px",
+                  background: "linear-gradient(to bottom, transparent, #0A0A0F)",
+                  pointerEvents: "none",
+                }} />
+              )}
+            </div>
+          )}
 
           {isOverflowing && (
             <button
@@ -155,13 +157,13 @@ export default function ProfileInfo({
               )}
 
               <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-                {location && (
+                {displayLocation && (
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <MapPin size={15} color="#64748B" strokeWidth={1.8} />
                     <span style={{ fontSize: "13px", color: "#94A3B8" }}>{displayLocation}</span>
                   </div>
                 )}
-                {twitterUrl && (
+                {displayTwitter && (
                   <a href={displayTwitter} target="_blank" rel="noopener noreferrer"
                     style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
@@ -169,7 +171,7 @@ export default function ProfileInfo({
                     <Twitter size={16} strokeWidth={1.8} />
                   </a>
                 )}
-                {instagramUrl && (
+                {displayInstagram && (
                   <a href={displayInstagram} target="_blank" rel="noopener noreferrer"
                     style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
@@ -177,7 +179,7 @@ export default function ProfileInfo({
                     <Instagram size={16} strokeWidth={1.8} />
                   </a>
                 )}
-                {facebookUrl && (
+                {displayFacebook && (
                   <a href={displayFacebook} target="_blank" rel="noopener noreferrer"
                     style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
@@ -185,7 +187,7 @@ export default function ProfileInfo({
                     <Facebook size={16} strokeWidth={1.8} />
                   </a>
                 )}
-                {telegramUrl && (
+                {displayTelegram && (
                   <a href={displayTelegram} target="_blank" rel="noopener noreferrer"
                     style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}

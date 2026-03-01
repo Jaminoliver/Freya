@@ -116,11 +116,8 @@ export default function ProfilePage() {
         };
         setProfile(enriched);
 
-        const { count } = await supabase
-          .from("likes")
-          .select("id, posts!inner(creator_id)", { count: "exact", head: true })
-          .eq("posts.creator_id", profileData.id);
-        likesCount = count ?? 0;
+        // Use denormalized likes_count from profiles table
+        likesCount = profileData.likes_count ?? 0;
         setTotalLikes(likesCount);
 
         if (profileData.role === "creator") {
@@ -187,7 +184,8 @@ export default function ProfilePage() {
       .channel(`creator-profile-${creatorId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${creatorId}` }, (payload: any) => {
         const updated = payload.new;
-        setProfile((prev) => prev ? { ...prev, subscriber_count: updated.subscriber_count } : prev);
+        setProfile((prev) => prev ? { ...prev, subscriber_count: updated.subscriber_count, likes_count: updated.likes_count } : prev);
+        setTotalLikes(updated.likes_count ?? 0);
       })
       .subscribe();
 
@@ -229,10 +227,7 @@ export default function ProfilePage() {
   const handlePost          = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule      = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
 
-  // PostRow handles the API call, local state update, and store emit itself.
-  // This is intentionally a no-op to prevent double API calls and double-toggle.
-  const handleLike = (_postId: string) => {};
-
+  const handleLike    = (_postId: string) => {};
   const handleComment = (id: string) => console.log("Comment:", id);
   const handleTip     = (_id: string) => openTip();
   const handleUnlock  = (id: string) => openUnlock(id);

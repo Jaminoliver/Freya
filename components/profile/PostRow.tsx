@@ -112,7 +112,7 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
   onUnlock?: (id: string) => void;
   viewer: { id: string; username: string; display_name: string; avatar_url: string } | null;
   onDelete?: (id: string) => void;
-  onImageClick?: (post: LightboxPost) => void;
+  onImageClick?: (post: LightboxPost, index: number) => void;
 }) {
   const mediaHeight  = useMediaHeight();
   const router       = useRouter();
@@ -163,7 +163,7 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
   const lockedThumb: string | undefined = firstMedia
     ? firstMedia.media_type === "video" && firstMedia.bunny_video_id
       ? getBunnyThumbnail(firstMedia.bunny_video_id)
-      : (firstMedia.thumbnail_url ?? firstMedia.file_url ?? undefined)
+      : ((firstMedia as any).locked_preview_url ?? undefined)
     : undefined;
 
   const videoThumbUrl: string | undefined = firstMedia?.bunny_video_id
@@ -209,7 +209,6 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
       {/* Media */}
       {firstMedia && (
         isLocked ? (
-          // FIX: minHeight ensures the overlay is visible even when lockedThumb is null (images without thumbnail_url)
           <div style={{ position: "relative", overflow: "hidden", width: "100%", minHeight: lockedThumb ? undefined : "220px", backgroundColor: "#0A0A0F" }}>
             {lockedThumb && (
               <img
@@ -256,11 +255,14 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
           </div>
 
         ) : isMultiPhoto ? (
-          <ImageCarousel media={photoMedia} onImageClick={() => onImageClick?.(post)} />
+          <ImageCarousel
+            media={photoMedia}
+            onImageClick={(index) => onImageClick?.(post, index)}
+          />
 
         ) : (
           <div
-            onClick={() => onImageClick?.(post)}
+            onClick={() => onImageClick?.(post, 0)}
             style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%", cursor: "zoom-in" }}
           >
             {firstMedia.file_url && (

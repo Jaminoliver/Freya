@@ -118,9 +118,13 @@ export async function GET(
           )
           .map((m: Record<string, unknown>) => ({
             ...m,
-            file_url:      canAccess ? m.file_url : null,
-            thumbnail_url: m.thumbnail_url,
-            locked:        !canAccess,
+            file_url:           canAccess ? m.file_url : null,
+            thumbnail_url:      m.thumbnail_url,
+            // Provides a preview URL for blurring locked content on the frontend.
+            // For images: falls back to file_url since they have no thumbnail.
+            // For videos: frontend uses getBunnyThumbnail() so this is not needed.
+            locked_preview_url: !canAccess ? (m.thumbnail_url ?? m.file_url) : null,
+            locked:             !canAccess,
           }));
 
         return {

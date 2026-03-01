@@ -123,7 +123,8 @@ export default function ContentFeed({
   const [showSearch,      setShowSearch]      = React.useState(false);
   const [searchQuery,     setSearchQuery]     = React.useState("");
   const [viewer,          setViewer]          = React.useState<{ id: string; username: string; display_name: string; avatar_url: string } | null>(null);
-  const [lightboxPost,    setLightboxPost]    = React.useState<LightboxPost | null>(null);
+  const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
+  const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
 
   React.useEffect(() => {
     feedLayoutCache.set(cacheKey, { activeTab, isPostsGridView, isMediaGridView });
@@ -188,6 +189,11 @@ export default function ContentFeed({
     setApiMedia((prev) => prev.filter((m) => String(m.post_id) !== id));
   };
 
+  const openLightbox = (p: LightboxPost, index: number) => {
+    setLightboxMediaIndex(index);
+    setLightboxPost(p);
+  };
+
   const filteredPosts = apiPosts.filter((p) => searchQuery ? p.caption?.toLowerCase().includes(searchQuery.toLowerCase()) : true);
   const filteredMedia = apiMedia.filter((m) => mediaFilter === "all" ? true : mediaFilter === "photo" ? m.media_type !== "video" : m.media_type === "video");
   const photoCount    = apiMedia.filter((m) => m.media_type !== "video").length;
@@ -199,8 +205,9 @@ export default function ContentFeed({
         <Lightbox
           post={lightboxPost}
           allPosts={imagePosts}
+          initialMediaIndex={lightboxMediaIndex}
           onClose={() => setLightboxPost(null)}
-          onNavigate={(p) => setLightboxPost(p)}
+          onNavigate={(p, mediaIndex) => { setLightboxMediaIndex(mediaIndex ?? 0); setLightboxPost(p); }}
         />
       )}
 
@@ -293,7 +300,7 @@ export default function ContentFeed({
                 onTip={onTip}
                 onUnlock={onUnlock}
                 onDelete={handleDeletePost}
-                onImageClick={(p) => setLightboxPost(p)}
+                onImageClick={(p, index) => openLightbox(p, index)}
               />
             ))
           )}

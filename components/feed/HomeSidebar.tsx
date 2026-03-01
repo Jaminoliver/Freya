@@ -1,68 +1,63 @@
 "use client";
 
-import { useState } from "react";
-import { BadgeCheck, Users, Image, RefreshCw, Filter, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { BadgeCheck, Heart, Users, RefreshCw, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
+import { createClient } from "@/lib/supabase/client";
 
 interface SuggestedCreator {
   id: string;
   name: string;
   username: string;
-  avatar_url: string;
-  coverImage: string;
+  avatar_url: string | null;
+  banner_url: string | null;
   isVerified: boolean;
-  subscribers: string;
-  posts: number;
+  subscriber_count: number;
+  likes_count: number;
 }
 
-const SUGGESTED_CREATORS: SuggestedCreator[] = [
-  {
-    id: "1", name: "Snow",         username: "Snow",
-    avatar_url: "https://i.pravatar.cc/150?img=47",
-    coverImage:  "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400&q=80",
-    isVerified: true,  subscribers: "8.23k", posts: 119,
-  },
-  {
-    id: "2", name: "Crazysocket",  username: "Crazysocket",
-    avatar_url: "https://i.pravatar.cc/150?img=45",
-    coverImage:  "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=400&q=80",
-    isVerified: true,  subscribers: "7.94k", posts: 14,
-  },
-  {
-    id: "3", name: "Freakiest",    username: "Freakiest",
-    avatar_url: "https://i.pravatar.cc/150?img=44",
-    coverImage:  "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80",
-    isVerified: true,  subscribers: "5.12k", posts: 92,
-  },
-  {
-    id: "4", name: "PrideVine",    username: "PrideVine",
-    avatar_url: "https://i.pravatar.cc/150?img=43",
-    coverImage:  "https://images.unsplash.com/photo-1513836279014-a89f7d76ae86?w=400&q=80",
-    isVerified: true,  subscribers: "12.5k", posts: 203,
-  },
-  {
-    id: "5", name: "LunaBella",    username: "LunaBella",
-    avatar_url: "https://i.pravatar.cc/150?img=48",
-    coverImage:  "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=400&q=80",
-    isVerified: false, subscribers: "3.8k",  posts: 47,
-  },
-  {
-    id: "6", name: "Aria Nova",    username: "AriaNova",
-    avatar_url: "https://i.pravatar.cc/150?img=46",
-    coverImage:  "https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=400&q=80",
-    isVerified: true,  subscribers: "9.1k",  posts: 88,
-  },
-];
+const PER_PAGE = 4;
 
 export function HomeSidebar() {
-  const router  = useRouter();
+  const router = useRouter();
+  const [creators, setCreators] = useState<SuggestedCreator[]>([]);
   const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  // Show 4 per page (2x2 grid)
-  const perPage    = 4;
-  const totalPages = Math.ceil(SUGGESTED_CREATORS.length / perPage);
-  const visible    = SUGGESTED_CREATORS.slice(page * perPage, page * perPage + perPage);
+  const fetchCreators = useCallback(async () => {
+    setLoading(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, display_name, username, avatar_url, banner_url, is_verified, subscriber_count, likes_count")
+      .eq("role", "creator")
+      .eq("is_active", true)
+      .eq("is_suspended", false)
+      .order("subscriber_count", { ascending: false })
+      .limit(12);
+
+    if (!error && data) {
+      setCreators(
+        data.map((p) => ({
+          id: p.id,
+          name: p.display_name || p.username,
+          username: p.username,
+          avatar_url: p.avatar_url,
+          banner_url: p.banner_url,
+          isVerified: p.is_verified ?? false,
+          subscriber_count: p.subscriber_count ?? 0,
+          likes_count: p.likes_count ?? 0,
+        }))
+      );
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchCreators(); }, [fetchCreators]);
+
+  const totalPages = Math.ceil(creators.length / PER_PAGE);
+  const visible = creators.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
@@ -82,6 +77,7 @@ export function HomeSidebar() {
             <Filter size={13} />
           </button>
           <button
+            onClick={fetchCreators}
             style={{ width: "26px", height: "26px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #2A2A3D", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
             title="Refresh"
           >
@@ -96,8 +92,8 @@ export function HomeSidebar() {
           </button>
           <button
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={page === totalPages - 1}
-            style={{ width: "26px", height: "26px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #2A2A3D", color: page === totalPages - 1 ? "#2A2A3D" : "#6B6B8A", cursor: page === totalPages - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            disabled={page >= totalPages - 1}
+            style={{ width: "26px", height: "26px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #2A2A3D", color: page >= totalPages - 1 ? "#2A2A3D" : "#6B6B8A", cursor: page >= totalPages - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
             <ChevronRight size={13} />
           </button>
@@ -105,31 +101,45 @@ export function HomeSidebar() {
       </div>
 
       {/* 2-column grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        {visible.map((creator) => (
-          <CreatorCard key={creator.id} creator={creator} onClick={() => router.push(`/${creator.username}`)} />
-        ))}
-      </div>
+      {loading ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={{ height: "220px", borderRadius: "10px", backgroundColor: "#1A1A2E", animation: "pulse 1.5s ease-in-out infinite" }} />
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          {visible.map((creator) => (
+            <CreatorCard
+              key={creator.id}
+              creator={creator}
+              onClick={() => router.push(`/${creator.username}`)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Pagination dots */}
-      <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "14px" }}>
-        {Array.from({ length: totalPages }).map((_, i) => (
-          <button
-            key={i}
-            onClick={() => setPage(i)}
-            style={{
-              width: i === page ? "18px" : "6px",
-              height: "6px",
-              borderRadius: "3px",
-              border: "none",
-              cursor: "pointer",
-              backgroundColor: i === page ? "#8B5CF6" : "#2A2A3D",
-              padding: 0,
-              transition: "all 0.2s ease",
-            }}
-          />
-        ))}
-      </div>
+      {totalPages > 1 && (
+        <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "14px" }}>
+          {Array.from({ length: totalPages }).map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setPage(i)}
+              style={{
+                width: i === page ? "18px" : "6px",
+                height: "6px",
+                borderRadius: "3px",
+                border: "none",
+                cursor: "pointer",
+                backgroundColor: i === page ? "#8B5CF6" : "#2A2A3D",
+                padding: 0,
+                transition: "all 0.2s ease",
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {/* See all button */}
       <button
@@ -151,6 +161,14 @@ export function HomeSidebar() {
 }
 
 // ── Single creator card ───────────────────────────────────────────────────────
+function formatCount(n: number): string {
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return String(n);
+}
+
+const FALLBACK_COVER = "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80";
+
 function CreatorCard({ creator, onClick }: { creator: SuggestedCreator; onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
 
@@ -163,32 +181,32 @@ function CreatorCard({ creator, onClick }: { creator: SuggestedCreator; onClick:
         borderRadius: "10px", overflow: "hidden", cursor: "pointer",
         border: `1px solid ${hovered ? "#8B5CF6" : "#2A2A3D"}`,
         transition: "border-color 0.15s ease",
-        position: "relative", height: "240px",
+        position: "relative", height: "220px",
       }}
     >
-      {/* Full cover image */}
+      {/* Cover image */}
       <img
-        src={creator.coverImage}
+        src={creator.banner_url || FALLBACK_COVER}
         alt={creator.name}
         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
       />
 
-      {/* Dark gradient overlay — bottom half */}
+      {/* Dark gradient overlay */}
       <div style={{
         position: "absolute", inset: 0,
         background: "linear-gradient(to bottom, rgba(0,0,0,0.0) 30%, rgba(0,0,0,0.85) 100%)",
       }} />
 
-      {/* Avatar — centered, lower in the card */}
+      {/* Avatar */}
       <div style={{
         position: "absolute", top: "50%", left: "50%",
         transform: "translate(-50%, -20%)",
         zIndex: 2,
       }}>
-        <Avatar src={creator.avatar_url} alt={creator.name} size="lg" showRing />
+        <Avatar src={creator.avatar_url ?? undefined} alt={creator.name} size="lg" showRing />
       </div>
 
-      {/* Name + username — overlaid at bottom */}
+      {/* Name + username */}
       <div style={{
         position: "absolute", bottom: "28px", left: 0, right: 0,
         display: "flex", flexDirection: "column", alignItems: "center", gap: "2px",
@@ -203,7 +221,7 @@ function CreatorCard({ creator, onClick }: { creator: SuggestedCreator; onClick:
         <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.65)" }}>@{creator.username}</span>
       </div>
 
-      {/* Stats row — very bottom */}
+      {/* Stats row */}
       <div style={{
         position: "absolute", bottom: "8px", left: 0, right: 0,
         display: "flex", justifyContent: "center", gap: "10px",
@@ -211,11 +229,15 @@ function CreatorCard({ creator, onClick }: { creator: SuggestedCreator; onClick:
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
           <Users size={9} color="rgba(255,255,255,0.6)" />
-          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>{creator.subscribers}</span>
+          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>
+            {formatCount(creator.subscriber_count)}
+          </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-          <Image size={9} color="rgba(255,255,255,0.6)" />
-          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>{creator.posts}</span>
+          <Heart size={9} color="rgba(255,255,255,0.6)" />
+          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>
+            {formatCount(creator.likes_count)}
+          </span>
         </div>
       </div>
     </div>

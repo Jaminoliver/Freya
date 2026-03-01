@@ -17,7 +17,7 @@ export interface MediaItem {
 
 export default function ImageCarousel({ media, onImageClick }: {
   media: MediaItem[];
-  onImageClick?: () => void;
+  onImageClick?: (index: number) => void;
 }) {
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [isDesktop,   setIsDesktop]   = React.useState(false);
@@ -64,7 +64,7 @@ export default function ImageCarousel({ media, onImageClick }: {
       if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
       if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
     } else if (!isDragging.current) {
-      onImageClick?.();
+      onImageClick?.(activeIndex);
     }
     startXRef.current = null;
     isDragging.current = false;
