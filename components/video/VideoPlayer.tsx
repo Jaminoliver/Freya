@@ -62,8 +62,8 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
       const Hls = (await import("hls.js")).default;
       if (Hls.isSupported()) {
         const hls = new Hls({
-          startLevel:             -1,    // let manifest load first, then we lock to max
-          capLevelToPlayerSize:   false, // never downgrade based on element size
+          startLevel:             -1,
+          capLevelToPlayerSize:   false,
           lowLatencyMode:         false,
           abrEwmaDefaultEstimate: 8_000_000,
           abrEwmaFastVoD:         3,
@@ -72,8 +72,6 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
         hlsRef.current = hls;
 
         hls.on(Hls.Events.MANIFEST_PARSED, (_evt: any, data: any) => {
-          // Lock to highest level and disable ABR so it never downgrades
-          // Setting currentLevel to a fixed value implicitly disables ABR
           hls.currentLevel = data.levels.length - 1;
         });
 
@@ -157,15 +155,17 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
 
       <div ref={containerRef} style={containerStyle}>
 
-        {/* Blurred background */}
-        <img src={posterSrc} alt="" aria-hidden onError={() => setPosterError(true)}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.4)", transform: "scale(1.1)", zIndex: 1 }}
-        />
+        {/* Blurred background — portrait only */}
+        {isPortrait && (
+          <img src={posterSrc} alt="" aria-hidden onError={() => setPosterError(true)}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.4)", transform: "scale(1.1)", zIndex: 1 }}
+          />
+        )}
 
         {/* Poster + play button */}
         {showPoster && (
           <div onClick={handlePosterPlay} style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <img src={posterSrc} alt="" onError={() => setPosterError(true)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+            <img src={posterSrc} alt="" onError={() => setPosterError(true)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 20%" }} />
             <div style={{ position: "relative", zIndex: 2, width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.55)", border: "2px solid rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
               <div style={{ width: 0, height: 0, borderTop: "10px solid transparent", borderBottom: "10px solid transparent", borderLeft: "18px solid rgba(255,255,255,0.95)", marginLeft: "4px" }} />
             </div>
@@ -181,6 +181,10 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
           onWaiting={() => setIsBuffering(true)}
           onPlaying={() => setIsBuffering(false)}
           onCanPlay={() => setIsBuffering(false)}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+          }}
           style={{ ...videoStyle, visibility: showPoster ? "hidden" : "visible", animation: !showPoster ? "fadeIn 0.2s ease" : undefined }}
         />
 

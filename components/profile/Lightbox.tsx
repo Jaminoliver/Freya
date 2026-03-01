@@ -33,142 +33,132 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   const images         = post.media?.filter((m) => m.media_type !== "video" && m.file_url) ?? [];
   const hasPrevImage   = mediaIndex > 0;
   const hasNextImage   = mediaIndex < images.length - 1;
-  const activeMedia    = images[mediaIndex] ?? images[0];
-  const [isMobile, setIsMobile] = React.useState(false);
+  const [mounted, setMounted] = React.useState(false);
 
-  React.useEffect(() => {
-    setMediaIndex(initialMediaIndex);
-  }, [post.id, initialMediaIndex]);
+  const touchStartX   = React.useRef<number | null>(null);
+  const touchCurrentX = React.useRef<number | null>(null);
+  const dragging      = React.useRef(false);
+  const [dragOffset, setDragOffset] = React.useState(0);
 
-  React.useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
+  React.useEffect(() => { setMounted(true); }, []);
 
-  const goPrev = () => {
+  React.useEffect(() => { setMediaIndex(initialMediaIndex); }, [post.id, initialMediaIndex]);
+
+  const goPrev = React.useCallback(() => {
     if (hasPrevImage) { setMediaIndex((i) => i - 1); return; }
     if (hasPrevPost)  onNavigate(allPosts[currentPostIdx - 1], 0);
-  };
+  }, [hasPrevImage, hasPrevPost, currentPostIdx, allPosts, onNavigate]);
 
-  const goNext = () => {
+  const goNext = React.useCallback(() => {
     if (hasNextImage) { setMediaIndex((i) => i + 1); return; }
     if (hasNextPost)  onNavigate(allPosts[currentPostIdx + 1], 0);
-  };
+  }, [hasNextImage, hasNextPost, currentPostIdx, allPosts, onNavigate]);
 
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape")      onClose();
-      if (e.key === "ArrowLeft")   goPrev();
-      if (e.key === "ArrowRight")  goNext();
+      if (e.key === "Escape")     onClose();
+      if (e.key === "ArrowLeft")  goPrev();
+      if (e.key === "ArrowRight") goNext();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [hasPrevImage, hasNextImage, hasPrevPost, hasNextPost, mediaIndex]);
-
-  const touchStartX = React.useRef<number | null>(null);
+  }, [goPrev, goNext, onClose]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
+    touchStartX.current   = e.touches[0].clientX;
+    touchCurrentX.current = e.touches[0].clientX;
+    dragging.current      = true;
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) goNext();
-      else goPrev();
-    }
-    touchStartX.current = null;
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!dragging.current || touchStartX.current === null) return;
+    const diff = e.touches[0].clientX - touchStartX.current;
+    touchCurrentX.current = e.touches[0].clientX;
+    const atLeftEdge  = diff > 0 && !hasPrevImage && !hasPrevPost;
+    const atRightEdge = diff < 0 && !hasNextImage && !hasNextPost;
+    setDragOffset(atLeftEdge || atRightEdge ? diff * 0.2 : diff);
+  };
+
+  const handleTouchEnd = () => {
+    if (!dragging.current || touchStartX.current === null) return;
+    const diff = (touchCurrentX.current ?? touchStartX.current) - touchStartX.current;
+    dragging.current = false;
+    setDragOffset(0);
+    if (Math.abs(diff) > 60) diff < 0 ? goNext() : goPrev();
+    touchStartX.current = touchCurrentX.current = null;
   };
 
   const hasPrev = hasPrevImage || hasPrevPost;
   const hasNext = hasNextImage || hasNextPost;
 
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => { setMounted(true); }, []);
-  if (!mounted) return null;
+  if (!mounted || images.length === 0) return null;
 
-  if (isMobile) {
-    return ReactDOM.createPortal(
-      <div
-        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", flexDirection: "column" }}
-      >
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, display: "flex", justifyContent: "flex-end", padding: "16px" }}>
-          <button onClick={(e) => { e.stopPropagation(); onClose(); }} style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#fff", border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
-            <X size={20} strokeWidth={2.5} />
-          </button>
-        </div>
-        {images.length > 1 && (
-          <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", top: "20px", left: "50%", transform: "translateX(-50%)", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
-            {mediaIndex + 1} / {images.length}
-          </div>
-        )}
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-          {activeMedia?.file_url && (
-            <img src={activeMedia.file_url} alt="" onClick={(e) => e.stopPropagation()} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
-          )}
-          {hasPrev && (
-            <button onClick={(e) => { e.stopPropagation(); goPrev(); }} style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <ChevronLeft size={20} />
-            </button>
-          )}
-          {hasNext && (
-            <button onClick={(e) => { e.stopPropagation(); goNext(); }} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <ChevronRight size={20} />
-            </button>
-          )}
-        </div>
-        {images.length > 1 && (
-          <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", justifyContent: "center", gap: "5px", padding: "12px" }}>
-            {images.map((_, i) => (
-              <button key={i} onClick={(e) => { e.stopPropagation(); setMediaIndex(i); }} style={{ width: i === mediaIndex ? "18px" : "6px", height: "6px", borderRadius: "3px", border: "none", backgroundColor: i === mediaIndex ? "#fff" : "rgba(255,255,255,0.45)", cursor: "pointer", padding: 0, transition: "all 0.25s", flexShrink: 0 }} />
-            ))}
-          </div>
-        )}
-      </div>,
-      document.body
-    );
-  }
+  const totalSlides = images.length;
+  const translateX  = -(mediaIndex / totalSlides) * 100;
 
   return ReactDOM.createPortal(
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingTop: "40px" }}
+      style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", overflow: "hidden" }}
     >
-      <button onClick={onClose} style={{ position: "absolute", top: "20px", right: "24px", backgroundColor: "#fff", border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "40px", height: "40px", borderRadius: "50%", boxShadow: "0 2px 8px rgba(0,0,0,0.5)", zIndex: 10 }}>
-        <X size={20} strokeWidth={2.5} />
-      </button>
-      {images.length > 1 && (
-        <div style={{ position: "absolute", top: "20px", left: "50%", transform: "translateX(-50%)", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
-          {mediaIndex + 1} / {images.length}
+      {/* Top bar */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", pointerEvents: "none" }}>
+        {images.length > 1 ? (
+          <div style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif", pointerEvents: "auto" }}>
+            {mediaIndex + 1} / {images.length}
+          </div>
+        ) : <div />}
+        <button
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#fff", border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.5)", pointerEvents: "auto" }}
+        >
+          <X size={20} strokeWidth={2.5} />
+        </button>
+      </div>
+
+      {/* Sliding strip */}
+      <div style={{ position: "absolute", inset: 0 }}>
+        <div style={{
+          display:    "flex",
+          width:      `${totalSlides * 100}%`,
+          height:     "100%",
+          transform:  `translateX(calc(${translateX}% + ${dragOffset}px))`,
+          transition: dragging.current ? "none" : "transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+          willChange: "transform",
+        }}>
+          {images.map((img) => (
+            <div key={img.id} style={{ width: `${100 / totalSlides}%`, height: "100%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              {img.file_url && (
+                <img
+                  src={img.file_url}
+                  alt=""
+                  draggable={false}
+                  style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block", userSelect: "none" }}
+                />
+              )}
+            </div>
+          ))}
         </div>
-      )}
-      {hasPrev && (
-        <button onClick={(e) => { e.stopPropagation(); goPrev(); }} style={{ position: "absolute", left: "16px", bottom: "50%", transform: "translateY(50%)", width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "rgba(30,30,46,0.9)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}>
-          <ChevronLeft size={20} />
-        </button>
-      )}
-      {hasNext && (
-        <button onClick={(e) => { e.stopPropagation(); goNext(); }} style={{ position: "absolute", right: "16px", bottom: "50%", transform: "translateY(50%)", width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "rgba(30,30,46,0.9)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}>
-          <ChevronRight size={20} />
-        </button>
-      )}
-      {activeMedia?.file_url && (
-        <img
-          src={activeMedia.file_url}
-          alt=""
-          style={{ maxWidth: "600px", width: "100%", maxHeight: "calc(100vh - 40px)", objectFit: "contain", display: "block", objectPosition: "bottom" }}
-        />
-      )}
+
+        {/* Arrows */}
+        {hasPrev && (
+          <button onClick={(e) => { e.stopPropagation(); goPrev(); }} style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5 }}>
+            <ChevronLeft size={20} />
+          </button>
+        )}
+        {hasNext && (
+          <button onClick={(e) => { e.stopPropagation(); goNext(); }} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5 }}>
+            <ChevronRight size={20} />
+          </button>
+        )}
+      </div>
+
+      {/* Dot indicators */}
       {images.length > 1 && (
-        <div style={{ position: "absolute", bottom: "16px", left: "50%", transform: "translateX(-50%)", display: "flex", gap: "5px" }}>
+        <div style={{ position: "absolute", bottom: "16px", left: "50%", transform: "translateX(-50%)", display: "flex", justifyContent: "center", gap: "5px", zIndex: 10 }}>
           {images.map((_, i) => (
             <button key={i} onClick={(e) => { e.stopPropagation(); setMediaIndex(i); }} style={{ width: i === mediaIndex ? "18px" : "6px", height: "6px", borderRadius: "3px", border: "none", backgroundColor: i === mediaIndex ? "#fff" : "rgba(255,255,255,0.45)", cursor: "pointer", padding: 0, transition: "all 0.25s", flexShrink: 0 }} />
           ))}

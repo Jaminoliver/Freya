@@ -8,6 +8,7 @@ import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import ImageCarousel from "@/components/profile/ImageCarousel";
+import DoubleTapLike from "@/components/shared/DoubleTapLike";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 
 export interface ApiPost {
@@ -192,6 +193,14 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
     if (res.ok) { setLiked(data.liked); setLikeCount(data.like_count); onLike?.(String(post.id)); }
   };
 
+  // Double tap should only ever LIKE, never unlike
+  const handleDoubleTapLike = async () => {
+    if (liked) return; // already liked, do nothing
+    const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) { setLiked(data.liked); setLikeCount(data.like_count); onLike?.(String(post.id)); }
+  };
+
   const handleDelete = async () => {
     const res = await fetch(`/api/posts/${post.id}`, { method: "DELETE" });
     if (res.ok) onDelete?.(String(post.id));
@@ -283,41 +292,44 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
           </div>
 
         ) : isVideo ? (
-          <div style={videoContainerStyle}>
-            <VideoPlayer
-              bunnyVideoId={firstMedia.bunny_video_id ?? null}
-              thumbnailUrl={firstMedia.thumbnail_url ?? null}
-              processingStatus={firstMedia.processing_status ?? null}
-              rawVideoUrl={firstMedia.raw_video_url ?? null}
-              fillParent={isPortrait}
-            />
-          </div>
+          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
+            <div style={videoContainerStyle}>
+              <VideoPlayer
+                bunnyVideoId={firstMedia.bunny_video_id ?? null}
+                thumbnailUrl={firstMedia.thumbnail_url ?? null}
+                processingStatus={firstMedia.processing_status ?? null}
+                rawVideoUrl={firstMedia.raw_video_url ?? null}
+                fillParent={isPortrait}
+              />
+            </div>
+          </DoubleTapLike>
 
         ) : isMultiPhoto ? (
-          <ImageCarousel
-            media={photoMedia}
-            onImageClick={(index) => onImageClick?.(post, index)}
-          />
+          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
+            <ImageCarousel
+              media={photoMedia}
+              onImageClick={(index) => onImageClick?.(post, index)}
+            />
+          </DoubleTapLike>
 
         ) : (
-          <div
-            onClick={() => onImageClick?.(post, 0)}
-            style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%", cursor: "zoom-in" }}
-          >
-            {firstMedia.file_url && (
-              <>
-                <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-                <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-                <img
-                  src={firstMedia.file_url}
-                  alt=""
-                  onLoad={() => setThumbReady(true)}
-                  onError={() => setThumbReady(true)}
-                  style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block" }}
-                />
-              </>
-            )}
-          </div>
+          <DoubleTapLike onSingleTap={() => onImageClick?.(post, 0)} onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
+            <div style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%", cursor: "zoom-in" }}>
+              {firstMedia.file_url && (
+                <>
+                  <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
+                  <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
+                  <img
+                    src={firstMedia.file_url}
+                    alt=""
+                    onLoad={() => setThumbReady(true)}
+                    onError={() => setThumbReady(true)}
+                    style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block" }}
+                  />
+                </>
+              )}
+            </div>
+          </DoubleTapLike>
         )
       )}
 
