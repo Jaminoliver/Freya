@@ -23,6 +23,7 @@ export default function ImageCarousel({ media, onImageClick }: {
   const [isDesktop,   setIsDesktop]   = React.useState(false);
   const trackRef      = React.useRef<HTMLDivElement>(null);
   const startXRef     = React.useRef<number | null>(null);
+  const startYRef     = React.useRef<number | null>(null);
   const isDragging    = React.useRef(false);
   // Double-tap detection for lightbox — single tap opens it, double tap cancels
   const lastTapTime   = React.useRef<number>(0);
@@ -51,35 +52,38 @@ export default function ImageCarousel({ media, onImageClick }: {
 
   const handleTouchStart = (e: React.TouchEvent) => {
     startXRef.current = e.touches[0].clientX;
+    startYRef.current = e.touches[0].clientY;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    // Block synthetic mouseup/click the browser fires after touchend
     touchWasUsed.current = true;
     setTimeout(() => { touchWasUsed.current = false; }, 500);
 
-    if (startXRef.current === null) return;
-    const diff = startXRef.current - e.changedTouches[0].clientX;
+    if (startXRef.current === null || startYRef.current === null) return;
+    const diffX = startXRef.current - e.changedTouches[0].clientX;
+    const diffY = Math.abs(startYRef.current - e.changedTouches[0].clientY);
     startXRef.current = null;
+    startYRef.current = null;
 
-    if (Math.abs(diff) > 40) {
-      // Swipe — navigate carousel, don't open lightbox
+    // Vertical scroll — do nothing at all
+    if (diffY > 10) return;
+
+    if (Math.abs(diffX) > 40) {
+      // Horizontal swipe — navigate carousel
       if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
-      if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
-      if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
+      if (diffX > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
+      if (diffX < 0 && activeIndex > 0) goTo(activeIndex - 1);
       return;
     }
 
-    // It's a tap — use double-tap detection so lightbox doesn't open on double-tap
+    // Tap — double-tap detection so lightbox doesn't open on double-tap
     const now     = Date.now();
     const tapDiff = now - lastTapTime.current;
     lastTapTime.current = now;
 
     if (tapDiff < 300 && tapDiff > 0) {
-      // Double tap — cancel pending single-tap lightbox open (parent DoubleTapLike handles the like)
       if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
     } else {
-      // Single tap — delay to confirm no second tap is coming
       if (tapTimer.current) clearTimeout(tapTimer.current);
       const capturedIndex = activeIndex;
       tapTimer.current = setTimeout(() => {

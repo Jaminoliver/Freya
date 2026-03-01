@@ -16,12 +16,15 @@ interface DoubleTapLikeProps {
 }
 
 export default function DoubleTapLike({ onSingleTap, onDoubleTap, children, style }: DoubleTapLikeProps) {
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const lastTap      = React.useRef<number>(0);
-  const timer        = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const idRef        = React.useRef(0);
+  const containerRef  = React.useRef<HTMLDivElement>(null);
+  const lastTap       = React.useRef<number>(0);
+  const timer         = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idRef         = React.useRef(0);
   // Tracks whether last interaction was touch, to suppress synthetic mouse click
-  const touchActive  = React.useRef(false);
+  const touchActive   = React.useRef(false);
+  // Track touch start position to detect scroll vs tap
+  const touchStartX   = React.useRef<number>(0);
+  const touchStartY   = React.useRef<number>(0);
   const [bursts, setBursts] = React.useState<HeartBurst[]>([]);
 
   const triggerHeart = React.useCallback((x: number, y: number) => {
@@ -35,10 +38,21 @@ export default function DoubleTapLike({ onSingleTap, onDoubleTap, children, styl
     const el = containerRef.current;
     if (!el) return;
 
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    };
+
     const handleTouchEnd = (e: TouchEvent) => {
       touchActive.current = true;
-      // Reset after synthetic click window has passed
       setTimeout(() => { touchActive.current = false; }, 500);
+
+      const touch   = e.changedTouches[0];
+      const movedX  = Math.abs(touch.clientX - touchStartX.current);
+      const movedY  = Math.abs(touch.clientY - touchStartY.current);
+
+      // If finger moved more than 10px in any direction it's a scroll — ignore completely
+      if (movedX > 10 || movedY > 10) return;
 
       const now  = Date.now();
       const diff = now - lastTap.current;
@@ -61,9 +75,12 @@ export default function DoubleTapLike({ onSingleTap, onDoubleTap, children, styl
       }
     };
 
-    // passive: false required so e.preventDefault() is respected
+    el.addEventListener("touchstart", handleTouchStart, { passive: true });
     el.addEventListener("touchend", handleTouchEnd, { passive: false });
-    return () => el.removeEventListener("touchend", handleTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchend", handleTouchEnd);
+    };
   }, [triggerHeart, onSingleTap]);
 
   // Desktop mouse double-click fallback
