@@ -56,7 +56,6 @@ function useMediaHeight() {
   return height;
 }
 
-// Detect aspect ratio from a thumbnail image URL
 function useThumbAspectRatio(src: string | undefined): { ratio: string; isPortrait: boolean } {
   const [ratio,      setRatio]      = React.useState("9/16");
   const [isPortrait, setIsPortrait] = React.useState(true);
@@ -147,6 +146,7 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
   const [comments,     setComments]     = React.useState<any[]>([]);
   const [commentCount, setCommentCount] = React.useState(post.comment_count);
   const [thumbReady,   setThumbReady]   = React.useState(!post.media?.[0]);
+  const isLiking = React.useRef(false);
 
   const firstMedia   = post.media?.[0];
   const isLocked     = post.locked;
@@ -164,7 +164,6 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
       : ((firstMedia as any).locked_preview_url ?? undefined)
     : undefined;
 
-  // Auto-detect aspect ratio from thumbnail
   const { ratio: videoRatio, isPortrait } = useThumbAspectRatio(videoThumbUrl);
 
   React.useEffect(() => {
@@ -188,17 +187,26 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
   }, []);
 
   const handleLike = async () => {
+    if (isLiking.current) return;
+    isLiking.current = true;
+    const newLiked = !liked;
+    setLiked(newLiked);
+    setLikeCount((c) => newLiked ? c + 1 : Math.max(0, c - 1));
     const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
     const data = await res.json();
     if (res.ok) { setLiked(data.liked); setLikeCount(data.like_count); onLike?.(String(post.id)); }
+    isLiking.current = false;
   };
 
-  // Double tap should only ever LIKE, never unlike
   const handleDoubleTapLike = async () => {
-    if (liked) return; // already liked, do nothing
+    if (liked || isLiking.current) return;
+    isLiking.current = true;
+    setLiked(true);
+    setLikeCount((c) => c + 1);
     const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
     const data = await res.json();
     if (res.ok) { setLiked(data.liked); setLikeCount(data.like_count); onLike?.(String(post.id)); }
+    isLiking.current = false;
   };
 
   const handleDelete = async () => {
@@ -206,8 +214,6 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
     if (res.ok) onDelete?.(String(post.id));
   };
 
-  // Portrait: centered narrow column with blur sides
-  // Landscape: natural 16/9 aspect ratio, full width, no blur needed
   const videoContainerStyle: React.CSSProperties = isPortrait
     ? {
         position: "relative",
