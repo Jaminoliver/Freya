@@ -43,11 +43,12 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
   const [liked,       setLiked]       = useState(post.liked);
   const [likeCount,   setLikeCount]   = useState(post.likes);
   const [thumbReady,  setThumbReady]  = useState(!post.media[0]);
-  const [isMobile,    setIsMobile]    = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
-    check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
@@ -79,7 +80,6 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
   const firstMedia  = post.media[0];
   const isVideoPost = firstMedia?.type === "video";
 
-  // For locked state: use thumbnailUrl or bunny thumbnail as blur background
   const lockedThumb: string | null = firstMedia
     ? firstMedia.type === "video" && firstMedia.bunnyVideoId
       ? getBunnyThumbnail(firstMedia.bunnyVideoId)
@@ -145,7 +145,6 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
       {post.media.length > 0 && (
         <>
           {post.isLocked ? (
-            // Locked state — blur thumbnail behind lock icon
             <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
               {lockedThumb && (
                 <img
@@ -167,7 +166,6 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
             </div>
 
           ) : isVideoPost ? (
-            // Video — matches ContentFeed layout exactly
             <div style={{
               height:          mediaHeight === "auto" ? undefined : mediaHeight,
               aspectRatio:     mediaHeight === "auto" ? "9/16" : undefined,
@@ -177,14 +175,12 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
               backgroundColor: "#000",
               width:           "100%",
             }}>
-              {/* Side blur bars (mobile only) */}
               {mediaHeight === "auto" && (
                 <>
                   <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
                   <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
                 </>
               )}
-              {/* Thumbnail while loading */}
               {!thumbReady && (
                 <img
                   src={firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")}
@@ -205,20 +201,20 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
             </div>
 
           ) : post.media.length === 1 ? (
-            // Single image
+            // Single image — no lightbox on mobile
             <div style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%" }}>
               <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
               <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
               <img
                 src={firstMedia.url}
                 alt="Post media"
-                style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block", cursor: "pointer" }}
-                onClick={() => router.push(`/posts/${post.id}`)}
+                style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block", cursor: isMobile ? "default" : "pointer" }}
+                onClick={isMobile ? undefined : () => router.push(`/posts/${post.id}`)}
               />
             </div>
 
           ) : (
-            // Multi image grid
+            // Multi image grid — no lightbox on mobile
             <div style={{ margin: "0 20px", borderRadius: "12px", overflow: "hidden" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px" }}>
                 {post.media.slice(0, 4).map((m, i) => (
@@ -226,8 +222,8 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
                     <img
                       src={m.url}
                       alt={`Media ${i + 1}`}
-                      style={{ width: "100%", height: "200px", objectFit: "cover", display: "block", cursor: "pointer" }}
-                      onClick={() => router.push(`/posts/${post.id}`)}
+                      style={{ width: "100%", height: "200px", objectFit: "cover", display: "block", cursor: isMobile ? "default" : "pointer" }}
+                      onClick={isMobile ? undefined : () => router.push(`/posts/${post.id}`)}
                     />
                     {i === 3 && post.media.length > 4 && (
                       <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "22px", fontWeight: 700 }}>

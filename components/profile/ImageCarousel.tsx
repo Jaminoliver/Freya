@@ -25,10 +25,8 @@ export default function ImageCarousel({ media, onImageClick }: {
   const startXRef     = React.useRef<number | null>(null);
   const startYRef     = React.useRef<number | null>(null);
   const isDragging    = React.useRef(false);
-  // Double-tap detection for lightbox — single tap opens it, double tap cancels
   const lastTapTime   = React.useRef<number>(0);
   const tapTimer      = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Blocks synthetic mouseup the browser fires after touchend
   const touchWasUsed  = React.useRef(false);
 
   React.useEffect(() => {
@@ -65,7 +63,7 @@ export default function ImageCarousel({ media, onImageClick }: {
     startXRef.current = null;
     startYRef.current = null;
 
-    // Vertical scroll — do nothing at all
+    // Vertical scroll — do nothing
     if (diffY > 10) return;
 
     if (Math.abs(diffX) > 40) {
@@ -76,21 +74,7 @@ export default function ImageCarousel({ media, onImageClick }: {
       return;
     }
 
-    // Tap — double-tap detection so lightbox doesn't open on double-tap
-    const now     = Date.now();
-    const tapDiff = now - lastTapTime.current;
-    lastTapTime.current = now;
-
-    if (tapDiff < 300 && tapDiff > 0) {
-      if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
-    } else {
-      if (tapTimer.current) clearTimeout(tapTimer.current);
-      const capturedIndex = activeIndex;
-      tapTimer.current = setTimeout(() => {
-        tapTimer.current = null;
-        onImageClick?.(capturedIndex);
-      }, 300);
-    }
+    // On mobile, taps never open the lightbox — swipe only
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -105,7 +89,6 @@ export default function ImageCarousel({ media, onImageClick }: {
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
-    // Skip if this mouseup was synthetically generated after a touchend
     if (touchWasUsed.current) return;
     if (startXRef.current === null) return;
 
@@ -113,7 +96,8 @@ export default function ImageCarousel({ media, onImageClick }: {
     if (Math.abs(diff) > 40) {
       if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
       if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
-    } else if (!isDragging.current) {
+    } else if (!isDragging.current && isDesktop) {
+      // Only open lightbox on desktop
       onImageClick?.(activeIndex);
     }
     startXRef.current  = null;
@@ -149,7 +133,7 @@ export default function ImageCarousel({ media, onImageClick }: {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        style={{ display: "flex", overflowX: "scroll", scrollSnapType: "x mandatory", scrollbarWidth: "none", WebkitOverflowScrolling: "touch", cursor: media.length > 1 ? "grab" : "pointer" }}
+        style={{ display: "flex", overflowX: "scroll", scrollSnapType: "x mandatory", scrollbarWidth: "none", WebkitOverflowScrolling: "touch", cursor: isDesktop ? (media.length > 1 ? "grab" : "pointer") : "default" }}
       >
         {media.map((item, i) => (
           <div key={i} style={{ flexShrink: 0, width: "100%", scrollSnapAlign: "start", position: "relative", backgroundColor: "#000" }}>

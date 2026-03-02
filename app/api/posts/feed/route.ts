@@ -4,6 +4,20 @@ import { signBunnyUrl } from "@/lib/utils/bunny";
 
 const PAGE_SIZE = 20;
 
+// Extract just the path from a stored Bunny URL (strips base + query params)
+// e.g. "https://freya-media-cdn.b-cdn.net/posts/abc/file.jpg?token=...&expires=..."
+// → "/posts/abc/file.jpg"
+function extractBunnyPath(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname; // e.g. "/posts/abc/file.jpg"
+  } catch {
+    // Already a plain path
+    return url.startsWith("/") ? url : `/${url}`;
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -84,7 +98,6 @@ export async function GET(req: NextRequest) {
       .eq("user_id", user.id)
       .in("post_id", postIds);
 
-    // Cast to Number — Supabase returns bigint as string, post.id is number
     const likedSet = new Set((userLikes ?? []).map((l: { post_id: number | string }) => Number(l.post_id)));
 
     const processed = (posts ?? [])
@@ -108,12 +121,24 @@ export async function GET(req: NextRequest) {
           .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
             (a.display_order as number) - (b.display_order as number)
           )
-          .map((m: Record<string, unknown>) => ({
-            ...m,
-            file_url:      canAccess ? m.file_url : null,
-            thumbnail_url: m.thumbnail_url,
-            locked:        !canAccess,
-          }));
+          .map((m: Record<string, unknown>) => {
+            // Re-sign file_url fresh on every request (24h expiry)
+            const rawUrl  = m.file_url as string | null;
+            const path    = extractBunnyPath(rawUrl);
+            const freshUrl = canAccess && path ? signBunnyUrl(path) : null;
+
+            // Also re-sign thumbnail_url if present
+            const rawThumb    = m.thumbnail_url as string | null;
+            const thumbPath   = extractBunnyPath(rawThumb);
+            const freshThumb  = thumbPath ? signBunnyUrl(thumbPath) : null;
+
+            return {
+              ...m,
+              file_url:      freshUrl,
+              thumbnail_url: freshThumb,
+              locked:        !canAccess,
+            };
+          });
 
         return {
           ...post,

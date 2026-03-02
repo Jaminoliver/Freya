@@ -33,20 +33,28 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   const images         = post.media?.filter((m) => m.media_type !== "video" && m.file_url) ?? [];
   const hasPrevImage   = mediaIndex > 0;
   const hasNextImage   = mediaIndex < images.length - 1;
-  const [mounted, setMounted] = React.useState(false);
+  const [mounted,  setMounted]  = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(false);
 
   const touchStartX   = React.useRef<number | null>(null);
   const touchCurrentX = React.useRef<number | null>(null);
   const dragging      = React.useRef(false);
   const [dragOffset, setDragOffset] = React.useState(0);
 
-  React.useEffect(() => { setMounted(true); }, []);
+  React.useEffect(() => {
+    setMounted(true);
+    setIsMobile(window.matchMedia("(hover: none), (pointer: coarse)").matches);
+  }, []);
+
+  // If mobile, close immediately and don't render
+  React.useEffect(() => {
+    if (mounted && isMobile) onClose();
+  }, [mounted, isMobile, onClose]);
 
   // Lock body scroll when lightbox is open, restore on close
   React.useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    // Also prevent iOS Safari rubber-band scroll on the body
     document.body.style.position = "fixed";
     document.body.style.width    = "100%";
     return () => {
@@ -85,7 +93,6 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    // Prevent the page behind from scrolling while lightbox is open
     e.stopPropagation();
     if (!dragging.current || touchStartX.current === null) return;
     const diff = e.touches[0].clientX - touchStartX.current;
@@ -107,7 +114,7 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   const hasPrev = hasPrevImage || hasPrevPost;
   const hasNext = hasNextImage || hasNextPost;
 
-  if (!mounted || images.length === 0) return null;
+  if (!mounted || isMobile || images.length === 0) return null;
 
   const totalSlides = images.length;
   const translateX  = -(mediaIndex / totalSlides) * 100;

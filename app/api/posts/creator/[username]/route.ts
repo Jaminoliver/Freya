@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
+import { signBunnyUrl } from "@/lib/utils/bunny";
+
+// Extract just the path from a stored Bunny URL (strips base + query params)
+function extractBunnyPath(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname;
+  } catch {
+    return url.startsWith("/") ? url : `/${url}`;
+  }
+}
 
 export async function GET(
   req: NextRequest,
@@ -112,20 +124,35 @@ export async function GET(
         const isFree    = post.is_free as boolean;
         const isPpv     = post.is_ppv as boolean;
         const canAccess = isFree || (isSubscribed && !isPpv) || isOwnProfile;
+
         const mediaItems = (post.media as Record<string, unknown>[] ?? [])
           .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
             (a.display_order as number) - (b.display_order as number)
           )
-          .map((m: Record<string, unknown>) => ({
-            ...m,
-            file_url:           canAccess ? m.file_url : null,
-            thumbnail_url:      m.thumbnail_url,
-            // Provides a preview URL for blurring locked content on the frontend.
-            // For images: falls back to file_url since they have no thumbnail.
-            // For videos: frontend uses getBunnyThumbnail() so this is not needed.
-            locked_preview_url: !canAccess ? (m.thumbnail_url ?? m.file_url) : null,
-            locked:             !canAccess,
-          }));
+          .map((m: Record<string, unknown>) => {
+            // Re-sign file_url fresh on every request (24h expiry)
+            const rawUrl   = m.file_url as string | null;
+            const path     = extractBunnyPath(rawUrl);
+            const freshUrl = canAccess && path ? signBunnyUrl(path) : null;
+
+            // Re-sign thumbnail_url if present
+            const rawThumb   = m.thumbnail_url as string | null;
+            const thumbPath  = extractBunnyPath(rawThumb);
+            const freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;
+
+            // Re-sign locked_preview_url (blurred preview for non-subscribers)
+            const rawPreview   = !canAccess ? (rawThumb ?? rawUrl) : null;
+            const previewPath  = extractBunnyPath(rawPreview);
+            const freshPreview = previewPath ? signBunnyUrl(previewPath) : null;
+
+            return {
+              ...m,
+              file_url:           freshUrl,
+              thumbnail_url:      freshThumb,
+              locked_preview_url: !canAccess ? freshPreview : null,
+              locked:             !canAccess,
+            };
+          });
 
         return {
           ...post,
