@@ -17,6 +17,7 @@ export interface ContentFeedProps {
   isOwnProfile?: boolean;
   creatorUsername?: string;
   creatorId?: string;
+  initialApiPosts?: ApiPost[]; // passed from ProfilePage — skips internal fetch
   onLike?: (postId: string) => void;
   onComment?: (postId: string) => void;
   onTip?: (postId: string) => void;
@@ -102,9 +103,20 @@ function MediaToolbar({ apiMediaCount, photoCount, videoCount, mediaFilter, setM
 const feedLayoutCache = new Map<string, { activeTab: string; isPostsGridView: boolean; isMediaGridView: boolean }>();
 const feedPostsCache  = new Map<string, { posts: ApiPost[]; media: ApiMedia[] }>();
 
+function buildMediaFromPosts(fetchedPosts: ApiPost[]): ApiMedia[] {
+  const allMedia: ApiMedia[] = [];
+  for (const p of fetchedPosts) {
+    for (const m of p.media || []) {
+      if (!p.locked) allMedia.push({ ...m, post_id: p.id });
+    }
+  }
+  return allMedia;
+}
+
 export default function ContentFeed({
   posts, isSubscribed, isOwnProfile = false,
-  creatorUsername, onLike, onComment, onTip, onUnlock, emptyState, className,
+  creatorUsername, initialApiPosts,
+  onLike, onComment, onTip, onUnlock, emptyState, className,
 }: ContentFeedProps) {
   const router = useRouter();
   const { uploads } = useUpload();
@@ -113,10 +125,16 @@ export default function ContentFeed({
   const cached   = feedLayoutCache.get(cacheKey);
 
   const [activeTab,       setActiveTab]       = React.useState(cached?.activeTab ?? "posts");
-  const cachedPosts = feedPostsCache.get(cacheKey);
-  const [apiPosts,        setApiPosts]        = React.useState<ApiPost[]>(cachedPosts?.posts ?? []);
-  const [apiMedia,        setApiMedia]        = React.useState<ApiMedia[]>(cachedPosts?.media ?? []);
-  const [loading,         setLoading]         = React.useState(!cachedPosts);
+
+  // If ProfilePage already fetched posts, seed state directly — no spinner needed
+  const cachedPosts    = feedPostsCache.get(cacheKey);
+  const seedPosts      = initialApiPosts ?? cachedPosts?.posts ?? [];
+  const seedMedia      = cachedPosts?.media ?? (initialApiPosts ? buildMediaFromPosts(initialApiPosts) : []);
+
+  const [apiPosts,        setApiPosts]        = React.useState<ApiPost[]>(seedPosts);
+  const [apiMedia,        setApiMedia]        = React.useState<ApiMedia[]>(seedMedia);
+  // Only show internal loading spinner when we have no data at all and must fetch ourselves
+  const [loading,         setLoading]         = React.useState(!initialApiPosts && !cachedPosts);
   const [mediaFilter,     setMediaFilter]     = React.useState<"all" | "photo" | "video">("all");
   const [isPostsGridView, setIsPostsGridView] = React.useState(cached?.isPostsGridView ?? false);
   const [isMediaGridView, setIsMediaGridView] = React.useState(cached?.isMediaGridView ?? true);
@@ -125,6 +143,16 @@ export default function ContentFeed({
   const [viewer,          setViewer]          = React.useState<{ id: string; username: string; display_name: string; avatar_url: string } | null>(null);
   const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
+
+  // Seed cache if initialApiPosts provided and cache is empty
+  React.useEffect(() => {
+    if (initialApiPosts && !feedPostsCache.has(cacheKey)) {
+      feedPostsCache.set(cacheKey, {
+        posts: initialApiPosts,
+        media: buildMediaFromPosts(initialApiPosts),
+      });
+    }
+  }, [cacheKey, initialApiPosts]);
 
   React.useEffect(() => {
     feedLayoutCache.set(cacheKey, { activeTab, isPostsGridView, isMediaGridView });
@@ -148,26 +176,22 @@ export default function ContentFeed({
 
   const fetchPosts = React.useCallback(async (force = false) => {
     if (!creatorUsername) return;
-    if (!force && feedPostsCache.has(cacheKey)) return;
+    // Skip fetch if ProfilePage already provided posts and no force refresh
+    if (!force && (feedPostsCache.has(cacheKey) || initialApiPosts)) return;
     setLoading(true);
     try {
       const res  = await fetch(`/api/posts/creator/${creatorUsername}`);
       const data = await res.json();
       if (res.ok) {
         const fetchedPosts: ApiPost[] = data.posts || [];
+        const fetchedMedia = buildMediaFromPosts(fetchedPosts);
         setApiPosts(fetchedPosts);
-        const allMedia: ApiMedia[] = [];
-        for (const p of fetchedPosts) {
-          for (const m of p.media || []) {
-            if (!p.locked) allMedia.push({ ...m, post_id: p.id });
-          }
-        }
-        setApiMedia(allMedia);
-        feedPostsCache.set(cacheKey, { posts: fetchedPosts, media: allMedia });
+        setApiMedia(fetchedMedia);
+        feedPostsCache.set(cacheKey, { posts: fetchedPosts, media: fetchedMedia });
       }
     } catch (err) { console.error("[ContentFeed]", err); }
     finally { setLoading(false); }
-  }, [creatorUsername, cacheKey]);
+  }, [creatorUsername, cacheKey, initialApiPosts]);
 
   React.useEffect(() => { fetchPosts(); }, [fetchPosts]);
 

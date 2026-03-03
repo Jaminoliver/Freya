@@ -11,6 +11,8 @@ import PrivacySettings from "@/components/settings/sections/PrivacySettings";
 import NotificationsSettings from "@/components/settings/sections/NotificationsSettings";
 import EarningsSettings from "@/components/settings/sections/EarningsSettings";
 import PayoutsSettings from "@/components/settings/sections/PayoutsSettings";
+import { SettingsSkeleton } from "@/components/loadscreen/SettingsSkeleton";
+import { useAppStore } from "@/lib/store/appStore";
 
 type SettingsTab = "profile" | "account" | "pricing" | "privacy" | "notifications" | "earnings" | "payouts";
 
@@ -26,20 +28,38 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType; descripti
 
 function SettingsLayoutInner() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-  const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
-  const [username, setUsername] = useState<string>("");
+  const router       = useRouter();
+
+  // Pull username from global store if already bootstrapped
+  const { viewer } = useAppStore();
+
+  const [activeTab,   setActiveTab]   = useState<SettingsTab>("profile");
+  const [mobileView,  setMobileView]  = useState<"menu" | "content">("menu");
+  const [username,    setUsername]    = useState<string>(viewer?.username ?? "");
+  const [loading,     setLoading]     = useState(!viewer?.username);
+  const [revealed,    setRevealed]    = useState(!!viewer?.username);
 
   useEffect(() => {
+    // If viewer already in store, no need to fetch
+    if (viewer?.username) {
+      setUsername(viewer.username);
+      setLoading(false);
+      setRevealed(true);
+      return;
+    }
+
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         supabase.from("profiles").select("username").eq("id", user.id).single()
-          .then(({ data }) => { if (data?.username) setUsername(data.username); });
+          .then(({ data }) => {
+            if (data?.username) setUsername(data.username);
+            setLoading(false);
+            requestAnimationFrame(() => setRevealed(true));
+          });
       }
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const panel = searchParams.get("panel");
@@ -62,12 +82,8 @@ function SettingsLayoutInner() {
     setMobileView("content");
   };
 
-  const handleBack = () => setMobileView("menu");
-
-  const handleWithdraw = () => {
-    setActiveTab("payouts");
-    setMobileView("content");
-  };
+  const handleBack    = () => setMobileView("menu");
+  const handleWithdraw = () => { setActiveTab("payouts"); setMobileView("content"); };
 
   const renderSection = () => {
     switch (activeTab) {
@@ -92,24 +108,15 @@ function SettingsLayoutInner() {
           .settings-mobile-back    { display: none !important; }
           .settings-content-inner  { padding: 32px 28px 60px !important; }
         }
-        @media (min-width: 768px) {
-          .settings-mobile-chevron { display: none !important; }
-        }
         .settings-tab-btn {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          padding: 14px 16px;
-          border-radius: 12px;
-          border: none;
-          cursor: pointer;
-          width: 100%;
-          text-align: left;
-          background-color: transparent;
-          transition: background-color 0.15s ease;
+          display: flex; align-items: center; gap: 14px;
+          padding: 14px 16px; border-radius: 12px; border: none;
+          cursor: pointer; width: 100%; text-align: left;
+          background-color: transparent; transition: background-color 0.15s ease;
         }
-        .settings-tab-btn:hover { background-color: rgba(255,255,255,0.03); }
+        .settings-tab-btn:hover  { background-color: rgba(255,255,255,0.03); }
         .settings-tab-btn.active { background-color: rgba(139,92,246,0.08); }
+        @media (min-width: 768px) { .settings-mobile-chevron { display: none !important; } }
       `}</style>
 
       {/* ── SIDEBAR ── */}
@@ -173,7 +180,14 @@ function SettingsLayoutInner() {
         }}
       >
         <div className="settings-content-inner" style={{ padding: "20px 16px 100px", maxWidth: "640px", width: "100%" }}>
-          {renderSection()}
+          {loading
+            ? <SettingsSkeleton />
+            : (
+              <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
+                {renderSection()}
+              </div>
+            )
+          }
         </div>
       </div>
     </div>

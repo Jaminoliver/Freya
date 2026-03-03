@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { PostCard } from "@/components/feed/PostCard";
 import { StoryBar } from "@/components/feed/StoryBar";
+import { FeedSkeleton } from "@/components/loadscreen/FeedSkeleton";
 import { postSyncStore } from "@/lib/store/postSyncStore";
+import { useAppStore, isStale } from "@/lib/store/appStore";
 
 interface FeedPost {
   id: number;
@@ -39,20 +41,20 @@ interface FeedPost {
 }
 
 function getRelativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
+  const diff  = Date.now() - new Date(dateStr).getTime();
   const mins  = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days  = Math.floor(diff / 86400000);
-  if (mins  < 1)   return "just now";
-  if (mins  < 60)  return `${mins}m ago`;
-  if (hours < 24)  return `${hours}h ago`;
-  if (days  < 7)   return `${days}d ago`;
+  if (mins  < 1)  return "just now";
+  if (mins  < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days  < 7)  return `${days}d ago`;
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function adaptPost(p: FeedPost) {
   return {
-    id:        String(p.id),
+    id: String(p.id),
     creator: {
       name:       p.profiles?.display_name || p.profiles?.username || "Creator",
       username:   p.profiles?.username || "",
@@ -61,7 +63,7 @@ function adaptPost(p: FeedPost) {
     },
     timestamp: getRelativeTime(p.published_at),
     caption:   p.caption || "",
-    media:     (p.media || []).map((m) => ({
+    media: (p.media || []).map((m) => ({
       type:             (m.media_type === "video" ? "video" : "image") as "image" | "video",
       url:              m.file_url || "",
       thumbnailUrl:     m.thumbnail_url || null,
@@ -78,13 +80,50 @@ function adaptPost(p: FeedPost) {
   };
 }
 
+// ─── Imperatively preload images (safe for Next.js — avoids onLoad timing bug) ───
+function preloadImages(urls: string[]): Promise<void[]> {
+  return Promise.all(
+    urls.map(
+      (url) =>
+        new Promise<void>((resolve) => {
+          if (!url) { resolve(); return; }
+          const img = new Image();
+          img.onload  = () => resolve();
+          img.onerror = () => resolve(); // resolve anyway — never block on broken images
+          img.src = url;
+        })
+    )
+  );
+}
+
+// Collect the first `n` media URLs (prefer thumbnail for videos) from posts
+function collectFirstMediaUrls(posts: FeedPost[], n: number): string[] {
+  const urls: string[] = [];
+  for (const post of posts) {
+    if (urls.length >= n) break;
+    for (const m of post.media ?? []) {
+      if (urls.length >= n) break;
+      const url = m.thumbnail_url || m.file_url;
+      if (url) urls.push(url);
+    }
+  }
+  return urls;
+}
+
 export default function HomePage() {
-  const [activeTab,   setActiveTab]   = useState<"feed" | "spotlight">("feed");
-  const [posts,       setPosts]       = useState<FeedPost[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [nextCursor,  setNextCursor]  = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error,       setError]       = useState<string | null>(null);
+  const [activeTab,    setActiveTab]    = useState<"feed" | "spotlight">("feed");
+
+  const { feed, setFeed, updateFeedPost, clearFeed } = useAppStore();
+
+  const [posts,        setPosts]        = useState(feed?.posts ?? []);
+  const [apiLoading,   setApiLoading]   = useState(!feed || isStale(feed.fetchedAt));
+  const [imgLoading,   setImgLoading]   = useState(false);
+  const [revealed,     setRevealed]     = useState(!!feed && !isStale(feed.fetchedAt));
+  const [nextCursor,   setNextCursor]   = useState<string | null>(feed?.nextCursor ?? null);
+  const [loadingMore,  setLoadingMore]  = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+
+  const showSkeleton = apiLoading || imgLoading;
 
   const fetchFeed = useCallback(async (cursor?: string) => {
     try {
@@ -94,27 +133,55 @@ export default function HomePage() {
 
       if (!res.ok) {
         setError(data.error || "Failed to load feed");
+        setApiLoading(false);
         return;
       }
 
-      const merged = data.posts.map((p: FeedPost) => {
+      const merged: FeedPost[] = data.posts.map((p: FeedPost) => {
         const cached = postSyncStore.get(String(p.id));
         if (!cached) return p;
         return { ...p, liked: cached.liked, like_count: cached.like_count };
       });
-      setPosts((prev) => cursor ? [...prev, ...merged] : merged);
+
+      if (cursor) {
+        const updated = [...posts, ...merged];
+        setPosts(updated);
+        setNextCursor(data.nextCursor);
+        setFeed({ posts: updated, nextCursor: data.nextCursor, fetchedAt: Date.now() });
+        setLoadingMore(false);
+        return;
+      }
+
+      setPosts(merged);
       setNextCursor(data.nextCursor);
-    } catch (err) {
+      setApiLoading(false);
+      setImgLoading(true);
+
+      const urls = collectFirstMediaUrls(merged, 6);
+      await preloadImages(urls);
+
+      setFeed({ posts: merged, nextCursor: data.nextCursor, fetchedAt: Date.now() });
+      setImgLoading(false);
+      requestAnimationFrame(() => setRevealed(true));
+
+    } catch {
       setError("Failed to load feed");
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      setApiLoading(false);
+      setImgLoading(false);
     }
+  }, [posts, setFeed]);
+
+  useEffect(() => {
+    // If store has fresh data, skip fetch entirely — just reveal
+    if (feed && !isStale(feed.fetchedAt)) {
+      setPosts(feed.posts);
+      setNextCursor(feed.nextCursor);
+      setRevealed(true);
+      return;
+    }
+    fetchFeed();
   }, []);
 
-  useEffect(() => { fetchFeed(); }, [fetchFeed]);
-
-  // Sync store events so PostCard gets correct initial values if it remounts
   useEffect(() => {
     return postSyncStore.subscribe((event) => {
       setPosts((prev) =>
@@ -124,8 +191,9 @@ export default function HomePage() {
             : p
         )
       );
+      updateFeedPost(event.postId, { liked: event.liked, like_count: event.like_count, comment_count: event.comment_count });
     });
-  }, []);
+  }, [updateFeedPost]);
 
   const handleLoadMore = () => {
     if (!nextCursor || loadingMore) return;
@@ -133,8 +201,6 @@ export default function HomePage() {
     fetchFeed(nextCursor);
   };
 
-  // PostCard handles the API call and store emit directly.
-  // onLike here is just a no-op callback kept for compatibility.
   const handleLikeToggle = (_postId: string) => {};
 
   return (
@@ -143,6 +209,14 @@ export default function HomePage() {
       <style>{`
         .feed-desktop-header { display: flex; }
         @media (max-width: 767px) { .feed-desktop-header { display: none !important; } }
+
+        @keyframes feedFadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0);   }
+        }
+        .feed-revealed {
+          animation: feedFadeIn 0.35s ease forwards;
+        }
       `}</style>
 
       {/* Sticky header */}
@@ -189,48 +263,51 @@ export default function HomePage() {
       <div style={{ padding: "0 0 40px" }}>
         {activeTab === "feed" ? (
           <>
-            {loading && (
-              <div style={{ display: "flex", justifyContent: "center", padding: "48px 0" }}>
-                <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: "3px solid #1F1F2A", borderTop: "3px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              </div>
-            )}
+            {/* ── Phase 1 & 2: Skeleton ── */}
+            {showSkeleton && <FeedSkeleton count={5} />}
 
-            {!loading && error && (
-              <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
-                {error}
-              </div>
-            )}
+            {/* ── Phase 3: Real cards with fade-in ── */}
+            {!showSkeleton && (
+              <div className={revealed ? "feed-revealed" : ""} style={{ opacity: revealed ? 1 : 0 }}>
 
-            {!loading && !error && posts.length === 0 && (
-              <div style={{ textAlign: "center", padding: "60px 24px" }}>
-                <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>Your feed is empty</p>
-                <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Subscribe to creators to see their posts here</p>
-              </div>
-            )}
+                {error && (
+                  <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
+                    {error}
+                  </div>
+                )}
 
-            {!loading && posts.map((post) => (
-              <PostCard
-                key={post.id}
-                post={adaptPost(post)}
-                onLike={handleLikeToggle}
-              />
-            ))}
+                {!error && posts.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "60px 24px" }}>
+                    <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>Your feed is empty</p>
+                    <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Subscribe to creators to see their posts here</p>
+                  </div>
+                )}
 
-            {nextCursor && !loadingMore && (
-              <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
-                <button
-                  onClick={handleLoadMore}
-                  style={{ padding: "10px 24px", borderRadius: "20px", border: "1.5px solid #2A2A3D", backgroundColor: "transparent", color: "#8B5CF6", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
-                >
-                  Load more
-                </button>
-              </div>
-            )}
+                {posts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    post={adaptPost(post)}
+                    onLike={handleLikeToggle}
+                  />
+                ))}
 
-            {loadingMore && (
-              <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
-                <div style={{ width: "24px", height: "24px", borderRadius: "50%", border: "2px solid #1F1F2A", borderTop: "2px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
+                {nextCursor && !loadingMore && (
+                  <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
+                    <button
+                      onClick={handleLoadMore}
+                      style={{ padding: "10px 24px", borderRadius: "20px", border: "1.5px solid #2A2A3D", backgroundColor: "transparent", color: "#8B5CF6", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+                    >
+                      Load more
+                    </button>
+                  </div>
+                )}
+
+                {loadingMore && (
+                  <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
+                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", border: "2px solid #1F1F2A", borderTop: "2px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                  </div>
+                )}
               </div>
             )}
           </>

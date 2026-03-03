@@ -5,10 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import WalletTab from "@/components/wallet/WalletTab";
 import CardsTab from "@/components/wallet/CardsTab";
 import HistoryTab from "@/components/wallet/HistoryTab";
+import { WalletSkeleton } from "@/components/loadscreen/WalletSkeleton";
 import { Transaction } from "@/components/wallet/TransactionItem";
 import { SavedCard } from "@/lib/types/checkout";
+import { useAppStore, isStale } from "@/lib/store/appStore";
 
 type Tab = "wallet" | "cards" | "history";
+
+const CACHE_KEY = "__wallet__";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "wallet",  label: "Wallet"  },
@@ -90,35 +94,40 @@ function PaymentBanner({ status, onDismiss }: { status: "success" | "failed"; on
 }
 
 function WalletContent() {
-  const router = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab]           = useState<Tab>("wallet");
-  const [autoRecharge, setAutoRecharge]     = useState(false);
-  const [balance, setBalance]               = useState(0);
-  const [transactions, setTransactions]     = useState<Transaction[]>([]);
-  const [cards, setCards]                   = useState<SavedCard[]>([]);
-  const [loading, setLoading]               = useState(true);
-  const [redirecting, setRedirecting]       = useState(false);
-  const [paymentStatus, setPaymentStatus]   = useState<"success" | "failed" | null>(null);
+  const { contentFeeds, setContentFeed } = useAppStore();
+  const cached = contentFeeds[CACHE_KEY];
+  const fresh  = cached && !isStale(cached.fetchedAt);
+
+  // Restore cached wallet data if fresh
+  const cachedData = fresh ? (cached.posts as unknown as {
+    balance: number; transactions: Transaction[]; cards: SavedCard[];
+  }) : null;
+
+  const [activeTab,      setActiveTab]      = useState<Tab>("wallet");
+  const [autoRecharge,   setAutoRecharge]   = useState(false);
+  const [balance,        setBalance]        = useState(cachedData?.balance ?? 0);
+  const [transactions,   setTransactions]   = useState<Transaction[]>(cachedData?.transactions ?? []);
+  const [cards,          setCards]          = useState<SavedCard[]>(cachedData?.cards ?? []);
+  const [loading,        setLoading]        = useState(!fresh);
+  const [revealed,       setRevealed]       = useState(fresh ?? false);
+  const [redirecting,    setRedirecting]    = useState(false);
+  const [paymentStatus,  setPaymentStatus]  = useState<"success" | "failed" | null>(null);
   const [bankTransferLoading, setBankTransferLoading] = useState(false);
-  const [bankAccount, setBankAccount]       = useState<{
-    accountNumber: string;
-    bankName: string;
-    accountName: string;
-    onusReference: string;
-    amount: number;
+  const [bankAccount,    setBankAccount]    = useState<{
+    accountNumber: string; bankName: string; accountName: string;
+    onusReference: string; amount: number;
   } | null>(null);
 
   useEffect(() => {
     const ref = searchParams.get("ref");
-    if (ref) {
-      setPaymentStatus("success");
-      router.replace("/wallet");
-    }
+    if (ref) { setPaymentStatus("success"); router.replace("/wallet"); }
   }, [searchParams, router]);
 
   const fetchWalletData = useCallback(async (silent = false) => {
+    if (!silent && fresh) { setRevealed(true); return; }
     if (!silent) setLoading(true);
     try {
       const [balanceRes, txRes, cardsRes] = await Promise.all([
@@ -127,46 +136,58 @@ function WalletContent() {
         fetch("/api/wallet/cards"),
       ]);
 
+      let newBalance = balance;
+      let newTx: Transaction[] = transactions;
+      let newCards: SavedCard[] = cards;
+
       if (balanceRes.ok) {
-        const { balance } = await balanceRes.json();
-        setBalance(balance);
+        const data = await balanceRes.json();
+        newBalance = data.balance;
+        setBalance(newBalance);
       }
 
       if (txRes.ok) {
         const { transactions: txData } = await txRes.json();
-        const mapped: Transaction[] = txData.map((t: {
-          id: number;
-          category: string;
-          amount: number;
-          provider: string;
-          description: string;
-          created_at: string;
+        newTx = txData.map((t: {
+          id: number; category: string; amount: number;
+          provider: string; description: string; created_at: string;
         }) => ({
-          id: String(t.id),
-          type: mapCategoryToType(t.category),
-          label: t.description ?? t.category,
+          id:       String(t.id),
+          type:     mapCategoryToType(t.category),
+          label:    t.description ?? t.category,
           subtitle: t.provider,
-          amount: t.amount,
-          date: new Date(t.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-          status: "completed" as const,
+          amount:   t.amount,
+          date:     new Date(t.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+          status:   "completed" as const,
         }));
-        setTransactions(mapped);
+        setTransactions(newTx);
       }
 
       if (cardsRes.ok) {
-        const { cards } = await cardsRes.json();
-        setCards(cards);
+        const data = await cardsRes.json();
+        newCards = data.cards;
+        setCards(newCards);
       }
-    } catch (error) {
-      console.error("[WalletPage] Failed to fetch wallet data:", error);
+
+      // Write to store
+      setContentFeed(CACHE_KEY, {
+        posts:     [{ balance: newBalance, transactions: newTx, cards: newCards }] as any,
+        media:     [],
+        fetchedAt: Date.now(),
+      });
+
+    } catch (err) {
+      console.error("[WalletPage] Failed to fetch wallet data:", err);
     } finally {
       setLoading(false);
+      requestAnimationFrame(() => setRevealed(true));
     }
-  }, []);
+  }, [fresh, balance, transactions, cards, setContentFeed]);
 
   useEffect(() => {
+    if (fresh) { setRevealed(true); return; }
     fetchWalletData();
-  }, [fetchWalletData]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePaymentConfirmed = useCallback(async () => {
     await fetchWalletData(true);
@@ -178,9 +199,8 @@ function WalletContent() {
     try {
       setRedirecting(true);
       const body = cardId ? { amount, cardId } : { amount };
-      const res = await fetch("/api/wallet/topup/card", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res  = await fetch("/api/wallet/topup/card", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -189,12 +209,11 @@ function WalletContent() {
         window.location.href = data.authorizationUrl;
       } else {
         setRedirecting(false);
-        await fetchWalletData();
+        await fetchWalletData(true);
         setPaymentStatus("success");
       }
-    } catch (error) {
+    } catch {
       setRedirecting(false);
-      console.error("[WalletPage] Card top-up failed:", error);
       setPaymentStatus("failed");
     }
   }
@@ -203,22 +222,18 @@ function WalletContent() {
     try {
       setBankTransferLoading(true);
       setBankAccount(null);
-      const res = await fetch("/api/wallet/topup/virtual-account", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res  = await fetch("/api/wallet/topup/virtual-account", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount }),
       });
       const data = await res.json();
       if (!res.ok) { setPaymentStatus("failed"); return; }
       setBankAccount({
-        accountNumber: data.accountNumber,
-        bankName:      data.bankName,
-        accountName:   data.accountName,
-        onusReference: data.onusReference,
-        amount:        data.amount,
+        accountNumber: data.accountNumber, bankName: data.bankName,
+        accountName: data.accountName, onusReference: data.onusReference,
+        amount: data.amount,
       });
-    } catch (error) {
-      console.error("[WalletPage] Bank transfer failed:", error);
+    } catch {
       setPaymentStatus("failed");
     } finally {
       setBankTransferLoading(false);
@@ -233,8 +248,8 @@ function WalletContent() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardId }),
       });
-      await fetchWalletData();
-    } catch (error) { console.error("[WalletPage] Set default failed:", error); }
+      await fetchWalletData(true);
+    } catch { /* silent */ }
   }
 
   async function handleRemoveCard(cardId: number) {
@@ -243,8 +258,8 @@ function WalletContent() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardId }),
       });
-      await fetchWalletData();
-    } catch (error) { console.error("[WalletPage] Remove card failed:", error); }
+      await fetchWalletData(true);
+    } catch { /* silent */ }
   }
 
   return (
@@ -255,6 +270,7 @@ function WalletContent() {
         minHeight: "100vh", backgroundColor: "#0A0A0F",
         fontFamily: "'Inter', sans-serif",
       }}>
+        {/* Header + tabs */}
         <div style={{ padding: "24px 24px 0", borderBottom: "1px solid #1E1E2E" }}>
           <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 2px" }}>Wallet</h1>
           <p style={{ fontSize: "13px", color: "#6B6B8A", margin: "0 0 20px" }}>Freya Credits</p>
@@ -282,12 +298,13 @@ function WalletContent() {
           {paymentStatus && (
             <PaymentBanner status={paymentStatus} onDismiss={() => setPaymentStatus(null)} />
           )}
-          {loading ? (
-            <p style={{ textAlign: "center", color: "#6B6B8A", fontSize: "14px", padding: "40px 0", fontFamily: "'Inter', sans-serif" }}>
-              Loading...
-            </p>
-          ) : (
-            <>
+
+          {/* ── Skeleton phase ── */}
+          {loading && <WalletSkeleton tab={activeTab} />}
+
+          {/* ── Revealed content ── */}
+          {!loading && (
+            <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
               {activeTab === "wallet" && (
                 <WalletTab
                   balance={balance}
@@ -304,11 +321,8 @@ function WalletContent() {
               {activeTab === "cards" && (
                 <CardsTab
                   cards={cards.map((c) => ({
-                    id: String(c.id),
-                    last_four: c.lastFour,
-                    card_type: c.cardType,
-                    expiry: "••/••",
-                    is_default: c.isDefault,
+                    id: String(c.id), last_four: c.lastFour,
+                    card_type: c.cardType, expiry: "••/••", is_default: c.isDefault,
                   }))}
                   onAddCard={handleAddCard}
                   onSetDefault={(id) => handleSetDefault(Number(id))}
@@ -318,7 +332,7 @@ function WalletContent() {
               {activeTab === "history" && (
                 <HistoryTab transactions={transactions} />
               )}
-            </>
+            </div>
           )}
         </div>
       </div>

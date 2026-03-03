@@ -1,13 +1,75 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SubscriptionList } from "@/components/subscription/SubscriptionCard";
+import { SubscriptionsSkeleton } from "@/components/loadscreen/SubscriptionsSkeleton";
 import { Search, SlidersHorizontal, ArrowUpDown } from "lucide-react";
+import { useAppStore, isStale } from "@/lib/store/appStore";
 
 type ContentTab = "following" | "posts";
 
+const CACHE_KEY = "__subscriptions__";
+
+function preloadImages(urls: string[]): Promise<void[]> {
+  return Promise.all(
+    urls.map(
+      (url) =>
+        new Promise<void>((resolve) => {
+          if (!url) { resolve(); return; }
+          const img = new Image();
+          img.onload  = () => resolve();
+          img.onerror = () => resolve();
+          img.src = url;
+        })
+    )
+  );
+}
+
 export default function SubscriptionsPage() {
   const [contentTab, setContentTab] = useState<ContentTab>("following");
+
+  const { contentFeeds, setContentFeed } = useAppStore();
+  const cached = contentFeeds[CACHE_KEY];
+  const fresh  = cached && !isStale(cached.fetchedAt);
+
+  const [subscriptions, setSubscriptions] = useState<any[]>(
+    fresh ? cached.posts : []
+  );
+  const [loading,   setLoading]   = useState(!fresh);
+  const [revealed,  setRevealed]  = useState(fresh ?? false);
+
+  const fetchSubscriptions = async (force = false) => {
+    if (!force && fresh) return;
+    setLoading(true);
+    try {
+      const res  = await fetch("/api/subscriptions/mine");
+      const data = await res.json();
+      if (data.subscriptions) {
+        const subs = data.subscriptions;
+
+        // Preload banner + avatar for first 6 cards
+        const urls: string[] = [];
+        for (const s of subs.slice(0, 6)) {
+          if (s.banner_url) urls.push(s.banner_url);
+          if (s.avatar_url) urls.push(s.avatar_url);
+        }
+        await preloadImages(urls);
+
+        setSubscriptions(subs);
+        setContentFeed(CACHE_KEY, { posts: subs, media: [], fetchedAt: Date.now() });
+      }
+    } catch (err) {
+      console.error("[SubscriptionsPage]", err);
+    } finally {
+      setLoading(false);
+      requestAnimationFrame(() => setRevealed(true));
+    }
+  };
+
+  useEffect(() => {
+    if (fresh) { setRevealed(true); return; }
+    fetchSubscriptions();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif" }}>
@@ -64,7 +126,18 @@ export default function SubscriptionsPage() {
 
       {/* Content */}
       <div style={{ padding: "0 28px 28px" }}>
-        {contentTab === "following" && <SubscriptionList />}
+        {contentTab === "following" && (
+          loading
+            ? <SubscriptionsSkeleton count={6} />
+            : (
+              <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
+                <SubscriptionList
+                  subscriptions={subscriptions}
+                  onRefresh={() => fetchSubscriptions(true)}
+                />
+              </div>
+            )
+        )}
         {contentTab === "posts" && (
           <div style={{ backgroundColor: "#1C1C2E", border: "1.5px dashed #2A2A3D", borderRadius: "10px", padding: "32px 16px", textAlign: "center" }}>
             <p style={{ fontSize: "13px", color: "#6B6B8A", margin: 0 }}>Posts feed coming soon</p>

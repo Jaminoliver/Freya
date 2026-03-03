@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { MoreHorizontal, BadgeCheck, Star, MessageCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -35,26 +35,14 @@ const STATUS_LABEL: Record<SubscriptionStatus, string> = {
 
 // ── Subscription List ─────────────────────────────────────────────────────────
 
-export function SubscriptionList() {
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [loading, setLoading] = useState(true);
+export function SubscriptionList({
+  subscriptions,
+  onRefresh,
+}: {
+  subscriptions: Subscription[];
+  onRefresh?: () => void;
+}) {
   const [filter, setFilter] = useState("all");
-
-  const fetchSubscriptions = useCallback(async () => {
-    try {
-      const res = await fetch("/api/subscriptions/mine");
-      const data = await res.json();
-      if (data.subscriptions) setSubscriptions(data.subscriptions);
-    } catch (err) {
-      console.error("[SubscriptionList]", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSubscriptions();
-  }, [fetchSubscriptions]);
 
   const counts = {
     all:       subscriptions.length,
@@ -66,10 +54,6 @@ export function SubscriptionList() {
   const filtered = filter === "all"
     ? subscriptions
     : subscriptions.filter((s) => s.status === filter);
-
-  if (loading) {
-    return <p style={{ fontSize: "12px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>Loading...</p>;
-  }
 
   if (subscriptions.length === 0) {
     return (
@@ -87,7 +71,7 @@ export function SubscriptionList() {
           <SubscriptionCard
             key={s.id}
             subscription={s}
-            onCancelled={fetchSubscriptions}
+            onCancelled={onRefresh}
           />
         ))}
       </div>
@@ -105,8 +89,8 @@ export function SubscriptionCard({
   onCancelled?: () => void;
 }) {
   const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
+  const [menuOpen,    setMenuOpen]    = useState(false);
+  const [cancelling,  setCancelling]  = useState(false);
 
   const coverBg = s.banner_url
     ? `url(${s.banner_url}) center/cover no-repeat`
@@ -116,7 +100,7 @@ export function SubscriptionCard({
     if (!confirm("Cancel subscription? You'll keep access until the period ends.")) return;
     setCancelling(true);
     try {
-      const res = await fetch(`/api/subscriptions/${s.id}/cancel`, { method: "POST" });
+      const res  = await fetch(`/api/subscriptions/${s.id}/cancel`, { method: "POST" });
       const data = await res.json();
       if (data.success) onCancelled?.();
       else alert(data.error ?? "Failed to cancel");
@@ -158,7 +142,6 @@ export function SubscriptionCard({
             >
               <MoreHorizontal size={14} />
             </button>
-
             {menuOpen && (
               <div
                 onClick={(e) => e.stopPropagation()}
@@ -265,7 +248,7 @@ export function SubscriptionFilterTabs({ active, counts, onChange }: FilterTabsP
     <div style={{ display: "flex", gap: "6px", overflowX: "auto", scrollbarWidth: "none", paddingBottom: "2px" }}>
       {tabs.map((t) => {
         const isActive = active === t.key;
-        const count = counts[t.key] ?? 0;
+        const count    = counts[t.key] ?? 0;
         return (
           <button
             key={t.key}

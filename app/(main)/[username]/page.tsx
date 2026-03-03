@@ -14,38 +14,78 @@ import FanActivityCard from "@/components/profile/FanActivityCard";
 import ContentFeed from "@/components/profile/ContentFeed";
 import PostComposer from "@/components/profile/PostComposer";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
+import { ProfileSkeleton } from "@/components/loadscreen/ProfileSkeleton";
+import type { ProfileSkeletonContext } from "@/components/loadscreen/ProfileSkeleton";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import type { User, Subscription, Post } from "@/lib/types/profile";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
+import type { ApiPost } from "@/components/profile/PostRow";
+import { useAppStore, isStale } from "@/lib/store/appStore";
 
-interface ProfileCache {
-  viewer: User | null;
-  profile: User | null;
-  totalLikes: number;
-  tierId: number | undefined;
-  isFollowing: boolean;
-  isSubscribed: boolean;
-  subscriptionPeriodEnd: string | null;
+// Module-level cache removed — now using Zustand appStore
+
+// ── Imperatively preload images (avoids Next.js onLoad timing bug) ────────────
+function preloadImages(urls: string[]): Promise<void[]> {
+  return Promise.all(
+    urls.map(
+      (url) =>
+        new Promise<void>((resolve) => {
+          if (!url) { resolve(); return; }
+          const img = new Image();
+          img.onload  = () => resolve();
+          img.onerror = () => resolve();
+          img.src = url;
+        })
+    )
+  );
 }
-const profileCache = new Map<string, ProfileCache>();
+
+function collectProfileImageUrls(
+  profile: User | null,
+  posts: Post[],
+  n = 6
+): string[] {
+  const urls: string[] = [];
+  // Always preload avatar + banner first
+  if (profile?.avatar_url)  urls.push(profile.avatar_url);
+  if (profile?.banner_url)  urls.push(profile.banner_url);
+
+  // Then first n post media images
+  for (const post of posts) {
+    if (urls.length >= n + 2) break;
+    for (const m of (post as any).media ?? []) {
+      if (urls.length >= n + 2) break;
+      const url = m.thumbnail_url || m.file_url;
+      if (url) urls.push(url);
+    }
+  }
+  return urls;
+}
 
 export default function ProfilePage() {
   const params   = useParams();
   const router   = useRouter();
   const username = params.username as string;
 
-  const cached = profileCache.get(username);
+  const { profiles, setProfile: setStoreProfile, updateProfile, clearProfile, viewer: globalViewer } = useAppStore();
+  const cached = profiles[username];
+  const fresh  = cached && !isStale(cached.fetchedAt);
 
-  const [viewer,                setViewer]                = React.useState<User | null>(cached?.viewer ?? null);
+  const [viewer,                setViewer]                = React.useState<User | null>(cached?.viewer ?? globalViewer as any ?? null);
   const [profile,               setProfile]               = React.useState<User | null>(cached?.profile ?? null);
   const [subscription,          setSubscription]          = React.useState<Subscription | null>(null);
   const [isSubscribed,          setIsSubscribed]          = React.useState(cached?.isSubscribed ?? false);
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(cached?.subscriptionPeriodEnd ?? null);
   const [posts,                 setPosts]                 = React.useState<Post[]>([]);
-  const [loading,               setLoading]               = React.useState(!cached);
-  const [isFollowing,           setIsFollowing]           = React.useState(cached?.isFollowing ?? false);
-  const [followLoading,         setFollowLoading]         = React.useState(false);
-  const [totalLikes,            setTotalLikes]            = React.useState(cached?.totalLikes ?? 0);
+  const [apiPosts,              setApiPosts]              = React.useState<ApiPost[]>(cached?.apiPosts ?? []);
+
+  const [apiLoading,  setApiLoading]  = React.useState(!fresh);
+  const [imgLoading,  setImgLoading]  = React.useState(false);
+  const [revealed,    setRevealed]    = React.useState(fresh ?? false);
+
+  const [isFollowing,   setIsFollowing]   = React.useState(cached?.isFollowing ?? false);
+  const [followLoading, setFollowLoading] = React.useState(false);
+  const [totalLikes,    setTotalLikes]    = React.useState(cached?.totalLikes ?? 0);
 
   const [checkoutOpen,    setCheckoutOpen]    = React.useState(false);
   const [checkoutType,    setCheckoutType]    = React.useState<CheckoutType>("subscription");
@@ -56,6 +96,21 @@ export default function ProfilePage() {
 
   const profileIdRef = React.useRef<string | null>(cached?.profile?.id ?? null);
   const viewerIdRef  = React.useRef<string | null>(cached?.viewer?.id ?? null);
+
+  const showSkeleton = apiLoading || imgLoading;
+
+  // Determine skeleton context as early as possible for correct shimmer shape
+  const skeletonContext = React.useMemo<ProfileSkeletonContext>(() => {
+    if (!viewer || !profile) return "unsubscribedCreator";
+    const isOwn      = viewer.id === profile.id;
+    const viewerRole = viewer.role;
+    const profileRole = profile.role;
+    if (isOwn && profileRole === "creator")                        return "ownCreator";
+    if (isOwn && profileRole === "fan")                            return "ownFan";
+    if (viewerRole === "creator" && profileRole === "fan")         return "creatorViewingFan";
+    if (profileRole === "creator" && isSubscribed)                 return "subscribedCreator";
+    return "unsubscribedCreator";
+  }, [viewer, profile, isSubscribed]);
 
   const openCheckout = (type: CheckoutType, tier: SubscriptionTier = "monthly") => {
     setCheckoutType(type); setCheckoutTier(tier); setCheckoutOpen(true);
@@ -78,10 +133,14 @@ export default function ProfilePage() {
   }, []);
 
   React.useEffect(() => {
-    if (cached) return;
+    // Fresh cache — reveal immediately, no fetch needed
+    if (fresh) {
+      setRevealed(true);
+      return;
+    }
 
     const fetchData = async () => {
-      setLoading(true);
+      setApiLoading(true);
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -116,7 +175,6 @@ export default function ProfilePage() {
         };
         setProfile(enriched);
 
-        // Use denormalized likes_count from profiles table
         likesCount = profileData.likes_count ?? 0;
         setTotalLikes(likesCount);
 
@@ -135,24 +193,42 @@ export default function ProfilePage() {
             periodEndVal   = data.currentPeriodEnd ?? null;
             setIsSubscribed(subscribedVal);
             setSubscriptionPeriodEnd(periodEndVal);
-
             followingVal = await checkIsFollowing(profileData.id);
             setIsFollowing(followingVal);
           }
         }
       }
 
-      profileCache.set(username, {
-        viewer:                viewerData,
-        profile:               enriched,
-        totalLikes:            likesCount,
-        tierId:                tierIdVal,
-        isFollowing:           followingVal,
-        isSubscribed:          subscribedVal,
-        subscriptionPeriodEnd: periodEndVal,
+      // ── Fetch posts in parallel with phase 2 ──
+      let fetchedPosts: ApiPost[] = [];
+      if (enriched?.username) {
+        try {
+          const res  = await fetch(`/api/posts/creator/${enriched.username}`);
+          const data = await res.json();
+          if (res.ok) {
+            fetchedPosts = data.posts || [];
+            setApiPosts(fetchedPosts);
+          }
+        } catch { /* non-fatal */ }
+      }
+
+      // Write everything to Zustand store
+      setStoreProfile(username, {
+        viewer: viewerData, profile: enriched, totalLikes: likesCount,
+        tierId: tierIdVal, isFollowing: followingVal,
+        isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
+        apiPosts: fetchedPosts, fetchedAt: Date.now(),
       });
 
-      setLoading(false);
+      // ── Phase 2: preload avatar, banner + first 6 post images ──
+      setApiLoading(false);
+      setImgLoading(true);
+
+      const urlsToPreload = collectProfileImageUrls(enriched, fetchedPosts as any, 6);
+      await preloadImages(urlsToPreload);
+
+      setImgLoading(false);
+      requestAnimationFrame(() => setRevealed(true));
     };
 
     fetchData();
@@ -171,11 +247,11 @@ export default function ProfilePage() {
         if (row?.creator_id === creatorId && row?.status === "active") {
           setIsSubscribed(true);
           setSubscriptionPeriodEnd(row.current_period_end ?? null);
-          profileCache.delete(username);
+          clearProfile(username);
         }
         if (row?.creator_id === creatorId && (row?.status === "cancelled" || row?.status === "expired")) {
           setIsSubscribed(false);
-          profileCache.delete(username);
+          clearProfile(username);
         }
       })
       .subscribe();
@@ -193,11 +269,11 @@ export default function ProfilePage() {
       supabase.removeChannel(subscriptionChannel);
       supabase.removeChannel(profileChannel);
     };
-  }, [loading, username]);
+  }, [apiLoading, username]);
 
   const handleSubscriptionSuccess = React.useCallback(async () => {
     setCheckoutOpen(false);
-    profileCache.delete(username);
+    clearProfile(username);
     if (profile) await fetchSubscriptionStatus(profile.id);
   }, [profile, fetchSubscriptionStatus, username]);
 
@@ -209,12 +285,13 @@ export default function ProfilePage() {
         await unfollowCreator(profile.id);
         setIsFollowing(false);
         setProfile((prev) => prev ? { ...prev, follower_count: Math.max((prev.follower_count ?? 1) - 1, 0) } : prev);
+        updateProfile(username, { isFollowing: false });
       } else {
         await followCreator(profile.id);
         setIsFollowing(true);
         setProfile((prev) => prev ? { ...prev, follower_count: (prev.follower_count ?? 0) + 1 } : prev);
+        updateProfile(username, { isFollowing: true });
       }
-      profileCache.delete(username);
     } catch (err) { console.error("Follow error:", err); }
     finally { setFollowLoading(false); }
   };
@@ -226,11 +303,10 @@ export default function ProfilePage() {
   const goToProfileSettings = () => router.push("/settings");
   const handlePost          = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule      = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
-
-  const handleLike    = (_postId: string) => {};
-  const handleComment = (id: string) => console.log("Comment:", id);
-  const handleTip     = (_id: string) => openTip();
-  const handleUnlock  = (id: string) => openUnlock(id);
+  const handleLike          = (_postId: string) => {};
+  const handleComment       = (id: string) => console.log("Comment:", id);
+  const handleTip           = (_id: string) => openTip();
+  const handleUnlock        = (id: string) => openUnlock(id);
 
   const checkoutModal = profile ? (
     <CheckoutModal
@@ -250,16 +326,8 @@ export default function ProfilePage() {
     />
   ) : null;
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: "40px", height: "40px", borderRadius: "50%", border: "3px solid #1F1F2A", borderTop: "3px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  if (!profile) {
+  // ── Profile not found (after loading) ────────────────────────────────────
+  if (!apiLoading && !profile) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center" }}>
@@ -271,11 +339,11 @@ export default function ProfilePage() {
   }
 
   const bannerStats = {
-    posts: profile.post_count ?? 0, media: 0, likes: totalLikes,
-    subscribers: profile.subscriber_count ?? 0,
+    posts: profile?.post_count ?? 0, media: 0, likes: totalLikes,
+    subscribers: profile?.subscriber_count ?? 0,
   };
 
-  const profileInfoProps = {
+  const profileInfoProps = profile ? {
     displayName:  profile.display_name || profile.username,
     username:     profile.username,
     bio:          profile.bio || undefined,
@@ -286,160 +354,184 @@ export default function ProfilePage() {
     telegramUrl:  (profile as any).telegram_url || undefined,
     facebookUrl:  (profile as any).facebook_url || undefined,
     isVerified:   profile.is_verified,
-  };
+  } : {} as any;
 
   const padded: React.CSSProperties = { padding: "0 16px" };
 
-  // ── 1. CREATOR VIEWING OWN PROFILE ────────────────────────────────────────
-  if (isOwnProfile && profile.role === "creator") {
-    return (
-      <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-        {checkoutModal}
-        <ProfileBanner
-          bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username}
-          isEditable={true} isCreator={true} stats={bannerStats} userId={profile.id}
-          onBannerUpdated={(url) => setProfile((p) => p ? { ...p, banner_url: url } : p)}
-        />
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
-          <ProfileAvatar
-            avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username}
-            isEditable={true} isOnline={true} userId={profile.id}
-            onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
-          />
-          <div style={{ paddingBottom: "12px" }}>
-            <ProfileActions viewContext="ownCreator" onEditProfile={goToProfileSettings} />
-          </div>
-        </div>
-        <div style={{ padding: "8px 16px 0" }}>
-          <ProfileInfo {...profileInfoProps} mode="full" isEditable={true} />
-        </div>
-        <div style={{ padding: "16px 16px 8px" }}>
-          <PostComposer user={profile} onPost={handlePost} onSchedule={handleSchedule} />
-        </div>
-        <ContentFeed
-          posts={posts} isSubscribed={true} isOwnProfile={true}
-          creatorUsername={profile.username}
-          onLike={handleLike} onComment={handleComment}
-          onTip={handleTip} onUnlock={handleUnlock}
-        />
-      </div>
-    );
-  }
+  const fadeStyle: React.CSSProperties = {
+    opacity:    revealed ? 1 : 0,
+    transition: "opacity 0.35s ease",
+  };
 
-  // ── 2. FAN VIEWING OWN PROFILE ────────────────────────────────────────────
-  if (isOwnProfile && profile.role === "fan") {
-    const fanStats = { posts: profile.post_count ?? 0, media: 0, likes: totalLikes, subscribers: profile.subscriber_count ?? 0 };
-    return (
-      <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-        {checkoutModal}
-        <ProfileBanner
-          bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username}
-          isEditable={false} isCreator={false} stats={fanStats}
-        />
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
-          <ProfileAvatar
-            avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username}
-            isEditable={true} isOnline={true} userId={profile.id}
-            onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
-          />
-          <div style={{ paddingBottom: "12px" }}>
-            <ProfileActions viewContext="ownFan" onEditProfile={goToProfileSettings} />
-          </div>
-        </div>
-        <div style={{ padding: "8px 16px 0" }}>
-          <ProfileInfo {...profileInfoProps} mode="full" isEditable={true} />
-        </div>
-        <ContentFeed
-          posts={posts} isSubscribed={true}
-          creatorUsername={profile.username}
-          onLike={handleLike} onComment={handleComment}
-          onTip={handleTip} onUnlock={handleUnlock}
-        />
-      </div>
-    );
-  }
+  return (
+    <>
+      <style>{`
+        @keyframes profileFadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0);   }
+        }
+        .profile-revealed {
+          animation: profileFadeIn 0.35s ease forwards;
+        }
+      `}</style>
 
-  // ── 3. CREATOR VIEWING A FAN'S PROFILE ────────────────────────────────────
-  if (isCreatorViewingFan) {
-    return (
-      <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "24px 16px" }}>
-        {checkoutModal}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
-          <ProfileActions viewContext="creatorViewingFan" onMessage={() => console.log("Message fan")} />
-        </div>
-        <div style={{ marginTop: "16px" }}>
-          <ProfileInfo {...profileInfoProps} />
-        </div>
-        {subscription && <div style={{ marginTop: "24px" }}><FanActivityCard subscription={subscription} /></div>}
-      </div>
-    );
-  }
+      {/* ── Skeleton phases 1 & 2 ── */}
+      {showSkeleton && <ProfileSkeleton context={skeletonContext} />}
 
-  // ── 4. ANYONE VIEWING A CREATOR (SUBSCRIBED) ──────────────────────────────
-  if (isViewingCreator && isSubscribed) {
-    const renewalDisplay = subscriptionPeriodEnd
-      ? new Date(subscriptionPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-      : "—";
-    return (
-      <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-        {checkoutModal}
-        <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
-          <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
-          <div style={{ paddingBottom: "12px" }}>
-            <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={openTip} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />
-          </div>
-        </div>
-        <div style={{ padding: "8px 16px 0" }}>
-          <ProfileInfo {...profileInfoProps} mode="full" />
-        </div>
-        <div style={{ padding: "16px 16px" }}>
-          <SubscribedBanner renewalDate={renewalDisplay} creatorId={profile.id} onCancelled={() => fetchSubscriptionStatus(profile.id)} />
-        </div>
-        <ContentFeed
-          posts={posts} isSubscribed={true}
-          creatorUsername={profile.username}
-          onLike={handleLike} onComment={handleComment}
-          onTip={handleTip} onUnlock={handleUnlock}
-        />
-      </div>
-    );
-  }
+      {/* ── Phase 3: real content with fade-in ── */}
+      {!showSkeleton && (
+        <div className={revealed ? "profile-revealed" : ""} style={fadeStyle}>
 
-  // ── 5. ANYONE VIEWING A CREATOR (NOT SUBSCRIBED) ──────────────────────────
-  if (isViewingCreator && !isSubscribed) {
-    return (
-      <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-        {checkoutModal}
-        <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
-          <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
-          <div style={{ paddingBottom: "12px" }}>
-            <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={openTip} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />
-          </div>
-        </div>
-        <div style={{ padding: "8px 16px 0" }}>
-          <ProfileInfo {...profileInfoProps} mode="full" />
-        </div>
-        <div style={{ padding: "16px 16px" }}>
-          <SubscriptionCard
-            monthlyPrice={profile.subscriptionPrice ?? 0}
-            threeMonthPrice={profile.bundlePricing?.threeMonths}
-            sixMonthPrice={profile.bundlePricing?.sixMonths}
-            isEditable={false}
-            onSubscribe={(tier) => openCheckout("subscription", tier)}
-          />
-        </div>
-        <ContentFeed
-          posts={posts} isSubscribed={false}
-          creatorUsername={profile.username}
-          onLike={handleLike} onComment={handleComment}
-          onTip={handleTip} onUnlock={handleUnlock}
-        />
-      </div>
-    );
-  }
+          {/* 1. CREATOR VIEWING OWN PROFILE */}
+          {isOwnProfile && profile?.role === "creator" && (
+            <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
+              {checkoutModal}
+              <ProfileBanner
+                bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username}
+                isEditable={true} isCreator={true} stats={bannerStats} userId={profile.id}
+                onBannerUpdated={(url) => setProfile((p) => p ? { ...p, banner_url: url } : p)}
+              />
+              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
+                <ProfileAvatar
+                  avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username}
+                  isEditable={true} isOnline={true} userId={profile.id}
+                  onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
+                />
+                <div style={{ paddingBottom: "12px" }}>
+                  <ProfileActions viewContext="ownCreator" onEditProfile={goToProfileSettings} />
+                </div>
+              </div>
+              <div style={{ padding: "8px 16px 0" }}>
+                <ProfileInfo {...profileInfoProps} mode="full" isEditable={true} />
+              </div>
+              <div style={{ padding: "16px 16px 8px" }}>
+                <PostComposer user={profile} onPost={handlePost} onSchedule={handleSchedule} />
+              </div>
+              <ContentFeed
+                posts={posts} isSubscribed={true} isOwnProfile={true}
+                creatorUsername={profile.username}
+                initialApiPosts={apiPosts}
+                onLike={handleLike} onComment={handleComment}
+                onTip={handleTip} onUnlock={handleUnlock}
+              />
+            </div>
+          )}
 
-  return null;
+          {/* 2. FAN VIEWING OWN PROFILE */}
+          {isOwnProfile && profile?.role === "fan" && (
+            <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
+              {checkoutModal}
+              <ProfileBanner
+                bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username}
+                isEditable={false} isCreator={false}
+                stats={{ posts: profile.post_count ?? 0, media: 0, likes: totalLikes, subscribers: profile.subscriber_count ?? 0 }}
+              />
+              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
+                <ProfileAvatar
+                  avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username}
+                  isEditable={true} isOnline={true} userId={profile.id}
+                  onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
+                />
+                <div style={{ paddingBottom: "12px" }}>
+                  <ProfileActions viewContext="ownFan" onEditProfile={goToProfileSettings} />
+                </div>
+              </div>
+              <div style={{ padding: "8px 16px 0" }}>
+                <ProfileInfo {...profileInfoProps} mode="full" isEditable={true} />
+              </div>
+              <ContentFeed
+                posts={posts} isSubscribed={true}
+                creatorUsername={profile.username}
+                initialApiPosts={apiPosts}
+                onLike={handleLike} onComment={handleComment}
+                onTip={handleTip} onUnlock={handleUnlock}
+              />
+            </div>
+          )}
+
+          {/* 3. CREATOR VIEWING A FAN */}
+          {isCreatorViewingFan && profile && (
+            <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "24px 16px" }}>
+              {checkoutModal}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
+                <ProfileActions viewContext="creatorViewingFan" onMessage={() => console.log("Message fan")} />
+              </div>
+              <div style={{ marginTop: "16px" }}>
+                <ProfileInfo {...profileInfoProps} />
+              </div>
+              {subscription && <div style={{ marginTop: "24px" }}><FanActivityCard subscription={subscription} /></div>}
+            </div>
+          )}
+
+          {/* 4. FAN VIEWING SUBSCRIBED CREATOR */}
+          {isViewingCreator && isSubscribed && profile && (
+            <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
+              {checkoutModal}
+              <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
+              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
+                <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
+                <div style={{ paddingBottom: "12px" }}>
+                  <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={openTip} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />
+                </div>
+              </div>
+              <div style={{ padding: "8px 16px 0" }}>
+                <ProfileInfo {...profileInfoProps} mode="full" />
+              </div>
+              <div style={{ padding: "16px 16px" }}>
+                <SubscribedBanner
+                  renewalDate={subscriptionPeriodEnd
+                    ? new Date(subscriptionPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : "—"}
+                  creatorId={profile.id}
+                  onCancelled={() => fetchSubscriptionStatus(profile.id)}
+                />
+              </div>
+              <ContentFeed
+                posts={posts} isSubscribed={true}
+                creatorUsername={profile.username}
+                initialApiPosts={apiPosts}
+                onLike={handleLike} onComment={handleComment}
+                onTip={handleTip} onUnlock={handleUnlock}
+              />
+            </div>
+          )}
+
+          {/* 5. FAN VIEWING UNSUBSCRIBED CREATOR */}
+          {isViewingCreator && !isSubscribed && profile && (
+            <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
+              {checkoutModal}
+              <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
+              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
+                <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
+                <div style={{ paddingBottom: "12px" }}>
+                  <ProfileActions viewContext="fanViewingCreator" onMessage={() => console.log("Message")} onTip={openTip} onShare={() => console.log("Share")} onFollow={handleFollow} isFollowing={isFollowing} />
+                </div>
+              </div>
+              <div style={{ padding: "8px 16px 0" }}>
+                <ProfileInfo {...profileInfoProps} mode="full" />
+              </div>
+              <div style={{ padding: "16px 16px" }}>
+                <SubscriptionCard
+                  monthlyPrice={profile.subscriptionPrice ?? 0}
+                  threeMonthPrice={profile.bundlePricing?.threeMonths}
+                  sixMonthPrice={profile.bundlePricing?.sixMonths}
+                  isEditable={false}
+                  onSubscribe={(tier) => openCheckout("subscription", tier)}
+                />
+              </div>
+              <ContentFeed
+                posts={posts} isSubscribed={false}
+                creatorUsername={profile.username}
+                initialApiPosts={apiPosts}
+                onLike={handleLike} onComment={handleComment}
+                onTip={handleTip} onUnlock={handleUnlock}
+              />
+            </div>
+          )}
+
+        </div>
+      )}
+    </>
+  );
 }
