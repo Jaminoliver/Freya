@@ -3,14 +3,12 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Share2, MoreHorizontal } from "lucide-react";
-import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import PostActions from "@/components/profile/PostActions";
-import { Lock } from "lucide-react";
 import CommentSection from "@/components/profile/CommentSection";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
-import ImageCarousel from "@/components/profile/ImageCarousel";
 import Lightbox from "@/components/profile/Lightbox";
-import DoubleTapLike from "@/components/shared/DoubleTapLike";
+import PostMediaViewer from "@/components/shared/PostMediaViewer";
+import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
 import { postSyncStore } from "@/lib/store/postSyncStore";
@@ -24,11 +22,7 @@ interface ApiComment {
   like_count: number;
   user_id: string;
   viewer_has_liked?: boolean;
-  profiles: {
-    username: string;
-    display_name: string | null;
-    avatar_url: string | null;
-  };
+  profiles: { username: string; display_name: string | null; avatar_url: string | null };
 }
 
 interface PostData {
@@ -270,11 +264,6 @@ export default function SinglePostPage() {
     }
   };
 
-  const openLightbox = (index: number) => {
-    setLightboxMediaIdx(index);
-    setLightboxOpen(true);
-  };
-
   const openTip    = () => { setCheckoutType("tips");        setCheckoutOpen(true); };
   const openUnlock = () => { setCheckoutType("locked_post"); setCheckoutOpen(true); };
 
@@ -305,12 +294,27 @@ export default function SinglePostPage() {
     );
   }
 
-  const isOwnPost    = viewerId === post.creator_id;
-  const isSubscribed = post.can_access;
-  const firstMedia   = post.media?.[0];
-  const isVideo      = firstMedia?.media_type === "video";
-  const photoMedia   = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
-  const isMultiPhoto = !isVideo && photoMedia.length > 1;
+  const isOwnPost  = viewerId === post.creator_id;
+  const photoMedia = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
+
+  // Normalize media — if post is locked, pass only first item for blurred preview
+  const normalizedMedia: NormalizedMedia[] = post.locked
+    ? post.media.slice(0, 1).map((m) => ({
+        type:             m.media_type === "video" ? "video" : "image",
+        url:              m.file_url,
+        bunnyVideoId:     m.bunny_video_id,
+        thumbnailUrl:     m.thumbnail_url,
+        processingStatus: m.processing_status,
+        rawVideoUrl:      m.raw_video_url,
+      }))
+    : post.media.filter((m) => !m.locked).map((m) => ({
+        type:             m.media_type === "video" ? "video" : "image",
+        url:              m.file_url,
+        bunnyVideoId:     m.bunny_video_id,
+        thumbnailUrl:     m.thumbnail_url,
+        processingStatus: m.processing_status,
+        rawVideoUrl:      m.raw_video_url,
+      }));
 
   const lightboxPost: LightboxPost = {
     id: post.id,
@@ -327,18 +331,6 @@ export default function SinglePostPage() {
     })),
   };
 
-  const carouselMedia = photoMedia.map((m) => ({
-    id:                m.id,
-    media_type:        m.media_type,
-    file_url:          m.file_url,
-    thumbnail_url:     m.thumbnail_url,
-    raw_video_url:     m.raw_video_url,
-    locked:            m.locked,
-    display_order:     m.display_order,
-    processing_status: m.processing_status,
-    bunny_video_id:    m.bunny_video_id,
-  }));
-
   const creatorForCheckout = {
     id: post.creator_id,
     username: post.profiles?.username || "",
@@ -351,7 +343,6 @@ export default function SinglePostPage() {
   return (
     <div style={{ width: "100%", fontFamily: "'Inter', sans-serif" }}>
 
-      {/* Lightbox */}
       {lightboxOpen && lightboxPost.media.length > 0 && (
         <Lightbox
           post={lightboxPost}
@@ -382,7 +373,9 @@ export default function SinglePostPage() {
           </button>
           <span style={{ fontSize: "17px", fontWeight: 800, color: "#F1F5F9", letterSpacing: "0.06em", textTransform: "uppercase" }}>Post</span>
         </div>
-        <button onClick={() => console.log("share")} style={{ background: "none", border: "none", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "8px" }}
+        <button
+          onClick={() => console.log("share")}
+          style={{ background: "none", border: "none", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "8px" }}
           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
@@ -423,64 +416,16 @@ export default function SinglePostPage() {
       </div>
 
       {/* Media */}
-      {firstMedia && (
-        post.locked ? (
-          <div style={{ position: "relative", overflow: "hidden", margin: "12px 0 0" }}>
-            {(() => {
-              const lockedThumb = firstMedia.media_type === "video" && firstMedia.bunny_video_id
-                ? getBunnyThumbnail(firstMedia.bunny_video_id)
-                : (firstMedia.thumbnail_url || null);
-              return lockedThumb ? (
-                <img src={lockedThumb} alt="" style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }} />
-              ) : null;
-            })()}
-            <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", minHeight: "280px" }}>
-              <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Lock size={18} color="#8B5CF6" />
-              </div>
-              <button onClick={openUnlock} style={{ padding: "8px 20px", borderRadius: "8px", backgroundColor: "#8B5CF6", border: "none", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                {post.ppv_price ? `Unlock for ₦${(post.ppv_price / 100).toLocaleString("en-NG")}` : "Subscribe to unlock"}
-              </button>
-            </div>
-          </div>
-
-        ) : isVideo ? (
-          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%", marginTop: "12px" }}>
-            <div style={{ aspectRatio: "9/16", maxHeight: "67vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
-              <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-              <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-              <div style={{ position: "absolute", inset: "0 28px", zIndex: 1 }}>
-                <VideoPlayer bunnyVideoId={firstMedia.bunny_video_id ?? null} thumbnailUrl={firstMedia.thumbnail_url ?? null} processingStatus={firstMedia.processing_status ?? null} rawVideoUrl={firstMedia.raw_video_url ?? null} fillParent={true} />
-              </div>
-            </div>
-          </DoubleTapLike>
-
-        ) : isMultiPhoto ? (
-          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%", marginTop: "12px" }}>
-            <ImageCarousel
-              media={carouselMedia}
-              onImageClick={(index) => openLightbox(index)}
-            />
-          </DoubleTapLike>
-
-        ) : (
-          <DoubleTapLike
-            onSingleTap={() => openLightbox(0)}
-            onDoubleTap={handleDoubleTapLike}
-            style={{ width: "100%", marginTop: "12px", cursor: "zoom-in" }}
-          >
-            <div style={{ overflow: "hidden", position: "relative", backgroundColor: "#000" }}>
-              {firstMedia.file_url && (
-                <>
-                  <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-                  <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-                  <img src={firstMedia.file_url} alt="" style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "clamp(400px, 85vh, 680px)", objectFit: "contain", display: "block" }} />
-                </>
-              )}
-            </div>
-          </DoubleTapLike>
-        )
-      )}
+      <div style={{ marginTop: "12px" }}>
+        <PostMediaViewer
+          media={normalizedMedia}
+          isLocked={post.locked}
+          price={post.ppv_price}
+          onDoubleTap={handleDoubleTapLike}
+          onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
+          onUnlock={openUnlock}
+        />
+      </div>
 
       {/* Actions */}
       <div style={{ margin: "0 16px" }}>
@@ -488,7 +433,7 @@ export default function SinglePostPage() {
           likes={post.like_count}
           comments={post.comment_count}
           liked={post.liked}
-          isSubscribed={isSubscribed}
+          isSubscribed={post.can_access}
           isOwnProfile={isOwnPost}
           onLike={handleLike}
           onComment={handleComment}

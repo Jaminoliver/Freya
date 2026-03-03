@@ -85,15 +85,21 @@ export async function GET(
             return NextResponse.json({ status: "failed" });
           }
 
-          // ── Stuck at status 0 (Created) — Bunny never started encoding ──
-          // Trigger re-encode if the video was created more than 2 minutes ago
-          if (video.status === 0 && video.dateUploaded) {
-            const uploadedAt  = new Date(video.dateUploaded).getTime();
-            const ageMs       = Date.now() - uploadedAt;
-            const twoMinutes  = 2 * 60 * 1000;
+          if (video.dateUploaded) {
+            const uploadedAt = new Date(video.dateUploaded).getTime();
+            const ageMs      = Date.now() - uploadedAt;
 
-            if (ageMs > twoMinutes) {
+            // ── Stuck at status 0 (Created) — not yet queued ──────────
+            // Trigger re-encode after 2 minutes
+            if (video.status === 0 && ageMs > 2 * 60 * 1000) {
               console.log(`[Bunny Status] Video ${data.bunny_video_id} stuck at status 0 for ${Math.round(ageMs / 1000)}s — triggering re-encode`);
+              await triggerReencode(data.bunny_video_id);
+            }
+
+            // ── Stuck at status 2 (Processing) with 0 progress ────────
+            // Encoding was queued but the job stalled — trigger re-encode after 60 seconds
+            if (video.status === 2 && video.encodeProgress === 0 && ageMs > 60 * 1000) {
+              console.log(`[Bunny Status] Video ${data.bunny_video_id} stuck at status 2 / encodeProgress 0 for ${Math.round(ageMs / 1000)}s — triggering re-encode`);
               await triggerReencode(data.bunny_video_id);
             }
           }

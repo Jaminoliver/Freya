@@ -3,12 +3,10 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { getRelativeTime } from "@/lib/utils/profile";
-import { MoreHorizontal, Lock } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
-import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
-import ImageCarousel from "@/components/profile/ImageCarousel";
-import DoubleTapLike from "@/components/shared/DoubleTapLike";
+import PostMediaViewer from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 
 export interface ApiPost {
@@ -43,38 +41,6 @@ export interface ApiPost {
     width?: number | null;
     height?: number | null;
   }[];
-}
-
-function useMediaHeight() {
-  const [height, setHeight] = React.useState("auto");
-  React.useEffect(() => {
-    const update = () => setHeight(window.innerWidth >= 768 ? "460px" : "auto");
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-  return height;
-}
-
-function useThumbAspectRatio(src: string | undefined): { ratio: string; isPortrait: boolean } {
-  const [ratio,      setRatio]      = React.useState("9/16");
-  const [isPortrait, setIsPortrait] = React.useState(true);
-
-  React.useEffect(() => {
-    if (!src) return;
-    const img = new Image();
-    img.onload = () => {
-      const w = img.naturalWidth;
-      const h = img.naturalHeight;
-      if (w && h) {
-        setRatio(`${w}/${h}`);
-        setIsPortrait(h > w);
-      }
-    };
-    img.src = src;
-  }, [src]);
-
-  return { ratio, isPortrait };
 }
 
 function PostMenu({ onEdit, onDelete, onShare }: {
@@ -138,33 +104,28 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
   onDelete?: (id: string) => void;
   onImageClick?: (post: LightboxPost, index: number) => void;
 }) {
-  const mediaHeight  = useMediaHeight();
-  const router       = useRouter();
+  const router = useRouter();
   const [commentOpen,  setCommentOpen]  = React.useState(false);
   const [liked,        setLiked]        = React.useState(post.liked);
   const [likeCount,    setLikeCount]    = React.useState(post.like_count);
   const [comments,     setComments]     = React.useState<any[]>([]);
   const [commentCount, setCommentCount] = React.useState(post.comment_count);
-  const [thumbReady,   setThumbReady]   = React.useState(!post.media?.[0]);
   const isLiking = React.useRef(false);
 
-  const firstMedia   = post.media?.[0];
-  const isLocked     = post.locked;
-  const isVideo      = firstMedia?.media_type === "video";
-  const isMultiPhoto = !isVideo && (post.media?.length ?? 0) > 1;
-  const photoMedia   = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
+  const firstMedia = post.media?.[0];
 
-  const videoThumbUrl: string | undefined = firstMedia?.bunny_video_id
-    ? getBunnyThumbnail(firstMedia.bunny_video_id)
-    : (firstMedia?.thumbnail_url ?? undefined);
-
-  const lockedThumb: string | undefined = firstMedia
-    ? firstMedia.media_type === "video" && firstMedia.bunny_video_id
-      ? getBunnyThumbnail(firstMedia.bunny_video_id)
-      : ((firstMedia as any).locked_preview_url ?? undefined)
-    : undefined;
-
-  const { ratio: videoRatio, isPortrait } = useThumbAspectRatio(videoThumbUrl);
+  // Build media array for PostMediaViewer
+  const viewerMedia = React.useMemo(() => {
+    if (!post.media?.length) return [];
+    return post.media.map((m) => ({
+      type: m.media_type as "video" | "image",
+      url: m.file_url ?? null,
+      bunnyVideoId: m.bunny_video_id ?? null,
+      thumbnailUrl: m.thumbnail_url ?? null,
+      processingStatus: m.processing_status ?? null,
+      rawVideoUrl: m.raw_video_url ?? null,
+    }));
+  }, [post.media]);
 
   React.useEffect(() => {
     setLiked(post.liked);
@@ -214,26 +175,11 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
     if (res.ok) onDelete?.(String(post.id));
   };
 
-  const videoContainerStyle: React.CSSProperties = isPortrait
-    ? {
-        position: "relative",
-        overflow: "hidden",
-        backgroundColor: "#000",
-        width: "100%",
-        aspectRatio: "9/16",
-        maxHeight: "min(75svh, 520px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }
-    : {
-        position: "relative",
-        overflow: "hidden",
-        backgroundColor: "#000",
-        width: "100%",
-        aspectRatio: "16/9",
-        maxHeight: "520px",
-      };
+  const handleSingleTap = () => {
+    if (firstMedia?.media_type !== "video") {
+      onImageClick?.(post, 0);
+    }
+  };
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E" }}>
@@ -272,75 +218,19 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
       )}
 
       {/* Media */}
-      {firstMedia && (
-        isLocked ? (
-          <div style={{ position: "relative", overflow: "hidden", width: "100%", minHeight: lockedThumb ? undefined : "220px", backgroundColor: "#0A0A0F" }}>
-            {lockedThumb && (
-              <img
-                src={lockedThumb}
-                alt=""
-                onLoad={() => setThumbReady(true)}
-                onError={() => setThumbReady(true)}
-                style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(16px)", transform: "scale(1.05)", display: "block" }}
-              />
-            )}
-            <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", minHeight: lockedThumb ? undefined : "220px" }}>
-              <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Lock size={18} color="#8B5CF6" />
-              </div>
-              <button
-                onClick={() => onUnlock?.(String(post.id))}
-                style={{ padding: "8px 20px", borderRadius: "8px", backgroundColor: "#8B5CF6", border: "none", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
-              >
-                {post.ppv_price ? `Unlock for ₦${(post.ppv_price / 100).toLocaleString("en-NG")}` : "Subscribe to unlock"}
-              </button>
-            </div>
-          </div>
-
-        ) : isVideo ? (
-          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
-            <div style={videoContainerStyle}>
-              <VideoPlayer
-                bunnyVideoId={firstMedia.bunny_video_id ?? null}
-                thumbnailUrl={firstMedia.thumbnail_url ?? null}
-                processingStatus={firstMedia.processing_status ?? null}
-                rawVideoUrl={firstMedia.raw_video_url ?? null}
-                fillParent={isPortrait}
-              />
-            </div>
-          </DoubleTapLike>
-
-        ) : isMultiPhoto ? (
-          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
-            <ImageCarousel
-              media={photoMedia}
-              onImageClick={(index) => onImageClick?.(post, index)}
-            />
-          </DoubleTapLike>
-
-        ) : (
-          <DoubleTapLike onSingleTap={() => onImageClick?.(post, 0)} onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
-            <div style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%", cursor: "zoom-in" }}>
-              {firstMedia.file_url && (
-                <>
-                  <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-                  <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-                  <img
-                    src={firstMedia.file_url}
-                    alt=""
-                    onLoad={() => setThumbReady(true)}
-                    onError={() => setThumbReady(true)}
-                    style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block" }}
-                  />
-                </>
-              )}
-            </div>
-          </DoubleTapLike>
-        )
+      {viewerMedia.length > 0 && (
+        <PostMediaViewer
+          media={viewerMedia}
+          isLocked={post.locked}
+          price={post.ppv_price}
+          onDoubleTap={handleDoubleTapLike}
+          onSingleTap={handleSingleTap}
+          onUnlock={() => onUnlock?.(String(post.id))}
+        />
       )}
 
       {/* Actions */}
-      {!isLocked && (
+      {!post.locked && (
         <div style={{ padding: "0 16px" }}>
           <PostActions
             likes={likeCount}

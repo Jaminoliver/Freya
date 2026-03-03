@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { MoreHorizontal, BadgeCheck, Lock } from "lucide-react";
+import { MoreHorizontal, BadgeCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
-import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
-import ImageCarousel from "@/components/profile/ImageCarousel";
 import Lightbox from "@/components/profile/Lightbox";
-import DoubleTapLike from "@/components/shared/DoubleTapLike";
+import PostMediaViewer from "@/components/shared/PostMediaViewer";
+import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
 import { postSyncStore } from "@/lib/store/postSyncStore";
@@ -41,21 +40,7 @@ interface Post {
 }
 
 interface Viewer {
-  id: string;
-  username: string;
-  display_name: string;
-  avatar_url: string;
-}
-
-function useMediaHeight() {
-  const [height, setHeight] = useState("auto");
-  useEffect(() => {
-    const update = () => setHeight(window.innerWidth >= 768 ? "460px" : "auto");
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-  return height;
+  id: string; username: string; display_name: string; avatar_url: string;
 }
 
 let cachedViewer: Viewer | null = null;
@@ -69,17 +54,9 @@ function useViewer() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const { data } = await supabase
-        .from("profiles")
-        .select("username, display_name, avatar_url")
-        .eq("id", user.id)
-        .single();
+        .from("profiles").select("username, display_name, avatar_url").eq("id", user.id).single();
       if (data) {
-        cachedViewer = {
-          id:           user.id,
-          username:     data.username,
-          display_name: data.display_name || data.username,
-          avatar_url:   data.avatar_url || "",
-        };
+        cachedViewer = { id: user.id, username: data.username, display_name: data.display_name || data.username, avatar_url: data.avatar_url || "" };
         setViewer(cachedViewer);
       }
     })();
@@ -93,34 +70,27 @@ function toLightboxPost(post: Post): LightboxPost {
     media: post.media
       .filter((m) => m.type === "image" && m.url)
       .map((m, i) => ({
-        id:                i,
-        media_type:        "image",
-        file_url:          m.url,
-        thumbnail_url:     m.thumbnailUrl ?? null,
-        raw_video_url:     null,
-        locked:            false,
-        display_order:     i,
-        processing_status: null,
-        bunny_video_id:    null,
+        id: i, media_type: "image", file_url: m.url,
+        thumbnail_url: m.thumbnailUrl ?? null, raw_video_url: null,
+        locked: false, display_order: i, processing_status: null, bunny_video_id: null,
       })),
   };
 }
 
 // ── PostCard ──────────────────────────────────────────────────────────────────
-export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: string) => void }) {
-  const router      = useRouter();
-  const mediaHeight = useMediaHeight();
-  const viewer      = useViewer();
 
-  const [commentOpen,       setCommentOpen]       = useState(false);
-  const [menuOpen,          setMenuOpen]          = useState(false);
-  const [liked,             setLiked]             = useState(post.liked);
-  const [likeCount,         setLikeCount]         = useState(post.likes);
-  const [commentCount,      setCommentCount]      = useState(post.comments);
-  const [comments,          setComments]          = useState<any[]>([]);
-  const [thumbReady,        setThumbReady]        = useState(!post.media[0]);
-  const [lightboxOpen,      setLightboxOpen]      = useState(false);
-  const [lightboxMediaIdx,  setLightboxMediaIdx]  = useState(0);
+export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: string) => void }) {
+  const router = useRouter();
+  const viewer = useViewer();
+
+  const [commentOpen,      setCommentOpen]      = useState(false);
+  const [menuOpen,         setMenuOpen]         = useState(false);
+  const [liked,            setLiked]            = useState(post.liked);
+  const [likeCount,        setLikeCount]        = useState(post.likes);
+  const [commentCount,     setCommentCount]     = useState(post.comments);
+  const [comments,         setComments]         = useState<any[]>([]);
+  const [lightboxOpen,     setLightboxOpen]     = useState(false);
+  const [lightboxMediaIdx, setLightboxMediaIdx] = useState(0);
 
   const isLiking   = useRef(false);
   const prevPostId = useRef(post.id);
@@ -189,41 +159,20 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
     }
   }, [liked, likeCount]);
 
-  const openLightbox = (index: number) => {
-    setLightboxMediaIdx(index);
-    setLightboxOpen(true);
-  };
-
-  const firstMedia   = post.media[0];
-  const isVideoPost  = firstMedia?.type === "video";
-  const isMultiPhoto = !isVideoPost && post.media.length > 1;
-
-  const lockedThumb: string | null = firstMedia
-    ? firstMedia.type === "video" && firstMedia.bunnyVideoId
-      ? getBunnyThumbnail(firstMedia.bunnyVideoId)
-      : (firstMedia.thumbnailUrl || null)
-    : null;
-
-  const carouselMedia = post.media
-    .filter((m) => m.type === "image")
-    .map((m, i) => ({
-      id:                i,
-      media_type:        "image" as const,
-      file_url:          m.url,
-      thumbnail_url:     m.thumbnailUrl ?? null,
-      raw_video_url:     null,
-      locked:            false,
-      display_order:     i,
-      processing_status: null,
-      bunny_video_id:    null,
-    }));
+  const normalizedMedia: NormalizedMedia[] = post.media.map((m) => ({
+    type:             m.type,
+    url:              m.url,
+    bunnyVideoId:     m.bunnyVideoId,
+    thumbnailUrl:     m.thumbnailUrl,
+    processingStatus: m.processingStatus,
+    rawVideoUrl:      m.rawVideoUrl,
+  }));
 
   const lightboxPost = toLightboxPost(post);
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
 
-      {/* Lightbox */}
       {lightboxOpen && lightboxPost.media.length > 0 && (
         <Lightbox
           post={lightboxPost}
@@ -236,7 +185,10 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
 
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => router.push(`/${post.creator.username}`)}>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
+          onClick={() => router.push(`/${post.creator.username}`)}
+        >
           <img src={post.creator.avatar_url || ""} alt="" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -284,84 +236,14 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
       )}
 
       {/* Media */}
-      {firstMedia && (
-        post.isLocked ? (
-          <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
-            <img
-              src={lockedThumb ?? undefined}
-              alt=""
-              onLoad={() => setThumbReady(true)}
-              onError={() => setThumbReady(true)}
-              style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", filter: "blur(16px)", transform: "scale(1.05)", display: lockedThumb ? "block" : "none" }}
-            />
-            <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", minHeight: lockedThumb ? undefined : "280px" }}>
-              <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Lock size={18} color="#8B5CF6" />
-              </div>
-              <button style={{ padding: "8px 20px", borderRadius: "8px", backgroundColor: "#8B5CF6", border: "none", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                {post.price ? `Unlock for ₦${(post.price / 100).toLocaleString("en-NG")}` : "Subscribe to unlock"}
-              </button>
-            </div>
-          </div>
-
-        ) : isVideoPost ? (
-          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
-            <div style={{ height: mediaHeight === "auto" ? undefined : mediaHeight, aspectRatio: mediaHeight === "auto" ? "9/16" : undefined, maxHeight: "75vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
-              {mediaHeight === "auto" && (
-                <>
-                  <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-                  <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-                </>
-              )}
-              {!thumbReady && (
-                <img
-                  src={firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")}
-                  alt=""
-                  onLoad={() => setThumbReady(true)}
-                  onError={() => setThumbReady(true)}
-                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
-                />
-              )}
-              <div style={{ position: "absolute", inset: mediaHeight === "auto" ? "0 28px" : 0, zIndex: 1 }}>
-                <VideoPlayer
-                  bunnyVideoId={firstMedia.bunnyVideoId ?? null}
-                  thumbnailUrl={firstMedia.thumbnailUrl ?? null}
-                  processingStatus={firstMedia.processingStatus ?? null}
-                  rawVideoUrl={firstMedia.rawVideoUrl ?? null}
-                  fillParent={true}
-                />
-              </div>
-            </div>
-          </DoubleTapLike>
-
-        ) : isMultiPhoto ? (
-          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
-            <ImageCarousel
-              media={carouselMedia}
-              onImageClick={(index) => openLightbox(index)}
-            />
-          </DoubleTapLike>
-
-        ) : (
-          <DoubleTapLike
-            onSingleTap={() => openLightbox(0)}
-            onDoubleTap={handleDoubleTapLike}
-            style={{ width: "100%", cursor: "zoom-in" }}
-          >
-            <div style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%" }}>
-              <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-              <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-              <img
-                src={firstMedia.url}
-                alt=""
-                onLoad={() => setThumbReady(true)}
-                onError={() => setThumbReady(true)}
-                style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block" }}
-              />
-            </div>
-          </DoubleTapLike>
-        )
-      )}
+      <PostMediaViewer
+        media={normalizedMedia}
+        isLocked={post.isLocked}
+        price={post.price}
+        onDoubleTap={handleDoubleTapLike}
+        onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
+        onUnlock={() => {}}
+      />
 
       {/* Tagged creators */}
       {post.taggedCreators && post.taggedCreators.length > 0 && (
@@ -406,7 +288,7 @@ function TaggedCreatorCard({ creator, onClick }: { creator: TaggedCreator; onCli
   return (
     <div
       onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "12px", border: "1px solid #2A2A3D", backgroundColor: "#0D0D18", cursor: "pointer", transition: "background 0.15s" }}
+      style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "12px", border: "1px solid #2A2A3D", backgroundColor: "#0D0D18", cursor: "pointer" }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "#1C1C2E"; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "#0D0D18"; }}
     >

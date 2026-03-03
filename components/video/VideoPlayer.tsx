@@ -20,22 +20,36 @@ interface VideoPlayerProps {
   processingStatus?: string | null;
   rawVideoUrl?:      string | null;
   fillParent?:       boolean;
+  aspectRatio?:      "9/16" | "16/9" | "1/1" | null;
 }
 
-export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStatus, rawVideoUrl, fillParent = false }: VideoPlayerProps) {
+export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStatus, rawVideoUrl, fillParent = false, aspectRatio: externalRatio = null }: VideoPlayerProps) {
   const videoRef       = React.useRef<HTMLVideoElement>(null);
   const containerRef   = React.useRef<HTMLDivElement>(null);
   const hlsRef         = React.useRef<any>(null);
   const hasInitialized = React.useRef(false);
 
-  const [showPoster,  setShowPoster]  = React.useState(true);
-  const [posterError, setPosterError] = React.useState(false);
-  const [isBuffering, setIsBuffering] = React.useState(false);
-  const [aspectRatio, setAspectRatio] = React.useState<string | null>(null);
+  const [showPoster,     setShowPoster]     = React.useState(true);
+  const [posterError,    setPosterError]    = React.useState(false);
+  const [isBuffering,    setIsBuffering]    = React.useState(false);
+  const [internalRatio,  setInternalRatio]  = React.useState<"9/16" | "16/9" | "1/1" | null>(null);
 
-  const isPortrait     = aspectRatio === "9/16";
+  // external ratio (from PostMediaViewer) takes priority — falls back to internal detection
+  const aspectRatio = externalRatio ?? internalRatio;
+  const isPortrait  = aspectRatio === "9/16";
+
   const useRawFallback = processingStatus !== "completed" && !!rawVideoUrl;
   const posterSrc      = (!posterError && thumbnailUrl) ? thumbnailUrl : bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "";
+
+  const handlePosterLoad = React.useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    if (externalRatio) return; // already know ratio — skip
+    const img = e.currentTarget;
+    const { naturalWidth: w, naturalHeight: h } = img;
+    if (!w || !h) return;
+    if (h > w)      setInternalRatio("9/16");
+    else if (w > h) setInternalRatio("16/9");
+    else            setInternalRatio("1/1");
+  }, [externalRatio]);
 
   const initVideo = React.useCallback(async () => {
     const video = videoRef.current;
@@ -50,14 +64,12 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
 
     const hlsSrc = getBunnyHLS(bunnyVideoId);
 
-    // iOS Safari — native HLS
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = hlsSrc;
       video.load();
       return;
     }
 
-    // hls.js for Chrome/Android
     try {
       const Hls = (await import("hls.js")).default;
       if (Hls.isSupported()) {
@@ -70,11 +82,9 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
           abrEwmaSlowVoD:         9,
         });
         hlsRef.current = hls;
-
         hls.on(Hls.Events.MANIFEST_PARSED, (_evt: any, data: any) => {
           hls.currentLevel = data.levels.length - 1;
         });
-
         hls.loadSource(hlsSrc);
         hls.attachMedia(video);
       }
@@ -101,13 +111,14 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
   }, []);
 
   const handleLoadedMetadata = React.useCallback(() => {
+    if (externalRatio) return; // already know ratio — skip
     const video = videoRef.current;
     if (!video) return;
     const { videoWidth: w, videoHeight: h } = video;
-    if (h > w) setAspectRatio("9/16");
-    else if (w > h) setAspectRatio("16/9");
-    else setAspectRatio("1/1");
-  }, []);
+    if (h > w)      setInternalRatio("9/16");
+    else if (w > h) setInternalRatio("16/9");
+    else            setInternalRatio("1/1");
+  }, [externalRatio]);
 
   const handlePosterPlay = React.useCallback(async () => {
     setShowPoster(false);
@@ -123,15 +134,15 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
   } : {
     width: "100%", position: "relative", overflow: "hidden",
     display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#000",
-    aspectRatio: isPortrait ? "9/16" : "16/9",
+    aspectRatio: isPortrait ? "9/16" : aspectRatio ?? "16/9",
     maxHeight:   isPortrait ? "min(75svh, 520px)" : "520px",
   };
 
   const videoStyle: React.CSSProperties = {
     position: "relative", zIndex: 2, display: "block",
-    width:     (isPortrait && typeof window !== "undefined" && window.innerWidth >= 768) ? "68%" : "100%",
+    width:     "100%",
     height:    "100%",
-    objectFit: "cover",
+    objectFit: "contain",
   };
 
   if (!bunnyVideoId) {
@@ -149,8 +160,8 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
   return (
     <>
       <style>{`
-        @keyframes spin    { to { transform: rotate(360deg); } }
-        @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes spin   { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
 
       <div ref={containerRef} style={containerStyle}>
@@ -165,7 +176,13 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
         {/* Poster + play button */}
         {showPoster && (
           <div onClick={handlePosterPlay} style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <img src={posterSrc} alt="" onError={() => setPosterError(true)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 20%" }} />
+            <img
+              src={posterSrc}
+              alt=""
+              onLoad={handlePosterLoad}
+              onError={() => setPosterError(true)}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
+            />
             <div style={{ position: "relative", zIndex: 2, width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.55)", border: "2px solid rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
               <div style={{ width: 0, height: 0, borderTop: "10px solid transparent", borderBottom: "10px solid transparent", borderLeft: "18px solid rgba(255,255,255,0.95)", marginLeft: "4px" }} />
             </div>
