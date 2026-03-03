@@ -21,9 +21,10 @@ interface VideoPlayerProps {
   rawVideoUrl?:      string | null;
   fillParent?:       boolean;
   aspectRatio?:      "9/16" | "16/9" | "1/1" | null;
+  hideInternalBlur?: boolean;
 }
 
-export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStatus, rawVideoUrl, fillParent = false, aspectRatio: externalRatio = null }: VideoPlayerProps) {
+export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStatus, rawVideoUrl, fillParent = false, aspectRatio: externalRatio = null, hideInternalBlur = false }: VideoPlayerProps) {
   const videoRef       = React.useRef<HTMLVideoElement>(null);
   const containerRef   = React.useRef<HTMLDivElement>(null);
   const hlsRef         = React.useRef<any>(null);
@@ -34,7 +35,6 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
   const [isBuffering,    setIsBuffering]    = React.useState(false);
   const [internalRatio,  setInternalRatio]  = React.useState<"9/16" | "16/9" | "1/1" | null>(null);
 
-  // external ratio (from PostMediaViewer) takes priority — falls back to internal detection
   const aspectRatio = externalRatio ?? internalRatio;
   const isPortrait  = aspectRatio === "9/16";
 
@@ -42,7 +42,7 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
   const posterSrc      = (!posterError && thumbnailUrl) ? thumbnailUrl : bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "";
 
   const handlePosterLoad = React.useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    if (externalRatio) return; // already know ratio — skip
+    if (externalRatio) return;
     const img = e.currentTarget;
     const { naturalWidth: w, naturalHeight: h } = img;
     if (!w || !h) return;
@@ -111,7 +111,7 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
   }, []);
 
   const handleLoadedMetadata = React.useCallback(() => {
-    if (externalRatio) return; // already know ratio — skip
+    if (externalRatio) return;
     const video = videoRef.current;
     if (!video) return;
     const { videoWidth: w, videoHeight: h } = video;
@@ -167,7 +167,7 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
       <div ref={containerRef} style={containerStyle}>
 
         {/* Blurred background — portrait only */}
-        {isPortrait && (
+        {isPortrait && !hideInternalBlur && (
           <img src={posterSrc} alt="" aria-hidden onError={() => setPosterError(true)}
             style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.4)", transform: "scale(1.1)", zIndex: 1 }}
           />

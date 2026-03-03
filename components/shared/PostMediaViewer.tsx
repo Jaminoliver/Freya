@@ -26,18 +26,23 @@ interface PostMediaViewerProps {
   onSlideChange?: (index: number) => void;
 }
 
-function useThumbAspectRatio(src: string | undefined): "9/16" | "16/9" | "1/1" | null {
-  const [ratio, setRatio] = React.useState<"9/16" | "16/9" | "1/1" | null>(null);
+// ── In-memory cache so ratio is known instantly on re-mount ─────────────────
+// Stores exact ratio string e.g. "720/1280" for perfect container fit
+const ratioCache = new Map<string, string>();
+
+function useThumbAspectRatio(src: string | undefined): string | null {
+  const cached = src ? ratioCache.get(src) ?? null : null;
+  const [ratio, setRatio] = React.useState<string | null>(cached);
 
   React.useEffect(() => {
-    if (!src) return;
+    if (!src || ratioCache.has(src)) return;
     const img = new Image();
     img.onload = () => {
       const { naturalWidth: w, naturalHeight: h } = img;
       if (!w || !h) return;
-      if (h > w)      setRatio("9/16");
-      else if (w > h) setRatio("16/9");
-      else            setRatio("1/1");
+      const r = `${w}/${h}`;
+      ratioCache.set(src, r);
+      setRatio(r);
     };
     img.src = src;
   }, [src]);
@@ -98,25 +103,36 @@ export default function PostMediaViewer({
   // ── Video ────────────────────────────────────────────────────────────────────
 
   if (isVideo) {
-    const isPortrait  = aspectRatio === "9/16";
+    const [w, h]      = (aspectRatio ?? "16/9").split("/").map(Number);
+    const isPortrait  = h > w;
+    const containerAR = aspectRatio ?? "16/9";
+    const blurSrc     = first.thumbnailUrl ?? (first.bunnyVideoId ? getBunnyThumbnail(first.bunnyVideoId) : undefined);
+    // Pass bucketed ratio to VideoPlayer which still expects "9/16" | "16/9" | "1/1"
+    const bucketedRatio = isPortrait ? "9/16" : (w === h ? "1/1" : "16/9") as "9/16" | "16/9" | "1/1";
 
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
         <div style={{
-          position:        "relative",
-          width:           "100%",
-          aspectRatio:     isPortrait ? undefined : (aspectRatio ?? "16/9"),
-          height:          isPortrait ? "min(80svh, 600px)" : undefined,
-          maxHeight:       isPortrait ? undefined : "520px",
-          overflow:        "hidden",
-          backgroundColor: "#000",
+          position: "relative", width: "100%",
+          aspectRatio: containerAR,
+          maxHeight: isPortrait ? "min(80svh, 600px)" : "520px",
+          overflow: "hidden", backgroundColor: "#000",
         }}>
+          {/* Side blur for portrait videos */}
+          {isPortrait && blurSrc && (
+            <>
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${blurSrc})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.5)", transform: "scaleX(1.3)", opacity: 0.9, zIndex: 1 }} />
+              <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${blurSrc})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.5)", transform: "scaleX(1.3)", opacity: 0.9, zIndex: 1 }} />
+            </>
+          )}
           <VideoPlayer
             bunnyVideoId={first.bunnyVideoId ?? null}
             thumbnailUrl={first.thumbnailUrl ?? null}
             processingStatus={first.processingStatus ?? null}
             rawVideoUrl={first.rawVideoUrl ?? null}
             fillParent={true}
+            aspectRatio={bucketedRatio}
+            hideInternalBlur={isPortrait}
           />
         </div>
       </DoubleTapLike>
