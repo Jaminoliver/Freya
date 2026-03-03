@@ -10,6 +10,7 @@ import CommentSection from "@/components/profile/CommentSection";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import ImageCarousel from "@/components/profile/ImageCarousel";
 import Lightbox from "@/components/profile/Lightbox";
+import DoubleTapLike from "@/components/shared/DoubleTapLike";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
 import { postSyncStore } from "@/lib/store/postSyncStore";
@@ -130,9 +131,10 @@ export default function SinglePostPage() {
   const [checkoutType, setCheckoutType] = React.useState<CheckoutType>("tips");
   const [checkoutTier, setCheckoutTier] = React.useState<SubscriptionTier>("monthly");
 
-  const [lightboxOpen,    setLightboxOpen]    = React.useState(false);
+  const [lightboxOpen,     setLightboxOpen]     = React.useState(false);
   const [lightboxMediaIdx, setLightboxMediaIdx] = React.useState(0);
 
+  const isLiking   = React.useRef(false);
   const commentRef = React.useRef<HTMLDivElement>(null);
   const postRef    = React.useRef<PostData | null>(null);
   React.useEffect(() => { postRef.current = post; }, [post]);
@@ -203,7 +205,8 @@ export default function SinglePostPage() {
   React.useEffect(() => { fetchComments(); }, [fetchComments]);
 
   const handleLike = async () => {
-    if (!post) return;
+    if (!post || isLiking.current) return;
+    isLiking.current = true;
     const wasLiked = post.liked;
     setPost((p) => p ? { ...p, liked: !wasLiked, like_count: !wasLiked ? p.like_count + 1 : Math.max(0, p.like_count - 1) } : p);
     const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
@@ -218,6 +221,26 @@ export default function SinglePostPage() {
     } else {
       setPost((p) => p ? { ...p, liked: wasLiked, like_count: wasLiked ? p.like_count + 1 : Math.max(0, p.like_count - 1) } : p);
     }
+    isLiking.current = false;
+  };
+
+  const handleDoubleTapLike = async () => {
+    if (!post || post.liked || isLiking.current) return;
+    isLiking.current = true;
+    setPost((p) => p ? { ...p, liked: true, like_count: p.like_count + 1 } : p);
+    const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      setPost((p) => {
+        if (!p) return p;
+        const updated = { ...p, liked: data.liked, like_count: data.like_count };
+        postSyncStore.emit({ postId: String(post.id), liked: updated.liked, like_count: updated.like_count, comment_count: updated.comment_count });
+        return updated;
+      });
+    } else {
+      setPost((p) => p ? { ...p, liked: false, like_count: Math.max(0, p.like_count - 1) } : p);
+    }
+    isLiking.current = false;
   };
 
   const handleDelete = async () => {
@@ -289,7 +312,6 @@ export default function SinglePostPage() {
   const photoMedia   = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
   const isMultiPhoto = !isVideo && photoMedia.length > 1;
 
-  // Build LightboxPost from this post's photo media
   const lightboxPost: LightboxPost = {
     id: post.id,
     media: photoMedia.map((m) => ({
@@ -305,7 +327,6 @@ export default function SinglePostPage() {
     })),
   };
 
-  // Convert photoMedia to ImageCarousel shape
   const carouselMedia = photoMedia.map((m) => ({
     id:                m.id,
     media_type:        m.media_type,
@@ -424,35 +445,40 @@ export default function SinglePostPage() {
           </div>
 
         ) : isVideo ? (
-          <div style={{ margin: "12px 0 0", aspectRatio: "9/16", maxHeight: "67vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
-            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-            <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-            <div style={{ position: "absolute", inset: "0 28px", zIndex: 1 }}>
-              <VideoPlayer bunnyVideoId={firstMedia.bunny_video_id ?? null} thumbnailUrl={firstMedia.thumbnail_url ?? null} processingStatus={firstMedia.processing_status ?? null} rawVideoUrl={firstMedia.raw_video_url ?? null} fillParent={true} />
+          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%", marginTop: "12px" }}>
+            <div style={{ aspectRatio: "9/16", maxHeight: "67vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
+              <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : (firstMedia.thumbnail_url || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
+              <div style={{ position: "absolute", inset: "0 28px", zIndex: 1 }}>
+                <VideoPlayer bunnyVideoId={firstMedia.bunny_video_id ?? null} thumbnailUrl={firstMedia.thumbnail_url ?? null} processingStatus={firstMedia.processing_status ?? null} rawVideoUrl={firstMedia.raw_video_url ?? null} fillParent={true} />
+              </div>
             </div>
-          </div>
+          </DoubleTapLike>
 
         ) : isMultiPhoto ? (
-          <div style={{ margin: "12px 0 0" }}>
+          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%", marginTop: "12px" }}>
             <ImageCarousel
               media={carouselMedia}
               onImageClick={(index) => openLightbox(index)}
             />
-          </div>
+          </DoubleTapLike>
 
         ) : (
-          <div
-            onClick={() => openLightbox(0)}
-            style={{ margin: "12px 0 0", overflow: "hidden", position: "relative", backgroundColor: "#000", cursor: "zoom-in" }}
+          <DoubleTapLike
+            onSingleTap={() => openLightbox(0)}
+            onDoubleTap={handleDoubleTapLike}
+            style={{ width: "100%", marginTop: "12px", cursor: "zoom-in" }}
           >
-            {firstMedia.file_url && (
-              <>
-                <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-                <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-                <img src={firstMedia.file_url} alt="" style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "clamp(400px, 85vh, 680px)", objectFit: "contain", display: "block" }} />
-              </>
-            )}
-          </div>
+            <div style={{ overflow: "hidden", position: "relative", backgroundColor: "#000" }}>
+              {firstMedia.file_url && (
+                <>
+                  <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
+                  <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.file_url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
+                  <img src={firstMedia.file_url} alt="" style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "clamp(400px, 85vh, 680px)", objectFit: "contain", display: "block" }} />
+                </>
+              )}
+            </div>
+          </DoubleTapLike>
         )
       )}
 

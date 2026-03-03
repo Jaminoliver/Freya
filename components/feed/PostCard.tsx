@@ -8,6 +8,7 @@ import CommentSection from "@/components/profile/CommentSection";
 import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import ImageCarousel from "@/components/profile/ImageCarousel";
 import Lightbox from "@/components/profile/Lightbox";
+import DoubleTapLike from "@/components/shared/DoubleTapLike";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
 import { postSyncStore } from "@/lib/store/postSyncStore";
@@ -86,7 +87,6 @@ function useViewer() {
   return viewer;
 }
 
-/** Convert home feed MediaItem[] into the LightboxPost shape */
 function toLightboxPost(post: Post): LightboxPost {
   return {
     id: Number(post.id),
@@ -106,27 +106,6 @@ function toLightboxPost(post: Post): LightboxPost {
   };
 }
 
-/** Scroll-aware tap handler hook — only fires onTap if finger didn't scroll */
-function useTapWithScrollGuard(onTap: () => void) {
-  const startX  = useRef<number>(0);
-  const startY  = useRef<number>(0);
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX;
-    startY.current = e.touches[0].clientY;
-  };
-
-  const onTouchEnd = (e: React.TouchEvent) => {
-    const movedX = Math.abs(e.changedTouches[0].clientX - startX.current);
-    const movedY = Math.abs(e.changedTouches[0].clientY - startY.current);
-    // If finger moved more than 10px in any direction it's a scroll — ignore
-    if (movedX > 10 || movedY > 10) return;
-    onTap();
-  };
-
-  return { onTouchStart, onTouchEnd };
-}
-
 // ── PostCard ──────────────────────────────────────────────────────────────────
 export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: string) => void }) {
   const router      = useRouter();
@@ -143,7 +122,9 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
   const [lightboxOpen,      setLightboxOpen]      = useState(false);
   const [lightboxMediaIdx,  setLightboxMediaIdx]  = useState(0);
 
+  const isLiking   = useRef(false);
   const prevPostId = useRef(post.id);
+
   useEffect(() => {
     if (prevPostId.current !== post.id) {
       prevPostId.current = post.id;
@@ -163,6 +144,11 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
   }, [commentOpen, post.id]);
 
   const handleLike = async () => {
+    if (isLiking.current) return;
+    isLiking.current = true;
+    const newLiked = !liked;
+    setLiked(newLiked);
+    setLikeCount((c) => newLiked ? c + 1 : Math.max(0, c - 1));
     const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
     const data = await res.json();
     if (res.ok) {
@@ -171,6 +157,23 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
       postSyncStore.emit({ postId: post.id, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
       onLike?.(post.id);
     }
+    isLiking.current = false;
+  };
+
+  const handleDoubleTapLike = async () => {
+    if (liked || isLiking.current) return;
+    isLiking.current = true;
+    setLiked(true);
+    setLikeCount((c) => c + 1);
+    const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      setLiked(data.liked);
+      setLikeCount(data.like_count);
+      postSyncStore.emit({ postId: post.id, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
+      onLike?.(post.id);
+    }
+    isLiking.current = false;
   };
 
   const handleAddComment = useCallback(async (id: string, text: string) => {
@@ -190,9 +193,6 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
     setLightboxMediaIdx(index);
     setLightboxOpen(true);
   };
-
-  // Scroll-aware tap handlers for the single photo div
-  const singlePhotoTap = useTapWithScrollGuard(() => openLightbox(0));
 
   const firstMedia   = post.media[0];
   const isVideoPost  = firstMedia?.type === "video";
@@ -305,57 +305,61 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
           </div>
 
         ) : isVideoPost ? (
-          <div style={{ height: mediaHeight === "auto" ? undefined : mediaHeight, aspectRatio: mediaHeight === "auto" ? "9/16" : undefined, maxHeight: "75vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
-            {mediaHeight === "auto" && (
-              <>
-                <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-                <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
-              </>
-            )}
-            {!thumbReady && (
+          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
+            <div style={{ height: mediaHeight === "auto" ? undefined : mediaHeight, aspectRatio: mediaHeight === "auto" ? "9/16" : undefined, maxHeight: "75vh", overflow: "hidden", position: "relative", backgroundColor: "#000", width: "100%" }}>
+              {mediaHeight === "auto" && (
+                <>
+                  <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
+                  <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "28px", backgroundImage: `url(${firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(14px)", transform: "scaleX(1.3)", opacity: 0.7 }} />
+                </>
+              )}
+              {!thumbReady && (
+                <img
+                  src={firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")}
+                  alt=""
+                  onLoad={() => setThumbReady(true)}
+                  onError={() => setThumbReady(true)}
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
+                />
+              )}
+              <div style={{ position: "absolute", inset: mediaHeight === "auto" ? "0 28px" : 0, zIndex: 1 }}>
+                <VideoPlayer
+                  bunnyVideoId={firstMedia.bunnyVideoId ?? null}
+                  thumbnailUrl={firstMedia.thumbnailUrl ?? null}
+                  processingStatus={firstMedia.processingStatus ?? null}
+                  rawVideoUrl={firstMedia.rawVideoUrl ?? null}
+                  fillParent={true}
+                />
+              </div>
+            </div>
+          </DoubleTapLike>
+
+        ) : isMultiPhoto ? (
+          <DoubleTapLike onDoubleTap={handleDoubleTapLike} style={{ width: "100%" }}>
+            <ImageCarousel
+              media={carouselMedia}
+              onImageClick={(index) => openLightbox(index)}
+            />
+          </DoubleTapLike>
+
+        ) : (
+          <DoubleTapLike
+            onSingleTap={() => openLightbox(0)}
+            onDoubleTap={handleDoubleTapLike}
+            style={{ width: "100%", cursor: "zoom-in" }}
+          >
+            <div style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%" }}>
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
+              <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
               <img
-                src={firstMedia.bunnyVideoId ? getBunnyThumbnail(firstMedia.bunnyVideoId) : (firstMedia.thumbnailUrl || "")}
+                src={firstMedia.url}
                 alt=""
                 onLoad={() => setThumbReady(true)}
                 onError={() => setThumbReady(true)}
-                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
-              />
-            )}
-            <div style={{ position: "absolute", inset: mediaHeight === "auto" ? "0 28px" : 0, zIndex: 1 }}>
-              <VideoPlayer
-                bunnyVideoId={firstMedia.bunnyVideoId ?? null}
-                thumbnailUrl={firstMedia.thumbnailUrl ?? null}
-                processingStatus={firstMedia.processingStatus ?? null}
-                rawVideoUrl={firstMedia.rawVideoUrl ?? null}
-                fillParent={true}
+                style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block" }}
               />
             </div>
-          </div>
-
-        ) : isMultiPhoto ? (
-          <ImageCarousel
-            media={carouselMedia}
-            onImageClick={(index) => openLightbox(index)}
-          />
-
-        ) : (
-          // Single photo — scroll-aware tap handler prevents lightbox opening during page scroll
-          <div
-            onTouchStart={singlePhotoTap.onTouchStart}
-            onTouchEnd={singlePhotoTap.onTouchEnd}
-            onClick={() => openLightbox(0)}  // desktop fallback
-            style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%", cursor: "zoom-in" }}
-          >
-            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-            <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${firstMedia.url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
-            <img
-              src={firstMedia.url}
-              alt=""
-              onLoad={() => setThumbReady(true)}
-              onError={() => setThumbReady(true)}
-              style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block" }}
-            />
-          </div>
+          </DoubleTapLike>
         )
       )}
 
