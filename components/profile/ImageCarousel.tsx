@@ -15,11 +15,13 @@ export interface MediaItem {
   bunny_video_id: string | null;
 }
 
-export default function ImageCarousel({ media, onImageClick }: {
+export default function ImageCarousel({ media, onImageClick, initialIndex = 0, onSlideChange }: {
   media: MediaItem[];
   onImageClick?: (index: number) => void;
+  initialIndex?: number;
+  onSlideChange?: (index: number) => void;
 }) {
-  const [activeIndex, setActiveIndex] = React.useState(0);
+  const [activeIndex, setActiveIndex] = React.useState(initialIndex);
   const [isDesktop,   setIsDesktop]   = React.useState(false);
   const trackRef      = React.useRef<HTMLDivElement>(null);
   const startXRef     = React.useRef<number | null>(null);
@@ -28,6 +30,7 @@ export default function ImageCarousel({ media, onImageClick }: {
   const lastTapTime   = React.useRef<number>(0);
   const tapTimer      = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchWasUsed  = React.useRef(false);
+  const didInit       = React.useRef(false);
 
   React.useEffect(() => {
     const check = () => setIsDesktop(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -36,16 +39,30 @@ export default function ImageCarousel({ media, onImageClick }: {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // Restore scroll position to initialIndex on mount
+  React.useEffect(() => {
+    if (didInit.current || !trackRef.current || initialIndex === 0) { didInit.current = true; return; }
+    didInit.current = true;
+    const el = trackRef.current;
+    // Use instant scroll — no animation on restore
+    el.scrollLeft = el.offsetWidth * initialIndex;
+    setActiveIndex(initialIndex);
+  }, [initialIndex]);
+
   const goTo = (index: number) => {
     if (!trackRef.current) return;
     setActiveIndex(index);
+    onSlideChange?.(index);
     trackRef.current.scrollTo({ left: trackRef.current.offsetWidth * index, behavior: "smooth" });
   };
 
   const onScroll = () => {
     if (!trackRef.current) return;
     const index = Math.round(trackRef.current.scrollLeft / trackRef.current.offsetWidth);
-    setActiveIndex(index);
+    if (index !== activeIndex) {
+      setActiveIndex(index);
+      onSlideChange?.(index);
+    }
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -63,18 +80,14 @@ export default function ImageCarousel({ media, onImageClick }: {
     startXRef.current = null;
     startYRef.current = null;
 
-    // Vertical scroll — do nothing
     if (diffY > 10) return;
 
     if (Math.abs(diffX) > 40) {
-      // Horizontal swipe — navigate carousel
       if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null; }
       if (diffX > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
       if (diffX < 0 && activeIndex > 0) goTo(activeIndex - 1);
       return;
     }
-
-    // On mobile, taps never open the lightbox — swipe only
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -97,7 +110,6 @@ export default function ImageCarousel({ media, onImageClick }: {
       if (diff > 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
       if (diff < 0 && activeIndex > 0) goTo(activeIndex - 1);
     } else if (!isDragging.current && isDesktop) {
-      // Only open lightbox on desktop
       onImageClick?.(activeIndex);
     }
     startXRef.current  = null;

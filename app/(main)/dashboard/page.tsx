@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { PostCard } from "@/components/feed/PostCard";
 import { StoryBar } from "@/components/feed/StoryBar";
 import { FeedSkeleton } from "@/components/loadscreen/FeedSkeleton";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import { useAppStore, isStale } from "@/lib/store/appStore";
+
+const SCROLL_KEY = "home_feed_scroll";
+const SLIDES_KEY = "home_feed_slides";
 
 interface FeedPost {
   id: number;
@@ -80,7 +83,6 @@ function adaptPost(p: FeedPost) {
   };
 }
 
-// ─── Imperatively preload images (safe for Next.js — avoids onLoad timing bug) ───
 function preloadImages(urls: string[]): Promise<void[]> {
   return Promise.all(
     urls.map(
@@ -89,14 +91,13 @@ function preloadImages(urls: string[]): Promise<void[]> {
           if (!url) { resolve(); return; }
           const img = new Image();
           img.onload  = () => resolve();
-          img.onerror = () => resolve(); // resolve anyway — never block on broken images
+          img.onerror = () => resolve();
           img.src = url;
         })
     )
   );
 }
 
-// Collect the first `n` media URLs (prefer thumbnail for videos) from posts
 function collectFirstMediaUrls(posts: FeedPost[], n: number): string[] {
   const urls: string[] = [];
   for (const post of posts) {
@@ -110,20 +111,74 @@ function collectFirstMediaUrls(posts: FeedPost[], n: number): string[] {
   return urls;
 }
 
+// ── sessionStorage helpers ──────────────────────────────────────────────────
+function saveScroll(y: number) {
+  try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {}
+}
+function loadScroll(): number {
+  try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; }
+}
+function saveSlides(map: Record<string, number>) {
+  try { sessionStorage.setItem(SLIDES_KEY, JSON.stringify(map)); } catch {}
+}
+function loadSlides(): Record<string, number> {
+  try { return JSON.parse(sessionStorage.getItem(SLIDES_KEY) ?? "{}"); } catch { return {}; }
+}
+
 export default function HomePage() {
-  const [activeTab,    setActiveTab]    = useState<"feed" | "spotlight">("feed");
+  const [activeTab, setActiveTab] = useState<"feed" | "spotlight">("feed");
+  const { feed, setFeed, updateFeedPost } = useAppStore();
 
-  const { feed, setFeed, updateFeedPost, clearFeed } = useAppStore();
+  const [posts,       setPosts]       = useState(feed?.posts ?? []);
+  const [apiLoading,  setApiLoading]  = useState(!feed || isStale(feed.fetchedAt));
+  const [imgLoading,  setImgLoading]  = useState(false);
+  const [revealed,    setRevealed]    = useState(!!feed && !isStale(feed.fetchedAt));
+  const [nextCursor,  setNextCursor]  = useState<string | null>(feed?.nextCursor ?? null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error,       setError]       = useState<string | null>(null);
 
-  const [posts,        setPosts]        = useState(feed?.posts ?? []);
-  const [apiLoading,   setApiLoading]   = useState(!feed || isStale(feed.fetchedAt));
-  const [imgLoading,   setImgLoading]   = useState(false);
-  const [revealed,     setRevealed]     = useState(!!feed && !isStale(feed.fetchedAt));
-  const [nextCursor,   setNextCursor]   = useState<string | null>(feed?.nextCursor ?? null);
-  const [loadingMore,  setLoadingMore]  = useState(false);
-  const [error,        setError]        = useState<string | null>(null);
+  // Per-post carousel slide indices  { postId: slideIndex }
+  const [slideMap, setSlideMap] = useState<Record<string, number>>(loadSlides);
 
+  const scrollRestoredRef = useRef(false);
   const showSkeleton = apiLoading || imgLoading;
+
+  // ── Save scroll on scroll + right before navigation ────────────────────
+  useEffect(() => {
+    const onScroll = () => saveScroll(window.scrollY);
+    const onHide   = () => saveScroll(window.scrollY);
+    const onVis    = () => { if (document.visibilityState === "hidden") saveScroll(window.scrollY); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  // ── Restore scroll after feed reveals ──────────────────────────────────
+  useEffect(() => {
+    if (!revealed || scrollRestoredRef.current) return;
+    scrollRestoredRef.current = true;
+    const saved = loadScroll();
+    if (saved > 0) {
+      // setTimeout beats Next.js's own scroll-to-top which fires after paint
+      setTimeout(() => {
+        window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
+      }, 80);
+    }
+  }, [revealed]);
+
+  // ── Carousel slide change handler ───────────────────────────────────────
+  const handleSlideChange = useCallback((postId: string, index: number) => {
+    setSlideMap((prev) => {
+      const next = { ...prev, [postId]: index };
+      saveSlides(next);
+      return next;
+    });
+  }, []);
 
   const fetchFeed = useCallback(async (cursor?: string) => {
     try {
@@ -172,7 +227,6 @@ export default function HomePage() {
   }, [posts, setFeed]);
 
   useEffect(() => {
-    // If store has fresh data, skip fetch entirely — just reveal
     if (feed && !isStale(feed.fetchedAt)) {
       setPosts(feed.posts);
       setNextCursor(feed.nextCursor);
@@ -211,8 +265,8 @@ export default function HomePage() {
         @media (max-width: 767px) { .feed-desktop-header { display: none !important; } }
 
         @keyframes feedFadeIn {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0);   }
+          from { opacity: 0; }
+          to   { opacity: 1; }
         }
         .feed-revealed {
           animation: feedFadeIn 0.35s ease forwards;
@@ -263,10 +317,8 @@ export default function HomePage() {
       <div style={{ padding: "0 0 40px" }}>
         {activeTab === "feed" ? (
           <>
-            {/* ── Phase 1 & 2: Skeleton ── */}
             {showSkeleton && <FeedSkeleton count={5} />}
 
-            {/* ── Phase 3: Real cards with fade-in ── */}
             {!showSkeleton && (
               <div className={revealed ? "feed-revealed" : ""} style={{ opacity: revealed ? 1 : 0 }}>
 
@@ -288,6 +340,8 @@ export default function HomePage() {
                     key={post.id}
                     post={adaptPost(post)}
                     onLike={handleLikeToggle}
+                    initialSlide={slideMap[String(post.id)] ?? 0}
+                    onSlideChange={handleSlideChange}
                   />
                 ))}
 

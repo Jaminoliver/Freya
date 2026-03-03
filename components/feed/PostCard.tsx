@@ -77,9 +77,17 @@ function toLightboxPost(post: Post): LightboxPost {
   };
 }
 
-// ── PostCard ──────────────────────────────────────────────────────────────────
-
-export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: string) => void }) {
+export function PostCard({
+  post,
+  onLike,
+  initialSlide = 0,
+  onSlideChange,
+}: {
+  post: Post;
+  onLike?: (postId: string) => void;
+  initialSlide?: number;
+  onSlideChange?: (postId: string, index: number) => void;
+}) {
   const router = useRouter();
   const viewer = useViewer();
 
@@ -159,6 +167,10 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
     }
   }, [liked, likeCount]);
 
+  const handleSlideChange = useCallback((index: number) => {
+    onSlideChange?.(post.id, index);
+  }, [post.id, onSlideChange]);
+
   const normalizedMedia: NormalizedMedia[] = post.media.map((m) => ({
     type:             m.type,
     url:              m.url,
@@ -185,10 +197,7 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
 
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div
-          style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
-          onClick={() => router.push(`/${post.creator.username}`)}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => router.push(`/${post.creator.username}`)}>
           <img src={post.creator.avatar_url || ""} alt="" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -243,6 +252,8 @@ export function PostCard({ post, onLike }: { post: Post; onLike?: (postId: strin
         onDoubleTap={handleDoubleTapLike}
         onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
         onUnlock={() => {}}
+        initialSlide={initialSlide}
+        onSlideChange={handleSlideChange}
       />
 
       {/* Tagged creators */}

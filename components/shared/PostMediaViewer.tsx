@@ -6,8 +6,6 @@ import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import ImageCarousel from "@/components/profile/ImageCarousel";
 import DoubleTapLike from "@/components/shared/DoubleTapLike";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 export interface NormalizedMedia {
   type:              "image" | "video";
   url:               string | null;
@@ -18,15 +16,15 @@ export interface NormalizedMedia {
 }
 
 interface PostMediaViewerProps {
-  media:        NormalizedMedia[];
-  isLocked:     boolean;
-  price?:       number | null;
-  onDoubleTap?: () => void;
-  onSingleTap?: (index: number) => void;
-  onUnlock?:    () => void;
+  media:          NormalizedMedia[];
+  isLocked:       boolean;
+  price?:         number | null;
+  onDoubleTap?:   () => void;
+  onSingleTap?:   (index: number) => void;
+  onUnlock?:      () => void;
+  initialSlide?:  number;
+  onSlideChange?: (index: number) => void;
 }
-
-// ── Hook: detects aspect ratio from thumbnail before VideoPlayer mounts ───────
 
 function useThumbAspectRatio(src: string | undefined): "9/16" | "16/9" | "1/1" | null {
   const [ratio, setRatio] = React.useState<"9/16" | "16/9" | "1/1" | null>(null);
@@ -47,8 +45,6 @@ function useThumbAspectRatio(src: string | undefined): "9/16" | "16/9" | "1/1" |
   return ratio;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export default function PostMediaViewer({
   media,
   isLocked,
@@ -56,6 +52,8 @@ export default function PostMediaViewer({
   onDoubleTap,
   onSingleTap,
   onUnlock,
+  initialSlide = 0,
+  onSlideChange,
 }: PostMediaViewerProps) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
@@ -73,7 +71,7 @@ export default function PostMediaViewer({
 
   if (!media.length || !first) return null;
 
-  // ── Locked ─────────────────────────────────────────────────────────────────
+  // ── Locked ──────────────────────────────────────────────────────────────────
 
   if (isLocked) {
     return (
@@ -82,41 +80,14 @@ export default function PostMediaViewer({
           <img
             src={thumbSrc}
             alt=""
-            style={{
-              width: "100%", height: "auto", maxHeight: "80vh",
-              objectFit: "contain", display: "block",
-              filter: "blur(16px)", transform: "scale(1.05)",
-            }}
+            style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block", filter: "blur(16px)", transform: "scale(1.05)" }}
           />
         )}
-        <div
-          style={{
-            position: "absolute", inset: 0,
-            backgroundColor: "rgba(10,10,15,0.5)",
-            display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-            gap: "10px", minHeight: thumbSrc ? undefined : "280px",
-          }}
-        >
-          <div
-            style={{
-              width: "44px", height: "44px", borderRadius: "50%",
-              backgroundColor: "rgba(139,92,246,0.2)",
-              border: "1.5px solid #8B5CF6",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
+        <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", minHeight: thumbSrc ? undefined : "280px" }}>
+          <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Lock size={18} color="#8B5CF6" />
           </div>
-          <button
-            onClick={onUnlock}
-            style={{
-              padding: "8px 20px", borderRadius: "8px",
-              backgroundColor: "#8B5CF6", border: "none",
-              color: "#fff", fontSize: "13px", fontWeight: 700,
-              cursor: "pointer", fontFamily: "'Inter', sans-serif",
-            }}
-          >
+          <button onClick={onUnlock} style={{ padding: "8px 20px", borderRadius: "8px", backgroundColor: "#8B5CF6", border: "none", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
             {price ? `Unlock for ₦${(price / 100).toLocaleString("en-NG")}` : "Subscribe to unlock"}
           </button>
         </div>
@@ -124,7 +95,7 @@ export default function PostMediaViewer({
     );
   }
 
-  // ── Video ───────────────────────────────────────────────────────────────────
+  // ── Video ────────────────────────────────────────────────────────────────────
 
   if (isVideo) {
     const isPortrait  = aspectRatio === "9/16";
@@ -132,16 +103,7 @@ export default function PostMediaViewer({
 
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
-        <div
-          style={{
-            position:        "relative",
-            width:           "100%",
-            aspectRatio:     containerAR,
-            maxHeight:       isPortrait ? "min(80svh, 600px)" : "520px",
-            overflow:        "hidden",
-            backgroundColor: "#000",
-          }}
-        >
+        <div style={{ position: "relative", width: "100%", aspectRatio: containerAR, maxHeight: isPortrait ? "min(80svh, 600px)" : "520px", overflow: "hidden", backgroundColor: "#000" }}>
           <VideoPlayer
             bunnyVideoId={first.bunnyVideoId ?? null}
             thumbnailUrl={first.thumbnailUrl ?? null}
@@ -154,7 +116,7 @@ export default function PostMediaViewer({
     );
   }
 
-  // ── Multi-photo carousel ────────────────────────────────────────────────────
+  // ── Multi-photo carousel ─────────────────────────────────────────────────────
 
   if (isMultiImg) {
     const carouselMedia = media.map((m, i) => ({
@@ -174,52 +136,25 @@ export default function PostMediaViewer({
         <ImageCarousel
           media={carouselMedia}
           onImageClick={(index) => onSingleTap?.(index)}
+          initialIndex={initialSlide}
+          onSlideChange={onSlideChange}
         />
       </DoubleTapLike>
     );
   }
 
-  // ── Single image ────────────────────────────────────────────────────────────
+  // ── Single image ─────────────────────────────────────────────────────────────
 
   return (
-    <DoubleTapLike
-      onSingleTap={singleTapAt0}
-      onDoubleTap={doubleTap}
-      style={{ width: "100%", cursor: "zoom-in" }}
-    >
+    <DoubleTapLike onSingleTap={singleTapAt0} onDoubleTap={doubleTap} style={{ width: "100%", cursor: "zoom-in" }}>
       <div style={{ position: "relative", overflow: "hidden", backgroundColor: "#000", width: "100%" }}>
         {first.url && (
           <>
-            <div
-              style={{
-                position: "absolute", top: 0, bottom: 0, left: 0, width: "80px",
-                backgroundImage: `url(${first.url})`,
-                backgroundSize: "cover", backgroundPosition: "left center",
-                filter: "blur(16px) brightness(0.7)",
-                transform: "scaleX(1.3)", opacity: 0.9,
-              }}
-            />
-            <div
-              style={{
-                position: "absolute", top: 0, bottom: 0, right: 0, width: "80px",
-                backgroundImage: `url(${first.url})`,
-                backgroundSize: "cover", backgroundPosition: "right center",
-                filter: "blur(16px) brightness(0.7)",
-                transform: "scaleX(1.3)", opacity: 0.9,
-              }}
-            />
+            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${first.url})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
+            <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${first.url})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9 }} />
           </>
         )}
-        <img
-          src={first.url ?? undefined}
-          alt=""
-          style={{
-            position: "relative", zIndex: 1,
-            width: "100%", height: "auto",
-            maxHeight: "80vh", objectFit: "contain",
-            display: "block",
-          }}
-        />
+        <img src={first.url ?? undefined} alt="" style={{ position: "relative", zIndex: 1, width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block" }} />
       </div>
     </DoubleTapLike>
   );
