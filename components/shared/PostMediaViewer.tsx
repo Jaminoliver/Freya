@@ -26,8 +26,8 @@ interface PostMediaViewerProps {
   onSlideChange?: (index: number) => void;
 }
 
-function useThumbAspectRatio(src: string | undefined): "9/16" | "16/9" | "1/1" {
-  const [ratio, setRatio] = React.useState<"9/16" | "16/9" | "1/1">("9/16");
+function useThumbAspectRatio(src: string | undefined): "9/16" | "16/9" | "1/1" | null {
+  const [ratio, setRatio] = React.useState<"9/16" | "16/9" | "1/1" | null>(null);
 
   React.useEffect(() => {
     if (!src) return;
@@ -99,11 +99,11 @@ export default function PostMediaViewer({
 
   if (isVideo) {
     const isPortrait  = aspectRatio === "9/16";
-    const containerAR = aspectRatio;
+    const containerAR = aspectRatio ?? undefined;
 
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
-        <div style={{ position: "relative", width: "100%", aspectRatio: containerAR, maxHeight: isPortrait ? "min(80svh, 600px)" : "520px", overflow: "hidden", backgroundColor: "#000" }}>
+        <div style={{ position: "relative", width: "100%", aspectRatio: containerAR, minHeight: containerAR ? undefined : "300px", maxHeight: isPortrait ? "min(80svh, 600px)" : "520px", overflow: "hidden", backgroundColor: "#000" }}>
           <VideoPlayer
             bunnyVideoId={first.bunnyVideoId ?? null}
             thumbnailUrl={first.thumbnailUrl ?? null}
