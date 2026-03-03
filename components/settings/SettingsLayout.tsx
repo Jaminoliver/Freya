@@ -31,7 +31,6 @@ function SettingsLayoutInner() {
   const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
   const [username, setUsername] = useState<string>("");
 
-  // Fetch current user's username
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -42,7 +41,6 @@ function SettingsLayoutInner() {
     });
   }, []);
 
-  // Handle ?panel= query param
   useEffect(() => {
     const panel = searchParams.get("panel");
     if (panel === "menu") {
@@ -97,6 +95,21 @@ function SettingsLayoutInner() {
         @media (min-width: 768px) {
           .settings-mobile-chevron { display: none !important; }
         }
+        .settings-tab-btn {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 14px 16px;
+          border-radius: 12px;
+          border: none;
+          cursor: pointer;
+          width: 100%;
+          text-align: left;
+          background-color: transparent;
+          transition: background-color 0.15s ease;
+        }
+        .settings-tab-btn:hover { background-color: rgba(255,255,255,0.03); }
+        .settings-tab-btn.active { background-color: rgba(139,92,246,0.08); }
       `}</style>
 
       {/* ── SIDEBAR ── */}
@@ -113,37 +126,35 @@ function SettingsLayoutInner() {
           animation: "slideInLeft 0.2s ease forwards",
         }}
       >
-        <div style={{ padding: "0 16px 20px", borderBottom: "1px solid #1F1F2A" }}>
-          <h1 style={{ fontSize: "16px", fontWeight: 700, color: "#F1F5F9", margin: 0 }}>Settings</h1>
+        <div style={{ padding: "0 20px 20px", borderBottom: "1px solid #1F1F2A" }}>
+          <h1 style={{ fontSize: "20px", fontWeight: 700, color: "#F1F5F9", margin: 0 }}>Settings</h1>
         </div>
 
-        <nav style={{ padding: "12px 12px", display: "flex", flexDirection: "column", gap: "1px" }}>
+        <nav style={{ padding: "16px 12px", display: "flex", flexDirection: "column", gap: "2px" }}>
           {tabs.map(({ id, label, icon: Icon, description }) => {
             const active = activeTab === id;
             return (
               <button
                 key={id}
                 onClick={() => handleTabSelect(id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: "12px",
-                  padding: "10px 12px", borderRadius: "10px", border: "none",
-                  cursor: "pointer", width: "100%", textAlign: "left",
-                  backgroundColor: active ? "rgba(139,92,246,0.08)" : "transparent",
-                  transition: "background-color 0.15s ease",
-                }}
-                onMouseEnter={(e) => { if (!active) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)"; }}
-                onMouseLeave={(e) => { if (!active) e.currentTarget.style.backgroundColor = "transparent"; }}
+                className={`settings-tab-btn${active ? " active" : ""}`}
               >
-                <Icon size={16} color={active ? "#8B5CF6" : "#6B6B8A"} strokeWidth={active ? 2.2 : 1.8} style={{ flexShrink: 0 }} />
+                <div style={{
+                  width: "38px", height: "38px", borderRadius: "10px", flexShrink: 0,
+                  backgroundColor: active ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.04)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Icon size={18} color={active ? "#8B5CF6" : "#6B6B8A"} strokeWidth={active ? 2.2 : 1.8} />
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: "14px", fontWeight: active ? 600 : 400, color: active ? "#F1F5F9" : "#A3A3C2", lineHeight: 1.3 }}>
+                  <p style={{ margin: 0, fontSize: "15px", fontWeight: active ? 600 : 400, color: active ? "#F1F5F9" : "#A3A3C2", lineHeight: 1.3 }}>
                     {label}
                   </p>
-                  <p style={{ margin: 0, fontSize: "11px", color: "#6B6B8A", marginTop: "1px" }}>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A", marginTop: "2px" }}>
                     {description}
                   </p>
                 </div>
-                <ChevronRight size={13} color="#6B6B8A" className="settings-mobile-chevron" style={{ flexShrink: 0 }} />
+                <ChevronRight size={16} color="#6B6B8A" className="settings-mobile-chevron" style={{ flexShrink: 0 }} />
               </button>
             );
           })}

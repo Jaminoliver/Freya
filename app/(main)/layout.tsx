@@ -27,7 +27,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           style={{
             flex: 1,
             minWidth: 0,
-            maxWidth: "720px",
+            maxWidth: isSettings ? "100%" : "720px",
             height: "100vh",
             borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
             overflowY: "auto",
