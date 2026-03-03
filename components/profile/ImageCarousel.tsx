@@ -23,7 +23,15 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
 }) {
   const [activeIndex, setActiveIndex] = React.useState(initialIndex);
   const [isDesktop,   setIsDesktop]   = React.useState(false);
-  const trackRef      = React.useRef<HTMLDivElement>(null);
+  const trackRef = React.useRef<HTMLDivElement>(null);
+
+  // Set scroll position synchronously when the track mounts — avoids flash
+  const setTrackRef = React.useCallback((el: HTMLDivElement | null) => {
+    (trackRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    if (el && initialIndex > 0) {
+      el.scrollLeft = el.offsetWidth * initialIndex;
+    }
+  }, [initialIndex]);
   const startXRef     = React.useRef<number | null>(null);
   const startYRef     = React.useRef<number | null>(null);
   const isDragging    = React.useRef(false);
@@ -39,15 +47,7 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // Restore scroll position to initialIndex on mount
-  React.useEffect(() => {
-    if (didInit.current || !trackRef.current || initialIndex === 0) { didInit.current = true; return; }
-    didInit.current = true;
-    const el = trackRef.current;
-    // Use instant scroll — no animation on restore
-    el.scrollLeft = el.offsetWidth * initialIndex;
-    setActiveIndex(initialIndex);
-  }, [initialIndex]);
+  // Restore scroll position to initialIndex on mount - handled by setTrackRef callback
 
   const goTo = (index: number) => {
     if (!trackRef.current) return;
@@ -138,7 +138,7 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
   return (
     <div style={{ position: "relative", width: "100%", backgroundColor: "#000", userSelect: "none" }}>
       <div
-        ref={trackRef}
+        ref={setTrackRef}
         onScroll={onScroll}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
