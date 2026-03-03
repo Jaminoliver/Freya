@@ -22,9 +22,6 @@ import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 import type { ApiPost } from "@/components/profile/PostRow";
 import { useAppStore, isStale } from "@/lib/store/appStore";
 
-// Module-level cache removed — now using Zustand appStore
-
-// ── Imperatively preload images (avoids Next.js onLoad timing bug) ────────────
 function preloadImages(urls: string[]): Promise<void[]> {
   return Promise.all(
     urls.map(
@@ -40,17 +37,10 @@ function preloadImages(urls: string[]): Promise<void[]> {
   );
 }
 
-function collectProfileImageUrls(
-  profile: User | null,
-  posts: Post[],
-  n = 6
-): string[] {
+function collectProfileImageUrls(profile: User | null, posts: Post[], n = 6): string[] {
   const urls: string[] = [];
-  // Always preload avatar + banner first
-  if (profile?.avatar_url)  urls.push(profile.avatar_url);
-  if (profile?.banner_url)  urls.push(profile.banner_url);
-
-  // Then first n post media images
+  if (profile?.avatar_url) urls.push(profile.avatar_url);
+  if (profile?.banner_url) urls.push(profile.banner_url);
   for (const post of posts) {
     if (urls.length >= n + 2) break;
     for (const m of (post as any).media ?? []) {
@@ -79,9 +69,9 @@ export default function ProfilePage() {
   const [posts,                 setPosts]                 = React.useState<Post[]>([]);
   const [apiPosts,              setApiPosts]              = React.useState<ApiPost[]>(cached?.apiPosts ?? []);
 
-  const [apiLoading,  setApiLoading]  = React.useState(!fresh);
-  const [imgLoading,  setImgLoading]  = React.useState(false);
-  const [revealed,    setRevealed]    = React.useState(fresh ?? false);
+  const [apiLoading, setApiLoading] = React.useState(!fresh);
+  const [imgLoading, setImgLoading] = React.useState(false);
+  const [revealed,   setRevealed]   = React.useState(fresh ?? false);
 
   const [isFollowing,   setIsFollowing]   = React.useState(cached?.isFollowing ?? false);
   const [followLoading, setFollowLoading] = React.useState(false);
@@ -99,16 +89,15 @@ export default function ProfilePage() {
 
   const showSkeleton = apiLoading || imgLoading;
 
-  // Determine skeleton context as early as possible for correct shimmer shape
   const skeletonContext = React.useMemo<ProfileSkeletonContext>(() => {
     if (!viewer || !profile) return "unsubscribedCreator";
-    const isOwn      = viewer.id === profile.id;
-    const viewerRole = viewer.role;
+    const isOwn       = viewer.id === profile.id;
+    const viewerRole  = viewer.role;
     const profileRole = profile.role;
-    if (isOwn && profileRole === "creator")                        return "ownCreator";
-    if (isOwn && profileRole === "fan")                            return "ownFan";
-    if (viewerRole === "creator" && profileRole === "fan")         return "creatorViewingFan";
-    if (profileRole === "creator" && isSubscribed)                 return "subscribedCreator";
+    if (isOwn && profileRole === "creator")                return "ownCreator";
+    if (isOwn && profileRole === "fan")                    return "ownFan";
+    if (viewerRole === "creator" && profileRole === "fan") return "creatorViewingFan";
+    if (profileRole === "creator" && isSubscribed)         return "subscribedCreator";
     return "unsubscribedCreator";
   }, [viewer, profile, isSubscribed]);
 
@@ -133,11 +122,7 @@ export default function ProfilePage() {
   }, []);
 
   React.useEffect(() => {
-    // Fresh cache — reveal immediately, no fetch needed
-    if (fresh) {
-      setRevealed(true);
-      return;
-    }
+    if (fresh) { setRevealed(true); return; }
 
     const fetchData = async () => {
       setApiLoading(true);
@@ -174,23 +159,19 @@ export default function ProfilePage() {
           },
         };
         setProfile(enriched);
-
         likesCount = profileData.likes_count ?? 0;
         setTotalLikes(likesCount);
 
         if (profileData.role === "creator") {
           const { data: tierData } = await supabase
-            .from("subscription_tiers")
-            .select("id")
-            .eq("creator_id", profileData.id)
-            .single();
+            .from("subscription_tiers").select("id").eq("creator_id", profileData.id).single();
           if (tierData) { tierIdVal = tierData.id; setTierId(tierIdVal); }
 
           if (user && user.id !== profileData.id) {
             const res  = await fetch(`/api/subscriptions/status?creatorId=${profileData.id}`);
             const data = await res.json();
-            subscribedVal  = !!data.active;
-            periodEndVal   = data.currentPeriodEnd ?? null;
+            subscribedVal = !!data.active;
+            periodEndVal  = data.currentPeriodEnd ?? null;
             setIsSubscribed(subscribedVal);
             setSubscriptionPeriodEnd(periodEndVal);
             followingVal = await checkIsFollowing(profileData.id);
@@ -199,20 +180,15 @@ export default function ProfilePage() {
         }
       }
 
-      // ── Fetch posts in parallel with phase 2 ──
       let fetchedPosts: ApiPost[] = [];
       if (enriched?.username) {
         try {
           const res  = await fetch(`/api/posts/creator/${enriched.username}`);
           const data = await res.json();
-          if (res.ok) {
-            fetchedPosts = data.posts || [];
-            setApiPosts(fetchedPosts);
-          }
+          if (res.ok) { fetchedPosts = data.posts || []; setApiPosts(fetchedPosts); }
         } catch { /* non-fatal */ }
       }
 
-      // Write everything to Zustand store
       setStoreProfile(username, {
         viewer: viewerData, profile: enriched, totalLikes: likesCount,
         tierId: tierIdVal, isFollowing: followingVal,
@@ -220,13 +196,10 @@ export default function ProfilePage() {
         apiPosts: fetchedPosts, fetchedAt: Date.now(),
       });
 
-      // ── Phase 2: preload avatar, banner + first 6 post images ──
       setApiLoading(false);
       setImgLoading(true);
-
       const urlsToPreload = collectProfileImageUrls(enriched, fetchedPosts as any, 6);
       await preloadImages(urlsToPreload);
-
       setImgLoading(false);
       requestAnimationFrame(() => setRevealed(true));
     };
@@ -326,7 +299,6 @@ export default function ProfilePage() {
     />
   ) : null;
 
-  // ── Profile not found (after loading) ────────────────────────────────────
   if (!apiLoading && !profile) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -358,29 +330,12 @@ export default function ProfilePage() {
 
   const padded: React.CSSProperties = { padding: "0 16px" };
 
-  const fadeStyle: React.CSSProperties = {
-    opacity:    revealed ? 1 : 0,
-    transition: "opacity 0.35s ease",
-  };
-
   return (
     <>
-      <style>{`
-        @keyframes profileFadeIn {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0);   }
-        }
-        .profile-revealed {
-          animation: profileFadeIn 0.35s ease forwards;
-        }
-      `}</style>
-
-      {/* ── Skeleton phases 1 & 2 ── */}
       {showSkeleton && <ProfileSkeleton context={skeletonContext} />}
 
-      {/* ── Phase 3: real content with fade-in ── */}
       {!showSkeleton && (
-        <div className={revealed ? "profile-revealed" : ""} style={fadeStyle}>
+        <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
 
           {/* 1. CREATOR VIEWING OWN PROFILE */}
           {isOwnProfile && profile?.role === "creator" && (
@@ -409,10 +364,8 @@ export default function ProfilePage() {
               </div>
               <ContentFeed
                 posts={posts} isSubscribed={true} isOwnProfile={true}
-                creatorUsername={profile.username}
-                initialApiPosts={apiPosts}
-                onLike={handleLike} onComment={handleComment}
-                onTip={handleTip} onUnlock={handleUnlock}
+                creatorUsername={profile.username} initialApiPosts={apiPosts}
+                onLike={handleLike} onComment={handleComment} onTip={handleTip} onUnlock={handleUnlock}
               />
             </div>
           )}
@@ -440,10 +393,8 @@ export default function ProfilePage() {
                 <ProfileInfo {...profileInfoProps} mode="full" isEditable={true} />
               </div>
               <ContentFeed
-                posts={posts} isSubscribed={true}
-                creatorUsername={profile.username}
-                initialApiPosts={apiPosts}
-                onLike={handleLike} onComment={handleComment}
+                posts={posts} isSubscribed={true} creatorUsername={profile.username}
+                initialApiPosts={apiPosts} onLike={handleLike} onComment={handleComment}
                 onTip={handleTip} onUnlock={handleUnlock}
               />
             </div>
@@ -488,10 +439,8 @@ export default function ProfilePage() {
                 />
               </div>
               <ContentFeed
-                posts={posts} isSubscribed={true}
-                creatorUsername={profile.username}
-                initialApiPosts={apiPosts}
-                onLike={handleLike} onComment={handleComment}
+                posts={posts} isSubscribed={true} creatorUsername={profile.username}
+                initialApiPosts={apiPosts} onLike={handleLike} onComment={handleComment}
                 onTip={handleTip} onUnlock={handleUnlock}
               />
             </div>
@@ -521,10 +470,8 @@ export default function ProfilePage() {
                 />
               </div>
               <ContentFeed
-                posts={posts} isSubscribed={false}
-                creatorUsername={profile.username}
-                initialApiPosts={apiPosts}
-                onLike={handleLike} onComment={handleComment}
+                posts={posts} isSubscribed={false} creatorUsername={profile.username}
+                initialApiPosts={apiPosts} onLike={handleLike} onComment={handleComment}
                 onTip={handleTip} onUnlock={handleUnlock}
               />
             </div>

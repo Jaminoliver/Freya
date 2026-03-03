@@ -99,11 +99,11 @@ export default function PostMediaViewer({
 
   if (isVideo) {
     const isPortrait  = aspectRatio === "9/16";
-    const containerAR = aspectRatio ?? undefined;
+    const containerAR = aspectRatio ?? "16/9";
 
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
-        <div style={{ position: "relative", width: "100%", aspectRatio: containerAR, minHeight: containerAR ? undefined : "300px", maxHeight: isPortrait ? "min(80svh, 600px)" : "520px", overflow: "hidden", backgroundColor: "#000" }}>
+        <div style={{ position: "relative", width: "100%", aspectRatio: containerAR, maxHeight: isPortrait ? "min(80svh, 600px)" : "520px", overflow: "hidden", backgroundColor: "#000" }}>
           <VideoPlayer
             bunnyVideoId={first.bunnyVideoId ?? null}
             thumbnailUrl={first.thumbnailUrl ?? null}
