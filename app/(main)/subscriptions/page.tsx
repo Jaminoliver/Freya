@@ -10,19 +10,12 @@ type ContentTab = "following" | "posts";
 
 const CACHE_KEY = "__subscriptions__";
 
-function preloadImages(urls: string[]): Promise<void[]> {
-  return Promise.all(
-    urls.map(
-      (url) =>
-        new Promise<void>((resolve) => {
-          if (!url) { resolve(); return; }
-          const img = new Image();
-          img.onload  = () => resolve();
-          img.onerror = () => resolve();
-          img.src = url;
-        })
-    )
-  );
+function preloadImages(urls: string[]): void {
+  for (const url of urls) {
+    if (!url) continue;
+    const img = new Image();
+    img.src = url;
+  }
 }
 
 export default function SubscriptionsPage() {
@@ -35,8 +28,8 @@ export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<any[]>(
     fresh ? cached.posts : []
   );
-  const [loading,   setLoading]   = useState(!fresh);
-  const [revealed,  setRevealed]  = useState(fresh ?? false);
+  const [loading,  setLoading]  = useState(!fresh);
+  const [revealed, setRevealed] = useState(fresh ?? false);
 
   const fetchSubscriptions = async (force = false) => {
     if (!force && fresh) return;
@@ -47,16 +40,16 @@ export default function SubscriptionsPage() {
       if (data.subscriptions) {
         const subs = data.subscriptions;
 
-        // Preload banner + avatar for first 6 cards
+        setSubscriptions(subs);
+        setContentFeed(CACHE_KEY, { posts: subs, media: [], fetchedAt: Date.now() });
+
+        // Preload images AFTER render — fire and forget, doesn't block UI
         const urls: string[] = [];
         for (const s of subs.slice(0, 6)) {
           if (s.banner_url) urls.push(s.banner_url);
           if (s.avatar_url) urls.push(s.avatar_url);
         }
-        await preloadImages(urls);
-
-        setSubscriptions(subs);
-        setContentFeed(CACHE_KEY, { posts: subs, media: [], fetchedAt: Date.now() });
+        preloadImages(urls);
       }
     } catch (err) {
       console.error("[SubscriptionsPage]", err);

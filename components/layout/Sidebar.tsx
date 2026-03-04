@@ -48,17 +48,33 @@ function formatCount(n: number): string {
 const FALLBACK_COVER = "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80";
 
 export function Sidebar() {
-  const pathname  = usePathname();
-  const router    = useRouter();
+  const pathname = usePathname();
+  const router   = useRouter();
 
-  const [username,      setUsername]      = useState<string | null>(null);
-  const [searchOpen,    setSearchOpen]    = useState(false);
-  const [moreOpen,      setMoreOpen]      = useState(false);
-  const [query,         setQuery]         = useState("");
-  const [results,       setResults]       = useState<Creator[]>([]);
-  const [searching,     setSearching]     = useState(false);
-  const [exploreData,   setExploreData]   = useState<Creator[]>([]);
-  const [exploreLoading,setExploreLoading]= useState(false);
+  // ── Instant active state — updates on click, not on route completion ──────
+  const [pendingPath, setPendingPath] = useState<string | null>(null);
+
+  // Clear pendingPath once pathname catches up
+  useEffect(() => {
+    if (pendingPath && pathname === pendingPath) {
+      setPendingPath(null);
+    }
+  }, [pathname, pendingPath]);
+
+  // Determine active href — pendingPath wins if set
+  const activePath = pendingPath ?? pathname;
+
+  const isActive = (href: string) =>
+    activePath === href || (href === "/subscriptions" && activePath.startsWith("/subscriptions"));
+
+  const [username,       setUsername]       = useState<string | null>(null);
+  const [searchOpen,     setSearchOpen]     = useState(false);
+  const [moreOpen,       setMoreOpen]       = useState(false);
+  const [query,          setQuery]          = useState("");
+  const [results,        setResults]        = useState<Creator[]>([]);
+  const [searching,      setSearching]      = useState(false);
+  const [exploreData,    setExploreData]    = useState<Creator[]>([]);
+  const [exploreLoading, setExploreLoading] = useState(false);
 
   const inputRef    = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -75,7 +91,6 @@ export function Sidebar() {
     fetchUsername();
   }, []);
 
-  // Fetch explore/discover creators once
   const fetchExplore = useCallback(async () => {
     if (exploreData.length > 0) return;
     setExploreLoading(true);
@@ -99,7 +114,6 @@ export function Sidebar() {
     }
   }, [searchOpen, fetchExplore]);
 
-  // Search debounce
   useEffect(() => {
     if (!query.trim()) { setResults([]); return; }
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -129,7 +143,10 @@ export function Sidebar() {
   }, [pathname]);
 
   const closeSearch    = () => { setSearchOpen(false); setQuery(""); setResults([]); };
-  const handleNavClick = () => { pendingClose.current = true; };
+  const handleNavClick = (href: string) => {
+    setPendingPath(href);  // ← highlight instantly
+    pendingClose.current = true;
+  };
 
   const navigateToCreator = (username: string) => {
     pendingClose.current = true;
@@ -147,14 +164,12 @@ export function Sidebar() {
       {/* MOBILE TOP BAR */}
       {isDashboard && (
         <div className="md:hidden" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A", height: "56px", fontFamily: "'Inter', sans-serif" }}>
-          {/* Default bar */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
             <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
             <button onClick={() => setSearchOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px" }}>
               <Search size={22} strokeWidth={1.8} />
             </button>
           </div>
-          {/* Search bar */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 12px", height: "100%", opacity: searchOpen ? 1 : 0, transform: searchOpen ? "translateY(0)" : "translateY(-10px)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "auto" : "none", position: "absolute", inset: 0 }}>
             <button onClick={closeSearch} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", flexShrink: 0 }}>
               <ArrowLeft size={22} strokeWidth={1.8} />
@@ -181,8 +196,6 @@ export function Sidebar() {
       {/* MOBILE SEARCH OVERLAY */}
       {isDashboard && searchOpen && (
         <div className="md:hidden" style={{ position: "fixed", top: "56px", left: 0, right: 0, bottom: "64px", backgroundColor: "#0A0A0F", zIndex: 99, overflowY: "auto", animation: "fadeIn 0.2s ease", fontFamily: "'Inter', sans-serif" }}>
-
-          {/* ── No query: show Discover grid ── */}
           {!query.trim() && (
             <div style={{ padding: "20px 16px 80px" }}>
               <p style={{ margin: "0 0 16px", fontSize: "13px", fontWeight: 700, color: "#6B6B8A", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -203,18 +216,12 @@ export function Sidebar() {
               )}
             </div>
           )}
-
-          {/* ── Searching ── */}
           {searching && (
             <div style={{ padding: "40px 20px", textAlign: "center", color: "#6B6B8A", fontSize: "14px" }}>Searching...</div>
           )}
-
-          {/* ── No results ── */}
           {!searching && query.trim() && results.length === 0 && (
             <div style={{ padding: "40px 20px", textAlign: "center", color: "#6B6B8A", fontSize: "14px" }}>No creators found for "{query}"</div>
           )}
-
-          {/* ── Search results list ── */}
           {!searching && query.trim() && results.map((creator) => (
             <div
               key={creator.id}
@@ -251,9 +258,12 @@ export function Sidebar() {
 
         <nav style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
           {navItems.map(({ label, href, icon: Icon }) => {
-            const active = pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
+            const active = isActive(href);
             return (
-              <Link key={href} href={href} onClick={handleNavClick}
+              <Link
+                key={href}
+                href={href}
+                onClick={() => handleNavClick(href)}
                 style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", textDecoration: "none", backgroundColor: active ? "#1E1E2E" : "transparent", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease" }}
                 onMouseEnter={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "#1A1A2E"; e.currentTarget.style.color = "#F1F5F9"; } }}
                 onMouseLeave={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; } }}
@@ -265,19 +275,25 @@ export function Sidebar() {
           })}
 
           {/* Profile */}
-          {username && (
-            <Link href={`/${username}`} onClick={handleNavClick}
-              style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", textDecoration: "none", backgroundColor: pathname === `/${username}` ? "#1E1E2E" : "transparent", color: pathname === `/${username}` ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: pathname === `/${username}` ? 600 : 400, transition: "all 0.15s ease" }}
-              onMouseEnter={(e) => { if (pathname !== `/${username}`) { e.currentTarget.style.backgroundColor = "#1A1A2E"; e.currentTarget.style.color = "#F1F5F9"; } }}
-              onMouseLeave={(e) => { if (pathname !== `/${username}`) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; } }}
-            >
-              <User size={22} strokeWidth={pathname === `/${username}` ? 2.2 : 1.8} />
-              My Profile
-            </Link>
-          )}
+          {username && (() => {
+            const active = isActive(`/${username}`);
+            return (
+              <Link
+                href={`/${username}`}
+                onClick={() => handleNavClick(`/${username}`)}
+                style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", textDecoration: "none", backgroundColor: active ? "#1E1E2E" : "transparent", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease" }}
+                onMouseEnter={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "#1A1A2E"; e.currentTarget.style.color = "#F1F5F9"; } }}
+                onMouseLeave={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; } }}
+              >
+                <User size={22} strokeWidth={active ? 2.2 : 1.8} />
+                My Profile
+              </Link>
+            );
+          })()}
 
           {/* More */}
-          <button onClick={() => setMoreOpen(true)}
+          <button
+            onClick={() => setMoreOpen(true)}
             style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", color: "#A3A3C2", fontSize: "16px", fontWeight: 400, transition: "all 0.15s ease", width: "100%", textAlign: "left" }}
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#1A1A2E"; e.currentTarget.style.color = "#F1F5F9"; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; }}
@@ -287,7 +303,9 @@ export function Sidebar() {
           </button>
 
           {/* New Post */}
-          <Link href="/create" onClick={handleNavClick}
+          <Link
+            href="/create"
+            onClick={() => handleNavClick("/create")}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "13px 16px", borderRadius: "30px", textDecoration: "none", background: "linear-gradient(to right, #8B5CF6, #EC4899)", color: "#fff", fontSize: "15px", fontWeight: 700, marginTop: "16px", transition: "opacity 0.15s ease" }}
             onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
@@ -303,7 +321,7 @@ export function Sidebar() {
   );
 }
 
-// ── Mobile creator card (cover image + avatar + name) ─────────────────────────
+// ── Mobile creator card ───────────────────────────────────────────────────────
 function MobileCreatorCard({ creator, onClick }: { creator: Creator; onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
 
@@ -320,13 +338,9 @@ function MobileCreatorCard({ creator, onClick }: { creator: Creator; onClick: ()
         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
       />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.85) 100%)" }} />
-
-      {/* Avatar */}
       <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -20%)", zIndex: 2 }}>
         <Avatar src={creator.avatar_url ?? undefined} alt={creator.display_name || creator.username} size="lg" showRing />
       </div>
-
-      {/* Name */}
       <div style={{ position: "absolute", bottom: "28px", left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", zIndex: 2, padding: "0 6px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
           <span style={{ fontSize: "12px", fontWeight: 700, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.6)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90px" }}>
@@ -336,8 +350,6 @@ function MobileCreatorCard({ creator, onClick }: { creator: Creator; onClick: ()
         </div>
         <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.65)" }}>@{creator.username}</span>
       </div>
-
-      {/* Subscriber count */}
       <div style={{ position: "absolute", bottom: "8px", left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 2 }}>
         <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>
           {formatCount(creator.subscriber_count)} subscribers

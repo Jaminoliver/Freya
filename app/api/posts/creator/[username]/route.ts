@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
-// Extract just the path from a stored Bunny URL (strips base + query params)
+const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
+
 function extractBunnyPath(url: string | null): string | null {
   if (!url) return null;
   try {
@@ -11,6 +12,26 @@ function extractBunnyPath(url: string | null): string | null {
   } catch {
     return url.startsWith("/") ? url : `/${url}`;
   }
+}
+
+function extractBunnyVideoId(url: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/play\/\d+\/([a-f0-9-]{36})\/playlist\.m3u8/i);
+  return match ? match[1] : null;
+}
+
+function resolveVideoMedia(m: Record<string, unknown>) {
+  let bunnyVideoId = m.bunny_video_id as string | null;
+
+  if (!bunnyVideoId && m.media_type === "video") {
+    bunnyVideoId = extractBunnyVideoId(m.file_url as string | null);
+  }
+
+  const derivedThumb = bunnyVideoId
+    ? `https://${STREAM_CDN_HOST}/${bunnyVideoId}/thumbnail.jpg`
+    : null;
+
+  return { bunnyVideoId, derivedThumb };
 }
 
 export async function GET(
@@ -25,7 +46,6 @@ export async function GET(
 
     const service = createServiceSupabaseClient();
 
-    // Get creator profile
     const { data: creator } = await service
       .from("profiles")
       .select("id, role")
@@ -36,9 +56,8 @@ export async function GET(
       return NextResponse.json({ error: "Creator not found" }, { status: 404 });
     }
 
-    // Check if viewer is subscribed
-    let isSubscribed = false;
     const isOwnProfile = user?.id === creator.id;
+    let isSubscribed   = false;
 
     if (user && !isOwnProfile) {
       const { data: sub } = await service
@@ -53,7 +72,6 @@ export async function GET(
 
     if (isOwnProfile) isSubscribed = true;
 
-    // Fetch posts
     const { data: posts, error } = await service
       .from("posts")
       .select(`
@@ -96,72 +114,79 @@ export async function GET(
       return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });
     }
 
-    // Get liked post IDs for the viewer
     const postIds = (posts ?? []).map((p: { id: number }) => p.id);
-    let likedSet = new Set<number>();
 
-    if (user && postIds.length > 0) {
-      const { data: likes } = await service
-        .from("likes")
-        .select("post_id")
-        .eq("user_id", user.id)
-        .in("post_id", postIds);
-      likedSet = new Set((likes ?? []).map((l: { post_id: number }) => l.post_id));
-    }
+    // ── Fetch likes in parallel with post filtering ───────────────────────
+    const likesPromise = user && postIds.length > 0
+      ? service
+          .from("likes")
+          .select("post_id")
+          .eq("user_id", user.id)
+          .in("post_id", postIds)
+      : Promise.resolve({ data: [] });
 
-    const processed = (posts ?? [])
-      .filter((post: Record<string, unknown>) => {
-        const mediaItems = post.media as Record<string, unknown>[] ?? [];
-        const hasUnreadyVideo = mediaItems.some(
-          (m) =>
-            m.media_type === "video" &&
-            m.processing_status !== "completed" &&
-            m.processing_status !== null
-        );
-        return !hasUnreadyVideo;
-      })
-      .map((post: Record<string, unknown>) => {
-        const isFree    = post.is_free as boolean;
-        const isPpv     = post.is_ppv as boolean;
-        const canAccess = isFree || (isSubscribed && !isPpv) || isOwnProfile;
+    const filteredPosts = (posts ?? []).filter((post: Record<string, unknown>) => {
+      const mediaItems = post.media as Record<string, unknown>[] ?? [];
+      const hasUnreadyVideo = mediaItems.some(
+        (m) =>
+          m.media_type === "video" &&
+          m.processing_status !== "completed" &&
+          m.processing_status !== null
+      );
+      return !hasUnreadyVideo;
+    });
 
-        const mediaItems = (post.media as Record<string, unknown>[] ?? [])
-          .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
-            (a.display_order as number) - (b.display_order as number)
-          )
-          .map((m: Record<string, unknown>) => {
-            // Re-sign file_url fresh on every request (24h expiry)
-            const rawUrl   = m.file_url as string | null;
-            const path     = extractBunnyPath(rawUrl);
-            const freshUrl = canAccess && path ? signBunnyUrl(path) : null;
+    // ── Await likes now that filtering is done ────────────────────────────
+    const { data: likes } = await likesPromise;
+    const likedSet = new Set((likes ?? []).map((l: { post_id: number }) => l.post_id));
 
-            // Re-sign thumbnail_url if present
-            const rawThumb   = m.thumbnail_url as string | null;
-            const thumbPath  = extractBunnyPath(rawThumb);
-            const freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;
+    const processed = filteredPosts.map((post: Record<string, unknown>) => {
+      const isFree    = post.is_free as boolean;
+      const isPpv     = post.is_ppv as boolean;
+      const canAccess = isFree || (isSubscribed && !isPpv) || isOwnProfile;
 
-            // Re-sign locked_preview_url (blurred preview for non-subscribers)
-            const rawPreview   = !canAccess ? (rawThumb ?? rawUrl) : null;
-            const previewPath  = extractBunnyPath(rawPreview);
-            const freshPreview = previewPath ? signBunnyUrl(previewPath) : null;
+      const mediaItems = (post.media as Record<string, unknown>[] ?? [])
+        .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+          (a.display_order as number) - (b.display_order as number)
+        )
+        .map((m: Record<string, unknown>) => {
+          const rawUrl   = m.file_url as string | null;
+          const path     = extractBunnyPath(rawUrl);
+          const freshUrl = canAccess && path ? signBunnyUrl(path) : null;
 
-            return {
-              ...m,
-              file_url:           freshUrl,
-              thumbnail_url:      freshThumb,
-              locked_preview_url: !canAccess ? freshPreview : null,
-              locked:             !canAccess,
-            };
-          });
+          const { bunnyVideoId, derivedThumb } = resolveVideoMedia(m);
 
-        return {
-          ...post,
-          media:      mediaItems,
-          liked:      likedSet.has(post.id as number),
-          can_access: canAccess,
-          locked:     !canAccess,
-        };
-      });
+          let freshThumb: string | null = null;
+          if (m.media_type === "video") {
+            freshThumb = derivedThumb;
+          } else {
+            const rawThumb  = m.thumbnail_url as string | null;
+            const thumbPath = extractBunnyPath(rawThumb);
+            freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;
+          }
+
+          const rawPreview   = !canAccess ? (m.thumbnail_url as string | null ?? rawUrl) : null;
+          const previewPath  = extractBunnyPath(rawPreview);
+          const freshPreview = previewPath ? signBunnyUrl(previewPath) : null;
+
+          return {
+            ...m,
+            file_url:           freshUrl,
+            thumbnail_url:      freshThumb,
+            bunny_video_id:     bunnyVideoId,
+            locked_preview_url: !canAccess ? freshPreview : null,
+            locked:             !canAccess,
+          };
+        });
+
+      return {
+        ...post,
+        media:      mediaItems,
+        liked:      likedSet.has(post.id as number),
+        can_access: canAccess,
+        locked:     !canAccess,
+      };
+    });
 
     return NextResponse.json({ posts: processed });
 

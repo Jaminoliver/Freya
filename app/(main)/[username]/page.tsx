@@ -16,78 +16,49 @@ import PostComposer from "@/components/profile/PostComposer";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import { ProfileSkeleton } from "@/components/loadscreen/ProfileSkeleton";
 import type { ProfileSkeletonContext } from "@/components/loadscreen/ProfileSkeleton";
-import { postSyncStore } from "@/lib/store/postSyncStore";
 import type { User, Subscription, Post } from "@/lib/types/profile";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 import type { ApiPost } from "@/components/profile/PostRow";
 import { useAppStore, isStale } from "@/lib/store/appStore";
-
-function preloadImages(urls: string[]): Promise<void[]> {
-  return Promise.all(
-    urls.map(
-      (url) =>
-        new Promise<void>((resolve) => {
-          if (!url) { resolve(); return; }
-          const img = new Image();
-          img.onload  = () => resolve();
-          img.onerror = () => resolve();
-          img.src = url;
-        })
-    )
-  );
-}
-
-function collectProfileImageUrls(profile: User | null, posts: Post[], n = 6): string[] {
-  const urls: string[] = [];
-  if (profile?.avatar_url) urls.push(profile.avatar_url);
-  if (profile?.banner_url) urls.push(profile.banner_url);
-  for (const post of posts) {
-    if (urls.length >= n + 2) break;
-    for (const m of (post as any).media ?? []) {
-      if (urls.length >= n + 2) break;
-      const url = m.thumbnail_url || m.file_url;
-      if (url) urls.push(url);
-    }
-  }
-  return urls;
-}
 
 export default function ProfilePage() {
   const params   = useParams();
   const router   = useRouter();
   const username = params.username as string;
 
-  const { profiles, setProfile: setStoreProfile, updateProfile, clearProfile, viewer: globalViewer } = useAppStore();
-  const cached = profiles[username];
-  const fresh  = cached && !isStale(cached.fetchedAt);
+  const {
+    profiles,
+    setProfile: setStoreProfile,
+    updateProfile,
+    clearProfile,
+    viewer: globalViewer,
+  } = useAppStore();
 
-  const [viewer,                setViewer]                = React.useState<User | null>(cached?.viewer ?? globalViewer as any ?? null);
-  const [profile,               setProfile]               = React.useState<User | null>(cached?.profile ?? null);
+  // ── Never read sessionStorage-backed state during SSR ────────────────────
+  // All cache checks happen inside useEffect (client-only)
+  const [viewer,                setViewer]                = React.useState<User | null>(null);
+  const [profile,               setProfile]               = React.useState<User | null>(null);
   const [subscription,          setSubscription]          = React.useState<Subscription | null>(null);
-  const [isSubscribed,          setIsSubscribed]          = React.useState(cached?.isSubscribed ?? false);
-  const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(cached?.subscriptionPeriodEnd ?? null);
-  const [posts,                 setPosts]                 = React.useState<Post[]>([]);
-  const [apiPosts,              setApiPosts]              = React.useState<ApiPost[]>(cached?.apiPosts ?? []);
+  const [isSubscribed,          setIsSubscribed]          = React.useState(false);
+  const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(null);
+  const [apiPosts,              setApiPosts]              = React.useState<ApiPost[]>([]);
 
-  const [apiLoading, setApiLoading] = React.useState(!fresh);
-  const [imgLoading, setImgLoading] = React.useState(false);
-  const [revealed,   setRevealed]   = React.useState(fresh ?? false);
+  // Always true on server + first client render — prevents SSR mismatch
+  const [apiLoading,            setApiLoading]            = React.useState(true);
+  const [revealed,              setRevealed]              = React.useState(false);
 
-  const [isFollowing,   setIsFollowing]   = React.useState(cached?.isFollowing ?? false);
-  const [followLoading, setFollowLoading] = React.useState(false);
-  const [totalLikes,    setTotalLikes]    = React.useState(cached?.totalLikes ?? 0);
+  const [isFollowing,           setIsFollowing]           = React.useState(false);
+  const [followLoading,         setFollowLoading]         = React.useState(false);
+  const [totalLikes,            setTotalLikes]            = React.useState(0);
+  const [checkoutOpen,          setCheckoutOpen]          = React.useState(false);
+  const [checkoutType,          setCheckoutType]          = React.useState<CheckoutType>("subscription");
+  const [checkoutTier,          setCheckoutTier]          = React.useState<SubscriptionTier>("monthly");
+  const [lockedPostId,          setLockedPostId]          = React.useState<string | null>(null);
+  const [lockedPostPrice,       setLockedPostPrice]       = React.useState<number>(0);
+  const [tierId,                setTierId]                = React.useState<number | undefined>(undefined);
 
-  const [checkoutOpen,    setCheckoutOpen]    = React.useState(false);
-  const [checkoutType,    setCheckoutType]    = React.useState<CheckoutType>("subscription");
-  const [checkoutTier,    setCheckoutTier]    = React.useState<SubscriptionTier>("monthly");
-  const [lockedPostId,    setLockedPostId]    = React.useState<string | null>(null);
-  const [lockedPostPrice, setLockedPostPrice] = React.useState<number>(0);
-  const [tierId,          setTierId]          = React.useState<number | undefined>(cached?.tierId);
-
-  const profileIdRef = React.useRef<string | null>(cached?.profile?.id ?? null);
-  const viewerIdRef  = React.useRef<string | null>(cached?.viewer?.id ?? null);
-
-  const showSkeleton = apiLoading || imgLoading;
+  const profileIdRef = React.useRef<string | null>(null);
+  const viewerIdRef  = React.useRef<string | null>(null);
 
   const skeletonContext = React.useMemo<ProfileSkeletonContext>(() => {
     if (!viewer || !profile) return "unsubscribedCreator";
@@ -121,72 +92,134 @@ export default function ProfilePage() {
     }
   }, []);
 
+  // ── Main fetch — runs client-side only ───────────────────────────────────
   React.useEffect(() => {
-    if (fresh) { setRevealed(true); return; }
+    const cached = profiles[username];
+    const fresh  = cached && !isStale(cached.fetchedAt);
+
+    // Hydrate from cache instantly — no network call
+    if (fresh) {
+      if (cached.viewer)   { setViewer(cached.viewer);   viewerIdRef.current  = cached.viewer.id; }
+      if (cached.profile)  { setProfile(cached.profile); profileIdRef.current = cached.profile.id; }
+      setApiPosts(cached.apiPosts ?? []);
+      setIsSubscribed(cached.isSubscribed ?? false);
+      setSubscriptionPeriodEnd(cached.subscriptionPeriodEnd ?? null);
+      setIsFollowing(cached.isFollowing ?? false);
+      setTotalLikes(cached.totalLikes ?? 0);
+      setTierId(cached.tierId);
+      setApiLoading(false);
+      requestAnimationFrame(() => setRevealed(true));
+      return;
+    }
 
     const fetchData = async () => {
-      setApiLoading(true);
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
 
-      let viewerData: User | null = null;
-      if (user) {
-        viewerIdRef.current = user.id;
-        const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-        if (data) { viewerData = data as User; setViewer(viewerData); }
-      }
+      // Viewer + profile fire in parallel
+      // If globalViewer already in store, skip viewer fetch entirely
+      const viewerPromise = (globalViewer as any)
+        ? Promise.resolve(globalViewer as any as User)
+        : (async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return null;
+            const { data } = await supabase
+              .from("profiles")
+              .select("id, username, display_name, avatar_url, role")
+              .eq("id", user.id)
+              .single();
+            return (data as User) ?? null;
+          })();
 
-      const { data: profileData } = await supabase
+      const profilePromise = supabase
         .from("profiles")
         .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
-        .eq("username", username).single();
+        .eq("username", username)
+        .single();
 
-      let enriched: User | null = null;
-      let likesCount = 0;
+      const [viewerResult, profileResult] = await Promise.allSettled([
+        viewerPromise,
+        profilePromise,
+      ]);
+
+      const viewerData: User | null =
+        viewerResult.status === "fulfilled" ? viewerResult.value : null;
+      const profileRaw =
+        profileResult.status === "fulfilled" ? profileResult.value.data : null;
+
+      if (viewerData) {
+        setViewer(viewerData);
+        viewerIdRef.current = viewerData.id;
+      }
+
+      let enriched: User | null       = null;
+      let likesCount                  = 0;
       let tierIdVal: number | undefined;
-      let followingVal = false;
-      let subscribedVal = false;
+      let followingVal                = false;
+      let subscribedVal               = false;
       let periodEndVal: string | null = null;
+      let fetchedPosts: ApiPost[]     = [];
 
-      if (profileData) {
-        profileIdRef.current = profileData.id;
+      if (profileRaw) {
+        profileIdRef.current = profileRaw.id;
         enriched = {
-          ...(profileData as User),
-          subscriptionPrice: profileData.subscription_price ?? 0,
+          ...(profileRaw as User),
+          subscriptionPrice: profileRaw.subscription_price ?? 0,
           bundlePricing: {
-            threeMonths: profileData.bundle_price_3_months ?? undefined,
-            sixMonths:   profileData.bundle_price_6_months ?? undefined,
+            threeMonths: profileRaw.bundle_price_3_months ?? undefined,
+            sixMonths:   profileRaw.bundle_price_6_months ?? undefined,
           },
         };
         setProfile(enriched);
-        likesCount = profileData.likes_count ?? 0;
+        likesCount = profileRaw.likes_count ?? 0;
         setTotalLikes(likesCount);
 
-        if (profileData.role === "creator") {
-          const { data: tierData } = await supabase
-            .from("subscription_tiers").select("id").eq("creator_id", profileData.id).single();
-          if (tierData) { tierIdVal = tierData.id; setTierId(tierIdVal); }
+        const userId       = viewerData?.id ?? null;
+        const isOwnProfile = userId === profileRaw.id;
+        const isCreator    = profileRaw.role === "creator";
 
-          if (user && user.id !== profileData.id) {
-            const res  = await fetch(`/api/subscriptions/status?creatorId=${profileData.id}`);
-            const data = await res.json();
+        if (isCreator) {
+          const [tierRes, subRes, followRes, postsRes] = await Promise.allSettled([
+            supabase
+              .from("subscription_tiers")
+              .select("id")
+              .eq("creator_id", profileRaw.id)
+              .single(),
+            !isOwnProfile && userId
+              ? fetch(`/api/subscriptions/status?creatorId=${profileRaw.id}`)
+              : Promise.resolve(null),
+            !isOwnProfile && userId
+              ? checkIsFollowing(profileRaw.id)
+              : Promise.resolve(false),
+            fetch(`/api/posts/creator/${profileRaw.username}`),
+          ]);
+
+          if (tierRes.status === "fulfilled" && tierRes.value.data) {
+            tierIdVal = tierRes.value.data.id;
+            setTierId(tierIdVal);
+          }
+          if (subRes.status === "fulfilled" && subRes.value instanceof Response && subRes.value.ok) {
+            const data = await subRes.value.json();
             subscribedVal = !!data.active;
             periodEndVal  = data.currentPeriodEnd ?? null;
             setIsSubscribed(subscribedVal);
             setSubscriptionPeriodEnd(periodEndVal);
-            followingVal = await checkIsFollowing(profileData.id);
+          }
+          if (followRes.status === "fulfilled") {
+            followingVal = followRes.value as boolean;
             setIsFollowing(followingVal);
           }
+          if (postsRes.status === "fulfilled" && postsRes.value instanceof Response && postsRes.value.ok) {
+            const data = await postsRes.value.json();
+            fetchedPosts = data.posts || [];
+            setApiPosts(fetchedPosts);
+          }
+        } else {
+          try {
+            const res  = await fetch(`/api/posts/creator/${profileRaw.username}`);
+            const data = await res.json();
+            if (res.ok) { fetchedPosts = data.posts || []; setApiPosts(fetchedPosts); }
+          } catch { /* non-fatal */ }
         }
-      }
-
-      let fetchedPosts: ApiPost[] = [];
-      if (enriched?.username) {
-        try {
-          const res  = await fetch(`/api/posts/creator/${enriched.username}`);
-          const data = await res.json();
-          if (res.ok) { fetchedPosts = data.posts || []; setApiPosts(fetchedPosts); }
-        } catch { /* non-fatal */ }
       }
 
       setStoreProfile(username, {
@@ -197,16 +230,14 @@ export default function ProfilePage() {
       });
 
       setApiLoading(false);
-      setImgLoading(true);
-      const urlsToPreload = collectProfileImageUrls(enriched, fetchedPosts as any, 6);
-      await preloadImages(urlsToPreload);
-      setImgLoading(false);
       requestAnimationFrame(() => setRevealed(true));
     };
 
     fetchData();
-  }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username]);
 
+  // ── Realtime channels ─────────────────────────────────────────────────────
   React.useEffect(() => {
     if (!profileIdRef.current || !viewerIdRef.current) return;
     const supabase  = createClient();
@@ -215,7 +246,10 @@ export default function ProfilePage() {
 
     const subscriptionChannel = supabase
       .channel(`sub-status-${creatorId}-${fanId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "subscriptions", filter: `fan_id=eq.${fanId}` }, (payload: any) => {
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "subscriptions",
+        filter: `fan_id=eq.${fanId}`,
+      }, (payload: any) => {
         const row = payload.new;
         if (row?.creator_id === creatorId && row?.status === "active") {
           setIsSubscribed(true);
@@ -231,9 +265,15 @@ export default function ProfilePage() {
 
     const profileChannel = supabase
       .channel(`creator-profile-${creatorId}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${creatorId}` }, (payload: any) => {
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "profiles",
+        filter: `id=eq.${creatorId}`,
+      }, (payload: any) => {
         const updated = payload.new;
-        setProfile((prev) => prev ? { ...prev, subscriber_count: updated.subscriber_count, likes_count: updated.likes_count } : prev);
+        setProfile((prev) => prev
+          ? { ...prev, subscriber_count: updated.subscriber_count, likes_count: updated.likes_count }
+          : prev
+        );
         setTotalLikes(updated.likes_count ?? 0);
       })
       .subscribe();
@@ -242,13 +282,14 @@ export default function ProfilePage() {
       supabase.removeChannel(subscriptionChannel);
       supabase.removeChannel(profileChannel);
     };
-  }, [apiLoading, username]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username]);
 
   const handleSubscriptionSuccess = React.useCallback(async () => {
     setCheckoutOpen(false);
     clearProfile(username);
     if (profile) await fetchSubscriptionStatus(profile.id);
-  }, [profile, fetchSubscriptionStatus, username]);
+  }, [profile, fetchSubscriptionStatus, username, clearProfile]);
 
   const handleFollow = async () => {
     if (!profile || followLoading) return;
@@ -332,9 +373,9 @@ export default function ProfilePage() {
 
   return (
     <>
-      {showSkeleton && <ProfileSkeleton context={skeletonContext} />}
+      {apiLoading && <ProfileSkeleton context={skeletonContext} />}
 
-      {!showSkeleton && (
+      {!apiLoading && (
         <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
 
           {/* 1. CREATOR VIEWING OWN PROFILE */}
@@ -363,7 +404,7 @@ export default function ProfilePage() {
                 <PostComposer user={profile} onPost={handlePost} onSchedule={handleSchedule} />
               </div>
               <ContentFeed
-                posts={posts} isSubscribed={true} isOwnProfile={true}
+                posts={[]} isSubscribed={true} isOwnProfile={true}
                 creatorUsername={profile.username} initialApiPosts={apiPosts}
                 onLike={handleLike} onComment={handleComment} onTip={handleTip} onUnlock={handleUnlock}
               />
@@ -393,7 +434,7 @@ export default function ProfilePage() {
                 <ProfileInfo {...profileInfoProps} mode="full" isEditable={true} />
               </div>
               <ContentFeed
-                posts={posts} isSubscribed={true} creatorUsername={profile.username}
+                posts={[]} isSubscribed={true} creatorUsername={profile.username}
                 initialApiPosts={apiPosts} onLike={handleLike} onComment={handleComment}
                 onTip={handleTip} onUnlock={handleUnlock}
               />
@@ -439,7 +480,7 @@ export default function ProfilePage() {
                 />
               </div>
               <ContentFeed
-                posts={posts} isSubscribed={true} creatorUsername={profile.username}
+                posts={[]} isSubscribed={true} creatorUsername={profile.username}
                 initialApiPosts={apiPosts} onLike={handleLike} onComment={handleComment}
                 onTip={handleTip} onUnlock={handleUnlock}
               />
@@ -470,7 +511,7 @@ export default function ProfilePage() {
                 />
               </div>
               <ContentFeed
-                posts={posts} isSubscribed={false} creatorUsername={profile.username}
+                posts={[]} isSubscribed={false} creatorUsername={profile.username}
                 initialApiPosts={apiPosts} onLike={handleLike} onComment={handleComment}
                 onTip={handleTip} onUnlock={handleUnlock}
               />

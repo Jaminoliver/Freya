@@ -15,35 +15,51 @@ export function MobileBottomNav() {
       <style>{`
         .mobile-bottom-nav { display: flex !important; }
         @media (min-width: 768px) { .mobile-bottom-nav { display: none !important; } }
+
+        /* Fix #1 — account for safe-area by adding it on top of fixed height,
+           not inside it, so flex centering is never disturbed */
+        .mobile-bottom-nav {
+          height: calc(64px + env(safe-area-inset-bottom));
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* Fix #2 — ensure nav items always receive touch events */
+        .mobile-bottom-nav a,
+        .mobile-bottom-nav button {
+          -webkit-tap-highlight-color: transparent;
+          touch-action: manipulation;
+          user-select: none;
+        }
       `}</style>
 
       <nav
         className="mobile-bottom-nav"
         style={{
-          position: "fixed", bottom: 0, left: 0, right: 0, height: "64px",
+          position: "fixed", bottom: 0, left: 0, right: 0,
           backgroundColor: "#13131F", borderTop: "1px solid #1F1F2A",
-          zIndex: 101, fontFamily: "'Inter', sans-serif",
-          paddingBottom: "env(safe-area-inset-bottom)",
+          zIndex: 200, // raised above main scroll container
+          fontFamily: "'Inter', sans-serif",
           alignItems: "center", justifyContent: "space-evenly",
+          boxSizing: "border-box",
         }}
       >
         <Link
           href="/dashboard"
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === "/dashboard" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", height: "64px", minWidth: "48px", color: pathname === "/dashboard" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}
         >
           <Home size={22} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
-          <span style={{ fontSize: "10px" }}>Home</span>
+          <span style={{ fontSize: "10px", lineHeight: 1 }}>Home</span>
         </Link>
 
         <Link
           href="/messages"
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname === "/messages" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", height: "64px", minWidth: "48px", color: pathname === "/messages" ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}
         >
           <MessageCircle size={22} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
-          <span style={{ fontSize: "10px" }}>Messages</span>
+          <span style={{ fontSize: "10px", lineHeight: 1 }}>Messages</span>
         </Link>
 
-        {/* ＋ links to /create */}
+        {/* ＋ button */}
         <Link
           href="/create"
           style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#8B5CF6", textDecoration: "none", flexShrink: 0 }}
@@ -53,18 +69,18 @@ export function MobileBottomNav() {
 
         <Link
           href="/subscriptions"
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: pathname.startsWith("/subscriptions") ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", height: "64px", minWidth: "48px", color: pathname.startsWith("/subscriptions") ? "#8B5CF6" : "#6B6B8A", textDecoration: "none" }}
         >
           <CreditCard size={22} strokeWidth={pathname.startsWith("/subscriptions") ? 2.2 : 1.8} />
-          <span style={{ fontSize: "10px" }}>Subs</span>
+          <span style={{ fontSize: "10px", lineHeight: 1 }}>Subs</span>
         </Link>
 
         <button
           onClick={() => setMoreOpen(true)}
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", color: moreOpen ? "#8B5CF6" : "#6B6B8A", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: 0 }}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", height: "64px", minWidth: "48px", color: moreOpen ? "#8B5CF6" : "#6B6B8A", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: 0 }}
         >
           <MoreHorizontal size={22} strokeWidth={1.8} />
-          <span style={{ fontSize: "10px" }}>More</span>
+          <span style={{ fontSize: "10px", lineHeight: 1 }}>More</span>
         </button>
       </nav>
 

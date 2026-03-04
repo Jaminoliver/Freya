@@ -83,34 +83,6 @@ function adaptPost(p: FeedPost) {
   };
 }
 
-function preloadImages(urls: string[]): Promise<void[]> {
-  return Promise.all(
-    urls.map(
-      (url) =>
-        new Promise<void>((resolve) => {
-          if (!url) { resolve(); return; }
-          const img = new Image();
-          img.onload  = () => resolve();
-          img.onerror = () => resolve();
-          img.src = url;
-        })
-    )
-  );
-}
-
-function collectFirstMediaUrls(posts: FeedPost[], n: number): string[] {
-  const urls: string[] = [];
-  for (const post of posts) {
-    if (urls.length >= n) break;
-    for (const m of post.media ?? []) {
-      if (urls.length >= n) break;
-      const url = m.thumbnail_url || m.file_url;
-      if (url) urls.push(url);
-    }
-  }
-  return urls;
-}
-
 // ── sessionStorage helpers ──────────────────────────────────────────────────
 function saveScroll(y: number) {
   try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {}
@@ -129,21 +101,19 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<"feed" | "spotlight">("feed");
   const { feed, setFeed, updateFeedPost } = useAppStore();
 
-  const [posts,       setPosts]       = useState(feed?.posts ?? []);
+  const [posts,       setPosts]       = useState<FeedPost[]>(feed?.posts ?? []);
   const [apiLoading,  setApiLoading]  = useState(!feed || isStale(feed.fetchedAt));
-  const [imgLoading,  setImgLoading]  = useState(false);
   const [revealed,    setRevealed]    = useState(!!feed && !isStale(feed.fetchedAt));
   const [nextCursor,  setNextCursor]  = useState<string | null>(feed?.nextCursor ?? null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error,       setError]       = useState<string | null>(null);
 
-  // Per-post carousel slide indices  { postId: slideIndex }
   const [slideMap, setSlideMap] = useState<Record<string, number>>(loadSlides);
 
   const scrollRestoredRef = useRef(false);
-  const showSkeleton = apiLoading || imgLoading;
+  const showSkeleton = apiLoading;
 
-  // ── Save scroll on scroll + right before navigation ────────────────────
+  // ── Save scroll ───────────────────────────────────────────────────────────
   useEffect(() => {
     const onScroll = () => saveScroll(window.scrollY);
     const onHide   = () => saveScroll(window.scrollY);
@@ -158,20 +128,19 @@ export default function HomePage() {
     };
   }, []);
 
-  // ── Restore scroll after feed reveals ──────────────────────────────────
+  // ── Restore scroll after feed reveals ────────────────────────────────────
   useEffect(() => {
     if (!revealed || scrollRestoredRef.current) return;
     scrollRestoredRef.current = true;
     const saved = loadScroll();
     if (saved > 0) {
-      // setTimeout beats Next.js's own scroll-to-top which fires after paint
       setTimeout(() => {
         window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
       }, 80);
     }
   }, [revealed]);
 
-  // ── Carousel slide change handler ───────────────────────────────────────
+  // ── Carousel slide change ─────────────────────────────────────────────────
   const handleSlideChange = useCallback((postId: string, index: number) => {
     setSlideMap((prev) => {
       const next = { ...prev, [postId]: index };
@@ -179,6 +148,9 @@ export default function HomePage() {
       return next;
     });
   }, []);
+
+  const postsRef = useRef<FeedPost[]>(posts);
+  useEffect(() => { postsRef.current = posts; }, [posts]);
 
   const fetchFeed = useCallback(async (cursor?: string) => {
     try {
@@ -199,7 +171,7 @@ export default function HomePage() {
       });
 
       if (cursor) {
-        const updated = [...posts, ...merged];
+        const updated = [...postsRef.current, ...merged];
         setPosts(updated);
         setNextCursor(data.nextCursor);
         setFeed({ posts: updated, nextCursor: data.nextCursor, fetchedAt: Date.now() });
@@ -209,22 +181,15 @@ export default function HomePage() {
 
       setPosts(merged);
       setNextCursor(data.nextCursor);
-      setApiLoading(false);
-      setImgLoading(true);
-
-      const urls = collectFirstMediaUrls(merged, 6);
-      await preloadImages(urls);
-
       setFeed({ posts: merged, nextCursor: data.nextCursor, fetchedAt: Date.now() });
-      setImgLoading(false);
+      setApiLoading(false);
       requestAnimationFrame(() => setRevealed(true));
 
     } catch {
       setError("Failed to load feed");
       setApiLoading(false);
-      setImgLoading(false);
     }
-  }, [posts, setFeed]);
+  }, [setFeed]);
 
   useEffect(() => {
     if (feed && !isStale(feed.fetchedAt)) {
@@ -234,6 +199,7 @@ export default function HomePage() {
       return;
     }
     fetchFeed();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -264,21 +230,19 @@ export default function HomePage() {
         .feed-desktop-header { display: flex; }
         @media (max-width: 767px) { .feed-desktop-header { display: none !important; } }
 
-        @keyframes feedFadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        .feed-revealed {
-          animation: feedFadeIn 0.35s ease forwards;
-        }
+        /* Fix: sticky header must sit below the 56px fixed mobile topbar */
+        .feed-sticky-header { position: sticky; top: 0; z-index: 10; }
+        @media (max-width: 767px) { .feed-sticky-header { top: 56px; } }
+
+        @keyframes feedFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .feed-revealed { animation: feedFadeIn 0.35s ease forwards; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
       {/* Sticky header */}
-      <div style={{
-        position: "sticky", top: 0, zIndex: 10,
+      <div className="feed-sticky-header" style={{
         backgroundColor: "rgba(10,10,15,0.9)",
         backdropFilter: "blur(12px)",
-        borderBottom: "1px solid #1F1F2A",
         padding: "0 16px",
       }}>
         <div className="feed-desktop-header" style={{ alignItems: "center", padding: "14px 0 10px" }}>
@@ -359,7 +323,6 @@ export default function HomePage() {
                 {loadingMore && (
                   <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
                     <div style={{ width: "24px", height: "24px", borderRadius: "50%", border: "2px solid #1F1F2A", borderTop: "2px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
-                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                   </div>
                 )}
               </div>

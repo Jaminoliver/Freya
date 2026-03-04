@@ -43,23 +43,50 @@ interface Viewer {
   id: string; username: string; display_name: string; avatar_url: string;
 }
 
+// ── Module-level viewer cache — shared across ALL PostCard instances ─────────
+// Only one fetch ever fires regardless of how many cards are on screen
 let cachedViewer: Viewer | null = null;
+let viewerPromise: Promise<Viewer | null> | null = null;
+
+function fetchViewer(): Promise<Viewer | null> {
+  if (cachedViewer) return Promise.resolve(cachedViewer);
+  if (viewerPromise) return viewerPromise;
+
+  viewerPromise = (async () => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from("profiles")
+        .select("username, display_name, avatar_url")
+        .eq("id", user.id)
+        .single();
+      if (data) {
+        cachedViewer = {
+          id:           user.id,
+          username:     data.username,
+          display_name: data.display_name || data.username,
+          avatar_url:   data.avatar_url || "",
+        };
+        return cachedViewer;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      viewerPromise = null;
+    }
+  })();
+
+  return viewerPromise;
+}
 
 function useViewer() {
   const [viewer, setViewer] = useState<Viewer | null>(cachedViewer);
   useEffect(() => {
     if (cachedViewer) return;
-    (async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from("profiles").select("username, display_name, avatar_url").eq("id", user.id).single();
-      if (data) {
-        cachedViewer = { id: user.id, username: data.username, display_name: data.display_name || data.username, avatar_url: data.avatar_url || "" };
-        setViewer(cachedViewer);
-      }
-    })();
+    fetchViewer().then((v) => { if (v) setViewer(v); });
   }, []);
   return viewer;
 }
@@ -171,6 +198,11 @@ export function PostCard({
     onSlideChange?.(post.id, index);
   }, [post.id, onSlideChange]);
 
+  // ── Prefetch profile on hover ─────────────────────────────────────────────
+  const handleCreatorMouseEnter = useCallback(() => {
+    router.prefetch(`/${post.creator.username}`);
+  }, [router, post.creator.username]);
+
   const normalizedMedia: NormalizedMedia[] = post.media.map((m) => ({
     type:             m.type,
     url:              m.url,
@@ -197,7 +229,11 @@ export function PostCard({
 
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => router.push(`/${post.creator.username}`)}>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
+          onClick={() => router.push(`/${post.creator.username}`)}
+          onMouseEnter={handleCreatorMouseEnter}
+        >
           <img src={post.creator.avatar_url || ""} alt="" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>

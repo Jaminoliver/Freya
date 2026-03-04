@@ -4,18 +4,40 @@ import { signBunnyUrl } from "@/lib/utils/bunny";
 
 const PAGE_SIZE = 20;
 
-// Extract just the path from a stored Bunny URL (strips base + query params)
-// e.g. "https://freya-media-cdn.b-cdn.net/posts/abc/file.jpg?token=...&expires=..."
-// → "/posts/abc/file.jpg"
+const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
+
 function extractBunnyPath(url: string | null): string | null {
   if (!url) return null;
   try {
     const parsed = new URL(url);
-    return parsed.pathname; // e.g. "/posts/abc/file.jpg"
+    return parsed.pathname;
   } catch {
-    // Already a plain path
     return url.startsWith("/") ? url : `/${url}`;
   }
+}
+
+// Extract Bunny video ID from HLS playlist URL
+// e.g. https://iframe.mediadelivery.net/play/607042/some-uuid/playlist.m3u8 → some-uuid
+function extractBunnyVideoId(url: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/play\/\d+\/([a-f0-9-]{36})\/playlist\.m3u8/i);
+  return match ? match[1] : null;
+}
+
+function resolveVideoMedia(m: Record<string, unknown>) {
+  let bunnyVideoId = m.bunny_video_id as string | null;
+
+  // Recover video ID from HLS URL if missing in DB
+  if (!bunnyVideoId && m.media_type === "video") {
+    bunnyVideoId = extractBunnyVideoId(m.file_url as string | null);
+  }
+
+  // Derive correct thumbnail from video ID
+  const derivedThumb = bunnyVideoId
+    ? `https://${STREAM_CDN_HOST}/${bunnyVideoId}/thumbnail.jpg`
+    : null;
+
+  return { bunnyVideoId, derivedThumb };
 }
 
 export async function GET(req: NextRequest) {
@@ -92,16 +114,16 @@ export async function GET(req: NextRequest) {
 
     const postIds = (posts ?? []).map((p: { id: number }) => Number(p.id));
 
-    const { data: userLikes } = await service
-      .from("likes")
-      .select("post_id")
-      .eq("user_id", user.id)
-      .in("post_id", postIds);
+    // ── Fetch likes in parallel with post processing ──────────────────────
+    const likesPromise = postIds.length > 0
+      ? service
+          .from("likes")
+          .select("post_id")
+          .eq("user_id", user.id)
+          .in("post_id", postIds)
+      : Promise.resolve({ data: [] });
 
-    const likedSet = new Set((userLikes ?? []).map((l: { post_id: number | string }) => Number(l.post_id)));
-
-    const processed = (posts ?? [])
-      .filter((post: Record<string, unknown>) => {
+    const filteredPosts = (posts ?? []).filter((post: Record<string, unknown>) => {
         const mediaItems = post.media as Record<string, unknown>[] ?? [];
         const hasUnreadyVideo = mediaItems.some(
           (m) =>
@@ -110,8 +132,13 @@ export async function GET(req: NextRequest) {
             m.processing_status !== null
         );
         return !hasUnreadyVideo;
-      })
-      .map((post: Record<string, unknown>) => {
+      });
+
+    // ── Await likes now that post filtering is done ───────────────────────
+    const { data: userLikes } = await likesPromise;
+    const likedSet = new Set((userLikes ?? []).map((l: { post_id: number | string }) => Number(l.post_id)));
+
+    const processed = filteredPosts.map((post: Record<string, unknown>) => {
         const isPpv        = post.is_ppv as boolean;
         const isFree       = post.is_free as boolean;
         const isSubscribed = subscribedSet.has(post.creator_id as string);
@@ -122,21 +149,28 @@ export async function GET(req: NextRequest) {
             (a.display_order as number) - (b.display_order as number)
           )
           .map((m: Record<string, unknown>) => {
-            // Re-sign file_url fresh on every request (24h expiry)
-            const rawUrl  = m.file_url as string | null;
-            const path    = extractBunnyPath(rawUrl);
+            const rawUrl   = m.file_url as string | null;
+            const path     = extractBunnyPath(rawUrl);
             const freshUrl = canAccess && path ? signBunnyUrl(path) : null;
 
-            // Also re-sign thumbnail_url if present
-            const rawThumb    = m.thumbnail_url as string | null;
-            const thumbPath   = extractBunnyPath(rawThumb);
-            const freshThumb  = thumbPath ? signBunnyUrl(thumbPath) : null;
+            const { bunnyVideoId, derivedThumb } = resolveVideoMedia(m);
+
+            // For videos use derived thumbnail (real image), for images sign the stored thumbnail
+            let freshThumb: string | null = null;
+            if (m.media_type === "video") {
+              freshThumb = derivedThumb;
+            } else {
+              const rawThumb  = m.thumbnail_url as string | null;
+              const thumbPath = extractBunnyPath(rawThumb);
+              freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;
+            }
 
             return {
               ...m,
-              file_url:      freshUrl,
-              thumbnail_url: freshThumb,
-              locked:        !canAccess,
+              file_url:       freshUrl,
+              thumbnail_url:  freshThumb,
+              bunny_video_id: bunnyVideoId,
+              locked:         !canAccess,
             };
           });
 

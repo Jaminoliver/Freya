@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
-// Extract just the path from a stored Bunny URL (strips base + query params)
+const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
+
 function extractBunnyPath(url: string | null): string | null {
   if (!url) return null;
   try {
@@ -11,6 +12,26 @@ function extractBunnyPath(url: string | null): string | null {
   } catch {
     return url.startsWith("/") ? url : `/${url}`;
   }
+}
+
+function extractBunnyVideoId(url: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/play\/\d+\/([a-f0-9-]{36})\/playlist\.m3u8/i);
+  return match ? match[1] : null;
+}
+
+function resolveVideoMedia(m: Record<string, unknown>) {
+  let bunnyVideoId = m.bunny_video_id as string | null;
+
+  if (!bunnyVideoId && m.media_type === "video") {
+    bunnyVideoId = extractBunnyVideoId(m.file_url as string | null);
+  }
+
+  const derivedThumb = bunnyVideoId
+    ? `https://${STREAM_CDN_HOST}/${bunnyVideoId}/thumbnail.jpg`
+    : null;
+
+  return { bunnyVideoId, derivedThumb };
 }
 
 export async function GET(
@@ -72,7 +93,6 @@ export async function GET(
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    // Determine access
     let canAccess = post.is_free;
 
     if (user && !canAccess) {
@@ -110,22 +130,27 @@ export async function GET(
         (a.display_order as number) - (b.display_order as number)
       )
       .map((m: Record<string, unknown>) => {
-        // Re-sign file_url fresh on every request (24h expiry)
         const rawUrl   = m.file_url as string | null;
         const path     = extractBunnyPath(rawUrl);
         const freshUrl = canAccess && path ? signBunnyUrl(path) : null;
 
-        // Re-sign thumbnail_url if present
-        const rawThumb   = m.thumbnail_url as string | null;
-        const thumbPath  = extractBunnyPath(rawThumb);
-        const freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;
+        const { bunnyVideoId, derivedThumb } = resolveVideoMedia(m);
+
+        let freshThumb: string | null = null;
+        if (m.media_type === "video") {
+          freshThumb = derivedThumb;
+        } else {
+          const rawThumb  = m.thumbnail_url as string | null;
+          const thumbPath = extractBunnyPath(rawThumb);
+          freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;
+        }
 
         return {
           ...m,
           file_url:          freshUrl,
           thumbnail_url:     freshThumb,
+          bunny_video_id:    bunnyVideoId,
           raw_video_url:     canAccess ? m.raw_video_url : null,
-          bunny_video_id:    canAccess ? m.bunny_video_id : null,
           processing_status: m.processing_status,
           locked:            !canAccess,
         };

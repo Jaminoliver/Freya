@@ -27,7 +27,6 @@ interface PostMediaViewerProps {
 }
 
 // ── In-memory cache so ratio is known instantly on re-mount ─────────────────
-// Stores exact ratio string e.g. "720/1280" for perfect container fit
 const ratioCache = new Map<string, string>();
 
 function useThumbAspectRatio(src: string | undefined): string | null {
@@ -107,7 +106,6 @@ export default function PostMediaViewer({
     const isPortrait  = h > w;
     const containerAR = aspectRatio ?? "16/9";
     const blurSrc     = first.thumbnailUrl ?? (first.bunnyVideoId ? getBunnyThumbnail(first.bunnyVideoId) : undefined);
-    // Pass bucketed ratio to VideoPlayer which still expects "9/16" | "16/9" | "1/1"
     const bucketedRatio = isPortrait ? "9/16" : (w === h ? "1/1" : "16/9") as "9/16" | "16/9" | "1/1";
 
     return (
@@ -118,8 +116,8 @@ export default function PostMediaViewer({
           maxHeight: isPortrait ? "min(80svh, 600px)" : "520px",
           overflow: "hidden", backgroundColor: "#000",
         }}>
-          {/* Side blur for portrait videos */}
-          {isPortrait && blurSrc && (
+          {/* Side blur — always render when blurSrc exists */}
+          {blurSrc && (
             <>
               <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${blurSrc})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.5)", transform: "scaleX(1.3)", opacity: 0.9, zIndex: 1 }} />
               <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${blurSrc})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.5)", transform: "scaleX(1.3)", opacity: 0.9, zIndex: 1 }} />
@@ -132,7 +130,7 @@ export default function PostMediaViewer({
             rawVideoUrl={first.rawVideoUrl ?? null}
             fillParent={true}
             aspectRatio={bucketedRatio}
-            hideInternalBlur={isPortrait}
+            hideInternalBlur={true}
           />
         </div>
       </DoubleTapLike>

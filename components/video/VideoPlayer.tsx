@@ -166,8 +166,8 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
 
       <div ref={containerRef} style={containerStyle}>
 
-        {/* Blurred background — portrait only */}
-        {isPortrait && !hideInternalBlur && (
+        {/* Blurred background — always show unless hidden by parent */}
+        {!hideInternalBlur && (
           <img src={posterSrc} alt="" aria-hidden onError={() => setPosterError(true)}
             style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.4)", transform: "scale(1.1)", zIndex: 1 }}
           />

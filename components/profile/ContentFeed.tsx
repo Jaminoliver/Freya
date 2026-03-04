@@ -10,6 +10,7 @@ import Lightbox from "@/components/profile/Lightbox";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import { useUpload } from "@/lib/context/UploadContext";
+import { useAppStore } from "@/lib/store/appStore";
 
 export interface ContentFeedProps {
   posts: Post[];
@@ -17,7 +18,7 @@ export interface ContentFeedProps {
   isOwnProfile?: boolean;
   creatorUsername?: string;
   creatorId?: string;
-  initialApiPosts?: ApiPost[]; // passed from ProfilePage — skips internal fetch
+  initialApiPosts?: ApiPost[];
   onLike?: (postId: string) => void;
   onComment?: (postId: string) => void;
   onTip?: (postId: string) => void;
@@ -121,26 +122,29 @@ export default function ContentFeed({
   const router = useRouter();
   const { uploads } = useUpload();
 
+  // ── Use globalViewer from store — no Supabase call needed ─────────────────
+  const globalViewer = useAppStore((s) => s.viewer);
+  const viewer = globalViewer
+    ? { id: globalViewer.id, username: globalViewer.username, display_name: globalViewer.display_name, avatar_url: globalViewer.avatar_url }
+    : null;
+
   const cacheKey = creatorUsername ?? "default";
   const cached   = feedLayoutCache.get(cacheKey);
 
   const [activeTab,       setActiveTab]       = React.useState(cached?.activeTab ?? "posts");
 
-  // If ProfilePage already fetched posts, seed state directly — no spinner needed
-  const cachedPosts    = feedPostsCache.get(cacheKey);
-  const seedPosts      = initialApiPosts ?? cachedPosts?.posts ?? [];
-  const seedMedia      = cachedPosts?.media ?? (initialApiPosts ? buildMediaFromPosts(initialApiPosts) : []);
+  const cachedPosts = feedPostsCache.get(cacheKey);
+  const seedPosts   = initialApiPosts ?? cachedPosts?.posts ?? [];
+  const seedMedia   = cachedPosts?.media ?? (initialApiPosts ? buildMediaFromPosts(initialApiPosts) : []);
 
   const [apiPosts,        setApiPosts]        = React.useState<ApiPost[]>(seedPosts);
   const [apiMedia,        setApiMedia]        = React.useState<ApiMedia[]>(seedMedia);
-  // Only show internal loading spinner when we have no data at all and must fetch ourselves
   const [loading,         setLoading]         = React.useState(!initialApiPosts && !cachedPosts);
   const [mediaFilter,     setMediaFilter]     = React.useState<"all" | "photo" | "video">("all");
   const [isPostsGridView, setIsPostsGridView] = React.useState(cached?.isPostsGridView ?? false);
   const [isMediaGridView, setIsMediaGridView] = React.useState(cached?.isMediaGridView ?? true);
   const [showSearch,      setShowSearch]      = React.useState(false);
   const [searchQuery,     setSearchQuery]     = React.useState("");
-  const [viewer,          setViewer]          = React.useState<{ id: string; username: string; display_name: string; avatar_url: string } | null>(null);
   const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
 
@@ -163,20 +167,28 @@ export default function ContentFeed({
     [apiPosts]
   );
 
-  React.useEffect(() => {
-    (async () => {
-      const { createClient } = await import("@/lib/supabase/client");
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase.from("profiles").select("username, display_name, avatar_url").eq("id", user.id).single();
-      if (data) setViewer({ id: user.id, username: data.username, display_name: data.display_name || data.username, avatar_url: data.avatar_url || "" });
-    })();
-  }, []);
+  // ── O(1) post lookup map for media grid — replaces O(n²) apiPosts.find() ─
+  const postById = React.useMemo(
+    () => new Map(apiPosts.map((p) => [p.id, p])),
+    [apiPosts]
+  );
+
+  // ── Memoized filtered lists — not recomputed on every render ─────────────
+  const filteredPosts = React.useMemo(
+    () => apiPosts.filter((p) => searchQuery ? p.caption?.toLowerCase().includes(searchQuery.toLowerCase()) : true),
+    [apiPosts, searchQuery]
+  );
+
+  const filteredMedia = React.useMemo(
+    () => apiMedia.filter((m) => mediaFilter === "all" ? true : mediaFilter === "photo" ? m.media_type !== "video" : m.media_type === "video"),
+    [apiMedia, mediaFilter]
+  );
+
+  const photoCount = React.useMemo(() => apiMedia.filter((m) => m.media_type !== "video").length, [apiMedia]);
+  const videoCount = React.useMemo(() => apiMedia.filter((m) => m.media_type === "video").length,  [apiMedia]);
 
   const fetchPosts = React.useCallback(async (force = false) => {
     if (!creatorUsername) return;
-    // Skip fetch if ProfilePage already provided posts and no force refresh
     if (!force && (feedPostsCache.has(cacheKey) || initialApiPosts)) return;
     setLoading(true);
     try {
@@ -218,11 +230,6 @@ export default function ContentFeed({
     setLightboxPost(p);
   };
 
-  const filteredPosts = apiPosts.filter((p) => searchQuery ? p.caption?.toLowerCase().includes(searchQuery.toLowerCase()) : true);
-  const filteredMedia = apiMedia.filter((m) => mediaFilter === "all" ? true : mediaFilter === "photo" ? m.media_type !== "video" : m.media_type === "video");
-  const photoCount    = apiMedia.filter((m) => m.media_type !== "video").length;
-  const videoCount    = apiMedia.filter((m) => m.media_type === "video").length;
-
   return (
     <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
       {lightboxPost && (
@@ -244,8 +251,8 @@ export default function ContentFeed({
 
       {loading && (
         <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <div style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid #1F1F2A", borderTop: "2px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <div style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid #1F1F2A", borderTop: "2px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
         </div>
       )}
 
@@ -353,7 +360,8 @@ export default function ContentFeed({
                 const thumb = item.media_type === "video" && item.bunny_video_id
                   ? getBunnyThumbnail(item.bunny_video_id)
                   : (item.thumbnail_url || item.file_url || undefined);
-                const parentPost = apiPosts.find((p) => p.id === item.post_id);
+                // ── O(1) lookup via map instead of O(n) find ─────────────
+                const parentPost = postById.get(item.post_id);
                 return (
                   <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
                     {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
@@ -373,7 +381,8 @@ export default function ContentFeed({
                 const thumb = item.media_type === "video" && item.bunny_video_id
                   ? getBunnyThumbnail(item.bunny_video_id)
                   : (item.thumbnail_url || item.file_url || undefined);
-                const parentPost = apiPosts.find((p) => p.id === item.post_id);
+                // ── O(1) lookup via map ───────────────────────────────────
+                const parentPost = postById.get(item.post_id);
                 return (
                   <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ borderBottom: "1px solid #1A1A2E", cursor: "pointer" }}>
                     <div style={{ position: "relative" }}>

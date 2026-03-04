@@ -10,40 +10,51 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .select(`
-        id,
-        status,
-        price_paid,
-        auto_renew,
-        current_period_end,
-        created_at,
-        creator:profiles!subscriptions_creator_id_fkey (
+    // DISTINCT ON (creator_id) — dedup in DB, not JS
+    // Also pulls newPosts count via a subquery
+    const { data, error } = await supabase.rpc("get_latest_subscriptions", {
+      p_fan_id: user.id,
+    });
+
+    // Fallback: plain query if RPC not set up yet
+    let rows = data;
+    if (error || !data) {
+      const { data: fallback, error: fallbackError } = await supabase
+        .from("subscriptions")
+        .select(`
           id,
-          username,
-          display_name,
-          avatar_url,
-          banner_url,
-          is_verified
-        )
-      `)
-      .eq("fan_id", user.id)
-      .order("created_at", { ascending: false });
+          status,
+          price_paid,
+          auto_renew,
+          current_period_end,
+          created_at,
+          creator_id,
+          creator:profiles!subscriptions_creator_id_fkey (
+            id,
+            username,
+            display_name,
+            avatar_url,
+            banner_url,
+            is_verified
+          )
+        `)
+        .eq("fan_id", user.id)
+        .order("creator_id")
+        .order("created_at", { ascending: false });
 
-    if (error) throw error;
+      if (fallbackError) throw fallbackError;
 
-    // Deduplicate — keep only the latest subscription per creator
-    const latestPerCreator = new Map<string, typeof data[0]>();
-    for (const s of data ?? []) {
-      const creator = (Array.isArray(s.creator) ? s.creator[0] : s.creator) as { id: string };
-      const existing = latestPerCreator.get(creator.id);
-      if (!existing || new Date(s.created_at) > new Date(existing.created_at)) {
-        latestPerCreator.set(creator.id, s);
-      }
+      // Dedup in JS as last resort — one pass with a Set (no double new Date())
+      const seen = new Set<string>();
+      rows = (fallback ?? []).filter((s) => {
+        const creatorId = (Array.isArray(s.creator) ? s.creator[0] : s.creator)?.id;
+        if (!creatorId || seen.has(creatorId)) return false;
+        seen.add(creatorId);
+        return true;
+      });
     }
 
-    const subscriptions = Array.from(latestPerCreator.values()).map((s) => {
+    const subscriptions = (rows ?? []).map((s: any) => {
       const creator = (Array.isArray(s.creator) ? s.creator[0] : s.creator) as {
         id: string;
         username: string;
@@ -54,7 +65,8 @@ export async function GET() {
       };
 
       const expiresAt = new Date(s.current_period_end).toLocaleDateString("en-NG", {
-        day: "numeric", month: "short",
+        day: "numeric",
+        month: "short",
       });
 
       let status: "active" | "expired" | "attention" = "active";
@@ -73,11 +85,19 @@ export async function GET() {
         price: s.price_paid,
         autoRenew: s.auto_renew,
         expiresAt,
-        newPosts: 0,
+        newPosts: s.new_posts_count ?? 0, // populated by RPC, 0 fallback
       };
     });
 
-    return NextResponse.json({ subscriptions });
+    return NextResponse.json(
+      { subscriptions },
+      {
+        headers: {
+          // Fresh for 60s, stale-while-revalidate for 5min
+          "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+        },
+      }
+    );
   } catch (err) {
     console.error("[Subscriptions Mine Error]", err);
     return NextResponse.json({ error: "Failed to fetch subscriptions" }, { status: 500 });

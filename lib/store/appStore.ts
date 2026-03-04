@@ -1,11 +1,69 @@
 import { create } from "zustand";
 import type { ApiPost } from "@/components/profile/PostRow";
 
-const STALE_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_MS         = 5 * 60 * 1000;
+const FEED_KEY         = "freya_feed_cache";
+const PROFILES_KEY     = "freya_profiles_cache";
+const CONTENT_FEEDS_KEY = "freya_content_feeds_cache"; // Fix #9
 
 export function isStale(fetchedAt: number | null): boolean {
   if (!fetchedAt) return true;
   return Date.now() - fetchedAt > STALE_MS;
+}
+
+// ── sessionStorage helpers ────────────────────────────────────
+
+function loadFeedFromStorage(): FeedEntry | null {
+  try {
+    const raw = sessionStorage.getItem(FEED_KEY);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as FeedEntry;
+    if (isStale(entry.fetchedAt)) { sessionStorage.removeItem(FEED_KEY); return null; }
+    return entry;
+  } catch { return null; }
+}
+
+function saveFeedToStorage(entry: FeedEntry) {
+  try { sessionStorage.setItem(FEED_KEY, JSON.stringify(entry)); } catch {}
+}
+
+function clearFeedFromStorage() {
+  try { sessionStorage.removeItem(FEED_KEY); } catch {}
+}
+
+function loadProfilesFromStorage(): Record<string, ProfileEntry> {
+  try {
+    const raw = sessionStorage.getItem(PROFILES_KEY);
+    if (!raw) return {};
+    const all = JSON.parse(raw) as Record<string, ProfileEntry>;
+    const fresh: Record<string, ProfileEntry> = {};
+    for (const [k, v] of Object.entries(all)) {
+      if (!isStale(v.fetchedAt)) fresh[k] = v;
+    }
+    return fresh;
+  } catch { return {}; }
+}
+
+function saveProfilesToStorage(profiles: Record<string, ProfileEntry>) {
+  try { sessionStorage.setItem(PROFILES_KEY, JSON.stringify(profiles)); } catch {}
+}
+
+// Fix #9 — persist contentFeeds so subscriptions survive refresh
+function loadContentFeedsFromStorage(): Record<string, ContentFeedEntry> {
+  try {
+    const raw = sessionStorage.getItem(CONTENT_FEEDS_KEY);
+    if (!raw) return {};
+    const all = JSON.parse(raw) as Record<string, ContentFeedEntry>;
+    const fresh: Record<string, ContentFeedEntry> = {};
+    for (const [k, v] of Object.entries(all)) {
+      if (!isStale(v.fetchedAt)) fresh[k] = v;
+    }
+    return fresh;
+  } catch { return {}; }
+}
+
+function saveContentFeedsToStorage(feeds: Record<string, ContentFeedEntry>) {
+  try { sessionStorage.setItem(CONTENT_FEEDS_KEY, JSON.stringify(feeds)); } catch {}
 }
 
 // ── Types ─────────────────────────────────────────────────────
@@ -19,7 +77,7 @@ export interface Viewer {
 }
 
 export interface FeedEntry {
-  posts: any[];         // raw FeedPost[]
+  posts: any[];
   nextCursor: string | null;
   fetchedAt: number;
 }
@@ -45,27 +103,23 @@ export interface ContentFeedEntry {
 // ── Store shape ───────────────────────────────────────────────
 
 interface AppStore {
-  // Viewer (logged-in user) — fetched once globally
   viewer: Viewer | null;
   viewerFetchedAt: number | null;
   setViewer: (viewer: Viewer | null) => void;
 
-  // Home feed
   feed: FeedEntry | null;
   setFeed: (entry: FeedEntry) => void;
   updateFeedPost: (postId: string, patch: Partial<any>) => void;
   clearFeed: () => void;
 
-  // Per-profile cache (keyed by username)
   profiles: Record<string, ProfileEntry>;
   setProfile: (username: string, entry: ProfileEntry) => void;
   updateProfile: (username: string, patch: Partial<ProfileEntry>) => void;
   clearProfile: (username: string) => void;
 
-  // Per-profile content feed cache (keyed by username)
   contentFeeds: Record<string, ContentFeedEntry>;
-  setContentFeed: (username: string, entry: ContentFeedEntry) => void;
-  clearContentFeed: (username: string) => void;
+  setContentFeed: (key: string, entry: ContentFeedEntry) => void;
+  clearContentFeed: (key: string) => void;
 }
 
 // ── Store ─────────────────────────────────────────────────────
@@ -77,49 +131,74 @@ export const useAppStore = create<AppStore>((set) => ({
   setViewer: (viewer) =>
     set({ viewer, viewerFetchedAt: viewer ? Date.now() : null }),
 
-  // Feed
-  feed: null,
-  setFeed: (entry) => set({ feed: entry }),
+  // Feed — hydrate from sessionStorage on first load
+  feed: loadFeedFromStorage(),
+
+  setFeed: (entry) => {
+    saveFeedToStorage(entry);
+    set({ feed: entry });
+  },
+
   updateFeedPost: (postId, patch) =>
     set((s) => {
       if (!s.feed) return s;
-      return {
-        feed: {
-          ...s.feed,
-          posts: s.feed.posts.map((p) =>
-            String(p.id) === postId ? { ...p, ...patch } : p
-          ),
-        },
-      };
+      const idx = s.feed.posts.findIndex((p) => String(p.id) === postId);
+      if (idx === -1) return s;
+      const posts = [...s.feed.posts];
+      posts[idx] = { ...posts[idx], ...patch };
+      const updated = { ...s.feed, posts };
+      saveFeedToStorage(updated);
+      return { feed: updated };
     }),
-  clearFeed: () => set({ feed: null }),
 
-  // Profiles
-  profiles: {},
+  clearFeed: () => {
+    clearFeedFromStorage();
+    set({ feed: null });
+  },
+
+  // Profiles — hydrate from sessionStorage on first load
+  profiles: loadProfilesFromStorage(),
+
   setProfile: (username, entry) =>
-    set((s) => ({ profiles: { ...s.profiles, [username]: entry } })),
+    set((s) => {
+      const profiles = { ...s.profiles, [username]: entry };
+      saveProfilesToStorage(profiles);
+      return { profiles };
+    }),
+
   updateProfile: (username, patch) =>
-    set((s) => ({
-      profiles: {
+    set((s) => {
+      const profiles = {
         ...s.profiles,
         [username]: { ...s.profiles[username], ...patch },
-      },
-    })),
+      };
+      saveProfilesToStorage(profiles);
+      return { profiles };
+    }),
+
   clearProfile: (username) =>
     set((s) => {
       const profiles = { ...s.profiles };
       delete profiles[username];
+      saveProfilesToStorage(profiles);
       return { profiles };
     }),
 
-  // Content feeds
-  contentFeeds: {},
-  setContentFeed: (username, entry) =>
-    set((s) => ({ contentFeeds: { ...s.contentFeeds, [username]: entry } })),
-  clearContentFeed: (username) =>
+  // Fix #9 — contentFeeds now hydrated from + saved to sessionStorage
+  contentFeeds: loadContentFeedsFromStorage(),
+
+  setContentFeed: (key, entry) =>
+    set((s) => {
+      const contentFeeds = { ...s.contentFeeds, [key]: entry };
+      saveContentFeedsToStorage(contentFeeds);
+      return { contentFeeds };
+    }),
+
+  clearContentFeed: (key) =>
     set((s) => {
       const contentFeeds = { ...s.contentFeeds };
-      delete contentFeeds[username];
+      delete contentFeeds[key];
+      saveContentFeedsToStorage(contentFeeds);
       return { contentFeeds };
     }),
 }));

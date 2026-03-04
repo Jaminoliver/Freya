@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { MoreHorizontal, BadgeCheck, Star, MessageCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
 
 type SubscriptionStatus = "active" | "expired" | "attention";
 
@@ -44,16 +46,18 @@ export function SubscriptionList({
 }) {
   const [filter, setFilter] = useState("all");
 
-  const counts = {
+  // Fix #8 — memoize counts so they don't recalculate every render
+  const counts = useMemo(() => ({
     all:       subscriptions.length,
     active:    subscriptions.filter((s) => s.status === "active").length,
     expired:   subscriptions.filter((s) => s.status === "expired").length,
     attention: subscriptions.filter((s) => s.status === "attention").length,
-  };
+  }), [subscriptions]);
 
-  const filtered = filter === "all"
-    ? subscriptions
-    : subscriptions.filter((s) => s.status === filter);
+  const filtered = useMemo(
+    () => filter === "all" ? subscriptions : subscriptions.filter((s) => s.status === filter),
+    [subscriptions, filter]
+  );
 
   if (subscriptions.length === 0) {
     return (
@@ -89,12 +93,8 @@ export function SubscriptionCard({
   onCancelled?: () => void;
 }) {
   const router = useRouter();
-  const [menuOpen,    setMenuOpen]    = useState(false);
-  const [cancelling,  setCancelling]  = useState(false);
-
-  const coverBg = s.banner_url
-    ? `url(${s.banner_url}) center/cover no-repeat`
-    : "linear-gradient(135deg, #1C1C2E, #2A2A3D)";
+  const [menuOpen,   setMenuOpen]   = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const handleCancel = async () => {
     if (!confirm("Cancel subscription? You'll keep access until the period ends.")) return;
@@ -115,12 +115,27 @@ export function SubscriptionCard({
   return (
     <div style={{ backgroundColor: "transparent", borderRadius: "12px", overflow: "hidden", fontFamily: "'Inter', sans-serif", position: "relative" }}>
 
-      {/* Banner cover */}
-      <div
-        onClick={() => router.push(`/${s.username}`)}
-        style={{ position: "relative", height: "160px", background: coverBg, cursor: "pointer" }}
+      {/* Banner cover — Fix #5: Next Image, Fix #7: Link with prefetch */}
+      <Link
+        href={`/${s.username}`}
+        prefetch
+        style={{ display: "block", position: "relative", height: "160px", cursor: "pointer", textDecoration: "none" }}
       >
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.65) 100%)" }} />
+        {/* Banner */}
+        {s.banner_url ? (
+          <Image
+            src={s.banner_url}
+            alt={s.creatorName}
+            fill
+            sizes="(max-width: 768px) 100vw, 320px"
+            style={{ objectFit: "cover" }}
+            priority={false}
+          />
+        ) : (
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #1C1C2E, #2A2A3D)" }} />
+        )}
+
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.65) 100%)", zIndex: 1 }} />
 
         {/* Top badges */}
         <div style={{ position: "absolute", top: "10px", left: "10px", display: "flex", gap: "6px", zIndex: 2 }}>
@@ -137,14 +152,14 @@ export function SubscriptionCard({
           <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: STATUS_COLOR[s.status], boxShadow: `0 0 6px ${STATUS_COLOR[s.status]}` }} />
           <div style={{ position: "relative" }}>
             <button
-              onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen((v) => !v); }}
               style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}
             >
               <MoreHorizontal size={14} />
             </button>
             {menuOpen && (
               <div
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 style={{ position: "absolute", top: "34px", right: 0, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "8px", overflow: "hidden", minWidth: "140px", zIndex: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
               >
                 {s.status === "active" && (
@@ -157,7 +172,7 @@ export function SubscriptionCard({
                   </button>
                 )}
                 <button
-                  onClick={() => setMenuOpen(false)}
+                  onClick={(e) => { e.preventDefault(); setMenuOpen(false); }}
                   style={{ width: "100%", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 500, color: "#94A3B8", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
                 >
                   Close
@@ -167,13 +182,23 @@ export function SubscriptionCard({
           </div>
         </div>
 
-        {/* Avatar + name */}
+        {/* Avatar + name — Fix #6: no pravatar fallback, use initials div instead */}
         <div style={{ position: "absolute", bottom: "12px", left: "12px", display: "flex", alignItems: "center", gap: "10px", zIndex: 2 }}>
-          <img
-            src={s.avatar_url ?? `https://i.pravatar.cc/150?u=${s.username}`}
-            alt={s.creatorName}
-            style={{ width: "72px", height: "72px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.9)", objectFit: "cover", flexShrink: 0 }}
-          />
+          <div style={{ position: "relative", width: "72px", height: "72px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.9)", overflow: "hidden", flexShrink: 0, backgroundColor: "#2A2A3D" }}>
+            {s.avatar_url ? (
+              <Image
+                src={s.avatar_url}
+                alt={s.creatorName}
+                fill
+                sizes="72px"
+                style={{ objectFit: "cover" }}
+              />
+            ) : (
+              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", fontWeight: 700, color: "#8B5CF6" }}>
+                {s.creatorName.charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <span style={{ fontSize: "15px", fontWeight: 700, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>{s.creatorName}</span>
@@ -185,14 +210,14 @@ export function SubscriptionCard({
 
         {/* Favorite + Message icons */}
         <div style={{ position: "absolute", bottom: "12px", right: "12px", display: "flex", gap: "8px", zIndex: 2 }}>
-          <button onClick={(e) => e.stopPropagation()} style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Star size={15} strokeWidth={1.6} />
           </button>
-          <button onClick={(e) => e.stopPropagation()} style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <MessageCircle size={15} strokeWidth={1.6} />
           </button>
         </div>
-      </div>
+      </Link>
 
       {/* Divider */}
       <div style={{ height: "1px", backgroundColor: "#1E1E2E", margin: "0 4px" }} />
@@ -210,10 +235,11 @@ export function SubscriptionCard({
             </>
           ) : (
             <>
-              <button
-                onClick={() => router.push(`/${s.username}`)}
-                style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "none", backgroundColor: "#8B5CF6", color: "#fff", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
-              >Resubscribe</button>
+              <Link
+                href={`/${s.username}`}
+                prefetch
+                style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "none", backgroundColor: "#8B5CF6", color: "#fff", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >Resubscribe</Link>
               <button style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#94A3B8", fontSize: "11px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>For free</button>
             </>
           )}
