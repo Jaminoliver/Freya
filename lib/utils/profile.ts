@@ -13,24 +13,36 @@ export function formatCount(count: number): string {
 export function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  const diff = date.getTime() - now.getTime();
+  const isFuture = diff > 0;
+  const diffInSeconds = Math.floor(Math.abs(diff) / 1000);
 
-  if (diffInSeconds < 60) return 'just now';
+  if (diffInSeconds < 60) return isFuture ? 'in a moment' : 'just now';
 
   const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) return `${diffInMinutes} ${diffInMinutes === 1 ? 'minute' : 'minutes'} ago`;
+  if (diffInMinutes < 60) return isFuture
+    ? `in ${diffInMinutes} ${diffInMinutes === 1 ? 'minute' : 'minutes'}`
+    : `${diffInMinutes} ${diffInMinutes === 1 ? 'minute' : 'minutes'} ago`;
 
   const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) return `${diffInHours} ${diffInHours === 1 ? 'hour' : 'hours'} ago`;
+  if (diffInHours < 24) return isFuture
+    ? `in ${diffInHours} ${diffInHours === 1 ? 'hour' : 'hours'}`
+    : `${diffInHours} ${diffInHours === 1 ? 'hour' : 'hours'} ago`;
 
   const diffInDays = Math.floor(diffInHours / 24);
-  if (diffInDays < 30) return `${diffInDays} ${diffInDays === 1 ? 'day' : 'days'} ago`;
+  if (diffInDays < 30) return isFuture
+    ? `in ${diffInDays} ${diffInDays === 1 ? 'day' : 'days'}`
+    : `${diffInDays} ${diffInDays === 1 ? 'day' : 'days'} ago`;
 
   const diffInMonths = Math.floor(diffInDays / 30);
-  if (diffInMonths < 12) return `${diffInMonths} ${diffInMonths === 1 ? 'month' : 'months'} ago`;
+  if (diffInMonths < 12) return isFuture
+    ? `in ${diffInMonths} ${diffInMonths === 1 ? 'month' : 'months'}`
+    : `${diffInMonths} ${diffInMonths === 1 ? 'month' : 'months'} ago`;
 
   const diffInYears = Math.floor(diffInMonths / 12);
-  return `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`;
+  return isFuture
+    ? `in ${diffInYears} ${diffInYears === 1 ? 'year' : 'years'}`
+    : `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`;
 }
 
 export function formatDate(dateString: string): string {
@@ -62,8 +74,8 @@ export function isSubscribed(
 ): boolean {
   if (!subscription) return false;
   return (
-    subscription.subscriber_id === viewerId &&   // ✅ FIX 1: was subscriberId
-    subscription.creator_id === profileId &&      // ✅ FIX 2: was creatorId
+    subscription.subscriber_id === viewerId &&
+    subscription.creator_id === profileId &&
     subscription.status === 'active'
   );
 }
@@ -78,7 +90,7 @@ export function isValidUsername(username: string): boolean {
 }
 
 export function getDisplayName(user: User): string {
-  return user.display_name || `@${user.username}`;  // ✅ FIX 3: was displayName
+  return user.display_name || `@${user.username}`;
 }
 
 export function formatSubscriptionStatus(status: 'active' | 'expired' | 'cancelled'): string {

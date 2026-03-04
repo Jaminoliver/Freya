@@ -13,6 +13,7 @@ function parseDuration(duration: string | null | undefined): string | null {
   if (!days) return null;
   const d = new Date();
   d.setDate(d.getDate() + days);
+  d.setHours(23, 59, 59, 999);
   return d.toISOString();
 }
 
