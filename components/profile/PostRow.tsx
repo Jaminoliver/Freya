@@ -8,45 +8,49 @@ import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
+import { PollDisplay } from "@/components/feed/PollDisplay";
+import type { PollData } from "@/components/feed/PollDisplay";
 
 export interface ApiPost {
-  id: number;
+  id:           number;
   content_type: string;
-  caption: string | null;
-  is_free: boolean;
-  is_ppv: boolean;
-  ppv_price: number | null;
-  like_count: number;
+  caption:      string | null;
+  is_free:      boolean;
+  is_ppv:       boolean;
+  ppv_price:    number | null;
+  like_count:   number;
   comment_count: number;
   published_at: string;
-  liked: boolean;
-  can_access: boolean;
-  locked: boolean;
+  liked:        boolean;
+  can_access:   boolean;
+  locked:       boolean;
+  poll?:        PollData | null;
   profiles: {
-    username: string;
+    username:     string;
     display_name: string | null;
-    avatar_url: string | null;
-    is_verified: boolean;
+    avatar_url:   string | null;
+    is_verified:  boolean;
   };
   media: {
-    id: number;
-    media_type: string;
-    file_url: string | null;
-    thumbnail_url: string | null;
-    raw_video_url: string | null;
-    locked: boolean;
-    display_order: number;
+    id:                number;
+    media_type:        string;
+    file_url:          string | null;
+    thumbnail_url:     string | null;
+    raw_video_url:     string | null;
+    locked:            boolean;
+    display_order:     number;
     processing_status: string | null;
-    bunny_video_id: string | null;
-    width?: number | null;
-    height?: number | null;
+    bunny_video_id:    string | null;
+    width?:            number | null;
+    height?:           number | null;
   }[];
 }
 
+// ── Post menu ─────────────────────────────────────────────────────────────────
 function PostMenu({ onEdit, onDelete, onShare }: {
-  onEdit: () => void;
+  onEdit:   () => void;
   onDelete: () => void;
-  onShare: () => void;
+  onShare:  () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -92,38 +96,51 @@ function PostMenu({ onEdit, onDelete, onShare }: {
   );
 }
 
-export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onComment, onTip, onUnlock, viewer, onDelete, onImageClick }: {
-  post: ApiPost;
+// ── Main PostRow ──────────────────────────────────────────────────────────────
+export default function PostRow({
+  post,
+  isOwnProfile,
+  isSubscribed,
+  onLike,
+  onComment,
+  onTip,
+  onUnlock,
+  viewer,
+  onDelete,
+  onImageClick,
+}: {
+  post:          ApiPost;
   isOwnProfile?: boolean;
-  isSubscribed: boolean;
-  onLike?: (id: string) => void;
-  onComment?: (id: string) => void;
-  onTip?: (id: string) => void;
-  onUnlock?: (id: string) => void;
-  viewer: { id: string; username: string; display_name: string; avatar_url: string } | null;
-  onDelete?: (id: string) => void;
+  isSubscribed:  boolean;
+  onLike?:       (id: string) => void;
+  onComment?:    (id: string) => void;
+  onTip?:        (id: string) => void;
+  onUnlock?:     (id: string) => void;
+  viewer:        { id: string; username: string; display_name: string; avatar_url: string } | null;
+  onDelete?:     (id: string) => void;
   onImageClick?: (post: LightboxPost, index: number) => void;
 }) {
   const router = useRouter();
+
   const [commentOpen,  setCommentOpen]  = React.useState(false);
   const [liked,        setLiked]        = React.useState(post.liked);
   const [likeCount,    setLikeCount]    = React.useState(post.like_count);
   const [comments,     setComments]     = React.useState<any[]>([]);
   const [commentCount, setCommentCount] = React.useState(post.comment_count);
+  const [pollData,     setPollData]     = React.useState<PollData | null>(post.poll ?? null);
   const isLiking = React.useRef(false);
 
   const firstMedia = post.media?.[0];
 
-  // Build media array for PostMediaViewer
   const viewerMedia = React.useMemo(() => {
     if (!post.media?.length) return [];
     return post.media.map((m) => ({
-      type: m.media_type as "video" | "image",
-      url: m.file_url ?? null,
-      bunnyVideoId: m.bunny_video_id ?? null,
-      thumbnailUrl: m.thumbnail_url ?? null,
+      type:             m.media_type as "video" | "image",
+      url:              m.file_url ?? null,
+      bunnyVideoId:     m.bunny_video_id ?? null,
+      thumbnailUrl:     m.thumbnail_url ?? null,
       processingStatus: m.processing_status ?? null,
-      rawVideoUrl: m.raw_video_url ?? null,
+      rawVideoUrl:      m.raw_video_url ?? null,
     }));
   }, [post.media]);
 
@@ -131,7 +148,8 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
     setLiked(post.liked);
     setLikeCount(post.like_count);
     setCommentCount(post.comment_count);
-  }, [post.liked, post.like_count, post.comment_count]);
+    setPollData(post.poll ?? null);
+  }, [post.liked, post.like_count, post.comment_count, post.poll]);
 
   React.useEffect(() => {
     if (!commentOpen) return;
@@ -181,6 +199,9 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
     }
   };
 
+  const isTextPost = post.content_type === "text";
+  const isPollPost = post.content_type === "poll";
+
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E" }}>
       {/* Header */}
@@ -212,12 +233,33 @@ export default function PostRow({ post, isOwnProfile, isSubscribed, onLike, onCo
 
       {/* Caption */}
       {post.caption && (
-        <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0", padding: "0 16px 10px" }}>
+        <p style={{
+          fontSize:   isTextPost ? "15px" : "14px",
+          color:      "#C4C4D4",
+          lineHeight: isTextPost ? 1.7 : 1.6,
+          margin:     "0",
+          padding:    isTextPost ? "0 16px 14px" : "0 16px 10px",
+          whiteSpace: "pre-wrap",
+        }}>
           {post.caption}
         </p>
       )}
 
-      {/* Media */}
+      {/* Text post separator */}
+      {isTextPost && (
+        <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />
+      )}
+
+      {/* Poll */}
+      {isPollPost && pollData && (
+        <PollDisplay
+          poll={pollData}
+          postId={String(post.id)}
+          onVoted={(updated) => setPollData(updated)}
+        />
+      )}
+
+      {/* Media (photo/video only) */}
       {viewerMedia.length > 0 && (
         <PostMediaViewer
           media={viewerMedia}

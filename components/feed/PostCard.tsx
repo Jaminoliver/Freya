@@ -11,6 +11,8 @@ import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
 import { postSyncStore } from "@/lib/store/postSyncStore";
+import { PollDisplay } from "@/components/feed/PollDisplay";
+import type { PollData } from "@/components/feed/PollDisplay";
 
 interface MediaItem {
   type:              "image" | "video";
@@ -27,6 +29,7 @@ interface TaggedCreator {
 
 interface Post {
   id:              string;
+  content_type?:   string;
   creator:         { name: string; username: string; avatar_url: string; isVerified: boolean };
   timestamp:       string;
   caption:         string;
@@ -36,6 +39,7 @@ interface Post {
   likes:           number;
   comments:        number;
   liked:           boolean;
+  poll?:           PollData | null;
   taggedCreators?: TaggedCreator[];
 }
 
@@ -43,8 +47,6 @@ interface Viewer {
   id: string; username: string; display_name: string; avatar_url: string;
 }
 
-// ── Module-level viewer cache — shared across ALL PostCard instances ─────────
-// Only one fetch ever fires regardless of how many cards are on screen
 let cachedViewer: Viewer | null = null;
 let viewerPromise: Promise<Viewer | null> | null = null;
 
@@ -104,15 +106,16 @@ function toLightboxPost(post: Post): LightboxPost {
   };
 }
 
+// ── Main PostCard ─────────────────────────────────────────────────────────────
 export function PostCard({
   post,
   onLike,
   initialSlide = 0,
   onSlideChange,
 }: {
-  post: Post;
-  onLike?: (postId: string) => void;
-  initialSlide?: number;
+  post:           Post;
+  onLike?:        (postId: string) => void;
+  initialSlide?:  number;
   onSlideChange?: (postId: string, index: number) => void;
 }) {
   const router = useRouter();
@@ -126,6 +129,25 @@ export function PostCard({
   const [comments,         setComments]         = useState<any[]>([]);
   const [lightboxOpen,     setLightboxOpen]     = useState(false);
   const [lightboxMediaIdx, setLightboxMediaIdx] = useState(0);
+  const [pollData,         setPollData]         = useState<PollData | null>(post.poll ?? null);
+
+  const [timestamp, setTimestamp] = useState("");
+  useEffect(() => {
+    function getRelativeTime(dateStr: string): string {
+      const diff  = Date.now() - new Date(dateStr).getTime();
+      const mins  = Math.floor(diff / 60000);
+      const hours = Math.floor(diff / 3600000);
+      const days  = Math.floor(diff / 86400000);
+      if (mins  < 1)  return "just now";
+      if (mins  < 60) return `${mins}m ago`;
+      if (hours < 24) return `${hours}h ago`;
+      if (days  < 7)  return `${days}d ago`;
+      return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+    setTimestamp(getRelativeTime(post.timestamp));
+    const interval = setInterval(() => setTimestamp(getRelativeTime(post.timestamp)), 60000);
+    return () => clearInterval(interval);
+  }, [post.timestamp]);
 
   const isLiking   = useRef(false);
   const prevPostId = useRef(post.id);
@@ -136,8 +158,9 @@ export function PostCard({
       setLiked(post.liked);
       setLikeCount(post.likes);
       setCommentCount(post.comments);
+      setPollData(post.poll ?? null);
     }
-  }, [post.id, post.liked, post.likes, post.comments]);
+  }, [post.id, post.liked, post.likes, post.comments, post.poll]);
 
   useEffect(() => {
     if (!commentOpen) return;
@@ -198,7 +221,6 @@ export function PostCard({
     onSlideChange?.(post.id, index);
   }, [post.id, onSlideChange]);
 
-  // ── Prefetch profile on hover ─────────────────────────────────────────────
   const handleCreatorMouseEnter = useCallback(() => {
     router.prefetch(`/${post.creator.username}`);
   }, [router, post.creator.username]);
@@ -213,6 +235,9 @@ export function PostCard({
   }));
 
   const lightboxPost = toLightboxPost(post);
+
+  const isTextPost = post.content_type === "text";
+  const isPollPost = post.content_type === "poll";
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
@@ -244,7 +269,7 @@ export function PostCard({
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{post.timestamp}</span>
+          <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{timestamp}</span>
           <div style={{ position: "relative" }}>
             <button
               onClick={() => setMenuOpen(!menuOpen)}
@@ -275,33 +300,53 @@ export function PostCard({
 
       {/* Caption */}
       {post.caption && (
-        <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0", padding: "0 16px 10px" }}>
+        <p style={{
+          fontSize:   isTextPost ? "15px" : "14px",
+          color:      "#C4C4D4",
+          lineHeight: isTextPost ? 1.7 : 1.6,
+          margin:     "0",
+          padding:    isTextPost ? "0 16px 14px" : "0 16px 10px",
+          whiteSpace: "pre-wrap",
+        }}>
           {post.caption}
         </p>
       )}
 
+      {/* Text post separator */}
+      {isTextPost && (
+        <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />
+      )}
+
+      {/* Poll */}
+      {isPollPost && pollData && (
+        <PollDisplay
+          poll={pollData}
+          postId={post.id}
+          onVoted={(updated) => setPollData(updated)}
+        />
+      )}
+
       {/* Media */}
-      <PostMediaViewer
-        media={normalizedMedia}
-        isLocked={post.isLocked}
-        price={post.price}
-        onDoubleTap={handleDoubleTapLike}
-        onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
-        onUnlock={() => {}}
-        initialSlide={initialSlide}
-        onSlideChange={handleSlideChange}
-      />
+      {!isTextPost && !isPollPost && (
+        <PostMediaViewer
+          media={normalizedMedia}
+          isLocked={post.isLocked}
+          price={post.price}
+          onDoubleTap={handleDoubleTapLike}
+          onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
+          onUnlock={() => {}}
+          initialSlide={initialSlide}
+          onSlideChange={handleSlideChange}
+        />
+      )}
 
       {/* Tagged creators */}
       {post.taggedCreators && post.taggedCreators.length > 0 && (
-        <>
-          <style>{`.tagged-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; } @media (max-width: 480px) { .tagged-grid { grid-template-columns: 1fr !important; } }`}</style>
-          <div className="tagged-grid" style={{ padding: "0 16px" }}>
-            {post.taggedCreators.map((tc) => (
-              <TaggedCreatorCard key={tc.username} creator={tc} onClick={() => router.push(`/${tc.username}`)} />
-            ))}
-          </div>
-        </>
+        <div style={{ padding: "0 16px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "10px" }}>
+          {post.taggedCreators.map((tc) => (
+            <TaggedCreatorCard key={tc.username} creator={tc} onClick={() => router.push(`/${tc.username}`)} />
+          ))}
+        </div>
       )}
 
       {/* Actions */}

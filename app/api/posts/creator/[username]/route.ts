@@ -116,13 +116,25 @@ export async function GET(
 
     const postIds = (posts ?? []).map((p: { id: number }) => p.id);
 
-    // ── Fetch likes in parallel with post filtering ───────────────────────
+    // ── Fetch likes in parallel ───────────────────────────────────────────
     const likesPromise = user && postIds.length > 0
       ? service
           .from("likes")
           .select("post_id")
           .eq("user_id", user.id)
           .in("post_id", postIds)
+      : Promise.resolve({ data: [] });
+
+    // ── Fetch poll data for poll posts ────────────────────────────────────
+    const pollPostIds = (posts ?? [])
+      .filter((p: Record<string, unknown>) => p.content_type === "poll")
+      .map((p: Record<string, unknown>) => Number(p.id));
+
+    const pollsPromise = pollPostIds.length > 0
+      ? service
+          .from("polls")
+          .select("id, post_id, question, total_votes, ends_at")
+          .in("post_id", pollPostIds)
       : Promise.resolve({ data: [] });
 
     const filteredPosts = (posts ?? []).filter((post: Record<string, unknown>) => {
@@ -136,9 +148,70 @@ export async function GET(
       return !hasUnreadyVideo;
     });
 
-    // ── Await likes now that filtering is done ────────────────────────────
-    const { data: likes } = await likesPromise;
+    // ── Await likes and polls ─────────────────────────────────────────────
+    const [{ data: likes }, { data: pollsRaw }] = await Promise.all([
+      likesPromise,
+      pollsPromise,
+    ]);
+
     const likedSet = new Set((likes ?? []).map((l: { post_id: number }) => l.post_id));
+
+    // ── Fetch poll options and user votes ─────────────────────────────────
+    const pollIds = (pollsRaw ?? []).map((p: { id: number }) => p.id);
+
+    const [{ data: pollOptionsRaw }, { data: userVotesRaw }] = await Promise.all([
+      pollIds.length > 0
+        ? service
+            .from("poll_options")
+            .select("id, poll_id, option_text, vote_count, display_order")
+            .in("poll_id", pollIds)
+            .order("display_order")
+        : Promise.resolve({ data: [] }),
+      pollIds.length > 0 && user
+        ? service
+            .from("poll_votes")
+            .select("poll_id, poll_option_id")
+            .eq("user_id", user.id)
+            .in("poll_id", pollIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    // ── Build poll lookup map keyed by post_id ────────────────────────────
+    type PollOption = { id: number; option_text: string; vote_count: number; display_order: number };
+    type PollData   = {
+      id:                   number;
+      question:             string;
+      total_votes:          number;
+      ends_at:              string | null;
+      options:              PollOption[];
+      user_voted_option_id: number | null;
+    };
+
+    const pollByPostId = new Map<number, PollData>();
+
+    for (const poll of (pollsRaw ?? []) as { id: number; post_id: number; question: string; total_votes: number; ends_at: string | null }[]) {
+      const options = (pollOptionsRaw ?? [])
+        .filter((o: { poll_id: number }) => o.poll_id === poll.id)
+        .map((o: { id: number; option_text: string; vote_count: number; display_order: number }) => ({
+          id:            o.id,
+          option_text:   o.option_text,
+          vote_count:    o.vote_count,
+          display_order: o.display_order,
+        }));
+
+      const userVote = (userVotesRaw ?? []).find(
+        (v: { poll_id: number }) => v.poll_id === poll.id
+      ) as { poll_id: number; poll_option_id: number } | undefined;
+
+      pollByPostId.set(poll.post_id, {
+        id:                   poll.id,
+        question:             poll.question,
+        total_votes:          poll.total_votes ?? 0,
+        ends_at:              poll.ends_at ?? null,
+        options,
+        user_voted_option_id: userVote?.poll_option_id ?? null,
+      });
+    }
 
     const processed = filteredPosts.map((post: Record<string, unknown>) => {
       const isFree    = post.is_free as boolean;
@@ -146,9 +219,7 @@ export async function GET(
       const canAccess = isFree || (isSubscribed && !isPpv) || isOwnProfile;
 
       const mediaItems = (post.media as Record<string, unknown>[] ?? [])
-        .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
-          (a.display_order as number) - (b.display_order as number)
-        )
+        .sort((a, b) => (a.display_order as number) - (b.display_order as number))
         .map((m: Record<string, unknown>) => {
           const rawUrl   = m.file_url as string | null;
           const path     = extractBunnyPath(rawUrl);
@@ -185,6 +256,7 @@ export async function GET(
         liked:      likedSet.has(post.id as number),
         can_access: canAccess,
         locked:     !canAccess,
+        poll:       pollByPostId.get(Number(post.id)) ?? null,
       };
     });
 

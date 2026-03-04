@@ -127,4 +127,33 @@
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
+
+  /* ✅ Feed page */
+  .feed-desktop-header {
+    display: flex;
+  }
+
+  .feed-sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .feed-spinner {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid #1F1F2A;
+    border-top: 2px solid #8B5CF6;
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 767px) {
+    .feed-desktop-header { display: none !important; }
+    .feed-sticky-header  { top: 56px; }
+  }
 }

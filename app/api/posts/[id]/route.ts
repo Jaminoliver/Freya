@@ -126,9 +126,7 @@ export async function GET(
     }
 
     const mediaItems = (post.media as Record<string, unknown>[] ?? [])
-      .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
-        (a.display_order as number) - (b.display_order as number)
-      )
+      .sort((a, b) => (a.display_order as number) - (b.display_order as number))
       .map((m: Record<string, unknown>) => {
         const rawUrl   = m.file_url as string | null;
         const path     = extractBunnyPath(rawUrl);
@@ -156,6 +154,52 @@ export async function GET(
         };
       });
 
+    // ── Fetch poll data if this is a poll post ───────────────────────────────
+    let pollData: {
+      id: number;
+      question: string;
+      total_votes: number;
+      ends_at: string | null;
+      options: { id: number; option_text: string; vote_count: number; display_order: number }[];
+      user_voted_option_id: number | null;
+    } | null = null;
+
+    if (post.content_type === "poll") {
+      const { data: poll } = await service
+        .from("polls")
+        .select("id, question, total_votes, ends_at")
+        .eq("post_id", postId)
+        .single();
+
+      if (poll) {
+        const { data: options } = await service
+          .from("poll_options")
+          .select("id, option_text, vote_count, display_order")
+          .eq("poll_id", poll.id)
+          .order("display_order");
+
+        let userVotedOptionId: number | null = null;
+        if (user) {
+          const { data: vote } = await service
+            .from("poll_votes")
+            .select("poll_option_id")
+            .eq("poll_id", poll.id)
+            .eq("user_id", user.id)
+            .maybeSingle();
+          userVotedOptionId = vote?.poll_option_id ?? null;
+        }
+
+        pollData = {
+          id:                   poll.id,
+          question:             poll.question,
+          total_votes:          poll.total_votes ?? 0,
+          ends_at:              poll.ends_at ?? null,
+          options:              options ?? [],
+          user_voted_option_id: userVotedOptionId,
+        };
+      }
+    }
+
     return NextResponse.json({
       post: {
         ...post,
@@ -163,6 +207,7 @@ export async function GET(
         liked,
         can_access: canAccess,
         locked:     !canAccess,
+        poll:       pollData,
       },
     });
 

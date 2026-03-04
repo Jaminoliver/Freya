@@ -6,65 +6,56 @@ import { StoryBar } from "@/components/feed/StoryBar";
 import { FeedSkeleton } from "@/components/loadscreen/FeedSkeleton";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import { useAppStore, isStale } from "@/lib/store/appStore";
+import type { PollData } from "@/components/feed/PollDisplay";
 
 const SCROLL_KEY = "home_feed_scroll";
 const SLIDES_KEY = "home_feed_slides";
 
 interface FeedPost {
-  id: number;
-  creator_id: string;
+  id:           number;
+  creator_id:   string;
   content_type: string;
-  caption: string | null;
-  is_free: boolean;
-  is_ppv: boolean;
-  ppv_price: number | null;
-  like_count: number;
+  caption:      string | null;
+  is_free:      boolean;
+  is_ppv:       boolean;
+  ppv_price:    number | null;
+  like_count:   number;
   comment_count: number;
   published_at: string;
-  liked: boolean;
-  can_access: boolean;
-  locked: boolean;
+  liked:        boolean;
+  can_access:   boolean;
+  locked:       boolean;
+  poll?:        PollData | null;
   profiles: {
-    username: string;
+    username:     string;
     display_name: string | null;
-    avatar_url: string | null;
-    is_verified: boolean;
+    avatar_url:   string | null;
+    is_verified:  boolean;
   };
   media: {
-    id: number;
-    media_type: string;
-    file_url: string | null;
-    thumbnail_url: string | null;
-    bunny_video_id: string | null;
+    id:                number;
+    media_type:        string;
+    file_url:          string | null;
+    thumbnail_url:     string | null;
+    bunny_video_id:    string | null;
     processing_status: string | null;
-    raw_video_url: string | null;
-    locked: boolean;
-    display_order: number;
+    raw_video_url:     string | null;
+    locked:            boolean;
+    display_order:     number;
   }[];
-}
-
-function getRelativeTime(dateStr: string): string {
-  const diff  = Date.now() - new Date(dateStr).getTime();
-  const mins  = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days  = Math.floor(diff / 86400000);
-  if (mins  < 1)  return "just now";
-  if (mins  < 60) return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days  < 7)  return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function adaptPost(p: FeedPost) {
   return {
-    id: String(p.id),
+    id:           String(p.id),
+    content_type: p.content_type,
     creator: {
       name:       p.profiles?.display_name || p.profiles?.username || "Creator",
       username:   p.profiles?.username || "",
       avatar_url: p.profiles?.avatar_url || "",
       isVerified: p.profiles?.is_verified || false,
     },
-    timestamp: getRelativeTime(p.published_at),
+    timestamp: p.published_at,
     caption:   p.caption || "",
     media: (p.media || []).map((m) => ({
       type:             (m.media_type === "video" ? "video" : "image") as "image" | "video",
@@ -79,11 +70,12 @@ function adaptPost(p: FeedPost) {
     likes:          p.like_count,
     comments:       p.comment_count,
     liked:          p.liked,
+    poll:           p.poll ?? null,
     taggedCreators: [],
   };
 }
 
-// ── sessionStorage helpers ──────────────────────────────────────────────────
+// ── sessionStorage helpers ────────────────────────────────────────────────────
 function saveScroll(y: number) {
   try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {}
 }
@@ -101,14 +93,13 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<"feed" | "spotlight">("feed");
   const { feed, setFeed, updateFeedPost } = useAppStore();
 
-  const [posts,       setPosts]       = useState<FeedPost[]>(feed?.posts ?? []);
-  const [apiLoading,  setApiLoading]  = useState(!feed || isStale(feed.fetchedAt));
-  const [revealed,    setRevealed]    = useState(!!feed && !isStale(feed.fetchedAt));
-  const [nextCursor,  setNextCursor]  = useState<string | null>(feed?.nextCursor ?? null);
+  const [posts,       setPosts]       = useState<FeedPost[]>([]);
+  const [apiLoading,  setApiLoading]  = useState(true);
+  const [nextCursor,  setNextCursor]  = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error,       setError]       = useState<string | null>(null);
-
-  const [slideMap, setSlideMap] = useState<Record<string, number>>(loadSlides);
+  const [slideMap,    setSlideMap]    = useState<Record<string, number>>({});
+  useEffect(() => { setSlideMap(loadSlides()); }, []);
 
   const scrollRestoredRef = useRef(false);
   const showSkeleton = apiLoading;
@@ -128,9 +119,9 @@ export default function HomePage() {
     };
   }, []);
 
-  // ── Restore scroll after feed reveals ────────────────────────────────────
+  // ── Restore scroll after feed loads ──────────────────────────────────────
   useEffect(() => {
-    if (!revealed || scrollRestoredRef.current) return;
+    if (apiLoading || scrollRestoredRef.current) return;
     scrollRestoredRef.current = true;
     const saved = loadScroll();
     if (saved > 0) {
@@ -138,7 +129,7 @@ export default function HomePage() {
         window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
       }, 80);
     }
-  }, [revealed]);
+  }, [apiLoading]);
 
   // ── Carousel slide change ─────────────────────────────────────────────────
   const handleSlideChange = useCallback((postId: string, index: number) => {
@@ -183,7 +174,6 @@ export default function HomePage() {
       setNextCursor(data.nextCursor);
       setFeed({ posts: merged, nextCursor: data.nextCursor, fetchedAt: Date.now() });
       setApiLoading(false);
-      requestAnimationFrame(() => setRevealed(true));
 
     } catch {
       setError("Failed to load feed");
@@ -195,7 +185,7 @@ export default function HomePage() {
     if (feed && !isStale(feed.fetchedAt)) {
       setPosts(feed.posts);
       setNextCursor(feed.nextCursor);
-      setRevealed(true);
+      setApiLoading(false);
       return;
     }
     fetchFeed();
@@ -226,24 +216,11 @@ export default function HomePage() {
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>
 
-      <style>{`
-        .feed-desktop-header { display: flex; }
-        @media (max-width: 767px) { .feed-desktop-header { display: none !important; } }
-
-        /* Fix: sticky header must sit below the 56px fixed mobile topbar */
-        .feed-sticky-header { position: sticky; top: 0; z-index: 10; }
-        @media (max-width: 767px) { .feed-sticky-header { top: 56px; } }
-
-        @keyframes feedFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .feed-revealed { animation: feedFadeIn 0.35s ease forwards; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
-
       {/* Sticky header */}
       <div className="feed-sticky-header" style={{
         backgroundColor: "rgba(10,10,15,0.9)",
-        backdropFilter: "blur(12px)",
-        padding: "0 16px",
+        backdropFilter:  "blur(12px)",
+        padding:         "0 16px",
       }}>
         <div className="feed-desktop-header" style={{ alignItems: "center", padding: "14px 0 10px" }}>
           <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>Feed</span>
@@ -263,12 +240,18 @@ export default function HomePage() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
-                flex: 1, padding: "12px 0", background: "none", border: "none",
+                flex:         1,
+                padding:      "12px 0",
+                background:   "none",
+                border:       "none",
                 borderBottom: activeTab === tab ? "2px solid #8B5CF6" : "2px solid transparent",
-                color: activeTab === tab ? "#FFFFFF" : "#6B6B8A",
-                fontSize: "14px", fontWeight: activeTab === tab ? 700 : 400,
-                cursor: "pointer", fontFamily: "'Inter', sans-serif",
-                transition: "all 0.15s", letterSpacing: "0.01em",
+                color:        activeTab === tab ? "#FFFFFF" : "#6B6B8A",
+                fontSize:     "14px",
+                fontWeight:   activeTab === tab ? 700 : 400,
+                cursor:       "pointer",
+                fontFamily:   "'Inter', sans-serif",
+                transition:   "all 0.15s",
+                letterSpacing: "0.01em",
               }}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -284,8 +267,7 @@ export default function HomePage() {
             {showSkeleton && <FeedSkeleton count={5} />}
 
             {!showSkeleton && (
-              <div className={revealed ? "feed-revealed" : ""} style={{ opacity: revealed ? 1 : 0 }}>
-
+              <>
                 {error && (
                   <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
                     {error}
@@ -322,10 +304,10 @@ export default function HomePage() {
 
                 {loadingMore && (
                   <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
-                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", border: "2px solid #1F1F2A", borderTop: "2px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
+                    <div className="feed-spinner" />
                   </div>
                 )}
-              </div>
+              </>
             )}
           </>
         ) : (

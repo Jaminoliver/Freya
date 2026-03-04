@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_ROUTES = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/verify-otp', '/terms', '/privacy', '/auth/callback']
+const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/verify-otp', '/terms', '/privacy', '/auth/callback']
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -9,6 +9,11 @@ export async function middleware(request: NextRequest) {
   // Let API routes handle their own auth
   if (pathname.startsWith('/api/')) {
     return NextResponse.next({ request })
+  }
+
+  // Redirect root to login
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(route))

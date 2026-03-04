@@ -15,10 +15,13 @@ export interface UploadItem {
   _title?:        string;
   _onMediaId?:    (mediaId: number) => void;
   _onMediaIds?:   (mediaIds: number[]) => void;
+  _onDone?:       () => void;
   _onError?:      (err: string) => void;
   _thumbnailBlob?: Blob;
   _isPhoto?:      boolean;
   _isMultiPhoto?: boolean;
+  _isText?:       boolean;
+  _isPoll?:       boolean;
 }
 
 // Serialisable shape stored in sessionStorage (no File/Blob/callbacks)
@@ -69,6 +72,16 @@ interface UploadContextValue {
     files:      File[];
     onMediaIds: (mediaIds: number[]) => void;
     onError:    (err: string) => void;
+  }) => string;
+  startTextPost: (params: {
+    label:   string;
+    onDone:  () => void;
+    onError: (err: string) => void;
+  }) => string;
+  startPollPost: (params: {
+    label:   string;
+    onDone:  () => void;
+    onError: (err: string) => void;
   }) => string;
   dismissUpload: (id: string) => void;
   retryUpload:   (id: string) => void;
@@ -143,6 +156,78 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       } catch { /* ignore network blips */ }
     }, 3000);
   }, [updateUpload]);
+
+  // ── Text post ─────────────────────────────────────────────────────────────
+  const runTextPost = useCallback(async (
+    uploadId: string,
+    onDone:   () => void,
+    onError:  (err: string) => void,
+  ) => {
+    try {
+      updateUpload(uploadId, { progress: 50 });
+      await new Promise((r) => setTimeout(r, 400));
+      updateUpload(uploadId, { progress: 100, phase: "done" });
+      onDone();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Post failed";
+      updateUpload(uploadId, { phase: "error", error: msg });
+      onError(msg);
+    }
+  }, [updateUpload]);
+
+  const startTextPost = useCallback(({
+    label, onDone, onError,
+  }: {
+    label:   string;
+    onDone:  () => void;
+    onError: (err: string) => void;
+  }): string => {
+    const uploadId = `upload_${Date.now()}_${Math.random()}`;
+
+    setUploads((prev) => [...prev, {
+      id: uploadId, fileName: label, progress: 0, phase: "uploading",
+      _isText: true, _onDone: onDone, _onError: onError,
+    }]);
+
+    runTextPost(uploadId, onDone, onError);
+    return uploadId;
+  }, [runTextPost]);
+
+  // ── Poll post ─────────────────────────────────────────────────────────────
+  const runPollPost = useCallback(async (
+    uploadId: string,
+    onDone:   () => void,
+    onError:  (err: string) => void,
+  ) => {
+    try {
+      updateUpload(uploadId, { progress: 50 });
+      await new Promise((r) => setTimeout(r, 400));
+      updateUpload(uploadId, { progress: 100, phase: "done" });
+      onDone();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Post failed";
+      updateUpload(uploadId, { phase: "error", error: msg });
+      onError(msg);
+    }
+  }, [updateUpload]);
+
+  const startPollPost = useCallback(({
+    label, onDone, onError,
+  }: {
+    label:   string;
+    onDone:  () => void;
+    onError: (err: string) => void;
+  }): string => {
+    const uploadId = `upload_${Date.now()}_${Math.random()}`;
+
+    setUploads((prev) => [...prev, {
+      id: uploadId, fileName: label, progress: 0, phase: "uploading",
+      _isPoll: true, _onDone: onDone, _onError: onError,
+    }]);
+
+    runPollPost(uploadId, onDone, onError);
+    return uploadId;
+  }, [runPollPost]);
 
   // ── Single photo upload ───────────────────────────────────────────────────
   const runPhotoUpload = useCallback(async (
@@ -257,7 +342,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     onError:       (err: string) => void,
   ) => {
     try {
-      // ── Step 1: Upload creator-picked thumbnail (if any) ──────────
       let customThumbnailUrl: string | null = null;
       if (thumbnailBlob) {
         try {
@@ -267,11 +351,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           const data = await res.json();
           if (res.ok) customThumbnailUrl = data.url;
         } catch {
-          // non-fatal — fall back to Bunny auto-generated thumbnail
+          // non-fatal
         }
       }
 
-      // ── Step 2: Get presigned TUS credentials ─────────────────────
       const initRes  = await fetch("/api/upload/video", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -288,7 +371,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         libraryId:   string;
       };
 
-      // ── Step 3: TUS direct browser → Bunny ───────────────────────
       await new Promise<void>((resolve, reject) => {
         const upload = new tus.Upload(file, {
           endpoint:    tusEndpoint,
@@ -321,7 +403,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
       updateUpload(uploadId, { progress: 82, phase: "processing" });
 
-      // ── Step 4: Save to Supabase ──────────────────────────────────
       const completeRes  = await fetch("/api/upload/video/complete", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -371,7 +452,11 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     setUploads((prev) => prev.map((u) => u.id === id ? { ...u, progress: 0, phase: "uploading", error: undefined } : u));
     setUploads((prev) => {
       const item = prev.find((u) => u.id === id);
-      if (item?._isMultiPhoto && item.files && item._onMediaIds && item._onError) {
+      if (item?._isText && item._onDone && item._onError) {
+        runTextPost(id, item._onDone, item._onError);
+      } else if (item?._isPoll && item._onDone && item._onError) {
+        runPollPost(id, item._onDone, item._onError);
+      } else if (item?._isMultiPhoto && item.files && item._onMediaIds && item._onError) {
         runMultiPhotoUpload(id, item.files, item._onMediaIds, item._onError);
       } else if (item?._isPhoto && item.file && item._onMediaId && item._onError) {
         runPhotoUpload(id, item.file, item._onMediaId, item._onError);
@@ -380,14 +465,24 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       }
       return prev;
     });
-  }, [runUpload, runPhotoUpload, runMultiPhotoUpload]);
+  }, [runUpload, runPhotoUpload, runMultiPhotoUpload, runTextPost, runPollPost]);
 
   const clearDone = useCallback(() => {
     setUploads((prev) => prev.filter((u) => u.phase !== "done"));
   }, []);
 
   return (
-    <UploadContext.Provider value={{ uploads, startVideoUpload, startPhotoUpload, startMultiPhotoUpload, dismissUpload, retryUpload, clearDone }}>
+    <UploadContext.Provider value={{
+      uploads,
+      startVideoUpload,
+      startPhotoUpload,
+      startMultiPhotoUpload,
+      startTextPost,
+      startPollPost,
+      dismissUpload,
+      retryUpload,
+      clearDone,
+    }}>
       {children}
     </UploadContext.Provider>
   );

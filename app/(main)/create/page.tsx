@@ -29,7 +29,7 @@ function CreatePostContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const typeParam    = searchParams.get("type");
-  const { startVideoUpload, startPhotoUpload, startMultiPhotoUpload } = useUpload();
+  const { startVideoUpload, startPhotoUpload, startMultiPhotoUpload, startTextPost, startPollPost } = useUpload();
 
   const [postType,     setPostType]     = useState<PostType>(isValidPostType(typeParam) ? typeParam : "photo");
   const [caption,      setCaption]      = useState("");
@@ -63,13 +63,19 @@ function CreatePostContent() {
     loadUser();
   }, []);
 
-  // Reset thumbnail when file changes
   React.useEffect(() => {
     setThumbnailBlob(null);
     setThumbnailPreview(null);
   }, [files]);
 
-  const canPost = caption.trim().length > 0 || files.length > 0 || pollOptions.some((o) => o.trim());
+  // Poll requires at least 2 non-empty options + a caption
+  const pollValid = pollOptions.filter((o) => o.trim().length > 0).length >= 2;
+
+  const canPost = (() => {
+    if (postType === "text")              return caption.trim().length > 0;
+    if (postType === "poll" || postType === "quiz") return caption.trim().length > 0 && pollValid;
+    return caption.trim().length > 0 || files.length > 0;
+  })();
 
   const handleClear = () => {
     setCaption(""); setFiles([]); setPollOptions(["", ""]);
@@ -79,22 +85,34 @@ function CreatePostContent() {
   };
 
   const createPost = async (mediaIds: number[]) => {
-    let content_type: string = postType;
-    if (postType === "poll" || postType === "quiz") content_type = "text";
+    // Map quiz → poll for API
+    const apiContentType = postType === "quiz" ? "poll" : postType;
+
     let scheduled_for: string | null = null;
-    if (isScheduled && schedDate && schedTime) scheduled_for = new Date(`${schedDate}T${schedTime}`).toISOString();
-    const res = await fetch("/api/posts", {
+    if (isScheduled && schedDate && schedTime) {
+      scheduled_for = new Date(`${schedDate}T${schedTime}`).toISOString();
+    }
+
+    const body: Record<string, unknown> = {
+      content_type:  apiContentType,
+      caption:       caption || null,
+      is_free:       audience === "everyone",
+      is_ppv:        isPPV,
+      ppv_price:     isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null,
+      media_ids:     mediaIds,
+      scheduled_for,
+    };
+
+    // Include poll options and duration for poll/quiz posts
+    if (postType === "poll" || postType === "quiz") {
+      body.poll_options = pollOptions.filter((o) => o.trim().length > 0);
+      body.poll_duration = pollDuration;
+    }
+
+    const res  = await fetch("/api/posts", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        content_type,
-        caption:      caption || null,
-        is_free:      audience === "everyone",
-        is_ppv:       isPPV,
-        ppv_price:    isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null,
-        media_ids:    mediaIds,
-        scheduled_for,
-      }),
+      body:    JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to create post");
@@ -110,7 +128,7 @@ function CreatePostContent() {
       const firstFile = files[0];
       const isVideo   = firstFile?.type.startsWith("video/");
 
-      // ── Video — redirect immediately, upload in background ────────
+      // ── Video ─────────────────────────────────────────────────────────
       if (firstFile && isVideo) {
         startVideoUpload({
           file:          firstFile,
@@ -126,7 +144,7 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Single photo — redirect immediately, upload in background ──
+      // ── Single photo ──────────────────────────────────────────────────
       if (files.length === 1 && !isVideo) {
         startPhotoUpload({
           file: firstFile,
@@ -140,7 +158,7 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Multiple photos — redirect immediately, upload in background
+      // ── Multiple photos ───────────────────────────────────────────────
       if (files.length > 1 && !isVideo) {
         startMultiPhotoUpload({
           files,
@@ -154,9 +172,33 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Text / poll / quiz — no media ─────────────────────────────
-      await createPost([]);
-      router.push(`/${currentUser.username}`);
+      // ── Text post ─────────────────────────────────────────────────────
+      if (postType === "text") {
+        startTextPost({
+          label: caption.slice(0, 40) || "Text post",
+          onDone: async () => {
+            try { await createPost([]); }
+            catch (err) { console.error("[CreatePost] Text post create error:", err); }
+          },
+          onError: (err) => console.error("[CreatePost] Text post error:", err),
+        });
+        router.push(`/${currentUser.username}`);
+        return;
+      }
+
+      // ── Poll / Quiz ───────────────────────────────────────────────────
+      if (postType === "poll" || postType === "quiz") {
+        startPollPost({
+          label: caption.slice(0, 40) || "Poll",
+          onDone: async () => {
+            try { await createPost([]); }
+            catch (err) { console.error("[CreatePost] Poll post create error:", err); }
+          },
+          onError: (err) => console.error("[CreatePost] Poll post error:", err),
+        });
+        router.push(`/${currentUser.username}`);
+        return;
+      }
 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -185,7 +227,7 @@ function CreatePostContent() {
             disabled={!canPost || posting || !userLoaded}
             style={{ padding: "7px 18px", borderRadius: "20px", border: "none", backgroundColor: canPost && !posting && userLoaded ? "#8B5CF6" : "#2A2A3D", color: canPost && !posting && userLoaded ? "#fff" : "#6B6B8A", fontSize: "13px", fontWeight: 600, cursor: canPost && !posting && userLoaded ? "pointer" : "default", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", minWidth: "64px" }}
           >
-            {posting ? "Uploading…" : "POST"}
+            {posting ? "Posting…" : "POST"}
           </button>
         </div>
       </div>
@@ -224,8 +266,14 @@ function CreatePostContent() {
             <textarea
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              placeholder={postType === "poll" || postType === "quiz" ? "Add a question or context..." : "Write a caption…"}
-              style={{ width: "100%", minHeight: "70px", backgroundColor: "transparent", border: "none", outline: "none", color: "#E2E8F0", fontSize: "15px", lineHeight: 1.6, resize: "none", fontFamily: "'Inter', sans-serif", marginTop: "12px", boxSizing: "border-box" }}
+              placeholder={
+                postType === "poll" || postType === "quiz"
+                  ? "Ask a question…"
+                  : postType === "text"
+                  ? "What's on your mind?"
+                  : "Write a caption…"
+              }
+              style={{ width: "100%", minHeight: postType === "text" ? "120px" : "70px", backgroundColor: "transparent", border: "none", outline: "none", color: "#E2E8F0", fontSize: "15px", lineHeight: 1.6, resize: "none", fontFamily: "'Inter', sans-serif", marginTop: "12px", boxSizing: "border-box" }}
             />
           </div>
 
@@ -253,8 +301,8 @@ function CreatePostContent() {
           )}
 
           {postType === "text" && (
-            <div style={{ margin: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "14px", textAlign: "center", color: "#4A4A6A", fontSize: "13px" }}>
-              Text-only post — just write your caption above and hit Post.
+            <div style={{ margin: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "10px" }}>
+              <p style={{ fontSize: "12px", color: "#4A4A6A", margin: 0 }}>Text-only post — write your message above and hit Post.</p>
             </div>
           )}
 

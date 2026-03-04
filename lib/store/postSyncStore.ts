@@ -1,14 +1,17 @@
+import type { PollData } from "@/components/feed/PollDisplay";
+
 type PostSyncEvent = {
-  postId: string;
-  liked: boolean;
-  like_count: number;
+  postId:        string;
+  liked:         boolean;
+  like_count:    number;
   comment_count?: number;
+  poll_data?:    PollData;
 };
 
 type Listener = (event: PostSyncEvent) => void;
 
 const listeners = new Set<Listener>();
-const cache = new Map<string, { liked: boolean; like_count: number; comment_count?: number }>();
+const cache = new Map<string, { liked: boolean; like_count: number; comment_count?: number; poll_data?: PollData }>();
 
 export const postSyncStore = {
   emit(event: PostSyncEvent) {
@@ -16,6 +19,7 @@ export const postSyncStore = {
       liked:         event.liked,
       like_count:    event.like_count,
       comment_count: event.comment_count,
+      poll_data:     event.poll_data,
     });
     listeners.forEach((fn) => fn(event));
   },
