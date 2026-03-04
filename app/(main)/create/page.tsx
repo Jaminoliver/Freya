@@ -10,6 +10,7 @@ import { PollBuilder } from "@/components/create/PollBuilder";
 import { PostSettings } from "@/components/create/PostSettings";
 import { createClient } from "@/lib/supabase/client";
 import { useUpload } from "@/lib/context/UploadContext";
+import { useAppStore } from "@/lib/store/appStore";
 
 type PostType = "photo" | "video" | "poll" | "quiz" | "text";
 
@@ -30,6 +31,7 @@ function CreatePostContent() {
   const searchParams = useSearchParams();
   const typeParam    = searchParams.get("type");
   const { startVideoUpload, startPhotoUpload, startMultiPhotoUpload, startTextPost, startPollPost } = useUpload();
+  const { clearProfile, clearContentFeed } = useAppStore();
 
   const [postType,     setPostType]     = useState<PostType>(isValidPostType(typeParam) ? typeParam : "photo");
   const [caption,      setCaption]      = useState("");
@@ -50,6 +52,7 @@ function CreatePostContent() {
 
   const [currentUser, setCurrentUser] = useState<{ name: string; username: string; avatar_url: string }>({ name: "", username: "", avatar_url: "" });
   const [userLoaded,  setUserLoaded]  = useState(false);
+  const usernameRef = React.useRef<string>("");
 
   React.useEffect(() => {
     const loadUser = async () => {
@@ -57,7 +60,11 @@ function CreatePostContent() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const { data } = await supabase.from("profiles").select("display_name, username, avatar_url").eq("id", user.id).single();
-      if (data) setCurrentUser({ name: data.display_name || data.username || "", username: data.username || "", avatar_url: data.avatar_url || "" });
+      if (data) {
+        const username = data.username || "";
+        usernameRef.current = username;
+        setCurrentUser({ name: data.display_name || username || "", username, avatar_url: data.avatar_url || "" });
+      }
       setUserLoaded(true);
     };
     loadUser();
@@ -68,7 +75,6 @@ function CreatePostContent() {
     setThumbnailPreview(null);
   }, [files]);
 
-  // Poll requires at least 2 non-empty options + a caption
   const pollValid = pollOptions.filter((o) => o.trim().length > 0).length >= 2;
 
   const canPost = (() => {
@@ -85,7 +91,6 @@ function CreatePostContent() {
   };
 
   const createPost = async (mediaIds: number[]) => {
-    // Map quiz → poll for API
     const apiContentType = postType === "quiz" ? "poll" : postType;
 
     let scheduled_for: string | null = null;
@@ -103,9 +108,8 @@ function CreatePostContent() {
       scheduled_for,
     };
 
-    // Include poll options and duration for poll/quiz posts
     if (postType === "poll" || postType === "quiz") {
-      body.poll_options = pollOptions.filter((o) => o.trim().length > 0);
+      body.poll_options  = pollOptions.filter((o) => o.trim().length > 0);
       body.poll_duration = pollDuration;
     }
 
@@ -117,6 +121,16 @@ function CreatePostContent() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to create post");
     return data;
+  };
+
+  // ── Clears profile + content feed cache so profile page always refetches ──
+  // Uses ref (not state) so it's always current even before re-render
+  const invalidateProfileCache = () => {
+    const username = usernameRef.current;
+    if (username) {
+      clearProfile(username);
+      clearContentFeed(username);
+    }
   };
 
   const handlePost = async () => {
@@ -135,11 +149,15 @@ function CreatePostContent() {
           title:         caption || firstFile.name,
           thumbnailBlob: thumbnailBlob ?? undefined,
           onMediaId: async (mediaId) => {
-            try { await createPost([mediaId]); }
-            catch (err) { console.error("[CreatePost] Post create error:", err); }
+            try {
+              await createPost([mediaId]);
+              invalidateProfileCache();
+            } catch (err) { console.error("[CreatePost] Post create error:", err); }
           },
           onError: (err) => console.error("[CreatePost] Upload error:", err),
         });
+        // Video uploads are background — navigate immediately (upload is long)
+        invalidateProfileCache();
         router.push(`/${currentUser.username}`);
         return;
       }
@@ -149,11 +167,14 @@ function CreatePostContent() {
         startPhotoUpload({
           file: firstFile,
           onMediaId: async (mediaId) => {
-            try { await createPost([mediaId]); }
-            catch (err) { console.error("[CreatePost] Photo post create error:", err); }
+            try {
+              await createPost([mediaId]);
+              invalidateProfileCache();
+            } catch (err) { console.error("[CreatePost] Photo post create error:", err); }
           },
           onError: (err) => console.error("[CreatePost] Photo upload error:", err),
         });
+        invalidateProfileCache();
         router.push(`/${currentUser.username}`);
         return;
       }
@@ -163,37 +184,38 @@ function CreatePostContent() {
         startMultiPhotoUpload({
           files,
           onMediaIds: async (mediaIds) => {
-            try { await createPost(mediaIds); }
-            catch (err) { console.error("[CreatePost] Multi photo post create error:", err); }
+            try {
+              await createPost(mediaIds);
+              invalidateProfileCache();
+            } catch (err) { console.error("[CreatePost] Multi photo post create error:", err); }
           },
           onError: (err) => console.error("[CreatePost] Multi photo upload error:", err),
         });
+        invalidateProfileCache();
         router.push(`/${currentUser.username}`);
         return;
       }
 
       // ── Text post ─────────────────────────────────────────────────────
       if (postType === "text") {
+        await createPost([]);
+        invalidateProfileCache();
         startTextPost({
           label: caption.slice(0, 40) || "Text post",
-          onDone: async () => {
-            try { await createPost([]); }
-            catch (err) { console.error("[CreatePost] Text post create error:", err); }
-          },
+          onDone: async () => {},
           onError: (err) => console.error("[CreatePost] Text post error:", err),
         });
         router.push(`/${currentUser.username}`);
         return;
       }
 
-      // ── Poll / Quiz ───────────────────────────────────────────────────
+      // ── Poll / Quiz — await createPost BEFORE navigating ─────────────
       if (postType === "poll" || postType === "quiz") {
+        await createPost([]);
+        invalidateProfileCache();
         startPollPost({
           label: caption.slice(0, 40) || "Poll",
-          onDone: async () => {
-            try { await createPost([]); }
-            catch (err) { console.error("[CreatePost] Poll post create error:", err); }
-          },
+          onDone: async () => {},
           onError: (err) => console.error("[CreatePost] Poll post error:", err),
         });
         router.push(`/${currentUser.username}`);

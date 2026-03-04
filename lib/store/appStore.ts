@@ -1,10 +1,11 @@
 import { create } from "zustand";
 import type { ApiPost } from "@/components/profile/PostRow";
 
-const STALE_MS         = 5 * 60 * 1000;
-const FEED_KEY         = "freya_feed_cache";
-const PROFILES_KEY     = "freya_profiles_cache";
-const CONTENT_FEEDS_KEY = "freya_content_feeds_cache"; // Fix #9
+// ── Reduced from 5 min to 30s so profile always refetches after posting ──
+const STALE_MS          = 30 * 1000;
+const FEED_KEY          = "freya_feed_cache";
+const PROFILES_KEY      = "freya_profiles_cache";
+const CONTENT_FEEDS_KEY = "freya_content_feeds_cache";
 
 export function isStale(fetchedAt: number | null): boolean {
   if (!fetchedAt) return true;
@@ -48,7 +49,6 @@ function saveProfilesToStorage(profiles: Record<string, ProfileEntry>) {
   try { sessionStorage.setItem(PROFILES_KEY, JSON.stringify(profiles)); } catch {}
 }
 
-// Fix #9 — persist contentFeeds so subscriptions survive refresh
 function loadContentFeedsFromStorage(): Record<string, ContentFeedEntry> {
   try {
     const raw = sessionStorage.getItem(CONTENT_FEEDS_KEY);
@@ -131,7 +131,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setViewer: (viewer) =>
     set({ viewer, viewerFetchedAt: viewer ? Date.now() : null }),
 
-  // Feed — hydrate from sessionStorage on first load
+  // Feed
   feed: loadFeedFromStorage(),
 
   setFeed: (entry) => {
@@ -156,7 +156,7 @@ export const useAppStore = create<AppStore>((set) => ({
     set({ feed: null });
   },
 
-  // Profiles — hydrate from sessionStorage on first load
+  // Profiles
   profiles: loadProfilesFromStorage(),
 
   setProfile: (username, entry) =>
@@ -184,7 +184,7 @@ export const useAppStore = create<AppStore>((set) => ({
       return { profiles };
     }),
 
-  // Fix #9 — contentFeeds now hydrated from + saved to sessionStorage
+  // Content feeds
   contentFeeds: loadContentFeedsFromStorage(),
 
   setContentFeed: (key, entry) =>

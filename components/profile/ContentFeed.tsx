@@ -122,7 +122,6 @@ export default function ContentFeed({
   const router = useRouter();
   const { uploads } = useUpload();
 
-  // ── Use globalViewer from store — no Supabase call needed ─────────────────
   const globalViewer = useAppStore((s) => s.viewer);
   const viewer = globalViewer
     ? { id: globalViewer.id, username: globalViewer.username, display_name: globalViewer.display_name, avatar_url: globalViewer.avatar_url }
@@ -158,6 +157,20 @@ export default function ContentFeed({
     }
   }, [cacheKey, initialApiPosts]);
 
+  // Sync state when parent passes fresh posts after a cache clear —
+  // uses a ref to avoid re-running on every render, only fires when
+  // the array reference itself changes (i.e. ProfilePage fetched new data)
+  const prevInitialPostsRef = React.useRef<ApiPost[] | undefined>(undefined);
+  React.useEffect(() => {
+    if (!initialApiPosts) return;
+    if (prevInitialPostsRef.current === initialApiPosts) return;
+    prevInitialPostsRef.current = initialApiPosts;
+    const freshMedia = buildMediaFromPosts(initialApiPosts);
+    setApiPosts(initialApiPosts);
+    setApiMedia(freshMedia);
+    feedPostsCache.set(cacheKey, { posts: initialApiPosts, media: freshMedia });
+  }, [initialApiPosts, cacheKey]);
+
   React.useEffect(() => {
     feedLayoutCache.set(cacheKey, { activeTab, isPostsGridView, isMediaGridView });
   }, [cacheKey, activeTab, isPostsGridView, isMediaGridView]);
@@ -167,13 +180,11 @@ export default function ContentFeed({
     [apiPosts]
   );
 
-  // ── O(1) post lookup map for media grid — replaces O(n²) apiPosts.find() ─
   const postById = React.useMemo(
     () => new Map(apiPosts.map((p) => [p.id, p])),
     [apiPosts]
   );
 
-  // ── Memoized filtered lists — not recomputed on every render ─────────────
   const filteredPosts = React.useMemo(
     () => apiPosts.filter((p) => searchQuery ? p.caption?.toLowerCase().includes(searchQuery.toLowerCase()) : true),
     [apiPosts, searchQuery]
@@ -360,7 +371,6 @@ export default function ContentFeed({
                 const thumb = item.media_type === "video" && item.bunny_video_id
                   ? getBunnyThumbnail(item.bunny_video_id)
                   : (item.thumbnail_url || item.file_url || undefined);
-                // ── O(1) lookup via map instead of O(n) find ─────────────
                 const parentPost = postById.get(item.post_id);
                 return (
                   <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
@@ -381,7 +391,6 @@ export default function ContentFeed({
                 const thumb = item.media_type === "video" && item.bunny_video_id
                   ? getBunnyThumbnail(item.bunny_video_id)
                   : (item.thumbnail_url || item.file_url || undefined);
-                // ── O(1) lookup via map ───────────────────────────────────
                 const parentPost = postById.get(item.post_id);
                 return (
                   <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ borderBottom: "1px solid #1A1A2E", cursor: "pointer" }}>
