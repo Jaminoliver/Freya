@@ -161,13 +161,13 @@ export default function PostRow({
       .finally(() => setCommentsLoading(false));
   }, [post.id]);
 
-  // ── Updated: passes parent_comment_id for replies ─────────────────────────
   const handleAddComment = React.useCallback(async (
     id: string,
     text: string,
     gif_url?: string,
     parent_comment_id?: string | number,
-    reply_to_username?: string | null
+    reply_to_username?: string | null,
+    reply_to_id?: string | number | null
   ) => {
     await fetch(`/api/posts/${id}/comments`, {
       method: "POST",
@@ -177,11 +177,12 @@ export default function PostRow({
         gif_url:            gif_url ?? null,
         parent_comment_id:  parent_comment_id ?? null,
         reply_to_username:  reply_to_username ?? null,
+        reply_to_id:        reply_to_id ?? null,
       }),
     });
-    // Only refresh top-level comments (replies handled inside CommentSection)
+    // Increment for both top-level and replies
+    setCommentCount((c) => c + 1);
     if (!parent_comment_id) {
-      setCommentCount((c) => c + 1);
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
       if (d.comments) setComments(d.comments);
     }
@@ -313,6 +314,8 @@ export default function PostRow({
         viewerUserId={viewer?.id}
         isOpen={commentOpen}
         onAddComment={handleAddComment}
+        isLoading={commentsLoading}
+        totalCommentCount={commentCount}
         onClose={() => setCommentOpen(false)}
       />
     </div>

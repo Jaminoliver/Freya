@@ -20,6 +20,7 @@ export interface ApiComment {
   viewer_has_liked?: boolean;
   reply_count?: number;
   reply_to_username?: string | null;
+  reply_to_id?: string | number | null;
   profiles: {
     username: string;
     display_name: string | null;
@@ -32,14 +33,15 @@ interface CommentSectionProps {
   comments: ApiComment[];
   viewer?: { username: string; display_name: string; avatar_url?: string } | null;
   viewerUserId?: string;
-  onAddComment?: (postId: string, text: string, gif_url?: string, parent_comment_id?: string | number, reply_to_username?: string | null) => Promise<void>;
+  onAddComment?: (postId: string, text: string, gif_url?: string, parent_comment_id?: string | number, reply_to_username?: string | null, reply_to_id?: string | number | null) => Promise<void>;
   isOpen?: boolean;
   onClose?: () => void;
   isLoading?: boolean;
+  totalCommentCount?: number;
 }
 
 
-export default function CommentSection({ postId, comments: propComments, viewer, viewerUserId, onAddComment, isOpen = false, onClose, isLoading = false }: CommentSectionProps) {
+export default function CommentSection({ postId, comments: propComments, viewer, viewerUserId, onAddComment, isOpen = false, onClose, isLoading = false, totalCommentCount }: CommentSectionProps) {
   const [text,          setText]          = React.useState("");
   const [selectedGif,   setSelectedGif]   = React.useState<GifItem | null>(null);
   const [gifPickerOpen, setGifPickerOpen] = React.useState(false);
@@ -50,6 +52,8 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   // Reply state
   const [replyingTo, setReplyingTo] = React.useState<ApiComment | null>(null);
+  // Track the actual parent comment id separately (always the top-level comment)
+  const [replyParentId, setReplyParentId] = React.useState<string | number | null>(null);
 
   const inputRef     = React.useRef<HTMLInputElement>(null);
   const sheetRef     = React.useRef<HTMLDivElement>(null);
@@ -113,15 +117,19 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const handleDeleted   = (id: string | number) => setLocalComments((prev) => prev.filter((c) => c.id !== id));
   const handleGifSelect = (gif: GifItem) => { setSelectedGif(gif); setGifPickerOpen(false); setText(""); };
 
+  // comment passed here is either the top-level comment (direct reply)
+  // or a spread of top-level comment with reply_to_username/reply_to_id set (reply to a reply)
   const handleReply = (comment: ApiComment) => {
     setReplyingTo(comment);
+    // The actual parent_comment_id is always the top-level comment id
+    setReplyParentId(comment.id);
     setText("");
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-
   const cancelReply = () => {
     setReplyingTo(null);
+    setReplyParentId(null);
     setText("");
     setSelectedGif(null);
   };
@@ -132,10 +140,13 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     if (!viewer) return;
 
     const isReply = replyingTo !== null;
-    const parentId = replyingTo?.id;
 
-    if (isReply && parentId !== undefined) {
-      // Optimistic reply — inject into the parent comment's reply list
+    if (isReply && replyParentId !== null) {
+      // reply_to_username is the specific person being replied to
+      const replyToUsername = replyingTo!.reply_to_username ?? replyingTo!.profiles?.username ?? null;
+      // reply_to_id is the specific reply being replied to (null if replying directly to top-level comment)
+      const replyToId = replyingTo!.reply_to_id ?? null;
+
       const optimisticReply: ApiComment = {
         id:               `local-reply-${Date.now()}`,
         content:          trimmed,
@@ -144,24 +155,25 @@ export default function CommentSection({ postId, comments: propComments, viewer,
         like_count:       0,
         user_id:          viewerUserId || "",
         viewer_has_liked: false,
-        reply_to_username: replyingTo.reply_to_username ?? null,
+        reply_to_username: replyToUsername,
+        reply_to_id:       replyToId,
         profiles:         { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url || null },
       };
 
-      // Call _addReply on the parent comment object (optimistic)
-      const parentComment = localComments.find((c) => c.id === parentId);
+      const parentComment = localComments.find((c) => c.id === replyParentId);
       if (parentComment && typeof (parentComment as any)._addReply === "function") {
         (parentComment as any)._addReply(optimisticReply);
       }
 
       const gifUrl = selectedGif?.url;
-      const replyToUsername = replyingTo.reply_to_username ?? null;
+      const capturedParentId = replyParentId;
       setText("");
       setSelectedGif(null);
       setReplyingTo(null);
-      // Post to API with reply_to_username
-      await onAddComment?.(postId, trimmed, gifUrl, parentId, replyToUsername);
-      // Refetch replies to replace optimistic ID with real DB ID — enables liking immediately
+      setReplyParentId(null);
+
+      await onAddComment?.(postId, trimmed, gifUrl, capturedParentId, replyToUsername, replyToId);
+
       if (parentComment && typeof (parentComment as any)._refetchReplies === "function") {
         (parentComment as any)._refetchReplies();
       }
@@ -191,6 +203,11 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const handleKey = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
   const canSend   = text.trim().length > 0 || selectedGif !== null;
 
+  // Derive the display name for the reply placeholder
+  const replyTargetName = replyingTo
+    ? (replyingTo.reply_to_username || replyingTo.profiles?.username || "user")
+    : null;
+
   if (!mounted || !visible) return null;
 
   return createPortal(
@@ -202,7 +219,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
         <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ padding: "12px 16px 0", userSelect: "none", touchAction: "none" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", margin: "0 auto 14px" }} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-            <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>Comments {localComments.length > 0 ? `· ${localComments.length}` : ""}</span>
+            <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>Comments {(totalCommentCount ?? localComments.length) > 0 ? `· ${totalCommentCount ?? localComments.length}` : ""}</span>
             <button onClick={handleClose} style={{ width: "30px", height: "30px", borderRadius: "50%", border: "none", backgroundColor: "#1C1C2E", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={15} /></button>
           </div>
         </div>
@@ -255,6 +272,18 @@ export default function CommentSection({ postId, comments: propComments, viewer,
             </div>
           )}
 
+          {/* Reply banner */}
+          {replyingTo && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", padding: "6px 10px", backgroundColor: "#1C1C2E", borderRadius: "8px", borderLeft: "2px solid #8B5CF6" }}>
+              <span style={{ fontSize: "12px", color: "#8B5CF6", fontFamily: "'Inter', sans-serif" }}>
+                Replying to <strong>@{replyTargetName}</strong>
+              </span>
+              <button onClick={cancelReply} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", alignItems: "center" }}>
+                <X size={13} />
+              </button>
+            </div>
+          )}
+
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <Avatar src={viewer?.avatar_url} name={viewer?.display_name || "You"} size={34} />
             <div style={{ flex: 1, display: "flex", alignItems: "center", backgroundColor: "#13131F", border: "1px solid #2A2A3D", borderRadius: "24px", padding: "10px 14px", gap: "8px" }}>
@@ -262,7 +291,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
                 ref={inputRef} type="text" value={text}
                 onChange={(e) => { setText(e.target.value); }}
                 onKeyDown={handleKey}
-                placeholder={replyingTo ? `Replying to @${replyingTo.profiles?.username || replyingTo.reply_to_username || "user"}…` : selectedGif ? "Add a caption… (optional)" : "Add a comment…"}
+                placeholder={replyingTo ? `Replying to @${replyTargetName}…` : selectedGif ? "Add a caption… (optional)" : "Add a comment…"}
                 style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: "13px", color: "#E2E8F0", fontFamily: "'Inter', sans-serif", caretColor: "#8B5CF6" }}
               />
               <button onClick={handleSend} disabled={!canSend}

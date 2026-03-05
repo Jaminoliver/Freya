@@ -205,13 +205,13 @@ export function PostCard({
     isLiking.current = false;
   };
 
-  // ── Updated: passes parent_comment_id for replies ─────────────────────────
   const handleAddComment = useCallback(async (
     id: string,
     text: string,
     gif_url?: string,
     parent_comment_id?: string | number,
-    reply_to_username?: string | null
+    reply_to_username?: string | null,
+    reply_to_id?: string | number | null
   ) => {
     await fetch(`/api/posts/${id}/comments`, {
       method: "POST",
@@ -221,16 +221,18 @@ export function PostCard({
         gif_url:            gif_url ?? null,
         parent_comment_id:  parent_comment_id ?? null,
         reply_to_username:  reply_to_username ?? null,
+        reply_to_id:        reply_to_id ?? null,
       }),
     });
-    // Only refresh top-level comments (replies handled inside CommentSection)
+    // Increment count for both top-level comments and replies
+    setCommentCount((c) => c + 1);
+    postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: commentCount + 1 });
+    // Only re-fetch top-level comments list for top-level comments
     if (!parent_comment_id) {
-      setCommentCount((c) => c + 1);
-      postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: commentCount + 1 });
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
       if (d.comments) setComments(d.comments);
     }
-  }, [liked, likeCount]);
+  }, [liked, likeCount, commentCount]);
 
   const handleSlideChange = useCallback((index: number) => {
     onSlideChange?.(post.id, index);
@@ -380,6 +382,7 @@ export function PostCard({
           isOpen={commentOpen}
           onAddComment={handleAddComment}
           isLoading={commentsLoading}
+          totalCommentCount={commentCount}
           onClose={() => setCommentOpen(false)}
         />
       </div>

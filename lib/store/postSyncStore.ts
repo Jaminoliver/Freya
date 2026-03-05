@@ -15,11 +15,19 @@ type CommentLikeSyncEvent = {
   like_count: number;
 };
 
-type Listener        = (event: PostSyncEvent) => void;
-type CommentListener = (event: CommentLikeSyncEvent) => void;
+type ReplyCountSyncEvent = {
+  postId:          string;
+  parentCommentId: string | number;
+  reply_count:     number;
+};
 
-const listeners        = new Set<Listener>();
-const commentListeners = new Set<CommentListener>();
+type Listener             = (event: PostSyncEvent) => void;
+type CommentListener      = (event: CommentLikeSyncEvent) => void;
+type ReplyCountListener   = (event: ReplyCountSyncEvent) => void;
+
+const listeners           = new Set<Listener>();
+const commentListeners    = new Set<CommentListener>();
+const replyCountListeners = new Set<ReplyCountListener>();
 
 const cache = new Map<string, {
   liked:          boolean;
@@ -33,12 +41,14 @@ const commentCache = new Map<string, {
   like_count: number;
 }>();
 
+const replyCountCache = new Map<string, number>();
+
 function commentCacheKey(postId: string, commentId: string | number) {
   return `${postId}:${commentId}`;
 }
 
 export const postSyncStore = {
-  // ── Post likes ────────────────────────────────────────────────────────────
+  // ── Post likes / comment count ────────────────────────────────────────────
   emit(event: PostSyncEvent) {
     cache.set(event.postId, {
       liked:         event.liked,
@@ -74,5 +84,20 @@ export const postSyncStore = {
   subscribeCommentLike(fn: CommentListener) {
     commentListeners.add(fn);
     return () => { commentListeners.delete(fn); };
+  },
+
+  // ── Reply counts ──────────────────────────────────────────────────────────
+  emitReplyCount(event: ReplyCountSyncEvent) {
+    replyCountCache.set(commentCacheKey(event.postId, event.parentCommentId), event.reply_count);
+    replyCountListeners.forEach((fn) => fn(event));
+  },
+
+  getReplyCount(postId: string, parentCommentId: string | number) {
+    return replyCountCache.get(commentCacheKey(postId, parentCommentId)) ?? null;
+  },
+
+  subscribeReplyCount(fn: ReplyCountListener) {
+    replyCountListeners.add(fn);
+    return () => { replyCountListeners.delete(fn); };
   },
 };

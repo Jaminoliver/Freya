@@ -31,6 +31,7 @@ export async function GET(
         like_count,
         parent_comment_id,
         reply_to_username,
+        reply_to_id,
         user_id,
         profiles!user_id (
           username,

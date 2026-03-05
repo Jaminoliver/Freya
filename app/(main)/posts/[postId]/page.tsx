@@ -122,6 +122,7 @@ export default function SinglePostPage() {
   const [comments,    setComments]    = React.useState<ApiComment[]>([]);
   const [commentsLoading, setCommentsLoading] = React.useState(true);
   const [commentOpen, setCommentOpen] = React.useState(false);
+  const [commentCount, setCommentCount] = React.useState(0);
 
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
   const [checkoutType, setCheckoutType] = React.useState<CheckoutType>("tips");
@@ -167,6 +168,7 @@ export default function SinglePostPage() {
           post.comment_count = cached.comment_count ?? post.comment_count;
         }
         setPost(post);
+        setCommentCount(post.comment_count);
       } catch {
         setError("Failed to load post");
       } finally {
@@ -183,6 +185,7 @@ export default function SinglePostPage() {
       setPost((p) =>
         p ? { ...p, liked: event.liked, like_count: event.like_count, comment_count: event.comment_count ?? p.comment_count } : p
       );
+      if (event.comment_count !== undefined) setCommentCount(event.comment_count);
     });
   }, [postId]);
 
@@ -213,7 +216,7 @@ export default function SinglePostPage() {
       setPost((p) => {
         if (!p) return p;
         const updated = { ...p, liked: data.liked, like_count: data.like_count };
-        postSyncStore.emit({ postId: String(post.id), liked: updated.liked, like_count: updated.like_count, comment_count: updated.comment_count });
+        postSyncStore.emit({ postId: String(post.id), liked: updated.liked, like_count: updated.like_count, comment_count: commentCount });
         return updated;
       });
     } else {
@@ -232,7 +235,7 @@ export default function SinglePostPage() {
       setPost((p) => {
         if (!p) return p;
         const updated = { ...p, liked: data.liked, like_count: data.like_count };
-        postSyncStore.emit({ postId: String(post.id), liked: updated.liked, like_count: updated.like_count, comment_count: updated.comment_count });
+        postSyncStore.emit({ postId: String(post.id), liked: updated.liked, like_count: updated.like_count, comment_count: commentCount });
         return updated;
       });
     } else {
@@ -252,13 +255,13 @@ export default function SinglePostPage() {
     setTimeout(() => commentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
 
-  // ── Updated: passes parent_comment_id for replies ─────────────────────────
   const handleAddComment = async (
     id: string,
     text: string,
     gif_url?: string,
     parent_comment_id?: string | number,
-    reply_to_username?: string | null
+    reply_to_username?: string | null,
+    reply_to_id?: string | number | null
   ) => {
     const res = await fetch(`/api/posts/${id}/comments`, {
       method: "POST",
@@ -268,15 +271,18 @@ export default function SinglePostPage() {
         gif_url:            gif_url ?? null,
         parent_comment_id:  parent_comment_id ?? null,
         reply_to_username:  reply_to_username ?? null,
+        reply_to_id:        reply_to_id ?? null,
       }),
     });
-    if (res.ok && !parent_comment_id) {
-      setPost((p) => p ? { ...p, comment_count: p.comment_count + 1 } : p);
-      await fetchComments();
+    if (res.ok) {
+      const newCount = commentCount + 1;
+      setCommentCount(newCount);
+      setPost((p) => p ? { ...p, comment_count: newCount } : p);
       const current = postRef.current;
       if (current) {
-        postSyncStore.emit({ postId: String(current.id), liked: current.liked, like_count: current.like_count, comment_count: current.comment_count + 1 });
+        postSyncStore.emit({ postId: String(current.id), liked: current.liked, like_count: current.like_count, comment_count: newCount });
       }
+      if (!parent_comment_id) await fetchComments();
     }
   };
 
@@ -446,7 +452,7 @@ export default function SinglePostPage() {
       <div style={{ margin: "0 16px" }}>
         <PostActions
           likes={post.like_count}
-          comments={post.comment_count}
+          comments={commentCount}
           liked={post.liked}
           isSubscribed={post.can_access}
           isOwnProfile={isOwnPost}
@@ -466,6 +472,7 @@ export default function SinglePostPage() {
           viewerUserId={viewerId || undefined}
           isOpen={commentOpen}
           isLoading={commentsLoading}
+          totalCommentCount={commentCount}
           onClose={() => setCommentOpen(false)}
           onAddComment={handleAddComment}
         />

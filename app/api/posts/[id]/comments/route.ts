@@ -24,6 +24,7 @@ export async function GET(
         like_count,
         parent_comment_id,
         reply_to_username,
+        reply_to_id,
         user_id,
         profiles!user_id (
           username,
@@ -99,7 +100,7 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { content, gif_url, parent_comment_id, reply_to_username } = await req.json();
+    const { content, gif_url, parent_comment_id, reply_to_username, reply_to_id } = await req.json();
 
     console.log(`[Comments POST] postId=${postId} parent=${parent_comment_id ?? "null"} reply_to_username=${reply_to_username ?? "null"}`);
 
@@ -122,6 +123,7 @@ export async function POST(
         gif_url:            hasGif ? gif_url.trim() : null,
         parent_comment_id:  parent_comment_id ?? null,
         reply_to_username:  reply_to_username ?? null,
+        reply_to_id:        reply_to_id ?? null,
       })
       .select(`
         id,
@@ -131,6 +133,7 @@ export async function POST(
         like_count,
         parent_comment_id,
         reply_to_username,
+        reply_to_id,
         user_id,
         profiles!user_id (
           username,
@@ -147,9 +150,8 @@ export async function POST(
 
     console.log(`[Comments POST] Inserted id=${comment.id} parent=${comment.parent_comment_id ?? "null"}`);
 
-    if (!parent_comment_id) {
-      await service.rpc("increment_comment_count", { post_id: postId });
-    }
+    // Always increment — applies to both top-level comments and replies
+    await service.rpc("increment_comment_count", { post_id: postId });
 
     return NextResponse.json({ comment: { ...comment, viewer_has_liked: false } });
 

@@ -118,16 +118,28 @@ export function CommentRow({ comment, postId, viewerUserId, onDeleted, onReply }
   const addOptimisticReplyRef = React.useRef(addOptimisticReply);
   addOptimisticReplyRef.current = addOptimisticReply;
 
+  // Subscribe to reply count sync events
+  React.useEffect(() => {
+    return postSyncStore.subscribeReplyCount((event) => {
+      if (event.postId === postId && String(event.parentCommentId) === String(comment.id)) {
+        setReplyCount(event.reply_count);
+      }
+    });
+  }, [postId, comment.id]);
+
   // Register with parent
   const refetchReplies = React.useCallback(async () => {
     try {
       const res  = await fetch(`/api/posts/${postId}/comments/${comment.id}/replies`);
       const data = await res.json();
       if (res.ok) {
-        setReplies(data.replies ?? []);
+        const fetched = data.replies ?? [];
+        setReplies(fetched);
         setRepliesFetched(true);
+        setReplyCount(fetched.length);
+        postSyncStore.emitReplyCount({ postId, parentCommentId: comment.id, reply_count: fetched.length });
       }
-    } catch (err) { console.error("Refetch replies error:", err); }
+    } catch (err) { console.error('Refetch replies error:', err); }
   }, [postId, comment.id]);
 
   React.useEffect(() => {
@@ -216,22 +228,28 @@ export function CommentRow({ comment, postId, viewerUserId, onDeleted, onReply }
         </button>
       )}
 
-      {/* Replies — indented with left border line */}
+      {/* Replies — flat list sorted by created_at, @mention shows who they replied to */}
       {repliesOpen && replies.length > 0 && (
         <div style={{ marginLeft: "46px", marginTop: "8px", paddingLeft: "12px", borderLeft: "2px solid #2A2A3D" }}>
-          {replies.map((r) => (
-            <ReplyRow key={r.id} reply={r} postId={postId} viewerUserId={viewerUserId} onDeleted={handleReplyDeleted}
-              onReply={(reply) => {
-                // Thread reply-to-reply flat under this parent comment
-                // Pass reply_to_name so the ► tag shows who they're replying to
-                const asParent: ApiComment = {
-                  ...comment,
-                  reply_to_username: reply.profiles?.username || "user",
-                };
-                onReply?.(asParent);
-              }}
-            />
-          ))}
+          {[...replies]
+            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+            .map((r) => (
+              <ReplyRow
+                key={r.id}
+                reply={r}
+                postId={postId}
+                viewerUserId={viewerUserId}
+                onDeleted={handleReplyDeleted}
+                onReply={(reply) => {
+                  const asParent: ApiComment = {
+                    ...comment,
+                    reply_to_username: reply.profiles?.username || "user",
+                    reply_to_id: reply.id,
+                  };
+                  onReply?.(asParent);
+                }}
+              />
+            ))}
         </div>
       )}
     </div>
