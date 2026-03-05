@@ -30,7 +30,6 @@ function SettingsLayoutInner() {
   const searchParams = useSearchParams();
   const router       = useRouter();
 
-  // Pull username from global store if already bootstrapped
   const { viewer } = useAppStore();
 
   const [activeTab,   setActiveTab]   = useState<SettingsTab>("profile");
@@ -40,7 +39,6 @@ function SettingsLayoutInner() {
   const [revealed,    setRevealed]    = useState(!!viewer?.username);
 
   useEffect(() => {
-    // If viewer already in store, no need to fetch
     if (viewer?.username) {
       setUsername(viewer.username);
       setLoading(false);
@@ -49,10 +47,10 @@ function SettingsLayoutInner() {
     }
 
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(({ data: { user } }: { data: { user: { id: string } | null } }) => {
       if (user) {
         supabase.from("profiles").select("username").eq("id", user.id).single()
-          .then(({ data }) => {
+          .then(({ data }: { data: { username?: string } | null }) => {
             if (data?.username) setUsername(data.username);
             setLoading(false);
             requestAnimationFrame(() => setRevealed(true));
