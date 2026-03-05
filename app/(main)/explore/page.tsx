@@ -15,6 +15,15 @@ interface Creator {
   trending?: boolean;
 }
 
+interface ProfileRow {
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  subscriber_count: number | null;
+  is_verified: boolean | null;
+}
+
 function formatCount(n: number): string {
   if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "K";
@@ -33,7 +42,7 @@ export default function ExplorePage() {
     setLoading(true);
     const supabase = createClient();
 
-    let query = supabase
+    const { data, error } = await supabase
       .from("profiles")
       .select("username, display_name, avatar_url, banner_url, subscriber_count, is_verified")
       .eq("role", "creator")
@@ -42,10 +51,8 @@ export default function ExplorePage() {
       .order("subscriber_count", { ascending: false })
       .limit(50);
 
-    const { data, error } = await query;
-
     if (!error && data) {
-      const mapped: Creator[] = data.map((p, i) => ({
+      const mapped: Creator[] = (data as ProfileRow[]).map((p, i) => ({
         username:    p.username,
         name:        p.display_name || p.username,
         avatar:      p.avatar_url || `https://i.pravatar.cc/150?img=${i + 1}`,
@@ -69,7 +76,6 @@ export default function ExplorePage() {
 
   return (
     <div style={{ maxWidth: "100%", fontFamily: "'Inter', sans-serif", backgroundColor: "#0A0A0F", minHeight: "100vh" }}>
-      {/* Sticky header */}
       <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "#0A0A0F", padding: "24px 20px 16px", borderBottom: "1px solid #1E1E2E" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", gap: "16px", flexWrap: "wrap" }}>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 800, color: "#F1F5F9" }}>Discover</h1>
@@ -87,7 +93,6 @@ export default function ExplorePage() {
         <FilterTabs active={activeFilter} onChange={setActiveFilter} />
       </div>
 
-      {/* Grid */}
       <div style={{ padding: "20px 20px 80px" }}>
         {loading ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px" }}>
