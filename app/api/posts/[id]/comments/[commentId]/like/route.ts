@@ -25,14 +25,30 @@ export async function POST(
 
     if (existing) {
       await service.from("comment_likes").delete().eq("id", existing.id);
-      const { data: comment } = await service.from("comments").select("like_count").eq("id", commentIdNum).single();
-      await service.from("comments").update({ like_count: Math.max((comment?.like_count ?? 1) - 1, 0) }).eq("id", commentIdNum);
-      return NextResponse.json({ liked: false });
+
+      const { data: comment } = await service
+        .from("comments")
+        .select("like_count")
+        .eq("id", commentIdNum)
+        .single();
+
+      const newCount = Math.max((comment?.like_count ?? 1) - 1, 0);
+      await service.from("comments").update({ like_count: newCount }).eq("id", commentIdNum);
+
+      return NextResponse.json({ liked: false, like_count: newCount });
     } else {
       await service.from("comment_likes").insert({ comment_id: commentIdNum, user_id: user.id });
-      const { data: comment } = await service.from("comments").select("like_count").eq("id", commentIdNum).single();
-      await service.from("comments").update({ like_count: (comment?.like_count ?? 0) + 1 }).eq("id", commentIdNum);
-      return NextResponse.json({ liked: true });
+
+      const { data: comment } = await service
+        .from("comments")
+        .select("like_count")
+        .eq("id", commentIdNum)
+        .single();
+
+      const newCount = (comment?.like_count ?? 0) + 1;
+      await service.from("comments").update({ like_count: newCount }).eq("id", commentIdNum);
+
+      return NextResponse.json({ liked: true, like_count: newCount });
     }
   } catch (err) {
     console.error("[Comment Like] Error:", err);

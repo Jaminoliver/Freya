@@ -21,6 +21,7 @@ export async function GET(
       .select(`
         id,
         content,
+        gif_url,
         created_at,
         like_count,
         parent_comment_id,
@@ -34,7 +35,7 @@ export async function GET(
       .eq("post_id", postId)
       .eq("is_deleted", false)
       .is("parent_comment_id", null)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(100);
 
     if (error) {
@@ -82,13 +83,17 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { content, parent_comment_id } = await req.json();
+    const { content, gif_url, parent_comment_id } = await req.json();
 
-    if (!content || content.trim().length === 0) {
+    // Must have either text content or a GIF
+    const hasText = content && content.trim().length > 0;
+    const hasGif  = gif_url  && gif_url.trim().length > 0;
+
+    if (!hasText && !hasGif) {
       return NextResponse.json({ error: "Comment cannot be empty" }, { status: 400 });
     }
 
-    if (content.length > 1000) {
+    if (hasText && content.length > 1000) {
       return NextResponse.json({ error: "Comment too long (max 1000 characters)" }, { status: 400 });
     }
 
@@ -99,12 +104,14 @@ export async function POST(
       .insert({
         user_id:           user.id,
         post_id:           postId,
-        content:           content.trim(),
+        content:           hasText ? content.trim() : "",
+        gif_url:           hasGif  ? gif_url.trim()  : null,
         parent_comment_id: parent_comment_id ?? null,
       })
       .select(`
         id,
         content,
+        gif_url,
         created_at,
         like_count,
         parent_comment_id,

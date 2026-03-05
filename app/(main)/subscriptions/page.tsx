@@ -29,7 +29,7 @@ export default function SubscriptionsPage() {
     fresh ? cached.posts : []
   );
   const [loading,  setLoading]  = useState(!fresh);
-  const [revealed, setRevealed] = useState(fresh ?? false);
+  const [revealed, setRevealed] = useState(false); // always false on first render — avoids hydration mismatch
 
   const fetchSubscriptions = async (force = false) => {
     if (!force && fresh) return;
@@ -43,7 +43,6 @@ export default function SubscriptionsPage() {
         setSubscriptions(subs);
         setContentFeed(CACHE_KEY, { posts: subs, media: [], fetchedAt: Date.now() });
 
-        // Preload images AFTER render — fire and forget, doesn't block UI
         const urls: string[] = [];
         for (const s of subs.slice(0, 6)) {
           if (s.banner_url) urls.push(s.banner_url);
@@ -60,7 +59,10 @@ export default function SubscriptionsPage() {
   };
 
   useEffect(() => {
-    if (fresh) { setRevealed(true); return; }
+    if (fresh) {
+      setRevealed(true); // only runs client-side — safe
+      return;
+    }
     fetchSubscriptions();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

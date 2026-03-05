@@ -89,18 +89,43 @@ export default function ProfilePage() {
     }
   }, []);
 
+  // ── Background revalidation ───────────────────────────────────────────────
+  // Always re-fetch subscription status + posts in the background even when
+  // cache is fresh — prevents stale sub/post state after a glitch or race.
+  const backgroundRevalidate = React.useCallback(async (creatorId: string, creatorUsername: string) => {
+    try {
+      const [subRes, postsRes] = await Promise.allSettled([
+        fetch(`/api/subscriptions/status?creatorId=${creatorId}`),
+        fetch(`/api/posts/creator/${creatorUsername}`),
+      ]);
+
+      if (subRes.status === "fulfilled" && subRes.value.ok) {
+        const data = await subRes.value.json();
+        const subscribedVal = !!data.active;
+        const periodEndVal  = data.currentPeriodEnd ?? null;
+        setIsSubscribed(subscribedVal);
+        setSubscriptionPeriodEnd(periodEndVal);
+        updateProfile(creatorUsername, { isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal });
+      }
+
+      if (postsRes.status === "fulfilled" && postsRes.value.ok) {
+        const data = await postsRes.value.json();
+        const freshPosts: ApiPost[] = data.posts || [];
+        setApiPosts(freshPosts);
+        updateProfile(creatorUsername, { apiPosts: freshPosts });
+      }
+    } catch (err) {
+      console.error("[ProfilePage] backgroundRevalidate error:", err);
+    }
+  }, [updateProfile]);
+
   // ── Main fetch ────────────────────────────────────────────────────────────
-  // Wait for AppStoreProvider to finish setting globalViewer before we fetch.
-  // This prevents a race where both this page and AppStoreProvider call
-  // supabase.auth.getUser() simultaneously, causing one to hang.
   const [viewerReady, setViewerReady] = React.useState(() => !!globalViewer);
 
   React.useEffect(() => {
     if (globalViewer) setViewerReady(true);
   }, [globalViewer]);
 
-  // Timeout fallback: if AppStoreProvider never sets globalViewer (logged-out user),
-  // unblock after 1.5s so the page still loads for unauthenticated visitors.
   React.useEffect(() => {
     if (viewerReady) return;
     const t = setTimeout(() => setViewerReady(true), 1500);
@@ -124,6 +149,11 @@ export default function ProfilePage() {
       setTierId(cached.tierId);
       setApiLoading(false);
       requestAnimationFrame(() => setRevealed(true));
+
+      // ── Background revalidate sub status + posts even on cache hit ──
+      if (cached.profile?.role === "creator" && cached.viewer?.id !== cached.profile.id) {
+        backgroundRevalidate(cached.profile.id, cached.profile.username);
+      }
       return;
     }
 
@@ -131,7 +161,6 @@ export default function ProfilePage() {
       try {
         const supabase = createClient();
 
-        // Use globalViewer already resolved by AppStoreProvider — no extra auth call.
         const viewerData: User | null = (globalViewer as any) ?? null;
 
         const profilePromise = supabase
@@ -141,7 +170,6 @@ export default function ProfilePage() {
           .single();
 
         const profileResult = await profilePromise;
-        const viewerResult  = { status: "fulfilled" as const, value: viewerData };
 
         const profileRaw = profileResult.data ?? null;
 
@@ -176,8 +204,6 @@ export default function ProfilePage() {
           const isOwnProfile = userId === profileRaw.id;
           const isCreator    = profileRaw.role === "creator";
 
-
-
           if (isCreator) {
             console.log("[ProfilePage] fetching creator-specific data");
             const [tierRes, subRes, followRes, postsRes] = await Promise.allSettled([
@@ -194,7 +220,6 @@ export default function ProfilePage() {
                 : Promise.resolve(false),
               fetch(`/api/posts/creator/${profileRaw.username}`),
             ]);
-
 
             if (tierRes.status === "fulfilled" && tierRes.value.data) {
               tierIdVal = tierRes.value.data.id;
@@ -352,7 +377,6 @@ export default function ProfilePage() {
     />
   ) : null;
 
-  // ── Error state ───────────────────────────────────────────────────────────
   if (!apiLoading && fetchError) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>

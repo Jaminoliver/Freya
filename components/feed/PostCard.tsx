@@ -204,10 +204,11 @@ export function PostCard({
     isLiking.current = false;
   };
 
-  const handleAddComment = useCallback(async (id: string, text: string) => {
+  const handleAddComment = useCallback(async (id: string, text: string, gif_url?: string) => {
     await fetch(`/api/posts/${id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text, gif_url: gif_url ?? null }),
     });
     const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
     if (d.comments) {

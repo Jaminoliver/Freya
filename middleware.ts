@@ -22,9 +22,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request })
   }
 
-  // ── Create response first, then attach supabase to it ──────────────────────
-  // This is the correct Supabase SSR pattern — the response object must be
-  // created before the client so cookie writes propagate back to the browser.
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -36,9 +33,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          // Write to both the request (for downstream use) and the response
-          // (so the browser receives the refreshed session cookies)
-          cookiesToSet.forEach(({ name, value, options }) => {
+          cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value)
           })
           response = NextResponse.next({ request })
@@ -50,9 +45,22 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // IMPORTANT: Always call getUser() to refresh the session token.
-  // This must happen before any redirects so cookies are refreshed on every request.
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
+
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch (error) {
+    // Network failure or Supabase unreachable — fail open on public routes,
+    // redirect to login on protected routes to avoid crashing
+    console.error('[Middleware] Supabase getUser failed:', error)
+
+    if (!isPublicRoute) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+
+    return NextResponse.next({ request })
+  }
 
   if (!user && !isPublicRoute) {
     return NextResponse.redirect(new URL('/login', request.url))

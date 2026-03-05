@@ -159,8 +159,12 @@ export default function PostRow({
       .catch((err) => console.error("[Comments] Fetch error:", err));
   }, [commentOpen, post.id]);
 
-  const handleAddComment = React.useCallback(async (id: string, text: string) => {
-    await fetch(`/api/posts/${id}/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: text }) });
+  const handleAddComment = React.useCallback(async (id: string, text: string, gif_url?: string) => {
+    await fetch(`/api/posts/${id}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text, gif_url: gif_url ?? null }),
+    });
     const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
     if (d.comments) { setComments(d.comments); setCommentCount(d.comments.length); }
   }, []);

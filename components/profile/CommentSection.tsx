@@ -2,13 +2,16 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { Send, Heart, Trash2, MoreHorizontal, X } from "lucide-react";
+import { Send, Heart, Trash2, MoreHorizontal, X, Star } from "lucide-react";
+import { postSyncStore } from "@/lib/store/postSyncStore";
+import { GifItem, GifPicker } from "@/components/gif/GifComponents";
 
 const QUICK_EMOJIS = ["😊", "😄", "🤣", "😜", "😆", "😝", "😂", "😁", "🥰", "🤩", "💋"];
 
 interface ApiComment {
   id: string | number;
   content: string;
+  gif_url?: string | null;
   created_at: string;
   like_count: number;
   user_id: string;
@@ -25,7 +28,7 @@ interface CommentSectionProps {
   comments: ApiComment[];
   viewer?: { username: string; display_name: string; avatar_url?: string } | null;
   viewerUserId?: string;
-  onAddComment?: (postId: string, text: string) => Promise<void>;
+  onAddComment?: (postId: string, text: string, gif_url?: string) => Promise<void>;
   isOpen?: boolean;
   onClose?: () => void;
 }
@@ -54,36 +57,61 @@ function Avatar({ src, name, size = 36 }: { src?: string | null; name: string; s
   );
 }
 
-function getLikeKey(postId: string, commentId: string | number) {
-  return `comment_liked:${postId}:${commentId}`;
-}
-function getStoredLike(postId: string, commentId: string | number): boolean | null {
-  try {
-    const val = localStorage.getItem(getLikeKey(postId, commentId));
-    if (val === null) return null;
-    return val === "1";
-  } catch { return null; }
-}
-function setStoredLike(postId: string, commentId: string | number, liked: boolean) {
-  try { localStorage.setItem(getLikeKey(postId, commentId), liked ? "1" : "0"); } catch { }
+// ── GIF Comment Sheet ─────────────────────────────────────────────────────────
+function GifCommentSheet({ gifUrl, onSave, onClose }: {
+  gifUrl: string;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  return createPortal(
+    <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.6)" }} />
+      <div style={{ position: "relative", backgroundColor: "#13131F", borderRadius: "20px 20px 0 0", padding: "20px 20px 36px", display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
+        <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", marginBottom: "4px" }} />
+        <img src={gifUrl} alt="GIF" style={{ width: "200px", borderRadius: "12px", display: "block" }} />
+        <span style={{ fontSize: "11px", color: "#4A4A6A", fontFamily: "'Inter', sans-serif" }}>GIF by KLIPY</span>
+        <div style={{ display: "flex", gap: "12px", width: "100%" }}>
+          <button
+            onClick={() => { navigator.share?.({ url: gifUrl }); onClose(); }}
+            style={{ flex: 1, padding: "14px", borderRadius: "14px", border: "1px solid #2A2A3D", backgroundColor: "#1C1C2E", color: "#C4C4D4", fontSize: "14px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+          >
+            Share
+          </button>
+          <button
+            onClick={() => { onSave(); onClose(); }}
+            style={{ flex: 1, padding: "14px", borderRadius: "14px", border: "1px solid #FACC15", backgroundColor: "rgba(250,204,21,0.1)", color: "#FACC15", fontSize: "14px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+          >
+            <Star size={15} fill="#FACC15" color="#FACC15" /> Save ⭐
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
 }
 
+// ── Comment Row ───────────────────────────────────────────────────────────────
 function CommentRow({ comment, postId, viewerUserId, onDeleted }: {
   comment: ApiComment; postId: string; viewerUserId?: string; onDeleted?: (id: string | number) => void;
 }) {
-  const [liked,     setLiked]     = React.useState(comment.viewer_has_liked ?? false);
-  const [likeCount, setLikeCount] = React.useState(comment.like_count);
+  const cached      = postSyncStore.getCommentLike(postId, comment.id);
+  const [liked,     setLiked]     = React.useState(cached?.liked      ?? comment.viewer_has_liked ?? false);
+  const [likeCount, setLikeCount] = React.useState(cached?.like_count ?? comment.like_count);
   const [deleting,  setDeleting]  = React.useState(false);
   const [menuOpen,  setMenuOpen]  = React.useState(false);
-  const menuRef = React.useRef<HTMLDivElement>(null);
+  const [gifSheetOpen, setGifSheetOpen] = React.useState(false);
+  const menuRef     = React.useRef<HTMLDivElement>(null);
   const displayName = comment.profiles?.display_name || comment.profiles?.username || "User";
-  const isOwner = viewerUserId && comment.user_id === viewerUserId;
+  const isOwner     = viewerUserId && comment.user_id === viewerUserId;
 
   React.useEffect(() => {
-    if (comment.viewer_has_liked !== undefined) return;
-    const stored = getStoredLike(postId, comment.id);
-    if (stored !== null) setLiked(stored);
-  }, [comment.id, comment.viewer_has_liked, postId]);
+    return postSyncStore.subscribeCommentLike((event) => {
+      if (event.postId === postId && event.commentId === comment.id) {
+        setLiked(event.liked);
+        setLikeCount(event.like_count);
+      }
+    });
+  }, [postId, comment.id]);
 
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -94,21 +122,24 @@ function CommentRow({ comment, postId, viewerUserId, onDeleted }: {
   }, []);
 
   const handleLike = async () => {
-    const newLiked = !liked;
+    const newLiked     = !liked;
+    const newLikeCount = newLiked ? likeCount + 1 : Math.max(0, likeCount - 1);
     setLiked(newLiked);
-    setLikeCount((c) => newLiked ? c + 1 : Math.max(0, c - 1));
-    setStoredLike(postId, comment.id, newLiked);
+    setLikeCount(newLikeCount);
+    postSyncStore.emitCommentLike({ postId, commentId: comment.id, liked: newLiked, like_count: newLikeCount });
     try {
-      const res = await fetch(`/api/posts/${postId}/comments/${comment.id}/like`, { method: "POST" });
+      const res  = await fetch(`/api/posts/${postId}/comments/${comment.id}/like`, { method: "POST" });
+      const data = await res.json();
       if (!res.ok) {
-        setLiked(!newLiked);
-        setLikeCount((c) => newLiked ? Math.max(0, c - 1) : c + 1);
-        setStoredLike(postId, comment.id, !newLiked);
+        setLiked(!newLiked); setLikeCount(likeCount);
+        postSyncStore.emitCommentLike({ postId, commentId: comment.id, liked: !newLiked, like_count: likeCount });
+        return;
       }
+      setLiked(data.liked); setLikeCount(data.like_count);
+      postSyncStore.emitCommentLike({ postId, commentId: comment.id, liked: data.liked, like_count: data.like_count });
     } catch {
-      setLiked(!newLiked);
-      setLikeCount((c) => newLiked ? Math.max(0, c - 1) : c + 1);
-      setStoredLike(postId, comment.id, !newLiked);
+      setLiked(!newLiked); setLikeCount(likeCount);
+      postSyncStore.emitCommentLike({ postId, commentId: comment.id, liked: !newLiked, like_count: likeCount });
     }
   };
 
@@ -119,11 +150,8 @@ function CommentRow({ comment, postId, viewerUserId, onDeleted }: {
     try {
       const res = await fetch(`/api/posts/${postId}/comments/${comment.id}/delete`, { method: "DELETE" });
       if (res.ok) onDeleted?.(comment.id);
-    } catch (err) {
-      console.error("Delete comment error:", err);
-    } finally {
-      setDeleting(false);
-    }
+    } catch (err) { console.error("Delete comment error:", err); }
+    finally { setDeleting(false); }
   };
 
   return (
@@ -133,7 +161,30 @@ function CommentRow({ comment, postId, viewerUserId, onDeleted }: {
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: "13px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>{displayName}</span>
-            <p style={{ margin: "3px 0 0", fontSize: "13px", color: "#C4C4D4", lineHeight: 1.5, fontFamily: "'Inter', sans-serif", wordBreak: "break-word" }}>{comment.content}</p>
+            {comment.content && (
+              <p style={{ margin: "3px 0 0", fontSize: "13px", color: "#C4C4D4", lineHeight: 1.5, fontFamily: "'Inter', sans-serif", wordBreak: "break-word" }}>{comment.content}</p>
+            )}
+            {comment.gif_url && (
+              <div
+                onClick={() => setGifSheetOpen(true)}
+                style={{ marginTop: "6px", borderRadius: "10px", overflow: "hidden", maxWidth: "200px", cursor: "pointer" }}
+              >
+                <img src={comment.gif_url} alt="GIF" style={{ width: "100%", display: "block", borderRadius: "10px" }} />
+              </div>
+            )}
+            {gifSheetOpen && comment.gif_url && (
+              <GifCommentSheet
+                gifUrl={comment.gif_url}
+                onSave={async () => {
+                  await fetch("/api/gifs/favorites", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ gif_id: comment.gif_url, gif_url: comment.gif_url, preview_url: comment.gif_url, title: "" }),
+                  });
+                }}
+                onClose={() => setGifSheetOpen(false)}
+              />
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "6px" }}>
               <span style={{ fontSize: "11px", color: "#4A4A6A", fontFamily: "'Inter', sans-serif" }}>{getRelativeTime(comment.created_at)}</span>
               <button style={{ fontSize: "11px", color: "#8B5CF6", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", fontWeight: 600, padding: 0 }}>Reply</button>
@@ -168,31 +219,30 @@ function CommentRow({ comment, postId, viewerUserId, onDeleted }: {
   );
 }
 
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function CommentSection({ postId, comments: propComments, viewer, viewerUserId, onAddComment, isOpen = false, onClose }: CommentSectionProps) {
   const [text,          setText]          = React.useState("");
+  const [selectedGif,   setSelectedGif]   = React.useState<GifItem | null>(null);
+  const [gifPickerOpen, setGifPickerOpen] = React.useState(false);
   const [localComments, setLocalComments] = React.useState<ApiComment[]>(propComments);
   const [visible,       setVisible]       = React.useState(false);
   const [animateIn,     setAnimateIn]     = React.useState(false);
   const [mounted,       setMounted]       = React.useState(false);
-  const inputRef   = React.useRef<HTMLInputElement>(null);
-  const sheetRef   = React.useRef<HTMLDivElement>(null);
-  const dragStartY = React.useRef(0);
-  const dragDeltaY = React.useRef(0);
-  const isDragging = React.useRef(false);
+  const inputRef     = React.useRef<HTMLInputElement>(null);
+  const sheetRef     = React.useRef<HTMLDivElement>(null);
+  const inputAreaRef = React.useRef<HTMLDivElement>(null);
+  const commentsRef  = React.useRef<HTMLDivElement>(null);
+  const dragStartY   = React.useRef(0);
+  const dragDeltaY   = React.useRef(0);
+  const isDragging   = React.useRef(false);
 
   React.useEffect(() => { setMounted(true); }, []);
+  React.useEffect(() => { setLocalComments(propComments); }, [propComments]);
 
-  // Sync comments from parent but preserve optimistic ones
-  React.useEffect(() => {
-    setLocalComments(propComments);
-  }, [propComments]);
-
-  // FIX: two-step open — mount first, then animate in next tick
   React.useEffect(() => {
     if (isOpen) {
       setVisible(true);
       document.body.style.overflow = "hidden";
-      // Wait for visible=true to mount the portal, then trigger animation
       const t = setTimeout(() => {
         setAnimateIn(true);
         setTimeout(() => inputRef.current?.focus(), 350);
@@ -206,10 +256,16 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     }
   }, [isOpen]);
 
-  // Cleanup on unmount
+  React.useEffect(() => { return () => { document.body.style.overflow = ""; }; }, []);
+
   React.useEffect(() => {
-    return () => { document.body.style.overflow = ""; };
-  }, []);
+    if (!gifPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (inputAreaRef.current && !inputAreaRef.current.contains(e.target as Node)) setGifPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [gifPickerOpen]);
 
   const handleClose = React.useCallback(() => {
     setAnimateIn(false);
@@ -217,12 +273,8 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     setTimeout(() => { setVisible(false); onClose?.(); }, 320);
   }, [onClose]);
 
-  const onTouchStart = (e: React.TouchEvent) => {
-    dragStartY.current = e.touches[0].clientY;
-    dragDeltaY.current = 0;
-    isDragging.current = true;
-  };
-  const onTouchMove = (e: React.TouchEvent) => {
+  const onTouchStart = (e: React.TouchEvent) => { dragStartY.current = e.touches[0].clientY; dragDeltaY.current = 0; isDragging.current = true; };
+  const onTouchMove  = (e: React.TouchEvent) => {
     if (!isDragging.current || !sheetRef.current) return;
     const delta = e.touches[0].clientY - dragStartY.current;
     dragDeltaY.current = delta;
@@ -235,117 +287,99 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     dragDeltaY.current = 0;
   };
 
-  const handleDeleted = (id: string | number) => setLocalComments((prev) => prev.filter((c) => c.id !== id));
+  const handleDeleted   = (id: string | number) => setLocalComments((prev) => prev.filter((c) => c.id !== id));
+  const handleGifSelect = (gif: GifItem) => { setSelectedGif(gif); setGifPickerOpen(false); setText(""); };
 
   const handleSend = async () => {
     const trimmed = text.trim();
-    if (!trimmed || !viewer) return;
+    if (!trimmed && !selectedGif) return;
+    if (!viewer) return;
+
     const optimistic: ApiComment = {
-      id: `local-${Date.now()}`,
-      content: trimmed,
-      created_at: new Date().toISOString(),
-      like_count: 0,
-      user_id: viewerUserId || "",
+      id:               `local-${Date.now()}`,
+      content:          trimmed,
+      gif_url:          selectedGif?.url ?? null,
+      created_at:       new Date().toISOString(),
+      like_count:       0,
+      user_id:          viewerUserId || "",
       viewer_has_liked: false,
-      profiles: { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url || null },
+      profiles:         { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url || null },
     };
+
     setLocalComments((prev) => [optimistic, ...prev]);
+    commentsRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    const gifUrl = selectedGif?.url;
     setText("");
-    await onAddComment?.(postId, trimmed);
-    // propComments will update from parent fetchComments and sync via useEffect above
+    setSelectedGif(null);
+    await onAddComment?.(postId, trimmed, gifUrl);
   };
 
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  };
+  const handleKey = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
+  const canSend   = text.trim().length > 0 || selectedGif !== null;
 
   if (!mounted || !visible) return null;
 
   return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-      {/* Backdrop */}
-      <div
-        onClick={handleClose}
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundColor: "rgba(0,0,0,0.65)",
-          backdropFilter: "blur(2px)",
-          WebkitBackdropFilter: "blur(2px)",
-          opacity: animateIn ? 1 : 0,
-          transition: "opacity 0.32s cubic-bezier(0.32, 0.72, 0, 1)",
-        }}
-      />
+      <div onClick={handleClose} style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)", WebkitBackdropFilter: "blur(2px)", opacity: animateIn ? 1 : 0, transition: "opacity 0.32s cubic-bezier(0.32, 0.72, 0, 1)" }} />
 
-      {/* Sheet */}
-      <div
-        ref={sheetRef}
-        style={{
-          position: "relative",
-          backgroundColor: "#0F0F1A",
-          borderRadius: "20px 20px 0 0",
-          maxHeight: "80vh",
-          display: "flex",
-          flexDirection: "column",
-          transform: animateIn ? "translateY(0)" : "translateY(100%)",
-          transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)",
-          boxShadow: "0 -4px 40px rgba(0,0,0,0.6)",
-        }}
-      >
-        {/* Drag handle + header */}
-        <div
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          style={{ padding: "12px 16px 0", userSelect: "none", touchAction: "none" }}
-        >
+      <div ref={sheetRef} style={{ position: "relative", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", maxHeight: "80vh", display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)" }}>
+
+        <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ padding: "12px 16px 0", userSelect: "none", touchAction: "none" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", margin: "0 auto 14px" }} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-            <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>
-              Comments {localComments.length > 0 ? `· ${localComments.length}` : ""}
-            </span>
-            <button onClick={handleClose} style={{ width: "30px", height: "30px", borderRadius: "50%", border: "none", backgroundColor: "#1C1C2E", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <X size={15} />
-            </button>
+            <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>Comments {localComments.length > 0 ? `· ${localComments.length}` : ""}</span>
+            <button onClick={handleClose} style={{ width: "30px", height: "30px", borderRadius: "50%", border: "none", backgroundColor: "#1C1C2E", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={15} /></button>
           </div>
         </div>
 
-        {/* Scrollable comment list */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "0 16px", scrollbarWidth: "none" }}>
-          {localComments.length === 0 && (
-            <p style={{ fontSize: "13px", color: "#4A4A6A", textAlign: "center", padding: "32px 0", fontFamily: "'Inter', sans-serif" }}>
-              No comments yet. Be the first!
-            </p>
-          )}
-          {localComments.map((c) => (
-            <CommentRow key={c.id} comment={c} postId={postId} viewerUserId={viewerUserId} onDeleted={handleDeleted} />
-          ))}
+        <div ref={commentsRef} style={{ flex: 1, overflowY: "auto", padding: "0 16px", scrollbarWidth: "none" }}>
+          {localComments.length === 0 && <p style={{ fontSize: "13px", color: "#4A4A6A", textAlign: "center", padding: "32px 0", fontFamily: "'Inter', sans-serif" }}>No comments yet. Be the first!</p>}
+          {localComments.map((c) => <CommentRow key={c.id} comment={c} postId={postId} viewerUserId={viewerUserId} onDeleted={handleDeleted} />)}
         </div>
 
-        {/* Pinned input */}
-        <div style={{ padding: "12px 16px 20px", borderTop: "1px solid #13131F", backgroundColor: "#0F0F1A" }}>
+        <div ref={inputAreaRef} style={{ padding: "12px 16px 20px", borderTop: "1px solid #13131F", backgroundColor: "#0F0F1A", position: "relative" }}>
+          {gifPickerOpen && (
+            <GifPicker
+              onSelect={handleGifSelect}
+              onClose={() => setGifPickerOpen(false)}
+              viewerUserId={viewerUserId}
+            />
+          )}
+
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", overflowX: "auto", scrollbarWidth: "none" }}>
-            <button style={{ padding: "5px 10px", borderRadius: "8px", border: "1px solid #2A2A3D", backgroundColor: "#1C1C2E", color: "#8A8AA0", fontSize: "12px", fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>GIF</button>
+            <button
+              onClick={() => setGifPickerOpen((o) => !o)}
+              style={{ padding: "5px 10px", borderRadius: "8px", border: `1px solid ${gifPickerOpen ? "#8B5CF6" : "#2A2A3D"}`, backgroundColor: gifPickerOpen ? "#2D1F4E" : "#1C1C2E", color: gifPickerOpen ? "#8B5CF6" : "#8A8AA0", fontSize: "12px", fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
+            >GIF</button>
             {QUICK_EMOJIS.map((emoji) => (
-              <button key={emoji} onClick={() => setText((p) => p + emoji)} style={{ fontSize: "22px", background: "none", border: "none", cursor: "pointer", flexShrink: 0, lineHeight: 1, padding: "2px", borderRadius: "6px", transition: "transform 0.1s" }}
+              <button key={emoji} onClick={() => { setText((p) => p + emoji); }} style={{ fontSize: "22px", background: "none", border: "none", cursor: "pointer", flexShrink: 0, lineHeight: 1, padding: "2px", borderRadius: "6px", transition: "transform 0.1s" }}
                 onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.25)")}
                 onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
               >{emoji}</button>
             ))}
           </div>
+
+          {selectedGif && (
+            <div style={{ position: "relative", display: "inline-block", marginBottom: "8px" }}>
+              <img src={selectedGif.preview_url || selectedGif.url} alt="Selected GIF" style={{ height: "80px", borderRadius: "8px", display: "block" }} />
+              <button onClick={() => setSelectedGif(null)} style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", border: "none", backgroundColor: "rgba(0,0,0,0.7)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                <X size={11} />
+              </button>
+            </div>
+          )}
+
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <Avatar src={viewer?.avatar_url} name={viewer?.display_name || "You"} size={34} />
             <div style={{ flex: 1, display: "flex", alignItems: "center", backgroundColor: "#13131F", border: "1px solid #2A2A3D", borderRadius: "24px", padding: "10px 14px", gap: "8px" }}>
               <input
-                ref={inputRef}
-                type="text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
+                ref={inputRef} type="text" value={text}
+                onChange={(e) => { setText(e.target.value); }}
                 onKeyDown={handleKey}
-                placeholder="Add a comment…"
+                placeholder={selectedGif ? "Add a caption… (optional)" : "Add a comment…"}
                 style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: "13px", color: "#E2E8F0", fontFamily: "'Inter', sans-serif", caretColor: "#8B5CF6" }}
               />
-              <button onClick={handleSend} disabled={!text.trim()} style={{ background: "none", border: "none", cursor: text.trim() ? "pointer" : "default", color: text.trim() ? "#8B5CF6" : "#3A3A4D", display: "flex", alignItems: "center", justifyContent: "center", padding: "2px", transition: "color 0.15s" }}>
+              <button onClick={handleSend} disabled={!canSend} style={{ background: "none", border: "none", cursor: canSend ? "pointer" : "default", color: canSend ? "#8B5CF6" : "#3A3A4D", display: "flex", alignItems: "center", justifyContent: "center", padding: "2px", transition: "color 0.15s" }}>
                 <Send size={17} strokeWidth={2} />
               </button>
             </div>

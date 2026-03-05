@@ -18,6 +18,7 @@ import type { User } from "@/lib/types/profile";
 interface ApiComment {
   id: string | number;
   content: string;
+  gif_url?: string | null;
   created_at: string;
   like_count: number;
   user_id: string;
@@ -248,11 +249,12 @@ export default function SinglePostPage() {
     setTimeout(() => commentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
 
-  const handleAddComment = async (id: string, text: string) => {
+  // ── Updated: accepts gif_url ──────────────────────────────────────────────
+  const handleAddComment = async (id: string, text: string, gif_url?: string) => {
     const res = await fetch(`/api/posts/${id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text }),
+      body: JSON.stringify({ content: text, gif_url: gif_url ?? null }),
     });
     if (res.ok) {
       setPost((p) => p ? { ...p, comment_count: p.comment_count + 1 } : p);
@@ -297,7 +299,6 @@ export default function SinglePostPage() {
   const isOwnPost  = viewerId === post.creator_id;
   const photoMedia = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
 
-  // Normalize media — if post is locked, pass only first item for blurred preview
   const normalizedMedia: NormalizedMedia[] = post.locked
     ? post.media.slice(0, 1).map((m) => ({
         type:             m.media_type === "video" ? "video" : "image",
