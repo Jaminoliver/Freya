@@ -5,34 +5,50 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/lib/store/appStore";
 
+const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+// Plain fetch avoids Supabase client deadlock inside onAuthStateChange
+async function fetchProfileById(userId: string, accessToken: string) {
+  const url = `${SUPABASE_URL}/rest/v1/profiles?select=id,username,display_name,avatar_url,role&id=eq.${userId}&limit=1`;
+  const res = await fetch(url, {
+    headers: {
+      "apikey":        SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type":  "application/json",
+    },
+  });
+  if (!res.ok) throw new Error(`Profile fetch failed: ${res.status}`);
+  const rows = await res.json();
+  return rows[0] ?? null;
+}
+
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const { setViewer } = useAppStore();
   const fetchingRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Single client with noOpLock — used for both auth and profile queries
     const supabase = createClient();
 
-    const fetchAndSetViewer = async (userId: string) => {
-      if (fetchingRef.current === userId) {
-        console.log("[AppStoreProvider] skipped — already in flight for:", userId);
-        return;
-      }
+    // Hydrate viewer from sessionStorage immediately on mount
+    // so the page doesn't wait for onAuthStateChange on reload
+    const stored = sessionStorage.getItem("freya_viewer_cache");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed?.id) setViewer(parsed);
+      } catch {}
+    }
+
+    const fetchAndSetViewer = async (userId: string, accessToken: string) => {
+      if (fetchingRef.current === userId) return;
       fetchingRef.current = userId;
-      console.log("[AppStoreProvider] fetchAndSetViewer started, userId:", userId);
+
+      // Defer to next event loop tick to break out of Supabase auth lock chain
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       try {
-        console.log("[AppStoreProvider] querying profiles table...");
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("id, username, display_name, avatar_url, role")
-          .eq("id", userId)
-          .single();
-
-        console.log("[AppStoreProvider] profile query result — data:", data, "error:", error);
-
-        if (error) throw error;
-
+        const data = await fetchProfileById(userId, accessToken);
         if (data) {
           setViewer({
             id:           userId,
@@ -41,48 +57,18 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
             avatar_url:   data.avatar_url || null,
             role:         data.role || "fan",
           });
-          console.log("[AppStoreProvider] viewer set successfully:", data.username);
-        } else {
-          console.warn("[AppStoreProvider] no profile data for userId:", userId);
         }
       } catch (err: unknown) {
         console.error("[AppStoreProvider] profile fetch failed:", err);
-        setTimeout(async () => {
-          try {
-            console.log("[AppStoreProvider] retrying profile query...");
-            const { data, error } = await supabase
-              .from("profiles")
-              .select("id, username, display_name, avatar_url, role")
-              .eq("id", userId)
-              .single();
-            console.log("[AppStoreProvider] retry result — data:", data, "error:", error);
-            if (data) {
-              setViewer({
-                id:           userId,
-                username:     data.username,
-                display_name: data.display_name || data.username,
-                avatar_url:   data.avatar_url || null,
-                role:         data.role || "fan",
-              });
-              console.log("[AppStoreProvider] viewer set on retry:", data.username);
-            }
-          } catch (retryErr: unknown) {
-            console.error("[AppStoreProvider] retry also failed:", retryErr);
-          }
-        }, 2000);
       } finally {
         fetchingRef.current = null;
-        console.log("[AppStoreProvider] fetchAndSetViewer finished for:", userId);
       }
     };
 
-    console.log("[AppStoreProvider] mounted — subscribing to onAuthStateChange");
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
-        console.log("[AppStoreProvider] onAuthStateChange:", event, session?.user?.id ?? "no session");
-        if (session?.user) {
-          await fetchAndSetViewer(session.user.id);
+        if (session?.user && session.access_token) {
+          await fetchAndSetViewer(session.user.id, session.access_token);
         } else {
           setViewer(null);
           if (event === "SIGNED_OUT") {
@@ -92,10 +78,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    return () => {
-      console.log("[AppStoreProvider] unmounting — unsubscribing");
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

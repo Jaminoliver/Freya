@@ -185,7 +185,7 @@ export default function ProfilePage() {
                 .from("subscription_tiers")
                 .select("id")
                 .eq("creator_id", profileRaw.id)
-                .single(),
+                .maybeSingle(),
               !isOwnProfile && userId
                 ? fetch(`/api/subscriptions/status?creatorId=${profileRaw.id}`)
                 : Promise.resolve(null),
@@ -247,7 +247,7 @@ export default function ProfilePage() {
 
     fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username, viewerReady]);
+  }, [username, viewerReady, globalViewer]);
 
   // ── Realtime channels ─────────────────────────────────────────────────────
   React.useEffect(() => {

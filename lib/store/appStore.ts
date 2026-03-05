@@ -6,6 +6,7 @@ const STALE_MS          = 30 * 1000;
 const FEED_KEY          = "freya_feed_cache";
 const PROFILES_KEY      = "freya_profiles_cache";
 const CONTENT_FEEDS_KEY = "freya_content_feeds_cache";
+const VIEWER_KEY        = "freya_viewer_cache";
 
 export function isStale(fetchedAt: number | null): boolean {
   if (!fetchedAt) return true;
@@ -13,6 +14,23 @@ export function isStale(fetchedAt: number | null): boolean {
 }
 
 // ── sessionStorage helpers ────────────────────────────────────
+
+function loadViewerFromStorage(): Viewer | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(VIEWER_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Viewer;
+  } catch { return null; }
+}
+
+function saveViewerToStorage(viewer: Viewer | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (viewer) sessionStorage.setItem(VIEWER_KEY, JSON.stringify(viewer));
+    else sessionStorage.removeItem(VIEWER_KEY);
+  } catch {}
+}
 
 function loadFeedFromStorage(): FeedEntry | null {
   try {
@@ -125,11 +143,14 @@ interface AppStore {
 // ── Store ─────────────────────────────────────────────────────
 
 export const useAppStore = create<AppStore>((set) => ({
-  // Viewer
+  // Viewer — always null on init to avoid SSR hydration mismatch.
+  // AppStoreProvider hydrates from sessionStorage after mount.
   viewer: null,
   viewerFetchedAt: null,
-  setViewer: (viewer) =>
-    set({ viewer, viewerFetchedAt: viewer ? Date.now() : null }),
+  setViewer: (viewer) => {
+    saveViewerToStorage(viewer);
+    set({ viewer, viewerFetchedAt: viewer ? Date.now() : null });
+  },
 
   // Feed
   feed: loadFeedFromStorage(),
