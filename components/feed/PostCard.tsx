@@ -127,6 +127,7 @@ export function PostCard({
   const [likeCount,        setLikeCount]        = useState(post.likes);
   const [commentCount,     setCommentCount]     = useState(post.comments);
   const [comments,         setComments]         = useState<any[]>([]);
+  const [commentsLoading,  setCommentsLoading]  = useState(true);
   const [lightboxOpen,     setLightboxOpen]     = useState(false);
   const [lightboxMediaIdx, setLightboxMediaIdx] = useState(0);
   const [pollData,         setPollData]         = useState<PollData | null>(post.poll ?? null);
@@ -162,14 +163,14 @@ export function PostCard({
     }
   }, [post.id, post.liked, post.likes, post.comments, post.poll]);
 
+  // Pre-fetch comments on mount so sheet opens instantly
   useEffect(() => {
-    if (!commentOpen) return;
     fetch(`/api/posts/${post.id}/comments`)
       .then((r) => r.json())
-      .then((d) => {
-        if (d.comments) { setComments(d.comments); setCommentCount(d.comments.length); }
-      });
-  }, [commentOpen, post.id]);
+      .then((d) => { if (d.comments) setComments(d.comments); })
+      .catch(() => {})
+      .finally(() => setCommentsLoading(false));
+  }, [post.id]);
 
   const handleLike = async () => {
     if (isLiking.current) return;
@@ -222,14 +223,12 @@ export function PostCard({
         reply_to_username:  reply_to_username ?? null,
       }),
     });
-    // Only refresh top-level comments (replies are handled inside CommentSection)
+    // Only refresh top-level comments (replies handled inside CommentSection)
     if (!parent_comment_id) {
+      setCommentCount((c) => c + 1);
+      postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: commentCount + 1 });
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
-      if (d.comments) {
-        setComments(d.comments);
-        setCommentCount(d.comments.length);
-        postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: d.comments.length });
-      }
+      if (d.comments) setComments(d.comments);
     }
   }, [liked, likeCount]);
 
@@ -380,6 +379,7 @@ export function PostCard({
           viewerUserId={viewer?.id}
           isOpen={commentOpen}
           onAddComment={handleAddComment}
+          isLoading={commentsLoading}
           onClose={() => setCommentOpen(false)}
         />
       </div>

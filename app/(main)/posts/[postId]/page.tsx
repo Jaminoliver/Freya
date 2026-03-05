@@ -120,6 +120,7 @@ export default function SinglePostPage() {
   const [viewerId,    setViewerId]    = React.useState<string | null>(null);
   const [viewer,      setViewer]      = React.useState<{ username: string; display_name: string; avatar_url: string } | null>(null);
   const [comments,    setComments]    = React.useState<ApiComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = React.useState(true);
   const [commentOpen, setCommentOpen] = React.useState(false);
 
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
@@ -194,6 +195,8 @@ export default function SinglePostPage() {
       setComments(data.comments || []);
     } catch (err) {
       console.error("Failed to fetch comments:", err);
+    } finally {
+      setCommentsLoading(false);
     }
   }, [postId]);
 
@@ -268,13 +271,11 @@ export default function SinglePostPage() {
       }),
     });
     if (res.ok && !parent_comment_id) {
-      // Only update comment count and refresh for top-level comments
-      // Replies are handled optimistically inside CommentSection
       setPost((p) => p ? { ...p, comment_count: p.comment_count + 1 } : p);
       await fetchComments();
       const current = postRef.current;
       if (current) {
-        postSyncStore.emit({ postId: String(current.id), liked: current.liked, like_count: current.like_count, comment_count: current.comment_count });
+        postSyncStore.emit({ postId: String(current.id), liked: current.liked, like_count: current.like_count, comment_count: current.comment_count + 1 });
       }
     }
   };
@@ -464,6 +465,7 @@ export default function SinglePostPage() {
           viewer={viewer || { username: "", display_name: "", avatar_url: "" }}
           viewerUserId={viewerId || undefined}
           isOpen={commentOpen}
+          isLoading={commentsLoading}
           onClose={() => setCommentOpen(false)}
           onAddComment={handleAddComment}
         />

@@ -126,6 +126,7 @@ export default function PostRow({
   const [liked,        setLiked]        = React.useState(post.liked);
   const [likeCount,    setLikeCount]    = React.useState(post.like_count);
   const [comments,     setComments]     = React.useState<any[]>([]);
+  const [commentsLoading, setCommentsLoading] = React.useState(true);
   const [commentCount, setCommentCount] = React.useState(post.comment_count);
   const [pollData,     setPollData]     = React.useState<PollData | null>(post.poll ?? null);
   const isLiking = React.useRef(false);
@@ -151,13 +152,14 @@ export default function PostRow({
     setPollData(post.poll ?? null);
   }, [post.liked, post.like_count, post.comment_count, post.poll]);
 
+  // Pre-fetch comments on mount so sheet opens instantly
   React.useEffect(() => {
-    if (!commentOpen) return;
     fetch(`/api/posts/${post.id}/comments`)
-      .then((r) => { if (!r.ok) throw new Error("Failed"); return r.json(); })
-      .then((d) => { if (d.comments) { setComments(d.comments); setCommentCount(d.comments.length); } })
-      .catch((err) => console.error("[Comments] Fetch error:", err));
-  }, [commentOpen, post.id]);
+      .then((r) => r.json())
+      .then((d) => { if (d.comments) setComments(d.comments); })
+      .catch(() => {})
+      .finally(() => setCommentsLoading(false));
+  }, [post.id]);
 
   // ── Updated: passes parent_comment_id for replies ─────────────────────────
   const handleAddComment = React.useCallback(async (
@@ -179,8 +181,9 @@ export default function PostRow({
     });
     // Only refresh top-level comments (replies handled inside CommentSection)
     if (!parent_comment_id) {
+      setCommentCount((c) => c + 1);
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
-      if (d.comments) { setComments(d.comments); setCommentCount(d.comments.length); }
+      if (d.comments) setComments(d.comments);
     }
   }, []);
 
