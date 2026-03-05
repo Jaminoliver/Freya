@@ -7,7 +7,6 @@ import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { UploadProvider } from "@/lib/context/UploadContext";
 import UploadProgressBar from "@/components/layout/UploadProgressBar";
 import { AppStoreProvider } from "@/lib/providers/AppStoreProvider";
-import { ViewerProvider } from "@/components/providers/ViewerProvider";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -21,48 +20,43 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <UploadProvider>
-      {/* AppStoreProvider bootstraps viewer once — survives all page navigations */}
       <AppStoreProvider>
-        {/* ViewerProvider fetches viewer once on mount, stores in appStore.
-            Every profile page after that skips the viewer DB call entirely. */}
-        <ViewerProvider>
-          <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#0A0A0F", overflow: "hidden", width: "100%" }}>
-            <Sidebar />
+        <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#0A0A0F", overflow: "hidden", width: "100%" }}>
+          <Sidebar />
 
-            <main
-              className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}`}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                maxWidth: isSettings ? "100%" : "720px",
-                height: "100vh",
-                borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
-                overflowY: "auto",
-                overflowX: "hidden",
-                paddingBottom: "72px",
-                scrollbarWidth: "none",
-                msOverflowStyle: "none",
-                WebkitOverflowScrolling: "touch",
-              } as React.CSSProperties}
-            >
-              <style>{`
-                main::-webkit-scrollbar { display: none; }
-                @media (min-width: 768px) { .main-scroll { padding-top: 0 !important; } }
-                @media (max-width: 767px) { .main-scroll { padding-top: 56px; } .main-scroll.no-topbar { padding-top: 0 !important; } }
-              `}</style>
-              {children}
-            </main>
+          <main
+            className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}`}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              maxWidth: isSettings ? "100%" : "720px",
+              height: "100vh",
+              borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
+              overflowY: "auto",
+              overflowX: "hidden",
+              paddingBottom: "72px",
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+              WebkitOverflowScrolling: "touch",
+            } as React.CSSProperties}
+          >
+            <style>{`
+              main::-webkit-scrollbar { display: none; }
+              @media (min-width: 768px) { .main-scroll { padding-top: 0 !important; } }
+              @media (max-width: 767px) { .main-scroll { padding-top: 56px; } .main-scroll.no-topbar { padding-top: 0 !important; } }
+            `}</style>
+            {children}
+          </main>
 
-            {showRightPanel && (
-              <div className="hidden lg:block" style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", width: "380px", flexShrink: 0 }}>
-                <RightPanel />
-              </div>
-            )}
+          {showRightPanel && (
+            <div className="hidden lg:block" style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", width: "380px", flexShrink: 0 }}>
+              <RightPanel />
+            </div>
+          )}
 
-            <MobileBottomNav />
-            <UploadProgressBar />
-          </div>
-        </ViewerProvider>
+          <MobileBottomNav />
+          <UploadProgressBar />
+        </div>
       </AppStoreProvider>
     </UploadProvider>
   );

@@ -72,7 +72,7 @@ export interface Viewer {
   id: string;
   username: string;
   display_name: string;
-  avatar_url: string;
+  avatar_url: string | null;
   role: string;
 }
 

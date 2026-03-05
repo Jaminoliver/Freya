@@ -124,7 +124,12 @@ export default function ContentFeed({
 
   const globalViewer = useAppStore((s) => s.viewer);
   const viewer = globalViewer
-    ? { id: globalViewer.id, username: globalViewer.username, display_name: globalViewer.display_name, avatar_url: globalViewer.avatar_url }
+    ? {
+        id:           globalViewer.id,
+        username:     globalViewer.username,
+        display_name: globalViewer.display_name,
+        avatar_url:   globalViewer.avatar_url ?? "",
+      }
     : null;
 
   const cacheKey = creatorUsername ?? "default";
@@ -147,7 +152,6 @@ export default function ContentFeed({
   const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
 
-  // Seed cache if initialApiPosts provided and cache is empty
   React.useEffect(() => {
     if (initialApiPosts && !feedPostsCache.has(cacheKey)) {
       feedPostsCache.set(cacheKey, {
@@ -157,9 +161,6 @@ export default function ContentFeed({
     }
   }, [cacheKey, initialApiPosts]);
 
-  // Sync state when parent passes fresh posts after a cache clear —
-  // uses a ref to avoid re-running on every render, only fires when
-  // the array reference itself changes (i.e. ProfilePage fetched new data)
   const prevInitialPostsRef = React.useRef<ApiPost[] | undefined>(undefined);
   React.useEffect(() => {
     if (!initialApiPosts) return;

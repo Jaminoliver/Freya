@@ -34,28 +34,25 @@ export default function ProfilePage() {
     viewer: globalViewer,
   } = useAppStore();
 
-  // ── Never read sessionStorage-backed state during SSR ────────────────────
-  // All cache checks happen inside useEffect (client-only)
   const [viewer,                setViewer]                = React.useState<User | null>(null);
   const [profile,               setProfile]               = React.useState<User | null>(null);
   const [subscription,          setSubscription]          = React.useState<Subscription | null>(null);
   const [isSubscribed,          setIsSubscribed]          = React.useState(false);
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(null);
   const [apiPosts,              setApiPosts]              = React.useState<ApiPost[]>([]);
-
-  // Always true on server + first client render — prevents SSR mismatch
   const [apiLoading,            setApiLoading]            = React.useState(true);
   const [revealed,              setRevealed]              = React.useState(false);
+  const [fetchError,            setFetchError]            = React.useState(false);
 
-  const [isFollowing,           setIsFollowing]           = React.useState(false);
-  const [followLoading,         setFollowLoading]         = React.useState(false);
-  const [totalLikes,            setTotalLikes]            = React.useState(0);
-  const [checkoutOpen,          setCheckoutOpen]          = React.useState(false);
-  const [checkoutType,          setCheckoutType]          = React.useState<CheckoutType>("subscription");
-  const [checkoutTier,          setCheckoutTier]          = React.useState<SubscriptionTier>("monthly");
-  const [lockedPostId,          setLockedPostId]          = React.useState<string | null>(null);
-  const [lockedPostPrice,       setLockedPostPrice]       = React.useState<number>(0);
-  const [tierId,                setTierId]                = React.useState<number | undefined>(undefined);
+  const [isFollowing,     setIsFollowing]     = React.useState(false);
+  const [followLoading,   setFollowLoading]   = React.useState(false);
+  const [totalLikes,      setTotalLikes]      = React.useState(0);
+  const [checkoutOpen,    setCheckoutOpen]    = React.useState(false);
+  const [checkoutType,    setCheckoutType]    = React.useState<CheckoutType>("subscription");
+  const [checkoutTier,    setCheckoutTier]    = React.useState<SubscriptionTier>("monthly");
+  const [lockedPostId,    setLockedPostId]    = React.useState<string | null>(null);
+  const [lockedPostPrice, setLockedPostPrice] = React.useState<number>(0);
+  const [tierId,          setTierId]          = React.useState<number | undefined>(undefined);
 
   const profileIdRef = React.useRef<string | null>(null);
   const viewerIdRef  = React.useRef<string | null>(null);
@@ -92,15 +89,33 @@ export default function ProfilePage() {
     }
   }, []);
 
-  // ── Main fetch — runs client-side only ───────────────────────────────────
+  // ── Main fetch ────────────────────────────────────────────────────────────
+  // Wait for AppStoreProvider to finish setting globalViewer before we fetch.
+  // This prevents a race where both this page and AppStoreProvider call
+  // supabase.auth.getUser() simultaneously, causing one to hang.
+  const [viewerReady, setViewerReady] = React.useState(() => !!globalViewer);
+
   React.useEffect(() => {
+    if (globalViewer) setViewerReady(true);
+  }, [globalViewer]);
+
+  // Timeout fallback: if AppStoreProvider never sets globalViewer (logged-out user),
+  // unblock after 1.5s so the page still loads for unauthenticated visitors.
+  React.useEffect(() => {
+    if (viewerReady) return;
+    const t = setTimeout(() => setViewerReady(true), 1500);
+    return () => clearTimeout(t);
+  }, [viewerReady]);
+
+  React.useEffect(() => {
+    if (!viewerReady) return;
+
     const cached = profiles[username];
     const fresh  = cached && !isStale(cached.fetchedAt);
 
-    // Hydrate from cache instantly — no network call
     if (fresh) {
-      if (cached.viewer)   { setViewer(cached.viewer);   viewerIdRef.current  = cached.viewer.id; }
-      if (cached.profile)  { setProfile(cached.profile); profileIdRef.current = cached.profile.id; }
+      if (cached.viewer)  { setViewer(cached.viewer);   viewerIdRef.current  = cached.viewer.id; }
+      if (cached.profile) { setProfile(cached.profile); profileIdRef.current = cached.profile.id; }
       setApiPosts(cached.apiPosts ?? []);
       setIsSubscribed(cached.isSubscribed ?? false);
       setSubscriptionPeriodEnd(cached.subscriptionPeriodEnd ?? null);
@@ -113,129 +128,126 @@ export default function ProfilePage() {
     }
 
     const fetchData = async () => {
-      const supabase = createClient();
+      try {
+        const supabase = createClient();
 
-      // Viewer + profile fire in parallel
-      // If globalViewer already in store, skip viewer fetch entirely
-      const viewerPromise = (globalViewer as any)
-        ? Promise.resolve(globalViewer as any as User)
-        : (async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return null;
-            const { data } = await supabase
-              .from("profiles")
-              .select("id, username, display_name, avatar_url, role")
-              .eq("id", user.id)
-              .single();
-            return (data as User) ?? null;
-          })();
+        // Use globalViewer already resolved by AppStoreProvider — no extra auth call.
+        const viewerData: User | null = (globalViewer as any) ?? null;
 
-      const profilePromise = supabase
-        .from("profiles")
-        .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
-        .eq("username", username)
-        .single();
+        const profilePromise = supabase
+          .from("profiles")
+          .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
+          .eq("username", username)
+          .single();
 
-      const [viewerResult, profileResult] = await Promise.allSettled([
-        viewerPromise,
-        profilePromise,
-      ]);
+        const profileResult = await profilePromise;
+        const viewerResult  = { status: "fulfilled" as const, value: viewerData };
 
-      const viewerData: User | null =
-        viewerResult.status === "fulfilled" ? viewerResult.value : null;
-      const profileRaw =
-        profileResult.status === "fulfilled" ? profileResult.value.data : null;
+        const profileRaw = profileResult.data ?? null;
 
-      if (viewerData) {
-        setViewer(viewerData);
-        viewerIdRef.current = viewerData.id;
-      }
-
-      let enriched: User | null       = null;
-      let likesCount                  = 0;
-      let tierIdVal: number | undefined;
-      let followingVal                = false;
-      let subscribedVal               = false;
-      let periodEndVal: string | null = null;
-      let fetchedPosts: ApiPost[]     = [];
-
-      if (profileRaw) {
-        profileIdRef.current = profileRaw.id;
-        enriched = {
-          ...(profileRaw as User),
-          subscriptionPrice: profileRaw.subscription_price ?? 0,
-          bundlePricing: {
-            threeMonths: profileRaw.bundle_price_3_months ?? undefined,
-            sixMonths:   profileRaw.bundle_price_6_months ?? undefined,
-          },
-        };
-        setProfile(enriched);
-        likesCount = profileRaw.likes_count ?? 0;
-        setTotalLikes(likesCount);
-
-        const userId       = viewerData?.id ?? null;
-        const isOwnProfile = userId === profileRaw.id;
-        const isCreator    = profileRaw.role === "creator";
-
-        if (isCreator) {
-          const [tierRes, subRes, followRes, postsRes] = await Promise.allSettled([
-            supabase
-              .from("subscription_tiers")
-              .select("id")
-              .eq("creator_id", profileRaw.id)
-              .single(),
-            !isOwnProfile && userId
-              ? fetch(`/api/subscriptions/status?creatorId=${profileRaw.id}`)
-              : Promise.resolve(null),
-            !isOwnProfile && userId
-              ? checkIsFollowing(profileRaw.id)
-              : Promise.resolve(false),
-            fetch(`/api/posts/creator/${profileRaw.username}`),
-          ]);
-
-          if (tierRes.status === "fulfilled" && tierRes.value.data) {
-            tierIdVal = tierRes.value.data.id;
-            setTierId(tierIdVal);
-          }
-          if (subRes.status === "fulfilled" && subRes.value instanceof Response && subRes.value.ok) {
-            const data = await subRes.value.json();
-            subscribedVal = !!data.active;
-            periodEndVal  = data.currentPeriodEnd ?? null;
-            setIsSubscribed(subscribedVal);
-            setSubscriptionPeriodEnd(periodEndVal);
-          }
-          if (followRes.status === "fulfilled") {
-            followingVal = followRes.value as boolean;
-            setIsFollowing(followingVal);
-          }
-          if (postsRes.status === "fulfilled" && postsRes.value instanceof Response && postsRes.value.ok) {
-            const data = await postsRes.value.json();
-            fetchedPosts = data.posts || [];
-            setApiPosts(fetchedPosts);
-          }
-        } else {
-          try {
-            const res  = await fetch(`/api/posts/creator/${profileRaw.username}`);
-            const data = await res.json();
-            if (res.ok) { fetchedPosts = data.posts || []; setApiPosts(fetchedPosts); }
-          } catch { /* non-fatal */ }
+        if (viewerData) {
+          setViewer(viewerData);
+          viewerIdRef.current = viewerData.id;
         }
+
+        let enriched: User | null       = null;
+        let likesCount                  = 0;
+        let tierIdVal: number | undefined;
+        let followingVal                = false;
+        let subscribedVal               = false;
+        let periodEndVal: string | null = null;
+        let fetchedPosts: ApiPost[]     = [];
+
+        if (profileRaw) {
+          profileIdRef.current = profileRaw.id;
+          enriched = {
+            ...(profileRaw as User),
+            subscriptionPrice: profileRaw.subscription_price ?? 0,
+            bundlePricing: {
+              threeMonths: profileRaw.bundle_price_3_months ?? undefined,
+              sixMonths:   profileRaw.bundle_price_6_months ?? undefined,
+            },
+          };
+          setProfile(enriched);
+          likesCount = profileRaw.likes_count ?? 0;
+          setTotalLikes(likesCount);
+
+          const userId       = viewerData?.id ?? null;
+          const isOwnProfile = userId === profileRaw.id;
+          const isCreator    = profileRaw.role === "creator";
+
+
+
+          if (isCreator) {
+            console.log("[ProfilePage] fetching creator-specific data");
+            const [tierRes, subRes, followRes, postsRes] = await Promise.allSettled([
+              supabase
+                .from("subscription_tiers")
+                .select("id")
+                .eq("creator_id", profileRaw.id)
+                .single(),
+              !isOwnProfile && userId
+                ? fetch(`/api/subscriptions/status?creatorId=${profileRaw.id}`)
+                : Promise.resolve(null),
+              !isOwnProfile && userId
+                ? checkIsFollowing(profileRaw.id)
+                : Promise.resolve(false),
+              fetch(`/api/posts/creator/${profileRaw.username}`),
+            ]);
+
+
+            if (tierRes.status === "fulfilled" && tierRes.value.data) {
+              tierIdVal = tierRes.value.data.id;
+              setTierId(tierIdVal);
+            }
+            if (subRes.status === "fulfilled" && subRes.value instanceof Response && subRes.value.ok) {
+              const data = await subRes.value.json();
+              subscribedVal = !!data.active;
+              periodEndVal  = data.currentPeriodEnd ?? null;
+              setIsSubscribed(subscribedVal);
+              setSubscriptionPeriodEnd(periodEndVal);
+            } else if (subRes.status === "fulfilled" && subRes.value instanceof Response && !subRes.value.ok) {
+              console.warn("[ProfilePage] subRes response not ok — status:", subRes.value.status);
+            }
+            if (followRes.status === "fulfilled") {
+              followingVal = followRes.value as boolean;
+              setIsFollowing(followingVal);
+            }
+            if (postsRes.status === "fulfilled" && postsRes.value instanceof Response && postsRes.value.ok) {
+              const data = await postsRes.value.json();
+              fetchedPosts = data.posts || [];
+              setApiPosts(fetchedPosts);
+            } else if (postsRes.status === "fulfilled" && postsRes.value instanceof Response && !postsRes.value.ok) {
+              console.warn("[ProfilePage] postsRes response not ok — status:", postsRes.value.status);
+            }
+          } else {
+            try {
+              const res  = await fetch(`/api/posts/creator/${profileRaw.username}`);
+              const data = await res.json();
+              if (res.ok) { fetchedPosts = data.posts || []; setApiPosts(fetchedPosts); }
+            } catch { /* non-fatal */ }
+          }
+        }
+
+        setStoreProfile(username, {
+          viewer: viewerData, profile: enriched, totalLikes: likesCount,
+          tierId: tierIdVal, isFollowing: followingVal,
+          isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
+          apiPosts: fetchedPosts, fetchedAt: Date.now(),
+        });
+
+      } catch (err) {
+        console.error("[ProfilePage] fetchData UNCAUGHT ERROR:", err);
+        setFetchError(true);
+      } finally {
+        setApiLoading(false);
+        requestAnimationFrame(() => setRevealed(true));
       }
-
-      setStoreProfile(username, {
-        viewer: viewerData, profile: enriched, totalLikes: likesCount,
-        tierId: tierIdVal, isFollowing: followingVal,
-        isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
-        apiPosts: fetchedPosts, fetchedAt: Date.now(),
-      });
-
-      setApiLoading(false);
-      requestAnimationFrame(() => setRevealed(true));
     };
 
     fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username]);
+  }, [username, viewerReady]);
 
   // ── Realtime channels ─────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -340,7 +352,25 @@ export default function ProfilePage() {
     />
   ) : null;
 
-  if (!apiLoading && !profile) {
+  // ── Error state ───────────────────────────────────────────────────────────
+  if (!apiLoading && fetchError) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <h1 style={{ fontSize: "28px", fontWeight: 700, color: "#F1F5F9", marginBottom: "12px" }}>Something went wrong</h1>
+          <p style={{ fontSize: "16px", color: "#94A3B8", marginBottom: "24px" }}>Could not load this profile. Check your connection.</p>
+          <button
+            onClick={() => { setFetchError(false); setApiLoading(true); setRevealed(false); }}
+            style={{ padding: "12px 24px", borderRadius: "10px", background: "#8B5CF6", color: "#fff", border: "none", cursor: "pointer", fontSize: "15px", fontWeight: 600 }}
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!apiLoading && !profile && !fetchError) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center" }}>

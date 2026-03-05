@@ -17,6 +17,17 @@ interface SuggestedCreator {
   likes_count: number;
 }
 
+interface ProfileRow {
+  id: string;
+  display_name: string | null;
+  username: string;
+  avatar_url: string | null;
+  banner_url: string | null;
+  is_verified: boolean | null;
+  subscriber_count: number | null;
+  likes_count: number | null;
+}
+
 const PER_PAGE = 4;
 
 export function HomeSidebar() {
@@ -39,7 +50,7 @@ export function HomeSidebar() {
 
     if (!error && data) {
       setCreators(
-        data.map((p) => ({
+        (data as ProfileRow[]).map((p) => ({
           id: p.id,
           name: p.display_name || p.username,
           username: p.username,
@@ -84,14 +95,14 @@ export function HomeSidebar() {
             <RefreshCw size={13} />
           </button>
           <button
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            onClick={() => setPage((prev) => Math.max(0, prev - 1))}
             disabled={page === 0}
             style={{ width: "26px", height: "26px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #2A2A3D", color: page === 0 ? "#2A2A3D" : "#6B6B8A", cursor: page === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
             <ChevronLeft size={13} />
           </button>
           <button
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            onClick={() => setPage((prev) => Math.min(totalPages - 1, prev + 1))}
             disabled={page >= totalPages - 1}
             style={{ width: "26px", height: "26px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #2A2A3D", color: page >= totalPages - 1 ? "#2A2A3D" : "#6B6B8A", cursor: page >= totalPages - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
           >

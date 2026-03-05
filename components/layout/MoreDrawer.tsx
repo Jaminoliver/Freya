@@ -1,59 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, Bookmark, Settings, Wallet, HelpCircle, LogOut, X, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
+import { useAppStore } from "@/lib/store/appStore";
 
 interface MoreDrawerProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-interface Profile {
-  username: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  role: string;
-}
-
 export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
   const router  = useRouter();
-  const [profile, setProfile] = useState<Profile | null>(null);
-
-  useEffect(() => {
-    const load = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("username, display_name, avatar_url, role")
-        .eq("id", user.id)
-        .single();
-      if (data) setProfile(data as Profile);
-    };
-    load();
-  }, []);
+  const viewer  = useAppStore((s) => s.viewer);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      // AppStoreProvider handles redirect on SIGNED_OUT — no router.push needed
+    } catch (err) {
+      console.error("[MoreDrawer] Logout failed:", err);
+      setLoggingOut(false);
+    }
     onClose();
   };
 
   const navigate = (href: string) => {
+    if (href === "#") return;
     router.push(href);
     onClose();
   };
 
   const navItems = [
-    { label: "Profile",   icon: User,      href: profile ? `/${profile.username}` : "#" },
-    { label: "Saved",     icon: Bookmark,  href: "/bookmarks"  },
-    { label: "Settings",  icon: Settings,  href: "/settings"   },
-    { label: "Wallet",    icon: Wallet,    href: "/wallet"     },
+    { label: "Profile",  icon: User,     href: viewer ? `/${viewer.username}` : "#" },
+    { label: "Saved",    icon: Bookmark, href: "/bookmarks" },
+    { label: "Settings", icon: Settings, href: "/settings"  },
+    { label: "Wallet",   icon: Wallet,   href: "/wallet"    },
   ];
 
   if (!isOpen) return null;
@@ -99,15 +87,29 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
         </button>
 
         {/* User info */}
-        {profile && (
+        {viewer ? (
           <div
-            onClick={() => navigate(`/${profile.username}`)}
+            onClick={() => navigate(`/${viewer.username}`)}
             style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 20px 16px", cursor: "pointer", borderBottom: "1px solid #1F1F2A", marginBottom: "8px" }}
           >
-            <Avatar src={profile.avatar_url ?? undefined} alt={profile.display_name || profile.username} size="md" showRing />
+            <Avatar
+              src={viewer.avatar_url ? viewer.avatar_url : undefined}
+              alt={viewer.display_name || viewer.username}
+              size="md"
+              showRing
+            />
             <div>
-              <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#F1F5F9" }}>{profile.display_name || profile.username}</p>
-              <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A" }}>@{profile.username}</p>
+              <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#F1F5F9" }}>{viewer.display_name || viewer.username}</p>
+              <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A" }}>@{viewer.username}</p>
+            </div>
+          </div>
+        ) : (
+          // Skeleton while viewer loads
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 20px 16px", borderBottom: "1px solid #1F1F2A", marginBottom: "8px" }}>
+            <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ width: "100px", height: "12px", borderRadius: "6px", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
+              <div style={{ width: "70px", height: "10px", borderRadius: "6px", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
             </div>
           </div>
         )}
@@ -117,8 +119,9 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
           <button
             key={label}
             onClick={() => navigate(href)}
-            style={{ width: "100%", display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "background 0.15s" }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
+            disabled={href === "#"}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px", background: "none", border: "none", cursor: href === "#" ? "default" : "pointer", fontFamily: "'Inter', sans-serif", transition: "background 0.15s", opacity: href === "#" ? 0.4 : 1 }}
+            onMouseEnter={(e) => { if (href !== "#") e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
           >
             <Icon size={20} color="#A3A3C2" strokeWidth={1.8} />
@@ -153,18 +156,20 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
         {/* Logout */}
         <button
           onClick={handleLogout}
-          style={{ width: "100%", display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "background 0.15s" }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
+          disabled={loggingOut}
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px", background: "none", border: "none", cursor: loggingOut ? "default" : "pointer", fontFamily: "'Inter', sans-serif", transition: "background 0.15s", opacity: loggingOut ? 0.5 : 1 }}
+          onMouseEnter={(e) => { if (!loggingOut) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
           <LogOut size={20} color="#EF4444" strokeWidth={1.8} />
-          <span style={{ fontSize: "15px", color: "#EF4444", fontWeight: 500 }}>Log out</span>
+          <span style={{ fontSize: "15px", color: "#EF4444", fontWeight: 500 }}>{loggingOut ? "Logging out..." : "Log out"}</span>
         </button>
       </div>
 
       <style>{`
         @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.4} }
       `}</style>
     </>
   );
