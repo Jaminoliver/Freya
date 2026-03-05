@@ -204,17 +204,32 @@ export function PostCard({
     isLiking.current = false;
   };
 
-  const handleAddComment = useCallback(async (id: string, text: string, gif_url?: string) => {
+  // ── Updated: passes parent_comment_id for replies ─────────────────────────
+  const handleAddComment = useCallback(async (
+    id: string,
+    text: string,
+    gif_url?: string,
+    parent_comment_id?: string | number,
+    reply_to_username?: string | null
+  ) => {
     await fetch(`/api/posts/${id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text, gif_url: gif_url ?? null }),
+      body: JSON.stringify({
+        content:            text,
+        gif_url:            gif_url ?? null,
+        parent_comment_id:  parent_comment_id ?? null,
+        reply_to_username:  reply_to_username ?? null,
+      }),
     });
-    const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
-    if (d.comments) {
-      setComments(d.comments);
-      setCommentCount(d.comments.length);
-      postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: d.comments.length });
+    // Only refresh top-level comments (replies are handled inside CommentSection)
+    if (!parent_comment_id) {
+      const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
+      if (d.comments) {
+        setComments(d.comments);
+        setCommentCount(d.comments.length);
+        postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: d.comments.length });
+      }
     }
   }, [liked, likeCount]);
 
@@ -313,12 +328,10 @@ export function PostCard({
         </p>
       )}
 
-      {/* Text post separator */}
       {isTextPost && (
         <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />
       )}
 
-      {/* Poll */}
       {isPollPost && pollData && (
         <PollDisplay
           poll={pollData}
@@ -327,7 +340,6 @@ export function PostCard({
         />
       )}
 
-      {/* Media */}
       {!isTextPost && !isPollPost && (
         <PostMediaViewer
           media={normalizedMedia}
@@ -341,7 +353,6 @@ export function PostCard({
         />
       )}
 
-      {/* Tagged creators */}
       {post.taggedCreators && post.taggedCreators.length > 0 && (
         <div style={{ padding: "0 16px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "10px" }}>
           {post.taggedCreators.map((tc) => (
@@ -350,7 +361,6 @@ export function PostCard({
         </div>
       )}
 
-      {/* Actions */}
       <div style={{ padding: "0 16px" }}>
         <PostActions
           likes={likeCount}

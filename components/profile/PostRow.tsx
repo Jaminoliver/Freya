@@ -159,14 +159,29 @@ export default function PostRow({
       .catch((err) => console.error("[Comments] Fetch error:", err));
   }, [commentOpen, post.id]);
 
-  const handleAddComment = React.useCallback(async (id: string, text: string, gif_url?: string) => {
+  // ── Updated: passes parent_comment_id for replies ─────────────────────────
+  const handleAddComment = React.useCallback(async (
+    id: string,
+    text: string,
+    gif_url?: string,
+    parent_comment_id?: string | number,
+    reply_to_username?: string | null
+  ) => {
     await fetch(`/api/posts/${id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text, gif_url: gif_url ?? null }),
+      body: JSON.stringify({
+        content:            text,
+        gif_url:            gif_url ?? null,
+        parent_comment_id:  parent_comment_id ?? null,
+        reply_to_username:  reply_to_username ?? null,
+      }),
     });
-    const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
-    if (d.comments) { setComments(d.comments); setCommentCount(d.comments.length); }
+    // Only refresh top-level comments (replies handled inside CommentSection)
+    if (!parent_comment_id) {
+      const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
+      if (d.comments) { setComments(d.comments); setCommentCount(d.comments.length); }
+    }
   }, []);
 
   const handleLike = async () => {
@@ -249,12 +264,10 @@ export default function PostRow({
         </p>
       )}
 
-      {/* Text post separator */}
       {isTextPost && (
         <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />
       )}
 
-      {/* Poll */}
       {isPollPost && pollData && (
         <PollDisplay
           poll={pollData}
@@ -263,7 +276,6 @@ export default function PostRow({
         />
       )}
 
-      {/* Media (photo/video only) */}
       {viewerMedia.length > 0 && (
         <PostMediaViewer
           media={viewerMedia}
@@ -275,7 +287,6 @@ export default function PostRow({
         />
       )}
 
-      {/* Actions */}
       {!post.locked && (
         <div style={{ padding: "0 16px" }}>
           <PostActions

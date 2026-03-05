@@ -249,14 +249,27 @@ export default function SinglePostPage() {
     setTimeout(() => commentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
 
-  // ── Updated: accepts gif_url ──────────────────────────────────────────────
-  const handleAddComment = async (id: string, text: string, gif_url?: string) => {
+  // ── Updated: passes parent_comment_id for replies ─────────────────────────
+  const handleAddComment = async (
+    id: string,
+    text: string,
+    gif_url?: string,
+    parent_comment_id?: string | number,
+    reply_to_username?: string | null
+  ) => {
     const res = await fetch(`/api/posts/${id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text, gif_url: gif_url ?? null }),
+      body: JSON.stringify({
+        content:            text,
+        gif_url:            gif_url ?? null,
+        parent_comment_id:  parent_comment_id ?? null,
+        reply_to_username:  reply_to_username ?? null,
+      }),
     });
-    if (res.ok) {
+    if (res.ok && !parent_comment_id) {
+      // Only update comment count and refresh for top-level comments
+      // Replies are handled optimistically inside CommentSection
       setPost((p) => p ? { ...p, comment_count: p.comment_count + 1 } : p);
       await fetchComments();
       const current = postRef.current;
