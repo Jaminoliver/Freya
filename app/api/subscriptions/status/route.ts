@@ -25,6 +25,8 @@ export async function GET(req: NextRequest) {
       .eq("fan_id", user.id)
       .eq("creator_id", creatorId)
       .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (activeSub) {

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { X, Check, ChevronRight } from "lucide-react";
+import { X, Check, ChevronRight, Loader2 } from "lucide-react";
 import type { User } from "@/lib/types/profile";
 import type { SubscriptionTier, Currency } from "@/lib/types/checkout";
 import PlanTab, { type Plan } from "../components/PlanTab";
@@ -27,12 +27,14 @@ interface SubscriptionScreenProps {
   onAutoRenewChange: (v: boolean) => void;
   onNext: () => void;
   onClose: () => void;
+  loading?: boolean;
+  error?: string | null;
 }
 
 export default function SubscriptionScreen({
   creator, monthlyPrice, threeMonthPrice, sixMonthPrice,
   selectedTier, onTierChange, currency, autoRenew, onAutoRenewChange,
-  onNext, onClose,
+  onNext, onClose, loading = false, error = null,
 }: SubscriptionScreenProps) {
   const currencyOption = CURRENCIES.find((c) => c.code === currency)!;
   const symbol = currencyOption.symbol;
@@ -54,7 +56,6 @@ export default function SubscriptionScreen({
 
   const activePlan = plans.find((p) => p.key === selectedTier) ?? plans[0];
 
-  // FIX: show total price for bundles, monthly price for basic — matching SubscriptionCard
   const displayPrice = activePlan.price;
   const displayLabel = activePlan.months === 1
     ? `${symbol}${displayPrice.toLocaleString()}/month`
@@ -177,27 +178,49 @@ export default function SubscriptionScreen({
         </div>
       )}
 
+      {/* Error message */}
+      {error && (
+        <div style={{ padding: "0 20px 10px" }}>
+          <p style={{
+            margin: 0, fontSize: "12px", color: "#F87171",
+            backgroundColor: "rgba(248,113,113,0.08)",
+            border: "1px solid rgba(248,113,113,0.2)",
+            borderRadius: "8px", padding: "8px 12px", textAlign: "center",
+          }}>
+            {error}
+          </p>
+        </div>
+      )}
+
       {/* CTA */}
       <div style={{ padding: isFree ? "16px 20px 8px" : "0 20px 8px" }}>
         <button
           onClick={onNext}
+          disabled={loading}
           style={{
             width: "100%", padding: "13px", borderRadius: "10px",
             background: isFree
               ? "linear-gradient(135deg, #22C55E, #16A34A)"
               : "linear-gradient(135deg, #8B5CF6, #7C3AED)",
-            border: "none", cursor: "pointer",
+            border: "none", cursor: loading ? "not-allowed" : "pointer",
             display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
             fontFamily: "'Inter', sans-serif", transition: "opacity 0.15s ease",
+            opacity: loading ? 0.7 : 1,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+          onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = "0.9"; }}
+          onMouseLeave={(e) => { if (!loading) e.currentTarget.style.opacity = "1"; }}
         >
-          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>
-            {isFree ? "Subscribe for Free" : `Subscribe · ${displayLabel}`}
-          </span>
-          {!isFree && <ChevronRight size={16} color="#fff" />}
+          {loading
+            ? <Loader2 size={18} color="#fff" style={{ animation: "spin 1s linear infinite" }} />
+            : <>
+                <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>
+                  {isFree ? "Subscribe for Free" : `Subscribe · ${displayLabel}`}
+                </span>
+                {!isFree && <ChevronRight size={16} color="#fff" />}
+              </>
+          }
         </button>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
 
       {/* Footer */}

@@ -116,7 +116,6 @@ export async function GET(
 
     const postIds = (posts ?? []).map((p: { id: number }) => p.id);
 
-    // ── Fetch likes in parallel ───────────────────────────────────────────
     const likesPromise = user && postIds.length > 0
       ? service
           .from("likes")
@@ -125,7 +124,6 @@ export async function GET(
           .in("post_id", postIds)
       : Promise.resolve({ data: [] });
 
-    // ── Fetch poll data for poll posts ────────────────────────────────────
     const pollPostIds = (posts ?? [])
       .filter((p: Record<string, unknown>) => p.content_type === "poll")
       .map((p: Record<string, unknown>) => Number(p.id));
@@ -148,7 +146,6 @@ export async function GET(
       return !hasUnreadyVideo;
     });
 
-    // ── Await likes and polls ─────────────────────────────────────────────
     const [{ data: likes }, { data: pollsRaw }] = await Promise.all([
       likesPromise,
       pollsPromise,
@@ -156,7 +153,6 @@ export async function GET(
 
     const likedSet = new Set((likes ?? []).map((l: { post_id: number }) => l.post_id));
 
-    // ── Fetch poll options and user votes ─────────────────────────────────
     const pollIds = (pollsRaw ?? []).map((p: { id: number }) => p.id);
 
     const [{ data: pollOptionsRaw }, { data: userVotesRaw }] = await Promise.all([
@@ -176,7 +172,6 @@ export async function GET(
         : Promise.resolve({ data: [] }),
     ]);
 
-    // ── Build poll lookup map keyed by post_id ────────────────────────────
     type PollOption = { id: number; option_text: string; vote_count: number; display_order: number };
     type PollData   = {
       id:                   number;
@@ -252,6 +247,7 @@ export async function GET(
 
       return {
         ...post,
+        is_free:    isFree,
         media:      mediaItems,
         liked:      likedSet.has(post.id as number),
         can_access: canAccess,
@@ -260,7 +256,7 @@ export async function GET(
       };
     });
 
-    return NextResponse.json({ posts: processed });
+    return NextResponse.json({ posts: processed, isSubscribed });
 
   } catch (err) {
     console.error("[Creator Posts] Error:", err);

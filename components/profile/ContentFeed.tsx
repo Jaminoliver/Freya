@@ -19,10 +19,12 @@ export interface ContentFeedProps {
   creatorUsername?: string;
   creatorId?: string;
   initialApiPosts?: ApiPost[];
+  refreshKey?: number;
   onLike?: (postId: string) => void;
   onComment?: (postId: string) => void;
   onTip?: (postId: string) => void;
   onUnlock?: (postId: string) => void;
+  onSubscribe?: () => void;
   emptyState?: React.ReactNode;
   className?: string;
 }
@@ -100,6 +102,61 @@ function MediaToolbar({ apiMediaCount, photoCount, videoCount, mediaFilter, setM
   );
 }
 
+// ── Subscribe divider shown between free and locked posts ────────────────────
+function SubscribeDivider({ onSubscribe }: { onSubscribe?: () => void }) {
+  return (
+    <div style={{
+      margin: "8px 16px",
+      borderRadius: "14px",
+      backgroundColor: "#0D0D18",
+      border: "1.5px solid #2A2A3D",
+      padding: "20px 16px",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: "10px",
+      textAlign: "center",
+    }}>
+      <div style={{
+        width: "44px", height: "44px", borderRadius: "50%",
+        backgroundColor: "rgba(139,92,246,0.12)",
+        border: "1.5px solid rgba(139,92,246,0.3)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <Lock size={20} color="#8B5CF6" />
+      </div>
+      <div>
+        <p style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>
+          Subscribe to see all posts
+        </p>
+        <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>
+          Subscribers get full access to exclusive content
+        </p>
+      </div>
+      {onSubscribe && (
+        <button
+          onClick={onSubscribe}
+          style={{
+            padding: "10px 28px",
+            borderRadius: "10px",
+            background: "linear-gradient(135deg, #8B5CF6, #7C3AED)",
+            border: "none",
+            color: "#fff",
+            fontSize: "14px",
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "'Inter', sans-serif",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+        >
+          Subscribe
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Module-level cache
 const feedLayoutCache = new Map<string, { activeTab: string; isPostsGridView: boolean; isMediaGridView: boolean }>();
 const feedPostsCache  = new Map<string, { posts: ApiPost[]; media: ApiMedia[] }>();
@@ -117,7 +174,8 @@ function buildMediaFromPosts(fetchedPosts: ApiPost[]): ApiMedia[] {
 export default function ContentFeed({
   posts, isSubscribed, isOwnProfile = false,
   creatorUsername, initialApiPosts,
-  onLike, onComment, onTip, onUnlock, emptyState, className,
+  refreshKey,
+  onLike, onComment, onTip, onUnlock, onSubscribe, emptyState, className,
 }: ContentFeedProps) {
   const router = useRouter();
   const { uploads } = useUpload();
@@ -151,6 +209,25 @@ export default function ContentFeed({
   const [searchQuery,     setSearchQuery]     = React.useState("");
   const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
+
+  const prevRefreshKey = React.useRef<number | undefined>(undefined);
+  React.useEffect(() => {
+    if (refreshKey === undefined) return;
+    if (prevRefreshKey.current === undefined) {
+      prevRefreshKey.current = refreshKey;
+      return;
+    }
+    if (refreshKey !== prevRefreshKey.current) {
+      prevRefreshKey.current = refreshKey;
+      feedPostsCache.delete(cacheKey);
+      if (initialApiPosts) {
+        const freshMedia = buildMediaFromPosts(initialApiPosts);
+        setApiPosts(initialApiPosts);
+        setApiMedia(freshMedia);
+        feedPostsCache.set(cacheKey, { posts: initialApiPosts, media: freshMedia });
+      }
+    }
+  }, [refreshKey, cacheKey, initialApiPosts]);
 
   React.useEffect(() => {
     if (initialApiPosts && !feedPostsCache.has(cacheKey)) {
@@ -190,6 +267,16 @@ export default function ContentFeed({
     () => apiPosts.filter((p) => searchQuery ? p.caption?.toLowerCase().includes(searchQuery.toLowerCase()) : true),
     [apiPosts, searchQuery]
   );
+
+  // ── Split posts for non-subscribers ──────────────────────────────────────
+  const { freePosts, lockedPosts } = React.useMemo(() => {
+    if (isSubscribed || isOwnProfile) {
+      return { freePosts: filteredPosts, lockedPosts: [] };
+    }
+    const free   = filteredPosts.filter((p) => p.is_free);
+    const locked = filteredPosts.filter((p) => !p.is_free);
+    return { freePosts: free, lockedPosts: locked };
+  }, [filteredPosts, isSubscribed, isOwnProfile]);
 
   const filteredMedia = React.useMemo(
     () => apiMedia.filter((m) => mediaFilter === "all" ? true : mediaFilter === "photo" ? m.media_type !== "video" : m.media_type === "video"),
@@ -240,6 +327,52 @@ export default function ContentFeed({
   const openLightbox = (p: LightboxPost, index: number) => {
     setLightboxMediaIndex(index);
     setLightboxPost(p);
+  };
+
+  const renderPostRow = (post: ApiPost) => (
+    <PostRow
+      key={post.id}
+      post={post}
+      isOwnProfile={isOwnProfile}
+      isSubscribed={isSubscribed}
+      viewer={viewer}
+      onLike={onLike}
+      onComment={onComment}
+      onTip={onTip}
+      onUnlock={onUnlock}
+      onDelete={handleDeletePost}
+      onImageClick={(p, index) => openLightbox(p, index)}
+    />
+  );
+
+  const renderGridPost = (post: ApiPost) => {
+    const m     = post.media?.[0];
+    const thumb = m
+      ? m.media_type === "video" && m.bunny_video_id
+        ? getBunnyThumbnail(m.bunny_video_id)
+        : (m.thumbnail_url || m.file_url || undefined)
+      : undefined;
+    return (
+      <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
+        {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
+        {post.locked && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}>
+            <Lock size={16} color="#fff" />
+          </div>
+        )}
+        {!post.locked && (post.media?.length ?? 0) > 1 && (
+          <div style={{ position: "absolute", top: "5px", right: "5px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "4px", padding: "2px 6px", fontSize: "10px", fontWeight: 700, color: "#fff" }}>
+            1/{post.media.length}
+          </div>
+        )}
+        <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
+          {m?.media_type === "video"
+            ? <Film size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
+            : <ImageIcon size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
+          }
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -298,54 +431,54 @@ export default function ContentFeed({
             <div style={{ textAlign: "center", padding: "40px 0", color: "#4A4A6A", fontSize: "14px" }}>No posts yet</div>
           ))}
 
-          {isPostsGridView ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
-              {filteredPosts.map((post) => {
-                const m     = post.media?.[0];
-                const thumb = m
-                  ? m.media_type === "video" && m.bunny_video_id
-                    ? getBunnyThumbnail(m.bunny_video_id)
-                    : (m.thumbnail_url || m.file_url || undefined)
-                  : undefined;
-                return (
-                  <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
-                    {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
-                    {post.locked && (
-                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}>
-                        <Lock size={16} color="#fff" />
-                      </div>
-                    )}
-                    {!post.locked && (post.media?.length ?? 0) > 1 && (
-                      <div style={{ position: "absolute", top: "5px", right: "5px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "4px", padding: "2px 6px", fontSize: "10px", fontWeight: 700, color: "#fff" }}>
-                        1/{post.media.length}
-                      </div>
-                    )}
-                    <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
-                      {m?.media_type === "video"
-                        ? <Film size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
-                        : <ImageIcon size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
-                      }
+          {/* ── Subscribed / own profile — normal feed ── */}
+          {(isSubscribed || isOwnProfile) && (
+            isPostsGridView ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
+                {filteredPosts.map(renderGridPost)}
+              </div>
+            ) : (
+              filteredPosts.map(renderPostRow)
+            )
+          )}
+
+          {/* ── Non-subscriber — free posts first, then divider, then locked ── */}
+          {!isSubscribed && !isOwnProfile && (
+            <>
+              {isPostsGridView ? (
+                <>
+                  {freePosts.length > 0 && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
+                      {freePosts.map(renderGridPost)}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            filteredPosts.map((post) => (
-              <PostRow
-                key={post.id}
-                post={post}
-                isOwnProfile={isOwnProfile}
-                isSubscribed={isSubscribed}
-                viewer={viewer}
-                onLike={onLike}
-                onComment={onComment}
-                onTip={onTip}
-                onUnlock={onUnlock}
-                onDelete={handleDeletePost}
-                onImageClick={(p, index) => openLightbox(p, index)}
-              />
-            ))
+                  )}
+                  {lockedPosts.length > 0 && (
+                    <>
+                      <SubscribeDivider onSubscribe={onSubscribe} />
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
+                        {lockedPosts.map(renderGridPost)}
+                      </div>
+                    </>
+                  )}
+                  {lockedPosts.length === 0 && freePosts.length > 0 && (
+                    <SubscribeDivider onSubscribe={onSubscribe} />
+                  )}
+                </>
+              ) : (
+                <>
+                  {freePosts.map(renderPostRow)}
+                  {lockedPosts.length > 0 && (
+                    <>
+                      <SubscribeDivider onSubscribe={onSubscribe} />
+                      {lockedPosts.map(renderPostRow)}
+                    </>
+                  )}
+                  {lockedPosts.length === 0 && freePosts.length > 0 && (
+                    <SubscribeDivider onSubscribe={onSubscribe} />
+                  )}
+                </>
+              )}
+            </>
           )}
         </>
       )}

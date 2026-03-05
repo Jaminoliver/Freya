@@ -1,9 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { uploadPhotoToBunny } from "@/lib/utils/bunny";
+import sharp from "sharp";
+import { encode } from "blurhash";
 
-const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+const MAX_SIZE_BYTES = 50 * 1024 * 1024;
 const ALLOWED_TYPES  = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+async function generateBlurHash(buffer: Buffer): Promise<string | null> {
+  try {
+    const { data, info } = await sharp(buffer)
+      .resize(20, 20, { fit: "inside" })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    return encode(
+      new Uint8ClampedArray(data),
+      info.width,
+      info.height,
+      4,
+      4,
+    );
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,12 +60,11 @@ export async function POST(req: NextRequest) {
         const isGif     = file.type === "image/gif";
         const mediaType = isGif ? "gif" : "photo";
 
-        const { url, path } = await uploadPhotoToBunny(
-          buffer,
-          user.id,
-          file.name,
-          file.type
-        );
+        // Generate blurhash and upload in parallel
+        const [{ url, path }, blurHash] = await Promise.all([
+          uploadPhotoToBunny(buffer, user.id, file.name, file.type),
+          isGif ? Promise.resolve(null) : generateBlurHash(buffer),
+        ]);
 
         const { data: mediaRow, error: insertError } = await service
           .from("media")
@@ -55,6 +76,7 @@ export async function POST(req: NextRequest) {
             file_size_bytes:   file.size,
             processing_status: "completed",
             is_watermarked:    false,
+            blur_hash:         blurHash ?? null,
           })
           .select("id, file_url, media_type")
           .single();

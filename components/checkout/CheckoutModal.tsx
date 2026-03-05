@@ -57,6 +57,9 @@ export default function CheckoutModal({
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Prevent useEffect from resetting screen after success
+  const successRef = React.useRef(false);
+
   React.useEffect(() => {
     if (isOpen) {
       fetch("/api/wallet/balance")
@@ -67,7 +70,8 @@ export default function CheckoutModal({
   }, [isOpen]);
 
   React.useEffect(() => {
-    if (isOpen) {
+    console.log("[Modal] reset useEffect fired — isOpen:", isOpen, "type:", type, "initialTier:", initialTier, "successRef:", successRef.current);
+    if (isOpen && !successRef.current) {
       setScreen(type === "tips" ? "tip_input" : type === "subscription" ? "plan" : "payment");
       setSelectedMethod(null);
       setVirtualAccount(null);
@@ -87,6 +91,7 @@ export default function CheckoutModal({
   }, [isOpen]);
 
   const handleClose = () => {
+    successRef.current = false;
     setIsClosing(true);
     setTimeout(() => {
       setIsClosing(false);
@@ -111,15 +116,17 @@ export default function CheckoutModal({
   };
 
   const handlePaymentSuccess = () => {
+    successRef.current = true;
+    setScreen("success");
     onSuccess?.();
     if (type === "subscription") onSubscriptionSuccess?.();
-    setScreen("success");
   };
 
   const handleNext = async () => {
     if (screen === "plan") {
       if (getAmount() === 0) {
         setLoading(true);
+        setError(null);
         try {
           const res = await fetch("/api/checkout", {
             method: "POST",
@@ -132,6 +139,7 @@ export default function CheckoutModal({
             }),
           });
           const data = await res.json();
+          console.log("[Checkout] status:", res.status, "data:", data);
           if (!res.ok) { setError(data.message ?? "Subscription failed"); return; }
           handlePaymentSuccess();
         } catch {
@@ -291,6 +299,8 @@ export default function CheckoutModal({
             onAutoRenewChange={setAutoRenew}
             onNext={handleNext}
             onClose={handleClose}
+            loading={loading}
+            error={error}
           />
         )}
 

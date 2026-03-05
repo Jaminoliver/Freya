@@ -6,12 +6,14 @@ import { Check } from "lucide-react";
 interface SubscribedBannerProps {
   renewalDate: string;
   creatorId: string;
+  subscriptionId?: number;
   onCancelled?: () => void;
 }
 
 export default function SubscribedBanner({
   renewalDate,
   creatorId,
+  subscriptionId,
   onCancelled,
 }: SubscribedBannerProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -21,20 +23,21 @@ export default function SubscribedBanner({
     if (!confirm("Cancel subscription? You'll keep access until the renewal date.")) return;
     setCancelling(true);
     try {
-      // Fetch the subscription id for this creator first
-      const res = await fetch(`/api/subscriptions/mine`);
-      const data = await res.json();
-      const sub = (data.subscriptions ?? []).find(
-        (s: { creatorId: string; status: string; id: number }) =>
-          s.creatorId === creatorId && s.status === "active"
-      );
+      let subId = subscriptionId;
 
-      if (!sub) {
-        alert("Subscription not found");
-        return;
+      // Fallback: fetch subscription id if not passed as prop
+      if (!subId) {
+        const res = await fetch(`/api/subscriptions/mine`);
+        const data = await res.json();
+        const sub = (data.subscriptions ?? []).find(
+          (s: { creatorId: string; status: string; id: number }) =>
+            s.creatorId === creatorId && s.status === "active"
+        );
+        if (!sub) { alert("Subscription not found"); return; }
+        subId = sub.id;
       }
 
-      const cancelRes = await fetch(`/api/subscriptions/${sub.id}/cancel`, { method: "POST" });
+      const cancelRes = await fetch(`/api/subscriptions/${subId}/cancel`, { method: "POST" });
       const cancelData = await cancelRes.json();
 
       if (cancelData.success) {
@@ -85,10 +88,10 @@ export default function SubscribedBanner({
 
         {menuOpen && (
           <div style={{
-            position: "absolute", top: "34px", right: 0,
+            position: "absolute", bottom: "34px", right: 0,
             backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D",
             borderRadius: "8px", overflow: "hidden", minWidth: "160px",
-            zIndex: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            zIndex: 10, boxShadow: "0 -4px 16px rgba(0,0,0,0.4)",
           }}>
             <button
               onClick={handleCancel}

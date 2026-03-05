@@ -17,6 +17,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { type, amount, creatorId, tierId, postId, message } = body;
 
+    console.log("[Checkout] incoming:", { type, amount, creatorId, tierId, postId, userId: user.id });
+
     if (!type || amount === undefined || amount === null || !creatorId) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
     }
@@ -47,15 +49,26 @@ export async function POST(req: NextRequest) {
       }
 
       // Check for ANY existing subscription row (any status) to avoid unique constraint violation
-      const { data: existingSub } = await supabase
+      const existingSubQuery = supabase
         .from("subscriptions")
         .select("id, status")
         .eq("fan_id", user.id)
         .eq("creator_id", creatorId)
-        .eq("tier_id", tierId ?? null)
-        .maybeSingle();
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (tierId) {
+        existingSubQuery.eq("tier_id", tierId);
+      } else {
+        existingSubQuery.is("tier_id", null);
+      }
+
+      const { data: existingSub, error: existingSubError } = await existingSubQuery.maybeSingle();
+
+      console.log("[Checkout] existingSub query:", { existingSub, existingSubError, tierId: tierId ?? null });
 
       if (existingSub?.status === "active") {
+        console.log("[Checkout] already subscribed — returning 409");
         return NextResponse.json({ message: "Already subscribed to this creator" }, { status: 409 });
       }
 
@@ -66,7 +79,7 @@ export async function POST(req: NextRequest) {
       let subId: string;
 
       if (existingSub) {
-        // Row exists (expired/cancelled) — update it instead of inserting
+        console.log("[Checkout] updating existing sub row:", existingSub.id);
         const { data: updatedSub, error: updateError } = await supabase
           .from("subscriptions")
           .update({
@@ -83,6 +96,8 @@ export async function POST(req: NextRequest) {
           .select("id")
           .single();
 
+        console.log("[Checkout] update result:", { updatedSub, updateError });
+
         if (updateError || !updatedSub) {
           console.error("[Checkout] subscription update error:", updateError);
           return NextResponse.json({ message: "Failed to reactivate subscription" }, { status: 500 });
@@ -90,7 +105,7 @@ export async function POST(req: NextRequest) {
 
         subId = updatedSub.id;
       } else {
-        // No row exists — fresh insert
+        console.log("[Checkout] inserting new sub row");
         const { data: newSub, error: subError } = await supabase
           .from("subscriptions")
           .insert({
@@ -107,6 +122,8 @@ export async function POST(req: NextRequest) {
           })
           .select("id")
           .single();
+
+        console.log("[Checkout] insert result:", { newSub, subError });
 
         if (subError || !newSub) {
           console.error("[Checkout] subscription insert error:", subError);
@@ -142,6 +159,7 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      console.log("[Checkout] subscription success — subId:", subId);
       return NextResponse.json({ message: "Subscription activated", subscriptionId: subId });
     }
 

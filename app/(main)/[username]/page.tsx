@@ -39,10 +39,12 @@ export default function ProfilePage() {
   const [subscription,          setSubscription]          = React.useState<Subscription | null>(null);
   const [isSubscribed,          setIsSubscribed]          = React.useState(false);
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(null);
+  const [subscriptionId,        setSubscriptionId]        = React.useState<number | undefined>(undefined);
   const [apiPosts,              setApiPosts]              = React.useState<ApiPost[]>([]);
   const [apiLoading,            setApiLoading]            = React.useState(true);
   const [revealed,              setRevealed]              = React.useState(false);
   const [fetchError,            setFetchError]            = React.useState(false);
+  const [feedRefreshKey,        setFeedRefreshKey]        = React.useState(0);
 
   const [isFollowing,     setIsFollowing]     = React.useState(false);
   const [followLoading,   setFollowLoading]   = React.useState(false);
@@ -84,14 +86,27 @@ export default function ProfilePage() {
       const data = await res.json();
       setIsSubscribed(!!data.active);
       setSubscriptionPeriodEnd(data.currentPeriodEnd ?? null);
+      setSubscriptionId(data.subscriptionId ?? undefined);
     } catch (err) {
       console.error("[Profile] Failed to fetch subscription status:", err);
     }
   }, []);
 
-  // ── Background revalidation ───────────────────────────────────────────────
-  // Always re-fetch subscription status + posts in the background even when
-  // cache is fresh — prevents stale sub/post state after a glitch or race.
+  const refreshPosts = React.useCallback(async (creatorUsername: string) => {
+    try {
+      const res  = await fetch(`/api/posts/creator/${creatorUsername}`);
+      const data = await res.json();
+      if (res.ok) {
+        const freshPosts: ApiPost[] = data.posts || [];
+        setApiPosts(freshPosts);
+        updateProfile(creatorUsername, { apiPosts: freshPosts });
+        setFeedRefreshKey((k) => k + 1);
+      }
+    } catch (err) {
+      console.error("[ProfilePage] refreshPosts error:", err);
+    }
+  }, [updateProfile]);
+
   const backgroundRevalidate = React.useCallback(async (creatorId: string, creatorUsername: string) => {
     try {
       const [subRes, postsRes] = await Promise.allSettled([
@@ -113,13 +128,13 @@ export default function ProfilePage() {
         const freshPosts: ApiPost[] = data.posts || [];
         setApiPosts(freshPosts);
         updateProfile(creatorUsername, { apiPosts: freshPosts });
+        setFeedRefreshKey((k) => k + 1);
       }
     } catch (err) {
       console.error("[ProfilePage] backgroundRevalidate error:", err);
     }
   }, [updateProfile]);
 
-  // ── Main fetch ────────────────────────────────────────────────────────────
   const [viewerReady, setViewerReady] = React.useState(() => !!globalViewer);
 
   React.useEffect(() => {
@@ -150,7 +165,6 @@ export default function ProfilePage() {
       setApiLoading(false);
       requestAnimationFrame(() => setRevealed(true));
 
-      // ── Background revalidate sub status + posts even on cache hit ──
       if (cached.profile?.role === "creator" && cached.viewer?.id !== cached.profile.id) {
         backgroundRevalidate(cached.profile.id, cached.profile.username);
       }
@@ -160,16 +174,13 @@ export default function ProfilePage() {
     const fetchData = async () => {
       try {
         const supabase = createClient();
-
         const viewerData: User | null = (globalViewer as any) ?? null;
 
-        const profilePromise = supabase
+        const profileResult = await supabase
           .from("profiles")
           .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
           .eq("username", username)
           .single();
-
-        const profileResult = await profilePromise;
 
         const profileRaw = profileResult.data ?? null;
 
@@ -274,7 +285,6 @@ export default function ProfilePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, viewerReady, globalViewer]);
 
-  // ── Realtime channels ─────────────────────────────────────────────────────
   React.useEffect(() => {
     if (!profileIdRef.current || !viewerIdRef.current) return;
     const supabase  = createClient();
@@ -323,10 +333,21 @@ export default function ProfilePage() {
   }, [username]);
 
   const handleSubscriptionSuccess = React.useCallback(async () => {
-    setCheckoutOpen(false);
+    setIsSubscribed(true);
+    updateProfile(username, { isSubscribed: true });
+    if (profile) {
+      try { await fetchSubscriptionStatus(profile.id); } catch (e) { console.error("[Profile] fetchSubscriptionStatus failed:", e); }
+      try { await refreshPosts(profile.username); } catch (e) { console.error("[Profile] refreshPosts failed:", e); }
+    }
     clearProfile(username);
-    if (profile) await fetchSubscriptionStatus(profile.id);
-  }, [profile, fetchSubscriptionStatus, username, clearProfile]);
+  }, [profile, fetchSubscriptionStatus, refreshPosts, username, clearProfile, updateProfile]);
+
+  const handleCancelled = React.useCallback(async () => {
+    if (profile) {
+      await fetchSubscriptionStatus(profile.id);
+      await refreshPosts(profile.username);
+    }
+  }, [profile, fetchSubscriptionStatus, refreshPosts]);
 
   const handleFollow = async () => {
     if (!profile || followLoading) return;
@@ -358,24 +379,6 @@ export default function ProfilePage() {
   const handleComment       = (id: string) => console.log("Comment:", id);
   const handleTip           = (_id: string) => openTip();
   const handleUnlock        = (id: string) => openUnlock(id);
-
-  const checkoutModal = profile ? (
-    <CheckoutModal
-      isOpen={checkoutOpen}
-      onClose={() => setCheckoutOpen(false)}
-      type={checkoutType}
-      creator={profile}
-      monthlyPrice={profile.subscriptionPrice ?? 0}
-      threeMonthPrice={profile.bundlePricing?.threeMonths}
-      sixMonthPrice={profile.bundlePricing?.sixMonths}
-      initialTier={checkoutTier}
-      tierId={tierId}
-      postPrice={lockedPostPrice}
-      onViewContent={() => router.push(`/${profile.username}`)}
-      onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
-      onSubscriptionSuccess={handleSubscriptionSuccess}
-    />
-  ) : null;
 
   if (!apiLoading && fetchError) {
     return (
@@ -427,6 +430,25 @@ export default function ProfilePage() {
 
   return (
     <>
+      {/* CheckoutModal rendered ONCE here — outside all conditional blocks to prevent unmount/remount */}
+      {profile && (
+        <CheckoutModal
+          isOpen={checkoutOpen}
+          onClose={() => setCheckoutOpen(false)}
+          type={checkoutType}
+          creator={profile}
+          monthlyPrice={profile.subscriptionPrice ?? 0}
+          threeMonthPrice={profile.bundlePricing?.threeMonths}
+          sixMonthPrice={profile.bundlePricing?.sixMonths}
+          initialTier={checkoutTier}
+          tierId={tierId}
+          postPrice={lockedPostPrice}
+          onViewContent={() => router.push(`/${profile.username}`)}
+          onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
+          onSubscriptionSuccess={handleSubscriptionSuccess}
+        />
+      )}
+
       {apiLoading && <ProfileSkeleton context={skeletonContext} />}
 
       {!apiLoading && (
@@ -435,7 +457,6 @@ export default function ProfilePage() {
           {/* 1. CREATOR VIEWING OWN PROFILE */}
           {isOwnProfile && profile?.role === "creator" && (
             <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-              {checkoutModal}
               <ProfileBanner
                 bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username}
                 isEditable={true} isCreator={true} stats={bannerStats} userId={profile.id}
@@ -460,6 +481,7 @@ export default function ProfilePage() {
               <ContentFeed
                 posts={[]} isSubscribed={true} isOwnProfile={true}
                 creatorUsername={profile.username} initialApiPosts={apiPosts}
+                refreshKey={feedRefreshKey}
                 onLike={handleLike} onComment={handleComment} onTip={handleTip} onUnlock={handleUnlock}
               />
             </div>
@@ -468,7 +490,6 @@ export default function ProfilePage() {
           {/* 2. FAN VIEWING OWN PROFILE */}
           {isOwnProfile && profile?.role === "fan" && (
             <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-              {checkoutModal}
               <ProfileBanner
                 bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username}
                 isEditable={false} isCreator={false}
@@ -489,7 +510,8 @@ export default function ProfilePage() {
               </div>
               <ContentFeed
                 posts={[]} isSubscribed={true} creatorUsername={profile.username}
-                initialApiPosts={apiPosts} onLike={handleLike} onComment={handleComment}
+                initialApiPosts={apiPosts} refreshKey={feedRefreshKey}
+                onLike={handleLike} onComment={handleComment}
                 onTip={handleTip} onUnlock={handleUnlock}
               />
             </div>
@@ -498,7 +520,6 @@ export default function ProfilePage() {
           {/* 3. CREATOR VIEWING A FAN */}
           {isCreatorViewingFan && profile && (
             <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "24px 16px" }}>
-              {checkoutModal}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
                 <ProfileActions viewContext="creatorViewingFan" onMessage={() => console.log("Message fan")} />
@@ -513,7 +534,6 @@ export default function ProfilePage() {
           {/* 4. FAN VIEWING SUBSCRIBED CREATOR */}
           {isViewingCreator && isSubscribed && profile && (
             <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-              {checkoutModal}
               <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
               <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
                 <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
@@ -530,12 +550,14 @@ export default function ProfilePage() {
                     ? new Date(subscriptionPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                     : "—"}
                   creatorId={profile.id}
-                  onCancelled={() => fetchSubscriptionStatus(profile.id)}
+                  subscriptionId={subscriptionId}
+                  onCancelled={handleCancelled}
                 />
               </div>
               <ContentFeed
-                posts={[]} isSubscribed={true} creatorUsername={profile.username}
-                initialApiPosts={apiPosts} onLike={handleLike} onComment={handleComment}
+                posts={[]} isSubscribed={isSubscribed} creatorUsername={profile.username}
+                initialApiPosts={apiPosts} refreshKey={feedRefreshKey}
+                onLike={handleLike} onComment={handleComment}
                 onTip={handleTip} onUnlock={handleUnlock}
               />
             </div>
@@ -544,7 +566,6 @@ export default function ProfilePage() {
           {/* 5. FAN VIEWING UNSUBSCRIBED CREATOR */}
           {isViewingCreator && !isSubscribed && profile && (
             <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-              {checkoutModal}
               <ProfileBanner bannerUrl={profile.banner_url || undefined} displayName={profile.display_name || profile.username} isEditable={false} isCreator={true} stats={bannerStats} />
               <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
                 <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
@@ -566,7 +587,8 @@ export default function ProfilePage() {
               </div>
               <ContentFeed
                 posts={[]} isSubscribed={false} creatorUsername={profile.username}
-                initialApiPosts={apiPosts} onLike={handleLike} onComment={handleComment}
+                initialApiPosts={apiPosts} refreshKey={feedRefreshKey}
+                onLike={handleLike} onComment={handleComment}
                 onTip={handleTip} onUnlock={handleUnlock}
               />
             </div>

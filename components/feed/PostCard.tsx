@@ -21,6 +21,9 @@ interface MediaItem {
   thumbnailUrl?:     string | null;
   processingStatus?: string | null;
   rawVideoUrl?:      string | null;
+  blurHash?:         string | null;
+  width?:            number | null;
+  height?:           number | null;
 }
 
 interface TaggedCreator {
@@ -163,7 +166,6 @@ export function PostCard({
     }
   }, [post.id, post.liked, post.likes, post.comments, post.poll]);
 
-  // Pre-fetch comments on mount so sheet opens instantly
   useEffect(() => {
     fetch(`/api/posts/${post.id}/comments`)
       .then((r) => r.json())
@@ -224,10 +226,8 @@ export function PostCard({
         reply_to_id:        reply_to_id ?? null,
       }),
     });
-    // Increment count for both top-level comments and replies
     setCommentCount((c) => c + 1);
     postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: commentCount + 1 });
-    // Only re-fetch top-level comments list for top-level comments
     if (!parent_comment_id) {
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
       if (d.comments) setComments(d.comments);
@@ -249,6 +249,9 @@ export function PostCard({
     thumbnailUrl:     m.thumbnailUrl,
     processingStatus: m.processingStatus,
     rawVideoUrl:      m.rawVideoUrl,
+    blurHash:         m.blurHash ?? null,
+    width:            m.width ?? null,
+    height:           m.height ?? null,
   }));
 
   const lightboxPost = toLightboxPost(post);
@@ -317,28 +320,15 @@ export function PostCard({
 
       {/* Caption */}
       {post.caption && (
-        <p style={{
-          fontSize:   isTextPost ? "15px" : "14px",
-          color:      "#C4C4D4",
-          lineHeight: isTextPost ? 1.7 : 1.6,
-          margin:     "0",
-          padding:    isTextPost ? "0 16px 14px" : "0 16px 10px",
-          whiteSpace: "pre-wrap",
-        }}>
+        <p style={{ fontSize: isTextPost ? "15px" : "14px", color: "#C4C4D4", lineHeight: isTextPost ? 1.7 : 1.6, margin: "0", padding: isTextPost ? "0 16px 14px" : "0 16px 10px", whiteSpace: "pre-wrap" }}>
           {post.caption}
         </p>
       )}
 
-      {isTextPost && (
-        <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />
-      )}
+      {isTextPost && <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />}
 
       {isPollPost && pollData && (
-        <PollDisplay
-          poll={pollData}
-          postId={post.id}
-          onVoted={(updated) => setPollData(updated)}
-        />
+        <PollDisplay poll={pollData} postId={post.id} onVoted={(updated) => setPollData(updated)} />
       )}
 
       {!isTextPost && !isPollPost && (

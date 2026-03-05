@@ -58,6 +58,9 @@ interface PostData {
     duration_seconds: number | null;
     locked: boolean;
     display_order: number;
+    blur_hash?: string | null;
+    width?: number | null;
+    height?: number | null;
   }[];
 }
 
@@ -327,6 +330,9 @@ export default function SinglePostPage() {
         thumbnailUrl:     m.thumbnail_url,
         processingStatus: m.processing_status,
         rawVideoUrl:      m.raw_video_url,
+        blurHash:         m.blur_hash ?? null,
+        width:            m.width ?? null,
+        height:           m.height ?? null,
       }))
     : post.media.filter((m) => !m.locked).map((m) => ({
         type:             m.media_type === "video" ? "video" : "image",
@@ -335,6 +341,9 @@ export default function SinglePostPage() {
         thumbnailUrl:     m.thumbnail_url,
         processingStatus: m.processing_status,
         rawVideoUrl:      m.raw_video_url,
+        blurHash:         m.blur_hash ?? null,
+        width:            m.width ?? null,
+        height:           m.height ?? null,
       }));
 
   const lightboxPost: LightboxPost = {

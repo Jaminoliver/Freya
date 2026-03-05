@@ -1,6 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { getBunnyStreamUrls, getBunnyRawVideoUrl } from "@/lib/utils/bunny";
+import sharp from "sharp";
+import { encode } from "blurhash";
+
+async function generateBlurHashFromUrl(url: string): Promise<string | null> {
+  try {
+    const res    = await fetch(url);
+    if (!res.ok) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+
+    const { data, info } = await sharp(buffer)
+      .resize(20, 20, { fit: "inside" })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    return encode(new Uint8ClampedArray(data), info.width, info.height, 4, 4);
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,10 +35,11 @@ export async function POST(req: NextRequest) {
     }
 
     const { hlsUrl, thumbnailUrl } = getBunnyStreamUrls(videoId);
-    const rawVideoUrl = getBunnyRawVideoUrl(videoId);
+    const rawVideoUrl              = getBunnyRawVideoUrl(videoId);
+    const finalThumbnailUrl        = customThumbnailUrl || thumbnailUrl;
 
-    // Use creator-picked thumbnail if provided, otherwise fall back to Bunny auto-generated
-    const finalThumbnailUrl = customThumbnailUrl || thumbnailUrl;
+    // Generate blurhash from thumbnail in parallel with DB insert prep
+    const blurHash = await generateBlurHashFromUrl(finalThumbnailUrl);
 
     const service = createServiceSupabaseClient();
     const { data: mediaRow, error: insertError } = await service
@@ -34,6 +55,7 @@ export async function POST(req: NextRequest) {
         processing_status: "processing",
         bunny_video_id:    videoId,
         is_watermarked:    false,
+        blur_hash:         blurHash ?? null,
       })
       .select("id, file_url, raw_video_url, thumbnail_url, bunny_video_id")
       .single();

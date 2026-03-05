@@ -52,13 +52,8 @@ export async function GET(req: NextRequest) {
       .eq("fan_id", user.id)
       .eq("status", "active");
 
-    const creatorIds = (subs ?? []).map((s: { creator_id: string }) => s.creator_id);
-
-    if (creatorIds.length === 0) {
-      return NextResponse.json({ posts: [], nextCursor: null });
-    }
-
-    const subscribedSet = new Set<string>(creatorIds);
+    const subscribedCreatorIds = (subs ?? []).map((s: { creator_id: string }) => s.creator_id);
+    const subscribedSet = new Set<string>(subscribedCreatorIds);
 
     let query = service
       .from("posts")
@@ -88,14 +83,24 @@ export async function GET(req: NextRequest) {
           duration_seconds,
           display_order,
           processing_status,
-          bunny_video_id
+          bunny_video_id,
+          blur_hash
         )
       `)
-      .in("creator_id", creatorIds)
       .eq("is_published", true)
       .eq("is_deleted", false)
       .order("published_at", { ascending: false })
       .limit(PAGE_SIZE);
+
+    if (subscribedCreatorIds.length > 0) {
+      query = query.or(
+        `creator_id.in.(${subscribedCreatorIds.join(",")}),is_free.eq.true`
+      );
+    } else {
+      query = query.eq("is_free", true);
+    }
+
+    query = query.neq("creator_id", user.id);
 
     if (cursor) {
       query = query.lt("published_at", cursor);
@@ -110,7 +115,6 @@ export async function GET(req: NextRequest) {
 
     const postIds = (posts ?? []).map((p: { id: number }) => Number(p.id));
 
-    // ── Fetch likes in parallel ───────────────────────────────────────────
     const likesPromise = postIds.length > 0
       ? service
           .from("likes")
@@ -119,7 +123,6 @@ export async function GET(req: NextRequest) {
           .in("post_id", postIds)
       : Promise.resolve({ data: [] });
 
-    // ── Fetch poll data for any poll posts ────────────────────────────────
     const pollPostIds = (posts ?? [])
       .filter((p: Record<string, unknown>) => p.content_type === "poll")
       .map((p: Record<string, unknown>) => Number(p.id));
@@ -142,7 +145,6 @@ export async function GET(req: NextRequest) {
       return !hasUnreadyVideo;
     });
 
-    // ── Await likes and polls ─────────────────────────────────────────────
     const [{ data: userLikes }, { data: pollsRaw }] = await Promise.all([
       likesPromise,
       pollsPromise,
@@ -152,7 +154,6 @@ export async function GET(req: NextRequest) {
       (userLikes ?? []).map((l: { post_id: number | string }) => Number(l.post_id))
     );
 
-    // ── Fetch poll options for all polls ──────────────────────────────────
     const pollIds = (pollsRaw ?? []).map((p: { id: number }) => p.id);
 
     const [{ data: pollOptionsRaw }, { data: userVotesRaw }] = await Promise.all([
@@ -172,7 +173,6 @@ export async function GET(req: NextRequest) {
         : Promise.resolve({ data: [] }),
     ]);
 
-    // ── Build poll lookup map keyed by post_id ────────────────────────────
     type PollOption = { id: number; option_text: string; vote_count: number; display_order: number };
     type PollData   = {
       id: number;
@@ -244,6 +244,7 @@ export async function GET(req: NextRequest) {
 
       return {
         ...post,
+        is_free:    isFree,
         media:      mediaItems,
         liked:      likedSet.has(Number(post.id)),
         can_access: canAccess,

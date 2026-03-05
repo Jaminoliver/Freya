@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { decode } from "blurhash";
 
 const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
 
@@ -14,6 +15,35 @@ export function getBunnyMP4(videoId: string, resolution: "1080" | "720" | "480" 
   return `https://${BUNNY_PULL_ZONE}/${videoId}/play_${resolution}p.mp4`;
 }
 
+// ── BlurHashCanvas — renders instantly from hash string ──────────────────────
+function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProperties }) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+
+  React.useEffect(() => {
+    if (!hash || !canvasRef.current) return;
+    try {
+      const pixels = decode(hash, 32, 32);
+      const ctx    = canvasRef.current.getContext("2d");
+      if (!ctx) return;
+      const imageData = ctx.createImageData(32, 32);
+      imageData.data.set(pixels);
+      ctx.putImageData(imageData, 0, 0);
+    } catch { /* invalid hash — fail silently */ }
+  }, [hash]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={32}
+      height={32}
+      style={{
+        ...style,
+        imageRendering: "pixelated",
+      }}
+    />
+  );
+}
+
 interface VideoPlayerProps {
   bunnyVideoId:      string | null;
   thumbnailUrl?:     string | null;
@@ -22,18 +52,29 @@ interface VideoPlayerProps {
   fillParent?:       boolean;
   aspectRatio?:      "9/16" | "16/9" | "1/1" | null;
   hideInternalBlur?: boolean;
+  blurHash?:         string | null;
 }
 
-export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStatus, rawVideoUrl, fillParent = false, aspectRatio: externalRatio = null, hideInternalBlur = false }: VideoPlayerProps) {
+export default function VideoPlayer({
+  bunnyVideoId,
+  thumbnailUrl,
+  processingStatus,
+  rawVideoUrl,
+  fillParent = false,
+  aspectRatio: externalRatio = null,
+  hideInternalBlur = false,
+  blurHash,
+}: VideoPlayerProps) {
   const videoRef       = React.useRef<HTMLVideoElement>(null);
   const containerRef   = React.useRef<HTMLDivElement>(null);
   const hlsRef         = React.useRef<any>(null);
   const hasInitialized = React.useRef(false);
 
-  const [showPoster,     setShowPoster]     = React.useState(true);
-  const [posterError,    setPosterError]    = React.useState(false);
-  const [isBuffering,    setIsBuffering]    = React.useState(false);
-  const [internalRatio,  setInternalRatio]  = React.useState<"9/16" | "16/9" | "1/1" | null>(null);
+  const [showPoster,    setShowPoster]    = React.useState(true);
+  const [posterLoaded,  setPosterLoaded]  = React.useState(false);
+  const [posterError,   setPosterError]   = React.useState(false);
+  const [isBuffering,   setIsBuffering]   = React.useState(false);
+  const [internalRatio, setInternalRatio] = React.useState<"9/16" | "16/9" | "1/1" | null>(null);
 
   const aspectRatio = externalRatio ?? internalRatio;
   const isPortrait  = aspectRatio === "9/16";
@@ -42,6 +83,7 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
   const posterSrc      = (!posterError && thumbnailUrl) ? thumbnailUrl : bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "";
 
   const handlePosterLoad = React.useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    setPosterLoaded(true);
     if (externalRatio) return;
     const img = e.currentTarget;
     const { naturalWidth: w, naturalHeight: h } = img;
@@ -166,22 +208,64 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
 
       <div ref={containerRef} style={containerStyle}>
 
-        {/* Blurred background — always show unless hidden by parent */}
+        {/* ── Blurhash canvas — visible instantly, zero network ── */}
+        {blurHash && !posterLoaded && (
+          <BlurHashCanvas
+            hash={blurHash}
+            style={{
+              position:  "absolute",
+              inset:     0,
+              width:     "100%",
+              height:    "100%",
+              zIndex:    0,
+            }}
+          />
+        )}
+
+        {/* Blurred background */}
         {!hideInternalBlur && (
-          <img src={posterSrc} alt="" aria-hidden onError={() => setPosterError(true)}
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.4)", transform: "scale(1.1)", zIndex: 1 }}
+          <img
+            src={posterSrc}
+            alt=""
+            aria-hidden
+            fetchPriority="high"
+            onError={() => setPosterError(true)}
+            style={{
+              position:   "absolute",
+              inset:      0,
+              width:      "100%",
+              height:     "100%",
+              objectFit:  "cover",
+              filter:     "blur(20px) brightness(0.4)",
+              transform:  "scale(1.1)",
+              zIndex:     1,
+              opacity:    posterLoaded ? 1 : 0,
+              transition: "opacity 0.2s ease",
+            }}
           />
         )}
 
         {/* Poster + play button */}
         {showPoster && (
-          <div onClick={handlePosterPlay} style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <div
+            onClick={handlePosterPlay}
+            style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+          >
             <img
               src={posterSrc}
               alt=""
+              fetchPriority="high"
               onLoad={handlePosterLoad}
               onError={() => setPosterError(true)}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
+              style={{
+                position:   "absolute",
+                inset:      0,
+                width:      "100%",
+                height:     "100%",
+                objectFit:  "contain",
+                opacity:    posterLoaded ? 1 : 0,
+                transition: "opacity 0.25s ease",
+              }}
             />
             <div style={{ position: "relative", zIndex: 2, width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.55)", border: "2px solid rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
               <div style={{ width: 0, height: 0, borderTop: "10px solid transparent", borderBottom: "10px solid transparent", borderLeft: "18px solid rgba(255,255,255,0.95)", marginLeft: "4px" }} />
@@ -191,10 +275,13 @@ export default function VideoPlayer({ bunnyVideoId, thumbnailUrl, processingStat
 
         {/* Video */}
         <video
-          ref={videoRef} controls={!showPoster} playsInline preload="none" poster={posterSrc}
+          ref={videoRef}
+          controls={!showPoster}
+          playsInline
+          preload="none"
+          poster={posterSrc}
           onLoadedMetadata={handleLoadedMetadata}
           onPlay={() => setIsBuffering(false)}
-          onPause={() => {}}
           onWaiting={() => setIsBuffering(true)}
           onPlaying={() => setIsBuffering(false)}
           onCanPlay={() => setIsBuffering(false)}

@@ -81,7 +81,8 @@ export async function GET(
           duration_seconds,
           width,
           height,
-          display_order
+          display_order,
+          blur_hash
         )
       `)
       .eq("id", postId)
@@ -154,7 +155,6 @@ export async function GET(
         };
       });
 
-    // ── Fetch poll data if this is a poll post ───────────────────────────────
     let pollData: {
       id: number;
       question: string;
@@ -213,6 +213,52 @@ export async function GET(
 
   } catch (err) {
     console.error("[Single Post] Error:", err);
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id }  = await params;
+    const postId  = Number(id);
+    if (isNaN(postId)) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
+
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const body    = await req.json();
+    const caption = typeof body.caption === "string" ? body.caption.trim() : null;
+
+    const service = createServiceSupabaseClient();
+
+    const { data: post } = await service
+      .from("posts")
+      .select("creator_id")
+      .eq("id", postId)
+      .single();
+
+    if (!post || post.creator_id !== user.id) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const { error } = await service
+      .from("posts")
+      .update({ caption })
+      .eq("id", postId);
+
+    if (error) {
+      console.error("[PATCH Post] Supabase error:", error.message);
+      return NextResponse.json({ error: "Failed to update caption" }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, caption });
+
+  } catch (err) {
+    console.error("[PATCH Post] Error:", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }
