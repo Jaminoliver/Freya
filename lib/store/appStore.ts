@@ -33,6 +33,7 @@ function saveViewerToStorage(viewer: Viewer | null) {
 }
 
 function loadFeedFromStorage(): FeedEntry | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(FEED_KEY);
     if (!raw) return null;
@@ -43,14 +44,17 @@ function loadFeedFromStorage(): FeedEntry | null {
 }
 
 function saveFeedToStorage(entry: FeedEntry) {
+  if (typeof window === "undefined") return;
   try { sessionStorage.setItem(FEED_KEY, JSON.stringify(entry)); } catch {}
 }
 
 function clearFeedFromStorage() {
+  if (typeof window === "undefined") return;
   try { sessionStorage.removeItem(FEED_KEY); } catch {}
 }
 
 function loadProfilesFromStorage(): Record<string, ProfileEntry> {
+  if (typeof window === "undefined") return {};
   try {
     const raw = sessionStorage.getItem(PROFILES_KEY);
     if (!raw) return {};
@@ -64,10 +68,12 @@ function loadProfilesFromStorage(): Record<string, ProfileEntry> {
 }
 
 function saveProfilesToStorage(profiles: Record<string, ProfileEntry>) {
+  if (typeof window === "undefined") return;
   try { sessionStorage.setItem(PROFILES_KEY, JSON.stringify(profiles)); } catch {}
 }
 
 function loadContentFeedsFromStorage(): Record<string, ContentFeedEntry> {
+  if (typeof window === "undefined") return {};
   try {
     const raw = sessionStorage.getItem(CONTENT_FEEDS_KEY);
     if (!raw) return {};
@@ -81,6 +87,7 @@ function loadContentFeedsFromStorage(): Record<string, ContentFeedEntry> {
 }
 
 function saveContentFeedsToStorage(feeds: Record<string, ContentFeedEntry>) {
+  if (typeof window === "undefined") return;
   try { sessionStorage.setItem(CONTENT_FEEDS_KEY, JSON.stringify(feeds)); } catch {}
 }
 

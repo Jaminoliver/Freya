@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       .eq("fan_id", user.id)
       .eq("creator_id", creatorId)
       .eq("status", "ACTIVE")
-      .single();
+      .maybeSingle();
 
     if (existingSub) {
       return NextResponse.json({ message: "Already subscribed to this creator" }, { status: 409 });

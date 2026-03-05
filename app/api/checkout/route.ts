@@ -21,6 +21,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
     }
 
+    if (typeof amount !== "number" || isNaN(amount) || amount < 0) {
+      return NextResponse.json({ message: "Invalid amount" }, { status: 400 });
+    }
+
     const isFree = amount === 0;
 
     // Only check balance if there's an actual charge

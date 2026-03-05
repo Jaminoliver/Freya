@@ -58,8 +58,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
             role:         data.role || "fan",
           });
         }
+        // If data is null, keep existing cached viewer — don't wipe it
       } catch (err: unknown) {
         console.error("[AppStoreProvider] profile fetch failed:", err);
+        // Keep existing cached viewer on error — don't wipe it
       } finally {
         fetchingRef.current = null;
       }
