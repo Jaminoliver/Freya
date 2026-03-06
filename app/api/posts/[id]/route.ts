@@ -137,8 +137,10 @@ export async function GET(
 
         let freshThumb: string | null = null;
         if (m.media_type === "video") {
-          freshThumb = derivedThumb;
-        } else {
+  const customThumb = m.thumbnail_url as string | null;
+  const customPath  = extractBunnyPath(customThumb);
+  freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
+} else {
           const rawThumb  = m.thumbnail_url as string | null;
           const thumbPath = extractBunnyPath(rawThumb);
           freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;

@@ -20,6 +20,7 @@ import type { User, Subscription, Post } from "@/lib/types/profile";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 import type { ApiPost } from "@/components/profile/PostRow";
 import { useAppStore, isStale } from "@/lib/store/appStore";
+import { useUpload } from "@/lib/context/UploadContext";
 
 export default function ProfilePage() {
   const params   = useParams();
@@ -33,6 +34,9 @@ export default function ProfilePage() {
     clearProfile,
     viewer: globalViewer,
   } = useAppStore();
+
+  // FIX: watch uploads to trigger feed refresh on completion
+  const { uploads } = useUpload();
 
   const [viewer,                setViewer]                = React.useState<User | null>(null);
   const [profile,               setProfile]               = React.useState<User | null>(null);
@@ -285,6 +289,27 @@ export default function ProfilePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, viewerReady, globalViewer]);
 
+  // FIX: single source of truth for upload-triggered feed refresh
+  // Only fires on own profile, only when phase transitions to "done"
+  // ContentFeed no longer watches uploads — no double-fetch
+  const prevUploadPhases = React.useRef<Record<string, string>>({});
+  React.useEffect(() => {
+    if (!profile || !viewer || viewer.id !== profile.id) return;
+
+    let shouldRefresh = false;
+    for (const u of uploads) {
+      const prev = prevUploadPhases.current[u.id];
+      if (prev && prev !== "done" && u.phase === "done") {
+        shouldRefresh = true;
+      }
+      prevUploadPhases.current[u.id] = u.phase;
+    }
+
+    if (shouldRefresh) {
+      refreshPosts(profile.username);
+    }
+  }, [uploads, profile, viewer, refreshPosts]);
+
   React.useEffect(() => {
     if (!profileIdRef.current || !viewerIdRef.current) return;
     const supabase  = createClient();
@@ -430,7 +455,6 @@ export default function ProfilePage() {
 
   return (
     <>
-      {/* CheckoutModal rendered ONCE here — outside all conditional blocks to prevent unmount/remount */}
       {profile && (
         <CheckoutModal
           isOpen={checkoutOpen}

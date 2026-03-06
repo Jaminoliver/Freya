@@ -9,8 +9,8 @@ import type { ApiPost } from "@/components/profile/PostRow";
 import Lightbox from "@/components/profile/Lightbox";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { getBunnyThumbnail } from "@/components/video/VideoPlayer";
-import { useUpload } from "@/lib/context/UploadContext";
 import { useAppStore } from "@/lib/store/appStore";
+import { ContentFeedSkeleton } from "@/components/loadscreen/ContentFeedSkeleton";
 
 export interface ContentFeedProps {
   posts: Post[];
@@ -102,7 +102,6 @@ function MediaToolbar({ apiMediaCount, photoCount, videoCount, mediaFilter, setM
   );
 }
 
-// ── Subscribe divider shown between free and locked posts ────────────────────
 function SubscribeDivider({ onSubscribe }: { onSubscribe?: () => void }) {
   return (
     <div style={{
@@ -178,7 +177,6 @@ export default function ContentFeed({
   onLike, onComment, onTip, onUnlock, onSubscribe, emptyState, className,
 }: ContentFeedProps) {
   const router = useRouter();
-  const { uploads } = useUpload();
 
   const globalViewer = useAppStore((s) => s.viewer);
   const viewer = globalViewer
@@ -201,6 +199,7 @@ export default function ContentFeed({
 
   const [apiPosts,        setApiPosts]        = React.useState<ApiPost[]>(seedPosts);
   const [apiMedia,        setApiMedia]        = React.useState<ApiMedia[]>(seedMedia);
+  // FIX: use skeleton loader instead of spinner
   const [loading,         setLoading]         = React.useState(!initialApiPosts && !cachedPosts);
   const [mediaFilter,     setMediaFilter]     = React.useState<"all" | "photo" | "video">("all");
   const [isPostsGridView, setIsPostsGridView] = React.useState(cached?.isPostsGridView ?? false);
@@ -210,6 +209,8 @@ export default function ContentFeed({
   const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
 
+  // FIX: respond to refreshKey increments from ProfilePage (upload done)
+  // ProfilePage owns the upload-watching logic — ContentFeed just consumes refreshKey
   const prevRefreshKey = React.useRef<number | undefined>(undefined);
   React.useEffect(() => {
     if (refreshKey === undefined) return;
@@ -268,7 +269,6 @@ export default function ContentFeed({
     [apiPosts, searchQuery]
   );
 
-  // ── Split posts for non-subscribers ──────────────────────────────────────
   const { freePosts, lockedPosts } = React.useMemo(() => {
     if (isSubscribed || isOwnProfile) {
       return { freePosts: filteredPosts, lockedPosts: [] };
@@ -286,6 +286,8 @@ export default function ContentFeed({
   const photoCount = React.useMemo(() => apiMedia.filter((m) => m.media_type !== "video").length, [apiMedia]);
   const videoCount = React.useMemo(() => apiMedia.filter((m) => m.media_type === "video").length,  [apiMedia]);
 
+  // FIX: ContentFeed only fetches if ProfilePage hasn't already provided posts
+  // Upload completion is handled by ProfilePage → refreshKey — no duplicate fetch here
   const fetchPosts = React.useCallback(async (force = false) => {
     if (!creatorUsername) return;
     if (!force && (feedPostsCache.has(cacheKey) || initialApiPosts)) return;
@@ -306,14 +308,8 @@ export default function ContentFeed({
 
   React.useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
-  const prevUploadStates = React.useRef<Record<string, string>>({});
-  React.useEffect(() => {
-    for (const u of uploads) {
-      const prev = prevUploadStates.current[u.id];
-      if (prev && prev !== "done" && u.phase === "done") { fetchPosts(true); break; }
-      prevUploadStates.current[u.id] = u.phase;
-    }
-  }, [uploads, fetchPosts]);
+  // FIX: removed upload watching from here — ProfilePage owns that logic
+  // This prevents the double-fetch that was happening before
 
   const handleDeletePost = (id: string) => {
     setApiPosts((prev) => {
@@ -375,6 +371,11 @@ export default function ContentFeed({
     );
   };
 
+  // FIX: skeleton loader replaces spinner
+  if (loading) {
+    return <ContentFeedSkeleton tab={activeTab as "posts" | "media"} />;
+  }
+
   return (
     <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
       {lightboxPost && (
@@ -394,15 +395,8 @@ export default function ContentFeed({
         onChange={(key) => { setActiveTab(key); setShowSearch(false); setSearchQuery(""); }}
       />
 
-      {loading && (
-        <div style={{ display: "flex", justifyContent: "center", padding: "40px 0" }}>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          <div style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid #1F1F2A", borderTop: "2px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
-        </div>
-      )}
-
       {/* Posts tab */}
-      {!loading && activeTab === "posts" && (
+      {activeTab === "posts" && (
         <>
           <div style={{ padding: "12px 16px 4px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
@@ -431,7 +425,6 @@ export default function ContentFeed({
             <div style={{ textAlign: "center", padding: "40px 0", color: "#4A4A6A", fontSize: "14px" }}>No posts yet</div>
           ))}
 
-          {/* ── Subscribed / own profile — normal feed ── */}
           {(isSubscribed || isOwnProfile) && (
             isPostsGridView ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
@@ -442,7 +435,6 @@ export default function ContentFeed({
             )
           )}
 
-          {/* ── Non-subscriber — free posts first, then divider, then locked ── */}
           {!isSubscribed && !isOwnProfile && (
             <>
               {isPostsGridView ? (
@@ -484,7 +476,7 @@ export default function ContentFeed({
       )}
 
       {/* Media tab */}
-      {!loading && activeTab === "media" && (
+      {activeTab === "media" && (
         <>
           <MediaToolbar
             apiMediaCount={apiMedia.length}

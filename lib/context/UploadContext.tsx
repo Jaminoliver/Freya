@@ -22,6 +22,7 @@ export interface UploadItem {
   _isMultiPhoto?: boolean;
   _isText?:       boolean;
   _isPoll?:       boolean;
+  _videoId?:      string;
 }
 
 // Serialisable shape stored in sessionStorage (no File/Blob/callbacks)
@@ -124,7 +125,22 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
   }, []);
 
-  const startPolling = useCallback((uploadId: string, mediaId: number) => {
+  // ── Watermark check — runs once after transcoding completes ───────────────
+  const checkWatermark = useCallback(async (uploadId: string, videoId: string) => {
+    try {
+      const res  = await fetch(`/api/upload/video/watermark-check?videoId=${videoId}`);
+      const data = await res.json();
+      if (data.hasWatermark) {
+        console.log(`✅ [watermark] videoId=${videoId} — watermark confirmed on transcoded video`);
+      } else {
+        console.warn(`⚠️ [watermark] videoId=${videoId} — NO watermark detected. hasWatermark=${data.hasWatermark} watermarkVersion=${data.watermarkVersion} status=${data.status}`);
+      }
+    } catch (err) {
+      console.error(`[watermark] check failed for videoId=${videoId}:`, err);
+    }
+  }, []);
+
+  const startPolling = useCallback((uploadId: string, mediaId: number, videoId?: string) => {
     let attempts = 0;
     const MAX_ATTEMPTS = 60;
 
@@ -138,6 +154,15 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           clearInterval(pollTimers.current[uploadId]);
           delete pollTimers.current[uploadId];
           updateUpload(uploadId, { progress: 100, phase: "done" });
+
+          // Check watermark after transcoding completes
+          const bunnyVideoId = videoId ?? data.bunnyVideoId;
+          if (bunnyVideoId) {
+            checkWatermark(uploadId, bunnyVideoId);
+          } else {
+            console.warn(`[watermark] no videoId available for uploadId=${uploadId} — skipping check`);
+          }
+
         } else if (data.status === "failed") {
           clearInterval(pollTimers.current[uploadId]);
           delete pollTimers.current[uploadId];
@@ -155,7 +180,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         }
       } catch { /* ignore network blips */ }
     }, 3000);
-  }, [updateUpload]);
+  }, [updateUpload, checkWatermark]);
 
   // ── Text post ─────────────────────────────────────────────────────────────
   const runTextPost = useCallback(async (
@@ -371,6 +396,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         libraryId:   string;
       };
 
+      // Save videoId on the upload item so watermark check can use it
+      updateUpload(uploadId, { _videoId: videoId });
+
       await new Promise<void>((resolve, reject) => {
         const upload = new tus.Upload(file, {
           endpoint:    tusEndpoint,
@@ -414,7 +442,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       const mediaId: number = completeData.mediaId;
       updateUpload(uploadId, { mediaId, progress: 85, phase: "processing" });
       onMediaId(mediaId);
-      startPolling(uploadId, mediaId);
+      startPolling(uploadId, mediaId, videoId);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed";

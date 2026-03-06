@@ -116,9 +116,13 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
   const startXRef    = React.useRef<number | null>(null);
   const startYRef    = React.useRef<number | null>(null);
   const dragDeltaX   = React.useRef(0);
-  const [liveOffset, setLiveOffset] = React.useState(0); // px dragged live
+  const [liveOffset, setLiveOffset] = React.useState(0);
   const isDragging   = React.useRef(false);
   const touchWasUsed = React.useRef(false);
+  const isHorizontalSwipe = React.useRef<boolean | null>(null); // FIX: track swipe axis
+
+  // FIX: ref for the strip so we can attach a non-passive touchmove listener
+  const stripRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const check = () => setIsDesktop(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -127,13 +131,37 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // FIX: attach non-passive touchmove to strip so preventDefault() works
+  React.useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (startXRef.current === null || startYRef.current === null) return;
+      const dx = Math.abs(e.touches[0].clientX - startXRef.current);
+      const dy = Math.abs(e.touches[0].clientY - startYRef.current);
+
+      // Determine axis on first meaningful movement
+      if (isHorizontalSwipe.current === null && (dx > 3 || dy > 3)) {
+        isHorizontalSwipe.current = dx > dy;
+      }
+
+      // Only prevent scroll if we've committed to a horizontal swipe
+      if (isHorizontalSwipe.current) {
+        e.preventDefault();
+      }
+    };
+
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => el.removeEventListener("touchmove", onTouchMove);
+  }, []);
+
   const goTo = React.useCallback((index: number) => {
     if (isTransitioning) return;
     setIsTransitioning(true);
     setLiveOffset(0);
     setActiveIndex(index);
     onSlideChange?.(index);
-    // Allow CSS transition to complete before unlocking
     setTimeout(() => setIsTransitioning(false), 380);
   }, [isTransitioning, onSlideChange]);
 
@@ -143,15 +171,19 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     startXRef.current = e.touches[0].clientX;
     startYRef.current = e.touches[0].clientY;
     dragDeltaX.current = 0;
+    isHorizontalSwipe.current = null; // FIX: reset axis lock on each new touch
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (startXRef.current === null || startYRef.current === null) return;
     const dx = e.touches[0].clientX - startXRef.current;
     const dy = Math.abs(e.touches[0].clientY - startYRef.current);
-    if (dy > 10 && Math.abs(dx) < dy) return; // vertical scroll
+
+    // FIX: if we've locked to vertical, do nothing
+    if (isHorizontalSwipe.current === false) return;
+    if (dy > 10 && Math.abs(dx) < dy) return;
+
     dragDeltaX.current = dx;
-    // Rubber-band at edges
     const bounded =
       (dx > 0 && activeIndex === 0) || (dx < 0 && activeIndex === media.length - 1)
         ? dx * 0.25
@@ -165,6 +197,7 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     const dx = dragDeltaX.current;
     startXRef.current = null;
     startYRef.current = null;
+    isHorizontalSwipe.current = null; // FIX: reset on end
     if (dx < -50 && activeIndex < media.length - 1) goTo(activeIndex + 1);
     else if (dx > 50 && activeIndex > 0) goTo(activeIndex - 1);
     else { setLiveOffset(0); }
@@ -239,7 +272,6 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     transition:      "opacity 0.2s",
   });
 
-  // CSS transform slides the strip; liveOffset adds finger/drag offset
   const translateX = `calc(${-activeIndex * 100}% + ${liveOffset}px)`;
 
   return (
@@ -249,6 +281,7 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     >
       {/* Slide strip */}
       <div
+        ref={stripRef}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -259,10 +292,10 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
           display:    "flex",
           width:      "100%",
           transform:  `translateX(${translateX})`,
-          // Only animate when not dragging live
           transition: liveOffset === 0 ? "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)" : "none",
           cursor:     isDesktop ? (media.length > 1 ? "grab" : "pointer") : "default",
           willChange: "transform",
+          touchAction: "pan-y", // FIX: tells browser horizontal is ours, vertical is page scroll
         }}
       >
         {media.map((item, i) => (

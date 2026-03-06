@@ -4,18 +4,22 @@ import dns from "dns";
 // Force Node.js to use Google DNS — bypasses broken OS/ISP DNS resolution
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
-// ─── Config ───────────────────────────────────────────────────────────────────
+// ─── Config — read lazily at call time so dotenv always runs first ─────────────
 
-const STORAGE_ZONE    = process.env.BUNNY_STORAGE_ZONE!;
-const STORAGE_API_KEY = process.env.BUNNY_STORAGE_API_KEY!;
-const CDN_URL         = process.env.BUNNY_CDN_URL!;
-const CDN_TOKEN_KEY   = process.env.BUNNY_CDN_TOKEN_KEY!;
-const STREAM_LIBRARY  = process.env.BUNNY_STREAM_LIBRARY_ID!;
-const STREAM_API_KEY  = process.env.BUNNY_STREAM_API_KEY!;
-const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
-
-const STORAGE_BASE_URL = `https://storage.bunnycdn.com/${STORAGE_ZONE}`;
-const STREAM_BASE_URL  = `https://video.bunnycdn.com/library/${STREAM_LIBRARY}`;
+function env() {
+  return {
+    STORAGE_ZONE:    process.env.BUNNY_STORAGE_ZONE!,
+    STORAGE_API_KEY: process.env.BUNNY_STORAGE_API_KEY!,
+    CDN_URL:         process.env.BUNNY_CDN_URL!,
+    CDN_TOKEN_KEY:   process.env.BUNNY_CDN_TOKEN_KEY!,
+    STREAM_LIBRARY:  process.env.BUNNY_STREAM_LIBRARY_ID!,
+    STREAM_API_KEY:  process.env.BUNNY_STREAM_API_KEY!,
+    STREAM_CDN_HOST: process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net",
+    BUNNY_API_KEY:   process.env.BUNNY_API_KEY!,
+    STORAGE_BASE_URL: `https://storage.bunnycdn.com/${process.env.BUNNY_STORAGE_ZONE}`,
+    STREAM_BASE_URL:  `https://video.bunnycdn.com/library/${process.env.BUNNY_STREAM_LIBRARY_ID}`,
+  };
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +37,7 @@ function sleep(ms: number) {
 // ─── Signed URL Generator ─────────────────────────────────────────────────────
 
 export function signBunnyUrl(path: string, expiresInSeconds = 86400): string {
+  const { CDN_URL, CDN_TOKEN_KEY } = env();
   const expires   = Math.floor(Date.now() / 1000) + expiresInSeconds;
   const hashInput = CDN_TOKEN_KEY + path + expires;
   const token     = crypto
@@ -54,6 +59,7 @@ export function getBunnyTusCredentials(videoId: string): {
   signature:    string;
   libraryId:    string;
 } {
+  const { STREAM_LIBRARY, STREAM_API_KEY } = env();
   const expireTime = Math.floor(Date.now() / 1000) + 3600;
   const signature  = crypto
     .createHash("sha256")
@@ -76,6 +82,7 @@ export async function uploadPhotoToBunny(
   filename: string,
   mimeType: string
 ): Promise<UploadPhotoResult> {
+  const { STORAGE_BASE_URL, STORAGE_API_KEY } = env();
   const ext      = filename.split(".").pop() ?? "jpg";
   const safeName = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
   const path     = `/posts/${userId}/${safeName}`;
@@ -100,6 +107,7 @@ export async function uploadPhotoToBunny(
 // ─── Video: Create (with retry) ───────────────────────────────────────────────
 
 export async function createBunnyVideo(title: string): Promise<string> {
+  const { STREAM_BASE_URL, STREAM_API_KEY } = env();
   const MAX_RETRIES = 3;
   const DELAYS      = [500, 1500, 3000];
 
@@ -148,6 +156,67 @@ export async function createBunnyVideo(title: string): Promise<string> {
   throw lastError ?? new Error("createBunnyVideo failed after retries");
 }
 
+// ─── Watermark: Upload PNG to library ────────────────────────────────────────
+// Uploads a PNG buffer as the library watermark image.
+// Must be called BEFORE enableBunnyWatermark.
+
+export async function uploadBunnyWatermark(pngBuffer: Buffer): Promise<void> {
+  const { STREAM_LIBRARY, BUNNY_API_KEY } = env();
+
+  const res = await fetch(`https://api.bunny.net/videolibrary/${STREAM_LIBRARY}/watermark`, {
+    method:  "PUT",
+    headers: {
+      AccessKey:      BUNNY_API_KEY,
+      "Content-Type": "image/png",
+    },
+    body: new Uint8Array(pngBuffer),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Bunny watermark upload failed: ${res.status} — ${text}`);
+  }
+}
+
+// ─── Watermark: Enable on library ────────────────────────────────────────────
+// Sets watermark position and size using correct Bunny API field names.
+// WatermarkPositionLeft/Top are % from top-left corner.
+// Bottom-right at 3% padding = Left: 85, Top: 85 (for a 12% wide watermark)
+
+export async function enableBunnyWatermark(options?: {
+  positionLeft?:    number; // % from left, default 85 (bottom-right)
+  positionTop?:     number; // % from top, default 85 (bottom-right)
+  watermarkWidth?:  number; // % of video width, default 12
+  watermarkHeight?: number; // % of video height, default 0 (auto)
+}): Promise<void> {
+  const { STREAM_LIBRARY, BUNNY_API_KEY } = env();
+  const {
+    positionLeft    = 85,
+    positionTop     = 85,
+    watermarkWidth  = 12,
+    watermarkHeight = 0,
+  } = options ?? {};
+
+  const res = await fetch(`https://api.bunny.net/videolibrary/${STREAM_LIBRARY}`, {
+    method:  "POST",
+    headers: {
+      AccessKey:      BUNNY_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      WatermarkPositionLeft: positionLeft,
+      WatermarkPositionTop:  positionTop,
+      WatermarkWidth:        watermarkWidth,
+      WatermarkHeight:       watermarkHeight,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Bunny watermark enable failed: ${res.status} — ${text}`);
+  }
+}
+
 /**
  * @deprecated Use getBunnyTusCredentials instead — TUS is resumable and more reliable.
  */
@@ -155,6 +224,7 @@ export function getBunnyUploadUrl(videoId: string): {
   uploadUrl: string;
   headers: Record<string, string>;
 } {
+  const { STREAM_LIBRARY, STREAM_API_KEY } = env();
   return {
     uploadUrl: `https://video.bunnycdn.com/library/${STREAM_LIBRARY}/videos/${videoId}`,
     headers: {
@@ -168,6 +238,7 @@ export async function uploadVideoToBunny(
   buffer: Buffer,
   videoId: string
 ): Promise<void> {
+  const { STREAM_BASE_URL, STREAM_API_KEY } = env();
   const res = await fetch(`${STREAM_BASE_URL}/videos/${videoId}`, {
     method:  "PUT",
     headers: {
@@ -187,6 +258,7 @@ export function getBunnyStreamUrls(videoId: string): {
   hlsUrl: string;
   thumbnailUrl: string;
 } {
+  const { STREAM_LIBRARY, STREAM_CDN_HOST } = env();
   return {
     hlsUrl:       `https://iframe.mediadelivery.net/play/${STREAM_LIBRARY}/${videoId}/playlist.m3u8`,
     thumbnailUrl: `https://${STREAM_CDN_HOST}/${videoId}/thumbnail.jpg`,
@@ -194,10 +266,12 @@ export function getBunnyStreamUrls(videoId: string): {
 }
 
 export function getBunnyRawVideoUrl(videoId: string): string {
+  const { STREAM_CDN_HOST } = env();
   return `https://${STREAM_CDN_HOST}/${videoId}/original`;
 }
 
 export async function deleteBunnyPhoto(path: string): Promise<void> {
+  const { STORAGE_BASE_URL, STORAGE_API_KEY } = env();
   await fetch(`${STORAGE_BASE_URL}${path}`, {
     method:  "DELETE",
     headers: { AccessKey: STORAGE_API_KEY },
@@ -205,6 +279,7 @@ export async function deleteBunnyPhoto(path: string): Promise<void> {
 }
 
 export async function deleteBunnyVideo(videoId: string): Promise<void> {
+  const { STREAM_BASE_URL, STREAM_API_KEY } = env();
   await fetch(`${STREAM_BASE_URL}/videos/${videoId}`, {
     method:  "DELETE",
     headers: { AccessKey: STREAM_API_KEY },
