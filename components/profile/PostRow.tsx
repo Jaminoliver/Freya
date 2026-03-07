@@ -43,9 +43,9 @@ export interface ApiPost {
     bunny_video_id:    string | null;
     width?:            number | null;
     height?:           number | null;
+    aspect_ratio?:     number | null;
     blur_hash?:        string | null;
   }[];
-
 }
 
 // ── Edit Caption Modal ────────────────────────────────────────────────────────
@@ -209,6 +209,7 @@ export default function PostRow({
       blurHash:         m.blur_hash ?? null,
       width:            m.width ?? null,
       height:           m.height ?? null,
+      aspectRatio:      m.aspect_ratio ?? null,
     }));
   }, [post.media]);
 
@@ -314,12 +315,17 @@ export default function PostRow({
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {post.profiles?.avatar_url
-            ? <img src={post.profiles.avatar_url} alt="" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
-            : <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            ? (
+              // FIX: added loading="lazy" to avatar
+              <img src={post.profiles.avatar_url} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
+            )
+            : (
+              <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <span style={{ fontSize: "16px", fontWeight: 700, color: "#8B5CF6" }}>
                   {(post.profiles?.display_name || post.profiles?.username || "?").charAt(0).toUpperCase()}
                 </span>
               </div>
+            )
           }
           <div>
             <div style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{post.profiles?.display_name || post.profiles?.username}</div>

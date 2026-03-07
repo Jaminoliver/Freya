@@ -27,6 +27,27 @@ async function generateBlurHash(buffer: Buffer): Promise<string | null> {
   }
 }
 
+async function generateThumbnail(buffer: Buffer, mimeType: string): Promise<Buffer | null> {
+  try {
+    return await sharp(buffer)
+      .resize(400, 400, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 70 })
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+async function getImageDimensions(buffer: Buffer): Promise<{ width: number; height: number } | null> {
+  try {
+    const meta = await sharp(buffer).metadata();
+    if (!meta.width || !meta.height) return null;
+    return { width: meta.width, height: meta.height };
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -60,11 +81,33 @@ export async function POST(req: NextRequest) {
         const isGif     = file.type === "image/gif";
         const mediaType = isGif ? "gif" : "photo";
 
-        // Generate blurhash and upload in parallel
-        const [{ url, path }, blurHash] = await Promise.all([
+        console.log(`[Upload Photo] Processing file: ${file.name} (${file.type}, ${file.size} bytes)`);
+
+        // Generate blurhash, thumbnail, dimensions, and upload in parallel
+        const [{ url, path }, blurHash, thumbnailBuffer, dimensions] = await Promise.all([
           uploadPhotoToBunny(buffer, user.id, file.name, file.type),
           isGif ? Promise.resolve(null) : generateBlurHash(buffer),
+          isGif ? Promise.resolve(null) : generateThumbnail(buffer, file.type),
+          isGif ? Promise.resolve(null) : getImageDimensions(buffer),
         ]);
+
+        console.log(`[Upload Photo] file_url: ${url}`);
+        console.log(`[Upload Photo] blur_hash: ${blurHash ?? "null"}`);
+
+        // Upload thumbnail to Bunny
+        let thumbnailUrl: string | null = null;
+        if (thumbnailBuffer) {
+          try {
+            const thumbFileName = file.name.replace(/\.[^.]+$/, "_thumb.jpg");
+            const { url: thumbUrl } = await uploadPhotoToBunny(thumbnailBuffer, user.id, thumbFileName, "image/jpeg");
+            thumbnailUrl = thumbUrl;
+            console.log(`[Upload Photo] thumbnail_url: ${thumbnailUrl}`);
+          } catch (thumbErr) {
+            console.warn(`[Upload Photo] Thumbnail upload failed (non-fatal):`, thumbErr);
+          }
+        } else {
+          console.log(`[Upload Photo] thumbnail_url: null (skipped for GIF or failed)`);
+        }
 
         const { data: mediaRow, error: insertError } = await service
           .from("media")
@@ -72,13 +115,17 @@ export async function POST(req: NextRequest) {
             creator_id:        user.id,
             media_type:        mediaType,
             file_url:          url,
+            thumbnail_url:     thumbnailUrl,
             mime_type:         file.type,
             file_size_bytes:   file.size,
             processing_status: "completed",
             is_watermarked:    false,
             blur_hash:         blurHash ?? null,
+            width:             dimensions?.width ?? null,
+            height:            dimensions?.height ?? null,
+            aspect_ratio:      dimensions ? dimensions.width / dimensions.height : null,
           })
-          .select("id, file_url, media_type")
+          .select("id, file_url, thumbnail_url, blur_hash, media_type, width, height")
           .single();
 
         if (insertError) {
@@ -86,6 +133,8 @@ export async function POST(req: NextRequest) {
           errors.push({ name: file.name, error: "Upload succeeded but failed to save record" });
           continue;
         }
+
+        console.log(`[Upload Photo] ✅ Saved to DB — mediaId: ${mediaRow.id}, thumbnail_url: ${mediaRow.thumbnail_url ?? "null"}, blur_hash: ${mediaRow.blur_hash ?? "null"}, dimensions: ${mediaRow.width}x${mediaRow.height}`);
 
         results.push({
           mediaId:   mediaRow.id,

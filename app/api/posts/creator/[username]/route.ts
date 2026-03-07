@@ -79,6 +79,7 @@ export async function GET(
         creator_id,
         content_type,
         caption,
+        audience,
         is_free,
         is_ppv,
         ppv_price,
@@ -100,7 +101,11 @@ export async function GET(
           display_order,
           processing_status,
           bunny_video_id,
-          raw_video_url
+          raw_video_url,
+          blur_hash,
+          width,
+          height,
+          aspect_ratio
         )
       `)
       .eq("creator_id", creator.id)
@@ -209,9 +214,12 @@ export async function GET(
     }
 
     const processed = filteredPosts.map((post: Record<string, unknown>) => {
-      const isFree    = post.is_free as boolean;
-      const isPpv     = post.is_ppv as boolean;
-      const canAccess = isFree || (isSubscribed && !isPpv) || isOwnProfile;
+      const isPpv        = post.is_ppv as boolean;
+      const postAudience = post.audience as string;
+
+      // FIX: audience=everyone → anyone can access (unless PPV)
+      // audience=subscribers → only subs/owner can access (unless PPV)
+      const canAccess = isOwnProfile || (!isPpv && (postAudience === "everyone" || isSubscribed));
 
       const mediaItems = (post.media as Record<string, unknown>[] ?? [])
         .sort((a, b) => (a.display_order as number) - (b.display_order as number))
@@ -224,10 +232,10 @@ export async function GET(
 
           let freshThumb: string | null = null;
           if (m.media_type === "video") {
-  const customThumb = m.thumbnail_url as string | null;
-  const customPath  = extractBunnyPath(customThumb);
-  freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
-} else {
+            const customThumb = m.thumbnail_url as string | null;
+            const customPath  = extractBunnyPath(customThumb);
+            freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
+          } else {
             const rawThumb  = m.thumbnail_url as string | null;
             const thumbPath = extractBunnyPath(rawThumb);
             freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;
@@ -249,7 +257,7 @@ export async function GET(
 
       return {
         ...post,
-        is_free:    isFree,
+        audience:   postAudience,
         media:      mediaItems,
         liked:      likedSet.has(post.id as number),
         can_access: canAccess,

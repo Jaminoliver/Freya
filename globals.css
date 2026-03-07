@@ -77,3 +77,15 @@
     background-image: var(--gradient-banner);
   }
 }
+
+/* Desktop: cap portrait video height to create letterbox with blur side bars */
+.post-video-outer {
+  max-height: 85svh;
+}
+
+/* Mobile: full portrait height, narrower bars handled via JS barWidth */
+@media (max-width: 768px) {
+  .post-video-outer {
+    max-height: none;
+  }
+}

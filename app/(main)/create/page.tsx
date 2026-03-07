@@ -101,7 +101,7 @@ function CreatePostContent() {
     const body: Record<string, unknown> = {
       content_type:  apiContentType,
       caption:       caption || null,
-      is_free:       audience === "everyone",
+      audience:      audience,
       is_ppv:        isPPV,
       ppv_price:     isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null,
       media_ids:     mediaIds,
@@ -123,8 +123,6 @@ function CreatePostContent() {
     return data;
   };
 
-  // ── Clears profile + content feed cache so profile page always refetches ──
-  // Uses ref (not state) so it's always current even before re-render
   const invalidateProfileCache = () => {
     const username = usernameRef.current;
     if (username) {
@@ -156,7 +154,6 @@ function CreatePostContent() {
           },
           onError: (err) => console.error("[CreatePost] Upload error:", err),
         });
-        // Video uploads are background — navigate immediately (upload is long)
         invalidateProfileCache();
         router.push(`/${currentUser.username}`);
         return;
@@ -209,7 +206,7 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Poll / Quiz — await createPost BEFORE navigating ─────────────
+      // ── Poll / Quiz ───────────────────────────────────────────────────
       if (postType === "poll" || postType === "quiz") {
         await createPost([]);
         invalidateProfileCache();

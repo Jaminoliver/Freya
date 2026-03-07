@@ -38,7 +38,7 @@ function formatCount(n: number): string {
 
 const FALLBACK_COVER = "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80";
 
-export function Sidebar() {
+export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
   const pathname = usePathname();
   const router   = useRouter();
 
@@ -49,7 +49,6 @@ export function Sidebar() {
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Clear pendingPath when route completes
   useEffect(() => {
     if (pendingPath && pathname === pendingPath) {
       setPendingPath(null);
@@ -69,6 +68,8 @@ export function Sidebar() {
   const [searching,      setSearching]      = useState(false);
   const [exploreData,    setExploreData]    = useState<Creator[]>([]);
   const [exploreLoading, setExploreLoading] = useState(false);
+
+  // ── Always show header when search is open ───────────────────────────────
 
   const inputRef    = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -128,11 +129,9 @@ export function Sidebar() {
   const closeSearch = () => { setSearchOpen(false); setQuery(""); setResults([]); };
 
   const handleNavClick = (href: string) => {
-    // Clear any previous timeout
     if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
     setPendingPath(href);
     pendingClose.current = true;
-    // Safety: clear pendingPath after 3s if route never completes (e.g. profile load hangs)
     pendingTimeoutRef.current = setTimeout(() => {
       setPendingPath(null);
     }, 3000);
@@ -153,7 +152,22 @@ export function Sidebar() {
 
       {/* MOBILE TOP BAR */}
       {isDashboard && (
-        <div className="md:hidden" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A", height: "56px", fontFamily: "'Inter', sans-serif" }}>
+        <div
+          className="md:hidden"
+          style={{
+            position:   "fixed",
+            top:        0,
+            left:       0,
+            right:      0,
+            zIndex:     100,
+            backgroundColor: "#13131F",
+            borderBottom:    "1px solid #1F1F2A",
+            height:     "56px",
+            fontFamily: "'Inter', sans-serif",
+            transform:  headerVisible ? "translateY(0)" : "translateY(-100%)",
+            transition: "transform 0.25s ease",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
             <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
             <button onClick={() => setSearchOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px" }}>
@@ -254,7 +268,6 @@ export function Sidebar() {
             );
           })}
 
-          {/* Profile — skeleton while username loads, never gets stuck blue */}
           {username === null ? (
             <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px" }}>
               <div style={{ width: "22px", height: "22px", borderRadius: "50%", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />

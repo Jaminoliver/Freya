@@ -24,6 +24,7 @@ interface MediaItem {
   blurHash?:         string | null;
   width?:            number | null;
   height?:           number | null;
+  aspectRatio?:      number | null;
 }
 
 interface TaggedCreator {
@@ -252,6 +253,7 @@ export function PostCard({
     blurHash:         m.blurHash ?? null,
     width:            m.width ?? null,
     height:           m.height ?? null,
+    aspectRatio:      m.aspectRatio ?? null,
   }));
 
   const lightboxPost = toLightboxPost(post);
@@ -279,7 +281,8 @@ export function PostCard({
           onClick={() => router.push(`/${post.creator.username}`)}
           onMouseEnter={handleCreatorMouseEnter}
         >
-          <img src={post.creator.avatar_url || ""} alt="" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
+          {/* FIX: added loading="lazy" to avatar */}
+          <img src={post.creator.avatar_url || ""} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <span style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
@@ -390,7 +393,8 @@ function TaggedCreatorCard({ creator, onClick }: { creator: TaggedCreator; onCli
     >
       <div style={{ padding: "2.5px", borderRadius: "50%", background: "linear-gradient(to right, #8B5CF6, #EC4899)", flexShrink: 0 }}>
         <div style={{ padding: "2px", borderRadius: "50%", backgroundColor: "#0D0D18" }}>
-          <img src={creator.avatar_url} alt={creator.name} style={{ width: "52px", height: "52px", borderRadius: "50%", objectFit: "cover", display: "block" }} />
+          {/* FIX: added loading="lazy" to tagged creator avatar */}
+          <img src={creator.avatar_url} alt={creator.name} loading="lazy" style={{ width: "52px", height: "52px", borderRadius: "50%", objectFit: "cover", display: "block" }} />
         </div>
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>

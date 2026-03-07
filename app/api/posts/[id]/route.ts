@@ -81,6 +81,7 @@ export async function GET(
           duration_seconds,
           width,
           height,
+          aspect_ratio,
           display_order,
           blur_hash
         )
@@ -137,10 +138,10 @@ export async function GET(
 
         let freshThumb: string | null = null;
         if (m.media_type === "video") {
-  const customThumb = m.thumbnail_url as string | null;
-  const customPath  = extractBunnyPath(customThumb);
-  freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
-} else {
+          const customThumb = m.thumbnail_url as string | null;
+          const customPath  = extractBunnyPath(customThumb);
+          freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
+        } else {
           const rawThumb  = m.thumbnail_url as string | null;
           const thumbPath = extractBunnyPath(rawThumb);
           freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;

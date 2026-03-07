@@ -15,32 +15,23 @@ export function getBunnyMP4(videoId: string, resolution: "1080" | "720" | "480" 
   return `https://${BUNNY_PULL_ZONE}/${videoId}/play_${resolution}p.mp4`;
 }
 
-// ── BlurHashCanvas — renders instantly from hash string ──────────────────────
-function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProperties }) {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+const W = 128, H = 128;
 
-  React.useEffect(() => {
-    if (!hash || !canvasRef.current) return;
+function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProperties }) {
+  const canvasRef = React.useCallback((canvas: HTMLCanvasElement | null) => {
+    if (!canvas || !hash) return;
     try {
-      const pixels = decode(hash, 32, 32);
-      const ctx    = canvasRef.current.getContext("2d");
+      const pixels    = decode(hash, W, H);
+      const ctx       = canvas.getContext("2d");
       if (!ctx) return;
-      const imageData = ctx.createImageData(32, 32);
+      const imageData = ctx.createImageData(W, H);
       imageData.data.set(pixels);
       ctx.putImageData(imageData, 0, 0);
-    } catch { /* invalid hash — fail silently */ }
+    } catch { }
   }, [hash]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={32}
-      height={32}
-      style={{
-        ...style,
-        imageRendering: "pixelated",
-      }}
-    />
+    <canvas ref={canvasRef} width={W} height={H} style={{ ...style, imageRendering: "auto" }} />
   );
 }
 
@@ -50,7 +41,7 @@ interface VideoPlayerProps {
   processingStatus?: string | null;
   rawVideoUrl?:      string | null;
   fillParent?:       boolean;
-  aspectRatio?:      "9/16" | "16/9" | "1/1" | null;
+  aspectRatio?:      string | null;
   hideInternalBlur?: boolean;
   blurHash?:         string | null;
 }
@@ -74,24 +65,44 @@ export default function VideoPlayer({
   const [posterLoaded,  setPosterLoaded]  = React.useState(false);
   const [posterError,   setPosterError]   = React.useState(false);
   const [isBuffering,   setIsBuffering]   = React.useState(false);
-  const [internalRatio, setInternalRatio] = React.useState<"9/16" | "16/9" | "1/1" | null>(null);
+  const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
 
-  const aspectRatio = externalRatio ?? internalRatio;
-  const isPortrait  = aspectRatio === "9/16";
+  const aspectRatio = fillParent ? null : (externalRatio ?? internalRatio);
+  const isPortrait  = aspectRatio === "9/16" || (aspectRatio != null && parseFloat(aspectRatio) < 1);
 
   const useRawFallback = processingStatus !== "completed" && !!rawVideoUrl;
   const posterSrc      = (!posterError && thumbnailUrl) ? thumbnailUrl : bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "";
 
+  React.useEffect(() => {
+    if (posterLoaded) return;
+    const t = setTimeout(() => setPosterLoaded(true), 2500);
+    return () => clearTimeout(t);
+  }, [posterLoaded]);
+
   const handlePosterLoad = React.useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     setPosterLoaded(true);
-    if (externalRatio) return;
+    if (fillParent || externalRatio) return;
     const img = e.currentTarget;
     const { naturalWidth: w, naturalHeight: h } = img;
     if (!w || !h) return;
-    if (h > w)      setInternalRatio("9/16");
-    else if (w > h) setInternalRatio("16/9");
-    else            setInternalRatio("1/1");
-  }, [externalRatio]);
+    setInternalRatio(`${w}/${h}`);
+  }, [fillParent, externalRatio]);
+
+  const teardown = React.useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    }
+    hasInitialized.current = false;
+    setShowPoster(true);
+    setIsBuffering(false);
+  }, []);
 
   const initVideo = React.useCallback(async () => {
     const video = videoRef.current;
@@ -136,31 +147,34 @@ export default function VideoPlayer({
   }, [bunnyVideoId, useRawFallback, rawVideoUrl]);
 
   React.useEffect(() => {
-    return () => { hlsRef.current?.destroy(); hlsRef.current = null; };
+    return () => {
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+    };
   }, []);
 
   React.useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+
     const observer = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting && !video.paused) {
-        video.pause();
-        setShowPoster(true);
+      if (!entry.isIntersecting) {
+        teardown();
       }
     }, { threshold: 0.2 });
+
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [teardown]);
 
   const handleLoadedMetadata = React.useCallback(() => {
-    if (externalRatio) return;
+    if (fillParent || externalRatio) return;
     const video = videoRef.current;
     if (!video) return;
     const { videoWidth: w, videoHeight: h } = video;
-    if (h > w)      setInternalRatio("9/16");
-    else if (w > h) setInternalRatio("16/9");
-    else            setInternalRatio("1/1");
-  }, [externalRatio]);
+    if (!w || !h) return;
+    setInternalRatio(`${w}/${h}`);
+  }, [fillParent, externalRatio]);
 
   const handlePosterPlay = React.useCallback(async () => {
     setShowPoster(false);
@@ -171,19 +185,30 @@ export default function VideoPlayer({
   }, [initVideo]);
 
   const containerStyle: React.CSSProperties = fillParent ? {
-    width: "100%", height: "100%", position: "relative", overflow: "hidden",
-    display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#000",
+    width:          "100%",
+    height:         "100%",
+    position:       "absolute",
+    inset:          0,
+    display:        "flex",
+    alignItems:     "center",
+    justifyContent: "center",
   } : {
-    width: "100%", position: "relative", overflow: "hidden",
-    display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#000",
-    aspectRatio: isPortrait ? "9/16" : aspectRatio ?? "16/9",
-    maxHeight:   isPortrait ? "min(75svh, 520px)" : "520px",
+    width:           "100%",
+    position:        "relative",
+    overflow:        "hidden",
+    display:         "flex",
+    alignItems:      "center",
+    justifyContent:  "center",
+    aspectRatio:     aspectRatio ?? "16/9",
+    maxHeight:       isPortrait ? "min(75svh, 520px)" : "520px",
   };
 
   const videoStyle: React.CSSProperties = {
-    position: "relative", zIndex: 2, display: "block",
-    width:     "100%",
-    height:    "100%",
+    position: "relative",
+    zIndex:   2,
+    display:  "block",
+    width:    "100%",
+    height:   "100%",
     objectFit: "contain",
   };
 
@@ -208,44 +233,20 @@ export default function VideoPlayer({
 
       <div ref={containerRef} style={containerStyle}>
 
-        {/* ── Blurhash canvas — visible instantly, zero network ── */}
-        {blurHash && !posterLoaded && (
-          <BlurHashCanvas
-            hash={blurHash}
-            style={{
-              position:  "absolute",
-              inset:     0,
-              width:     "100%",
-              height:    "100%",
-              zIndex:    0,
-            }}
-          />
-        )}
-
-        {/* Blurred background */}
-        {!hideInternalBlur && (
+        {/* Blurred thumbnail fills entire background — replaces black bars */}
+        {posterSrc && (
           <img
             src={posterSrc}
             alt=""
             aria-hidden
-            fetchPriority="high"
-            onError={() => setPosterError(true)}
-            style={{
-              position:   "absolute",
-              inset:      0,
-              width:      "100%",
-              height:     "100%",
-              objectFit:  "cover",
-              filter:     "blur(20px) brightness(0.4)",
-              transform:  "scale(1.1)",
-              zIndex:     1,
-              opacity:    posterLoaded ? 1 : 0,
-              transition: "opacity 0.2s ease",
-            }}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.45)", transform: "scale(1.1)", zIndex: 0, pointerEvents: "none" }}
           />
         )}
 
-        {/* Poster + play button */}
+        {blurHash && !posterLoaded && (
+          <BlurHashCanvas hash={blurHash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />
+        )}
+
         {showPoster && (
           <div
             onClick={handlePosterPlay}
@@ -257,15 +258,7 @@ export default function VideoPlayer({
               fetchPriority="high"
               onLoad={handlePosterLoad}
               onError={() => setPosterError(true)}
-              style={{
-                position:   "absolute",
-                inset:      0,
-                width:      "100%",
-                height:     "100%",
-                objectFit:  "contain",
-                opacity:    posterLoaded ? 1 : 0,
-                transition: "opacity 0.25s ease",
-              }}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
             />
             <div style={{ position: "relative", zIndex: 2, width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.55)", border: "2px solid rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
               <div style={{ width: 0, height: 0, borderTop: "10px solid transparent", borderBottom: "10px solid transparent", borderLeft: "18px solid rgba(255,255,255,0.95)", marginLeft: "4px" }} />
@@ -273,7 +266,6 @@ export default function VideoPlayer({
           </div>
         )}
 
-        {/* Video */}
         <video
           ref={videoRef}
           controls={!showPoster}
@@ -292,7 +284,6 @@ export default function VideoPlayer({
           style={{ ...videoStyle, visibility: showPoster ? "hidden" : "visible", animation: !showPoster ? "fadeIn 0.2s ease" : undefined }}
         />
 
-        {/* Buffering spinner */}
         {isBuffering && !showPoster && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
             <div style={{ width: "44px", height: "44px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.2)", borderTop: "3px solid rgba(255,255,255,0.9)", animation: "spin 0.8s linear infinite" }} />

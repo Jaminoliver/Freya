@@ -46,6 +46,10 @@ export async function GET(req: NextRequest) {
     const cursor  = searchParams.get("cursor");
     const service = createServiceSupabaseClient();
 
+    console.log("[Feed:DEBUG] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(`[Feed:DEBUG] User: ${user.id}`);
+    console.log(`[Feed:DEBUG] Cursor: ${cursor ?? "none"}`);
+
     const { data: subs } = await service
       .from("subscriptions")
       .select("creator_id")
@@ -55,6 +59,11 @@ export async function GET(req: NextRequest) {
     const subscribedCreatorIds = (subs ?? []).map((s: { creator_id: string }) => s.creator_id);
     const subscribedSet = new Set<string>(subscribedCreatorIds);
 
+    console.log(`[Feed:DEBUG] Subscribed to ${subscribedCreatorIds.length} creator(s):`);
+    subscribedCreatorIds.forEach((id: string, i: number) => {
+      console.log(`  [${i + 1}] ${id}`);
+    });
+
     let query = service
       .from("posts")
       .select(`
@@ -62,6 +71,7 @@ export async function GET(req: NextRequest) {
         creator_id,
         content_type,
         caption,
+        audience,
         is_free,
         is_ppv,
         ppv_price,
@@ -84,7 +94,11 @@ export async function GET(req: NextRequest) {
           display_order,
           processing_status,
           bunny_video_id,
-          blur_hash
+          blur_hash,
+          raw_video_url,
+          width,
+          height,
+          aspect_ratio
         )
       `)
       .eq("is_published", true)
@@ -92,12 +106,12 @@ export async function GET(req: NextRequest) {
       .order("published_at", { ascending: false })
       .limit(PAGE_SIZE);
 
+    // Show posts from subscribed creators (any audience) OR posts set to everyone
     if (subscribedCreatorIds.length > 0) {
-      query = query.or(
-        `creator_id.in.(${subscribedCreatorIds.join(",")}),is_free.eq.true`
-      );
+      const quotedIds = subscribedCreatorIds.join(",");
+      query = query.or(`creator_id.in.(${quotedIds}),audience.eq.everyone`);
     } else {
-      query = query.eq("is_free", true);
+      query = query.eq("audience", "everyone");
     }
 
     query = query.neq("creator_id", user.id);
@@ -109,9 +123,18 @@ export async function GET(req: NextRequest) {
     const { data: posts, error } = await query;
 
     if (error) {
-      console.error("[Feed] Query error:", error.message);
+      console.error("[Feed:ERROR] Query error:", error.message);
       return NextResponse.json({ error: "Failed to fetch feed" }, { status: 500 });
     }
+
+    const rawCount = (posts ?? []).length;
+
+    // ── nextCursor based on raw posts BEFORE the video filter ────────────────
+    const lastRawPost = (posts ?? [])[(posts ?? []).length - 1] as Record<string, unknown> | undefined;
+    const nextCursor  = rawCount === PAGE_SIZE ? (lastRawPost?.published_at ?? null) : null;
+
+    console.log(`[Feed:DEBUG] Raw posts from DB: ${rawCount}`);
+    console.log(`[Feed:DEBUG] Next cursor: ${nextCursor ?? "none (last page)"}`);
 
     const postIds = (posts ?? []).map((p: { id: number }) => Number(p.id));
 
@@ -144,6 +167,9 @@ export async function GET(req: NextRequest) {
       );
       return !hasUnreadyVideo;
     });
+
+    const removedByFilter = rawCount - filteredPosts.length;
+    console.log(`[Feed:DEBUG] After video filter: ${filteredPosts.length} (removed ${removedByFilter})`);
 
     const [{ data: userLikes }, { data: pollsRaw }] = await Promise.all([
       likesPromise,
@@ -211,9 +237,12 @@ export async function GET(req: NextRequest) {
 
     const processed = filteredPosts.map((post: Record<string, unknown>) => {
       const isPpv        = post.is_ppv as boolean;
-      const isFree       = post.is_free as boolean;
+      const postAudience = post.audience as string;
       const isSubscribed = subscribedSet.has(post.creator_id as string);
-      const canAccess    = isFree || (isSubscribed && !isPpv);
+
+      // audience=everyone → anyone can access (unless PPV)
+      // audience=subscribers → only subs can access (unless PPV)
+      const canAccess = !isPpv && (postAudience === "everyone" || isSubscribed);
 
       const mediaItems = (post.media as Record<string, unknown>[] ?? [])
         .sort((a, b) => (a.display_order as number) - (b.display_order as number))
@@ -226,10 +255,10 @@ export async function GET(req: NextRequest) {
 
           let freshThumb: string | null = null;
           if (m.media_type === "video") {
-  const customThumb = m.thumbnail_url as string | null;
-  const customPath  = extractBunnyPath(customThumb);
-  freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
-} else {
+            const customThumb = m.thumbnail_url as string | null;
+            const customPath  = extractBunnyPath(customThumb);
+            freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
+          } else {
             const rawThumb  = m.thumbnail_url as string | null;
             const thumbPath = extractBunnyPath(rawThumb);
             freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;
@@ -246,7 +275,7 @@ export async function GET(req: NextRequest) {
 
       return {
         ...post,
-        is_free:    isFree,
+        audience:   postAudience,
         media:      mediaItems,
         liked:      likedSet.has(Number(post.id)),
         can_access: canAccess,
@@ -255,13 +284,19 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const lastPost   = processed[processed.length - 1] as Record<string, unknown> | undefined;
-    const nextCursor = processed.length === PAGE_SIZE ? (lastPost?.published_at ?? null) : null;
+    const uniqueCreators = [...new Set(processed.map((p: Record<string, unknown>) => p.creator_id as string))];
+    console.log(`[Feed:DEBUG] Unique creators in page (${uniqueCreators.length}):`);
+    uniqueCreators.forEach((id, i) => {
+      const status = subscribedSet.has(id) ? "✓ subscribed" : "everyone post";
+      console.log(`  [${i + 1}] ${id} — ${status}`);
+    });
+    console.log(`[Feed:DEBUG] Returning ${processed.length} posts to client`);
+    console.log("[Feed:DEBUG] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     return NextResponse.json({ posts: processed, nextCursor });
 
   } catch (err) {
-    console.error("[Feed] Error:", err);
+    console.error("[Feed:ERROR] Unhandled exception:", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

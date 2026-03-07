@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     const {
       content_type,
       caption,
+      audience,
       is_free,
       is_ppv,
       ppv_price,
@@ -67,6 +68,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "PPV price must be at least ₦100" }, { status: 400 });
     }
 
+    const resolvedAudience: "everyone" | "subscribers" =
+      audience === "everyone" ? "everyone" : "subscribers";
+
     const isScheduled = !!scheduled_for;
     const isPublished = !isScheduled;
     const publishedAt = isPublished ? new Date().toISOString() : null;
@@ -80,6 +84,7 @@ export async function POST(req: NextRequest) {
         creator_id:    user.id,
         content_type,
         caption:       caption ?? null,
+        audience:      resolvedAudience,
         is_free:       is_ppv ? false : (is_free ?? true),
         is_ppv:        is_ppv ?? false,
         ppv_price:     is_ppv ? ppv_price : null,

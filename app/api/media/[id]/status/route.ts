@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { extractBunnyMetadata } from "@/lib/utils/bunnyMetadata";
 
 const STREAM_LIBRARY = process.env.BUNNY_STREAM_LIBRARY_ID!;
 const STREAM_API_KEY = process.env.BUNNY_STREAM_API_KEY!;
@@ -68,9 +69,19 @@ export async function GET(
           const isFailed = video.status === 5 || video.status === 6;
 
           if (isReady) {
+            const meta = extractBunnyMetadata(video);
+
             await service
               .from("media")
-              .update({ processing_status: "completed" })
+              .update({
+                processing_status: "completed",
+                width:             meta.width,
+                height:            meta.height,
+                aspect_ratio:      meta.aspect_ratio,
+                fps:               meta.fps,
+                bitrate:           meta.bitrate,
+                duration_seconds:  meta.duration,
+              })
               .eq("id", id);
 
             return NextResponse.json({ status: "completed", encodeProgress: 100 });

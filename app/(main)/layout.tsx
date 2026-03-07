@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useRef, useState, useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { RightPanel } from "@/components/layout/RightPanel";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
@@ -18,13 +19,46 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const showRightPanel = !isSettings && !isSubscriptions;
   const noTopbar       = !isDashboard || isPostPage;
 
+  // ── Hide/show header on scroll ────────────────────────────────────────────
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const lastScrollY = useRef(0);
+  const ticking     = useRef(false);
+  const mainRef     = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      if (ticking.current) return;
+      ticking.current = true;
+      requestAnimationFrame(() => {
+        const current = el.scrollTop;
+        const diff    = current - lastScrollY.current;
+        if (current === 0) {
+          setHeaderVisible(true);
+        } else if (diff > 4) {
+          setHeaderVisible(false);
+        } else if (diff < -4) {
+          setHeaderVisible(true);
+        }
+        lastScrollY.current = current;
+        ticking.current = false;
+      });
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
     <UploadProvider>
       <AppStoreProvider>
         <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#0A0A0F", overflow: "hidden", width: "100%" }}>
-          <Sidebar />
+          <Sidebar headerVisible={headerVisible} />
 
           <main
+            ref={mainRef}
             className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}`}
             style={{
               flex: 1,
