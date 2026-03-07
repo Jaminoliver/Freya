@@ -23,7 +23,6 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
     try {
       const supabase = createClient();
       await supabase.auth.signOut();
-      // AppStoreProvider handles redirect on SIGNED_OUT — no router.push needed
     } catch (err) {
       console.error("[MoreDrawer] Logout failed:", err);
       setLoggingOut(false);
@@ -39,7 +38,7 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
 
   const navItems = [
     { label: "Profile",  icon: User,     href: viewer ? `/${viewer.username}` : "#" },
-    { label: "Saved",    icon: Bookmark, href: "/bookmarks" },
+    { label: "Saved",    icon: Bookmark, href: "/saved" },
     { label: "Settings", icon: Settings, href: "/settings"  },
     { label: "Wallet",   icon: Wallet,   href: "/wallet"    },
   ];
@@ -104,12 +103,11 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
             </div>
           </div>
         ) : (
-          // Skeleton while viewer loads
           <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 20px 16px", borderBottom: "1px solid #1F1F2A", marginBottom: "8px" }}>
             <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <div style={{ width: "100px", height: "12px", borderRadius: "6px", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
-              <div style={{ width: "70px", height: "10px", borderRadius: "6px", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
+              <div style={{ width: "70px",  height: "10px", borderRadius: "6px", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
             </div>
           </div>
         )}

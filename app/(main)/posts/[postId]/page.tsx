@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Share2, MoreHorizontal } from "lucide-react";
 import PostActions from "@/components/profile/PostActions";
@@ -65,10 +65,10 @@ interface PostData {
 }
 
 function PostMenu({ isOwnPost, onDelete }: { isOwnPost: boolean; onDelete: () => void }) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
@@ -117,34 +117,35 @@ export default function SinglePostPage() {
   const router    = useRouter();
   const postId    = rawParams?.postId as string | undefined;
 
-  const [post,        setPost]        = React.useState<PostData | null>(null);
-  const [loading,     setLoading]     = React.useState(true);
-  const [error,       setError]       = React.useState<string | null>(null);
-  const [viewerId,    setViewerId]    = React.useState<string | null>(null);
-  const [viewer,      setViewer]      = React.useState<{ username: string; display_name: string; avatar_url: string } | null>(null);
-  const [comments,    setComments]    = React.useState<ApiComment[]>([]);
-  const [commentsLoading, setCommentsLoading] = React.useState(true);
-  const [commentOpen, setCommentOpen] = React.useState(false);
-  const [commentCount, setCommentCount] = React.useState(0);
+  const [post,            setPost]            = useState<PostData | null>(null);
+  const [loading,         setLoading]         = useState(true);
+  const [error,           setError]           = useState<string | null>(null);
+  const [viewerId,        setViewerId]        = useState<string | null>(null);
+  const [viewer,          setViewer]          = useState<{ username: string; display_name: string; avatar_url: string } | null>(null);
+  const [comments,        setComments]        = useState<ApiComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentOpen,     setCommentOpen]     = useState(false);
+  const [commentCount,    setCommentCount]    = useState(0);
+  const [savedPost,       setSavedPost]       = useState(false);
 
-  const [checkoutOpen, setCheckoutOpen] = React.useState(false);
-  const [checkoutType, setCheckoutType] = React.useState<CheckoutType>("tips");
-  const [checkoutTier, setCheckoutTier] = React.useState<SubscriptionTier>("monthly");
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutType, setCheckoutType] = useState<CheckoutType>("tips");
+  const [checkoutTier, setCheckoutTier] = useState<SubscriptionTier>("monthly");
 
-  const [lightboxOpen,     setLightboxOpen]     = React.useState(false);
-  const [lightboxMediaIdx, setLightboxMediaIdx] = React.useState(0);
+  const [lightboxOpen,     setLightboxOpen]     = useState(false);
+  const [lightboxMediaIdx, setLightboxMediaIdx] = useState(0);
 
-  const isLiking   = React.useRef(false);
-  const commentRef = React.useRef<HTMLDivElement>(null);
-  const postRef    = React.useRef<PostData | null>(null);
-  React.useEffect(() => { postRef.current = post; }, [post]);
+  const isLiking   = useRef(false);
+  const commentRef = useRef<HTMLDivElement>(null);
+  const postRef    = useRef<PostData | null>(null);
+  useEffect(() => { postRef.current = post; }, [post]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const main = document.querySelector("main");
     if (main) main.scrollTop = 0;
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const load = async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -156,7 +157,7 @@ export default function SinglePostPage() {
     load();
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!postId) return;
     const load = async () => {
       try {
@@ -181,7 +182,20 @@ export default function SinglePostPage() {
     load();
   }, [postId]);
 
-  React.useEffect(() => {
+  // ── Fetch initial saved state ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!postId || !post) return;
+    const fetchSavedState = async () => {
+      try {
+        const res  = await fetch(`/api/saved/posts?post_id=${postId}`);
+        const data = await res.json();
+        if (res.ok) setSavedPost(data.saved ?? false);
+      } catch {}
+    };
+    fetchSavedState();
+  }, [postId, post?.id]);
+
+  useEffect(() => {
     if (!postId) return;
     return postSyncStore.subscribe((event) => {
       if (event.postId !== postId) return;
@@ -192,7 +206,7 @@ export default function SinglePostPage() {
     });
   }, [postId]);
 
-  const fetchComments = React.useCallback(async () => {
+  const fetchComments = useCallback(async () => {
     if (!postId) return;
     try {
       const res = await fetch(`/api/posts/${postId}/comments`);
@@ -206,7 +220,7 @@ export default function SinglePostPage() {
     }
   }, [postId]);
 
-  React.useEffect(() => { fetchComments(); }, [fetchComments]);
+  useEffect(() => { fetchComments(); }, [fetchComments]);
 
   const handleLike = async () => {
     if (!post || isLiking.current) return;
@@ -259,9 +273,7 @@ export default function SinglePostPage() {
   };
 
   const handleAddComment = async (
-    id: string,
-    text: string,
-    gif_url?: string,
+    id: string, text: string, gif_url?: string,
     parent_comment_id?: string | number,
     reply_to_username?: string | null,
     reply_to_id?: string | number | null
@@ -288,6 +300,22 @@ export default function SinglePostPage() {
       if (!parent_comment_id) await fetchComments();
     }
   };
+
+  // ── Save / unsave post ────────────────────────────────────────────────────
+  const handleBookmark = useCallback(async () => {
+    if (!post) return;
+    const next = !savedPost;
+    setSavedPost(next);
+    try {
+      await fetch("/api/saved/posts", {
+        method:  next ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ post_id: post.id }),
+      });
+    } catch {
+      setSavedPost(!next);
+    }
+  }, [savedPost, post]);
 
   const openTip    = () => { setCheckoutType("tips");        setCheckoutOpen(true); };
   const openUnlock = () => { setCheckoutType("locked_post"); setCheckoutOpen(true); };
@@ -463,12 +491,13 @@ export default function SinglePostPage() {
           likes={post.like_count}
           comments={commentCount}
           liked={post.liked}
+          bookmarked={savedPost}
           isSubscribed={post.can_access}
           isOwnProfile={isOwnPost}
           onLike={handleLike}
           onComment={handleComment}
           onTip={openTip}
-          onBookmark={() => console.log("bookmarked")}
+          onBookmark={handleBookmark}
         />
       </div>
 

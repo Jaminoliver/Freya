@@ -54,6 +54,7 @@ function adaptPost(p: FeedPost) {
     id:           String(p.id),
     content_type: p.content_type,
     creator: {
+      id:         p.creator_id,
       name:       p.profiles?.display_name || p.profiles?.username || "Creator",
       username:   p.profiles?.username || "",
       avatar_url: p.profiles?.avatar_url || "",

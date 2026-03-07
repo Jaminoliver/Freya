@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { MoreHorizontal, BadgeCheck } from "lucide-react";
+import { BadgeCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import Lightbox from "@/components/profile/Lightbox";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
+import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
 import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
@@ -34,7 +35,13 @@ interface TaggedCreator {
 interface Post {
   id:              string;
   content_type?:   string;
-  creator:         { name: string; username: string; avatar_url: string; isVerified: boolean };
+  creator: {
+    id:         string;           // needed for save/unsave creator
+    name:       string;
+    username:   string;
+    avatar_url: string;
+    isVerified: boolean;
+  };
   timestamp:       string;
   caption:         string;
   media:           MediaItem[];
@@ -126,7 +133,7 @@ export function PostCard({
   const viewer = useViewer();
 
   const [commentOpen,      setCommentOpen]      = useState(false);
-  const [menuOpen,         setMenuOpen]         = useState(false);
+  const [sheetOpen,        setSheetOpen]        = useState(false);
   const [liked,            setLiked]            = useState(post.liked);
   const [likeCount,        setLikeCount]        = useState(post.likes);
   const [commentCount,     setCommentCount]     = useState(post.comments);
@@ -135,6 +142,8 @@ export function PostCard({
   const [lightboxOpen,     setLightboxOpen]     = useState(false);
   const [lightboxMediaIdx, setLightboxMediaIdx] = useState(0);
   const [pollData,         setPollData]         = useState<PollData | null>(post.poll ?? null);
+  const [savedPost,        setSavedPost]        = useState(false);
+  const [savedCreator,     setSavedCreator]     = useState(false);
 
   const [timestamp, setTimestamp] = useState("");
   useEffect(() => {
@@ -175,6 +184,23 @@ export function PostCard({
       .finally(() => setCommentsLoading(false));
   }, [post.id]);
 
+  // ── Lazy-load saved state when sheet opens ───────────────────────────────
+  const savedFetched = useRef(false);
+  const handleOpenSheet = useCallback(async () => {
+    setSheetOpen(true);
+    if (savedFetched.current) return;
+    savedFetched.current = true;
+    try {
+      const [postRes, creatorRes] = await Promise.all([
+        fetch(`/api/saved/posts?post_id=${post.id}`),
+        fetch(`/api/saved/creators?creator_id=${post.creator.id}`),
+      ]);
+      const [postData, creatorData] = await Promise.all([postRes.json(), creatorRes.json()]);
+      if (postRes.ok)    setSavedPost(postData.saved ?? false);
+      if (creatorRes.ok) setSavedCreator(creatorData.saved ?? false);
+    } catch {}
+  }, [post.id, post.creator.id]);
+
   const handleLike = async () => {
     if (isLiking.current) return;
     isLiking.current = true;
@@ -209,9 +235,7 @@ export function PostCard({
   };
 
   const handleAddComment = useCallback(async (
-    id: string,
-    text: string,
-    gif_url?: string,
+    id: string, text: string, gif_url?: string,
     parent_comment_id?: string | number,
     reply_to_username?: string | null,
     reply_to_id?: string | number | null
@@ -242,6 +266,40 @@ export function PostCard({
   const handleCreatorMouseEnter = useCallback(() => {
     router.prefetch(`/${post.creator.username}`);
   }, [router, post.creator.username]);
+
+  // ── Save / unsave post ────────────────────────────────────────────────────
+  const handleSavePost = useCallback(async () => {
+    const next = !savedPost;
+    setSavedPost(next);
+    try {
+      await fetch("/api/saved/posts", {
+        method:  next ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ post_id: post.id }),
+      });
+    } catch {
+      setSavedPost(!next);
+    }
+  }, [savedPost, post.id]);
+
+  // ── Save / unsave creator ─────────────────────────────────────────────────
+  const handleSaveCreator = useCallback(async () => {
+    const next = !savedCreator;
+    setSavedCreator(next);
+    try {
+      await fetch("/api/saved/creators", {
+        method:  next ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ creator_id: post.creator.id }),
+      });
+    } catch {
+      setSavedCreator(!next);
+    }
+  }, [savedCreator, post.creator.id]);
+
+  const handleBookmark = useCallback(() => {
+    handleSavePost();
+  }, [handleSavePost]);
 
   const normalizedMedia: NormalizedMedia[] = post.media.map((m) => ({
     type:             m.type,
@@ -274,6 +332,19 @@ export function PostCard({
         />
       )}
 
+      <PostOptionsSheet
+        isOpen={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onSavePost={handleSavePost}
+        onSaveCreator={handleSaveCreator}
+        onAddToList={() => console.log("add to list")}
+        onHidePost={() => console.log("hide post")}
+        onReport={() => console.log("report")}
+        onBlockCreator={() => console.log("block creator")}
+        savedPost={savedPost}
+        savedCreator={savedCreator}
+      />
+
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div
@@ -281,7 +352,6 @@ export function PostCard({
           onClick={() => router.push(`/${post.creator.username}`)}
           onMouseEnter={handleCreatorMouseEnter}
         >
-          {/* FIX: added loading="lazy" to avatar */}
           <img src={post.creator.avatar_url || ""} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -293,31 +363,16 @@ export function PostCard({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{timestamp}</span>
-          <div style={{ position: "relative" }}>
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-            >
-              <MoreHorizontal size={16} />
-            </button>
-            {menuOpen && (
-              <div style={{ position: "absolute", right: 0, top: "36px", zIndex: 50, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", overflow: "hidden", minWidth: "160px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
-                {["Add to list", "Hide post", "Report", "Block creator"].map((item, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setMenuOpen(false)}
-                    style={{ width: "100%", padding: "10px 14px", border: "none", backgroundColor: "transparent", color: i === 3 ? "#EF4444" : "#C4C4D4", fontSize: "13px", textAlign: "left", cursor: "pointer", fontFamily: "'Inter', sans-serif", borderBottom: i < 3 ? "1px solid #2A2A3D" : "none" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => handleOpenSheet()}
+            style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -360,12 +415,13 @@ export function PostCard({
           likes={likeCount}
           comments={commentCount}
           liked={liked}
+          bookmarked={savedPost}
           isSubscribed={true}
           isOwnProfile={false}
           onLike={handleLike}
           onComment={() => setCommentOpen((prev) => !prev)}
           onTip={() => console.log("tip", post.id)}
-          onBookmark={() => console.log("bookmarked", post.id)}
+          onBookmark={handleBookmark}
         />
         <CommentSection
           postId={post.id}
@@ -393,7 +449,6 @@ function TaggedCreatorCard({ creator, onClick }: { creator: TaggedCreator; onCli
     >
       <div style={{ padding: "2.5px", borderRadius: "50%", background: "linear-gradient(to right, #8B5CF6, #EC4899)", flexShrink: 0 }}>
         <div style={{ padding: "2px", borderRadius: "50%", backgroundColor: "#0D0D18" }}>
-          {/* FIX: added loading="lazy" to tagged creator avatar */}
           <img src={creator.avatar_url} alt={creator.name} loading="lazy" style={{ width: "52px", height: "52px", borderRadius: "50%", objectFit: "cover", display: "block" }} />
         </div>
       </div>

@@ -8,6 +8,7 @@ interface PostActionsProps {
   comments: number;
   tips?: number;
   liked?: boolean;
+  bookmarked?: boolean;
   isSubscribed: boolean;
   isOwnProfile?: boolean;
   onLike?: () => void;
@@ -18,18 +19,22 @@ interface PostActionsProps {
 
 export default function PostActions({
   likes, comments, tips = 0, liked: likedProp = false,
+  bookmarked: bookmarkedProp = false,
   isSubscribed, isOwnProfile = false,
   onLike, onComment, onTip, onBookmark,
 }: PostActionsProps) {
   const [liked,      setLiked]      = React.useState(likedProp);
-  const [bookmarked, setBookmarked] = React.useState(false);
+  const [bookmarked, setBookmarked] = React.useState(bookmarkedProp);
   const [likeCount,  setLikeCount]  = React.useState(likes);
 
-  // Sync if prop changes (e.g. after refresh)
   React.useEffect(() => {
     setLiked(likedProp);
     setLikeCount(likes);
   }, [likedProp, likes]);
+
+  React.useEffect(() => {
+    setBookmarked(bookmarkedProp);
+  }, [bookmarkedProp]);
 
   const handleLike = () => {
     if (!isSubscribed && !isOwnProfile) return;

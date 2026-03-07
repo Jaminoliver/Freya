@@ -7,25 +7,28 @@ import { MoreHorizontal } from "lucide-react";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
+import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
+import CreatorPostOptionsSheet from "@/components/profile/PostOptionsSheet";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { PollDisplay } from "@/components/feed/PollDisplay";
 import type { PollData } from "@/components/feed/PollDisplay";
 
 export interface ApiPost {
-  id:           number;
-  content_type: string;
-  caption:      string | null;
-  is_free:      boolean;
-  is_ppv:       boolean;
-  ppv_price:    number | null;
-  like_count:   number;
+  id:            number;
+  content_type:  string;
+  caption:       string | null;
+  is_free:       boolean;
+  is_ppv:        boolean;
+  ppv_price:     number | null;
+  like_count:    number;
   comment_count: number;
-  published_at: string;
-  liked:        boolean;
-  can_access:   boolean;
-  locked:       boolean;
-  poll?:        PollData | null;
+  published_at:  string;
+  liked:         boolean;
+  can_access:    boolean;
+  locked:        boolean;
+  poll?:         PollData | null;
   profiles: {
+    id:           string;          // creator_id — needed for save/unsave
     username:     string;
     display_name: string | null;
     avatar_url:   string | null;
@@ -50,14 +53,14 @@ export interface ApiPost {
 
 // ── Edit Caption Modal ────────────────────────────────────────────────────────
 function EditCaptionModal({ caption, onSave, onClose }: {
-  caption:  string;
-  onSave:   (newCaption: string) => Promise<void>;
-  onClose:  () => void;
+  caption: string;
+  onSave:  (newCaption: string) => Promise<void>;
+  onClose: () => void;
 }) {
-  const [value,   setValue]   = React.useState(caption);
-  const [saving,  setSaving]  = React.useState(false);
-  const [error,   setError]   = React.useState<string | null>(null);
-  const textareaRef           = React.useRef<HTMLTextAreaElement>(null);
+  const [value,  setValue]  = React.useState(caption);
+  const [saving, setSaving] = React.useState(false);
+  const [error,  setError]  = React.useState<string | null>(null);
+  const textareaRef         = React.useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
     textareaRef.current?.focus();
@@ -108,56 +111,6 @@ function EditCaptionModal({ caption, onSave, onClose }: {
   );
 }
 
-// ── Post menu ─────────────────────────────────────────────────────────────────
-function PostMenu({ onEdit, onDelete, onShare }: {
-  onEdit:   () => void;
-  onDelete: () => void;
-  onShare:  () => void;
-}) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button
-        onClick={() => setOpen(!open)}
-        style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-      >
-        <MoreHorizontal size={16} />
-      </button>
-      {open && (
-        <div style={{ position: "absolute", right: 0, top: "36px", zIndex: 50, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", overflow: "hidden", minWidth: "160px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
-          {[
-            { label: "Edit caption", action: onEdit,   danger: false },
-            { label: "Share post",   action: onShare,  danger: false },
-            { label: "Delete post",  action: onDelete, danger: true  },
-          ].map((item, i, arr) => (
-            <button
-              key={item.label}
-              onClick={() => { item.action(); setOpen(false); }}
-              style={{ width: "100%", padding: "10px 14px", border: "none", backgroundColor: "transparent", color: item.danger ? "#EF4444" : "#C4C4D4", fontSize: "13px", textAlign: "left", cursor: "pointer", fontFamily: "'Inter', sans-serif", borderBottom: i < arr.length - 1 ? "1px solid #2A2A3D" : "none" }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main PostRow ──────────────────────────────────────────────────────────────
 export default function PostRow({
   post,
@@ -184,15 +137,19 @@ export default function PostRow({
 }) {
   const router = useRouter();
 
-  const [commentOpen,     setCommentOpen]     = React.useState(false);
-  const [liked,           setLiked]           = React.useState(post.liked);
-  const [likeCount,       setLikeCount]       = React.useState(post.like_count);
-  const [comments,        setComments]        = React.useState<any[]>([]);
-  const [commentsLoading, setCommentsLoading] = React.useState(true);
-  const [commentCount,    setCommentCount]    = React.useState(post.comment_count);
-  const [pollData,        setPollData]        = React.useState<PollData | null>(post.poll ?? null);
-  const [caption,         setCaption]         = React.useState<string | null>(post.caption);
-  const [editOpen,        setEditOpen]        = React.useState(false);
+  const [commentOpen,      setCommentOpen]      = React.useState(false);
+  const [sheetOpen,        setSheetOpen]        = React.useState(false);
+  const [creatorSheetOpen, setCreatorSheetOpen] = React.useState(false);
+  const [liked,            setLiked]            = React.useState(post.liked);
+  const [likeCount,        setLikeCount]        = React.useState(post.like_count);
+  const [comments,         setComments]         = React.useState<any[]>([]);
+  const [commentsLoading,  setCommentsLoading]  = React.useState(true);
+  const [commentCount,     setCommentCount]     = React.useState(post.comment_count);
+  const [pollData,         setPollData]         = React.useState<PollData | null>(post.poll ?? null);
+  const [caption,          setCaption]          = React.useState<string | null>(post.caption);
+  const [editOpen,         setEditOpen]         = React.useState(false);
+  const [savedPost,        setSavedPost]        = React.useState(false);
+  const [savedCreator,     setSavedCreator]     = React.useState(false);
   const isLiking = React.useRef(false);
 
   const firstMedia = post.media?.[0];
@@ -213,6 +170,23 @@ export default function PostRow({
     }));
   }, [post.media]);
 
+  // ── Lazy-load saved state when fan sheet opens ────────────────────────────
+  const savedFetched = React.useRef(false);
+  const handleOpenFanSheet = React.useCallback(async () => {
+    setSheetOpen(true);
+    if (savedFetched.current) return;
+    savedFetched.current = true;
+    try {
+      const [postRes, creatorRes] = await Promise.all([
+        fetch(`/api/saved/posts?post_id=${post.id}`),
+        fetch(`/api/saved/creators?creator_id=${post.profiles.id}`),
+      ]);
+      const [postData, creatorData] = await Promise.all([postRes.json(), creatorRes.json()]);
+      if (postRes.ok)    setSavedPost(postData.saved ?? false);
+      if (creatorRes.ok) setSavedCreator(creatorData.saved ?? false);
+    } catch {}
+  }, [post.id, post.profiles.id]);
+
   React.useEffect(() => {
     setLiked(post.liked);
     setLikeCount(post.like_count);
@@ -230,9 +204,7 @@ export default function PostRow({
   }, [post.id]);
 
   const handleAddComment = React.useCallback(async (
-    id: string,
-    text: string,
-    gif_url?: string,
+    id: string, text: string, gif_url?: string,
     parent_comment_id?: string | number,
     reply_to_username?: string | null,
     reply_to_id?: string | number | null
@@ -240,13 +212,7 @@ export default function PostRow({
     await fetch(`/api/posts/${id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content:            text,
-        gif_url:            gif_url ?? null,
-        parent_comment_id:  parent_comment_id ?? null,
-        reply_to_username:  reply_to_username ?? null,
-        reply_to_id:        reply_to_id ?? null,
-      }),
+      body: JSON.stringify({ content: text, gif_url: gif_url ?? null, parent_comment_id: parent_comment_id ?? null, reply_to_username: reply_to_username ?? null, reply_to_id: reply_to_id ?? null }),
     });
     setCommentCount((c) => c + 1);
     if (!parent_comment_id) {
@@ -285,19 +251,50 @@ export default function PostRow({
 
   const handleSaveCaption = async (newCaption: string) => {
     const res = await fetch(`/api/posts/${post.id}`, {
-      method:  "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ caption: newCaption }),
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caption: newCaption }),
     });
     if (!res.ok) throw new Error("Failed");
     setCaption(newCaption || null);
   };
 
   const handleSingleTap = () => {
-    if (firstMedia?.media_type !== "video") {
-      onImageClick?.(post, 0);
-    }
+    if (firstMedia?.media_type !== "video") onImageClick?.(post, 0);
   };
+
+  // ── Save / unsave post ────────────────────────────────────────────────────
+  const handleSavePost = React.useCallback(async () => {
+    const next = !savedPost;
+    setSavedPost(next);
+    try {
+      await fetch("/api/saved/posts", {
+        method:  next ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ post_id: post.id }),
+      });
+    } catch {
+      setSavedPost(!next);
+    }
+  }, [savedPost, post.id]);
+
+  // ── Save / unsave creator ─────────────────────────────────────────────────
+  const handleSaveCreator = React.useCallback(async () => {
+    const next = !savedCreator;
+    setSavedCreator(next);
+    try {
+      await fetch("/api/saved/creators", {
+        method:  next ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ creator_id: post.profiles.id }),
+      });
+    } catch {
+      setSavedCreator(!next);
+    }
+  }, [savedCreator, post.profiles.id]);
+
+  const handleBookmark = React.useCallback(() => {
+    handleSavePost();
+  }, [handleSavePost]);
 
   const isTextPost = post.content_type === "text";
   const isPollPost = post.content_type === "poll";
@@ -312,13 +309,37 @@ export default function PostRow({
         />
       )}
 
+      {/* Fan sheet */}
+      {!isOwnProfile && (
+        <PostOptionsSheet
+          isOpen={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          onSavePost={handleSavePost}
+          onSaveCreator={handleSaveCreator}
+          onAddToList={() => console.log("add to list")}
+          onHidePost={() => console.log("hide post")}
+          onReport={() => console.log("report")}
+          onBlockCreator={() => console.log("block creator")}
+          savedPost={savedPost}
+          savedCreator={savedCreator}
+        />
+      )}
+
+      {/* Creator sheet */}
+      {isOwnProfile && (
+        <CreatorPostOptionsSheet
+          isOpen={creatorSheetOpen}
+          onClose={() => setCreatorSheetOpen(false)}
+          onEdit={() => setEditOpen(true)}
+          onDelete={handleDelete}
+        />
+      )}
+
+      {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {post.profiles?.avatar_url
-            ? (
-              // FIX: added loading="lazy" to avatar
-              <img src={post.profiles.avatar_url} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
-            )
+            ? <img src={post.profiles.avatar_url} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
             : (
               <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <span style={{ fontSize: "16px", fontWeight: 700, color: "#8B5CF6" }}>
@@ -334,12 +355,14 @@ export default function PostRow({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{getRelativeTime(post.published_at)}</span>
-          {isOwnProfile
-            ? <PostMenu onEdit={() => setEditOpen(true)} onDelete={handleDelete} onShare={() => {}} />
-            : <button style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <MoreHorizontal size={16} />
-              </button>
-          }
+          <button
+            onClick={() => isOwnProfile ? setCreatorSheetOpen(true) : handleOpenFanSheet()}
+            style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+          >
+            <MoreHorizontal size={16} />
+          </button>
         </div>
       </div>
 
@@ -372,12 +395,13 @@ export default function PostRow({
             likes={likeCount}
             comments={commentCount}
             liked={liked}
+            bookmarked={savedPost}
             isSubscribed={isSubscribed}
             isOwnProfile={isOwnProfile}
             onLike={handleLike}
             onComment={() => setCommentOpen((p) => !p)}
             onTip={() => onTip?.(String(post.id))}
-            onBookmark={() => {}}
+            onBookmark={handleBookmark}
           />
         </div>
       )}

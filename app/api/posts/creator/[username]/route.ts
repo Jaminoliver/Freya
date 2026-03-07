@@ -88,6 +88,7 @@ export async function GET(
         view_count,
         published_at,
         profiles!creator_id (
+           id, 
           username,
           display_name,
           avatar_url,
