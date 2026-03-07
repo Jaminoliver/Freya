@@ -199,7 +199,6 @@ export default function ContentFeed({
 
   const [apiPosts,        setApiPosts]        = React.useState<ApiPost[]>(seedPosts);
   const [apiMedia,        setApiMedia]        = React.useState<ApiMedia[]>(seedMedia);
-  // FIX: use skeleton loader instead of spinner
   const [loading,         setLoading]         = React.useState(!initialApiPosts && !cachedPosts);
   const [mediaFilter,     setMediaFilter]     = React.useState<"all" | "photo" | "video">("all");
   const [isPostsGridView, setIsPostsGridView] = React.useState(cached?.isPostsGridView ?? false);
@@ -209,8 +208,6 @@ export default function ContentFeed({
   const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
 
-  // FIX: respond to refreshKey increments from ProfilePage (upload done)
-  // ProfilePage owns the upload-watching logic — ContentFeed just consumes refreshKey
   const prevRefreshKey = React.useRef<number | undefined>(undefined);
   React.useEffect(() => {
     if (refreshKey === undefined) return;
@@ -269,12 +266,13 @@ export default function ContentFeed({
     [apiPosts, searchQuery]
   );
 
+  // FIX: use p.locked (set by API based on audience + subscription) instead of p.is_free
   const { freePosts, lockedPosts } = React.useMemo(() => {
     if (isSubscribed || isOwnProfile) {
       return { freePosts: filteredPosts, lockedPosts: [] };
     }
-    const free   = filteredPosts.filter((p) => p.is_free);
-    const locked = filteredPosts.filter((p) => !p.is_free);
+    const free   = filteredPosts.filter((p) => !p.locked);
+    const locked = filteredPosts.filter((p) => p.locked);
     return { freePosts: free, lockedPosts: locked };
   }, [filteredPosts, isSubscribed, isOwnProfile]);
 
@@ -286,8 +284,6 @@ export default function ContentFeed({
   const photoCount = React.useMemo(() => apiMedia.filter((m) => m.media_type !== "video").length, [apiMedia]);
   const videoCount = React.useMemo(() => apiMedia.filter((m) => m.media_type === "video").length,  [apiMedia]);
 
-  // FIX: ContentFeed only fetches if ProfilePage hasn't already provided posts
-  // Upload completion is handled by ProfilePage → refreshKey — no duplicate fetch here
   const fetchPosts = React.useCallback(async (force = false) => {
     if (!creatorUsername) return;
     if (!force && (feedPostsCache.has(cacheKey) || initialApiPosts)) return;
@@ -307,9 +303,6 @@ export default function ContentFeed({
   }, [creatorUsername, cacheKey, initialApiPosts]);
 
   React.useEffect(() => { fetchPosts(); }, [fetchPosts]);
-
-  // FIX: removed upload watching from here — ProfilePage owns that logic
-  // This prevents the double-fetch that was happening before
 
   const handleDeletePost = (id: string) => {
     setApiPosts((prev) => {
@@ -371,7 +364,6 @@ export default function ContentFeed({
     );
   };
 
-  // FIX: skeleton loader replaces spinner
   if (loading) {
     return <ContentFeedSkeleton tab={activeTab as "posts" | "media"} />;
   }
