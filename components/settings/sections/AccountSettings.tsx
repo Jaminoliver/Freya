@@ -6,18 +6,32 @@ import { createClient } from "@/lib/supabase/client";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+const PasswordInput = ({ value, onChange, placeholder, show, onToggle }: {
+  value: string; onChange: (v: string) => void; placeholder: string; show: boolean; onToggle: () => void;
+}) => (
+  <div style={{ position: "relative" }}>
+    <input type={show ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      style={{ width: "100%", borderRadius: "10px", padding: "12px 44px 12px 14px", fontSize: "14px", outline: "none", backgroundColor: "#141420", border: "1.5px solid #2A2A3D", color: "#F1F5F9", boxSizing: "border-box", fontFamily: "'Inter', sans-serif", transition: "border-color 0.2s" }}
+      onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
+      onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+    <button type="button" onClick={onToggle}
+      style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#6B6B8A", display: "flex", alignItems: "center" }}>
+      {show ? <EyeOff size={15} /> : <Eye size={15} />}
+    </button>
+  </div>
+);
+
 export default function AccountSettings({ onBack }: { onBack?: () => void }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [currentEmail, setCurrentEmail] = useState("");
   const [currentUsername, setCurrentUsername] = useState("");
   const [currentPhone, setCurrentPhone] = useState("");
 
-  const [newUsername, setNewUsername] = useState("");
-  const [usernameSave, setUsernameSave] = useState<SaveState>("idle");
-  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   const [newEmail, setNewEmail] = useState("");
-  const [confirmEmail, setConfirmEmail] = useState("");
+  const [emailStep, setEmailStep] = useState<"input" | "otp">("input");
+  const [otpCode, setOtpCode] = useState("");
   const [emailSave, setEmailSave] = useState<SaveState>("idle");
   const [emailError, setEmailError] = useState<string | null>(null);
 
@@ -76,29 +90,34 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
     backgroundColor: "#0F0F1A",
   };
 
-  const sectionBox: React.CSSProperties = {
-    backgroundColor: "#141420", border: "1.5px solid #2A2A3D",
-    borderRadius: "12px", padding: "20px",
+  const dividerLabel: React.CSSProperties = {
+    fontSize: "11px", color: "#6B6B8A", letterSpacing: "0.08em",
+    textTransform: "uppercase", fontWeight: 600,
   };
 
-  const divider = (
-    <div style={{ height: "1px", backgroundColor: "#1F1F2A", margin: "24px 0" }} />
+  const DividerSection = ({ label, danger }: { label: string; danger?: boolean }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "28px 0 14px" }}>
+      <div style={{ flex: 1, height: "1px", backgroundColor: danger ? "rgba(239,68,68,0.3)" : "#2A2A3D" }} />
+      <span style={{ ...dividerLabel, color: danger ? "#EF4444" : "#6B6B8A" }}>{label}</span>
+      <div style={{ flex: 1, height: "1px", backgroundColor: danger ? "rgba(239,68,68,0.3)" : "#2A2A3D" }} />
+    </div>
   );
 
   const SaveButton = ({ onSave, state, label = "Save" }: { onSave: () => void; state: SaveState; label?: string }) => (
     <button type="button" onClick={onSave} disabled={state === "saving"}
       style={{
         display: "flex", alignItems: "center", gap: "8px",
-        padding: "9px 20px", borderRadius: "8px", fontSize: "13px",
+        padding: "11px 24px", borderRadius: "8px", fontSize: "14px",
         fontWeight: 600, border: "none",
         cursor: state === "saving" ? "not-allowed" : "pointer",
         backgroundColor: state === "saved" ? "#059669" : "#8B5CF6",
         color: "#fff", fontFamily: "'Inter', sans-serif",
+        boxShadow: "0 4px 20px rgba(139,92,246,0.3)",
         transition: "background-color 0.2s", opacity: state === "saving" ? 0.7 : 1,
       }}>
-      {state === "saving" && <Loader2 size={13} style={{ animation: "spin 0.9s linear infinite" }} />}
-      {state === "saved" && <Check size={13} />}
-      {state === "saving" ? "Saving…" : state === "saved" ? "Saved" : label}
+      {state === "saving" && <Loader2 size={14} style={{ animation: "spin 0.9s linear infinite" }} />}
+      {state === "saved" && <Check size={14} />}
+      {state === "saving" ? "Saving…" : state === "saved" ? "Saved ✓" : label}
     </button>
   );
 
@@ -110,35 +129,26 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
       </div>
     ) : null;
 
-  const PasswordInput = ({ value, onChange, placeholder, show, onToggle }: { value: string; onChange: (v: string) => void; placeholder: string; show: boolean; onToggle: () => void }) => (
-    <div style={{ position: "relative" }}>
-      <input type={show ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder} style={{ ...inputBase, paddingRight: "44px" }}
-        onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-        onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
-      <button type="button" onClick={onToggle}
-        style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#6B6B8A", display: "flex", alignItems: "center" }}>
-        {show ? <EyeOff size={15} /> : <Eye size={15} />}
-      </button>
-    </div>
-  );
-
-  const handleUsernameSave = async () => {
-    if (!userId || !newUsername.trim()) return;
-    setUsernameSave("saving"); setUsernameError(null);
-    const supabase = createClient();
-    const { error } = await supabase.from("profiles").update({ username: newUsername.trim(), updated_at: new Date().toISOString() }).eq("id", userId);
-    if (error) { setUsernameSave("error"); setUsernameError(error.message.includes("unique") ? "That username is already taken." : error.message); }
-    else { setCurrentUsername(newUsername.trim()); setNewUsername(""); setUsernameSave("saved"); setTimeout(() => setUsernameSave("idle"), 3000); }
-  };
-
   const handleEmailSave = async () => {
-    if (!newEmail || newEmail !== confirmEmail) { setEmailError("Emails do not match."); return; }
+    if (!newEmail.trim()) { setEmailError("Please enter a new email address."); return; }
     setEmailSave("saving"); setEmailError(null);
     const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ email: newEmail });
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
     if (error) { setEmailSave("error"); setEmailError(error.message); }
-    else { setEmailSave("saved"); setNewEmail(""); setConfirmEmail(""); setTimeout(() => setEmailSave("idle"), 3000); }
+    else { setEmailSave("idle"); setEmailStep("otp"); }
+  };
+
+  const handleEmailVerify = async () => {
+    if (otpCode.length !== 8) { setEmailError("Enter the 8-digit code sent to your new email."); return; }
+    setEmailSave("saving"); setEmailError(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.verifyOtp({ email: newEmail.trim(), token: otpCode, type: "email_change" });
+    if (error) { setEmailSave("error"); setEmailError(error.message); }
+    else {
+      setCurrentEmail(newEmail.trim());
+      setNewEmail(""); setOtpCode(""); setEmailStep("input");
+      setEmailSave("saved"); setTimeout(() => setEmailSave("idle"), 3000);
+    }
   };
 
   const handlePhoneSave = async () => {
@@ -151,10 +161,14 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
   };
 
   const handlePasswordSave = async () => {
+    if (!currentPassword) { setPasswordError("Enter your current password."); return; }
+    if (newPassword.length < 8) { setPasswordError("New password must be at least 8 characters."); return; }
     if (newPassword !== confirmPassword) { setPasswordError("Passwords do not match."); return; }
-    if (newPassword.length < 8) { setPasswordError("Password must be at least 8 characters."); return; }
     setPasswordSave("saving"); setPasswordError(null);
     const supabase = createClient();
+    // Verify current password first
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: currentEmail, password: currentPassword });
+    if (signInError) { setPasswordSave("error"); setPasswordError("Current password is incorrect."); return; }
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) { setPasswordSave("error"); setPasswordError(error.message); }
     else { setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setPasswordSave("saved"); setTimeout(() => setPasswordSave("idle"), 3000); }
@@ -168,7 +182,7 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div style={{ display: "flex", flexDirection: "column", paddingBottom: "80px" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* Header */}
@@ -184,48 +198,80 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
+      {/* ── Identity ── */}
       <p style={{ fontSize: "11px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 14px" }}>Identity</p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div style={sectionBox}>
-          <label style={labelStyle}>Username</label>
-          <input type="text" readOnly value={`@${currentUsername}`} style={readOnlyStyle} />
-          <div style={{ height: "12px" }} />
-          <input type="text" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="New username" style={inputBase}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
-          <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "6px", display: "block", fontStyle: "italic" }}>Choose carefully — you can change this anytime but your old URL will stop working</span>
-          <ErrorNote msg={usernameError} />
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}><SaveButton onSave={handleUsernameSave} state={usernameSave} label="Update Username" /></div>
-        </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
-        <div style={sectionBox}>
+        {/* Email */}
+        <div>
           <label style={labelStyle}>Email</label>
           <input type="email" readOnly value={currentEmail} style={readOnlyStyle} />
-          <div style={{ height: "12px" }} />
-          <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="New email address" style={inputBase}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           <div style={{ height: "10px" }} />
-          <input type="email" value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} placeholder="Confirm new email" style={inputBase}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
-          <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "6px", display: "block", fontStyle: "italic" }}>A confirmation link will be sent to your new email</span>
-          <ErrorNote msg={emailError} />
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}><SaveButton onSave={handleEmailSave} state={emailSave} label="Update Email" /></div>
+
+          {emailStep === "input" ? (
+            <>
+              <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="New email address" style={inputBase}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+              <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "5px", display: "block", fontStyle: "italic" }}>
+                A confirmation code will be sent to your new email
+              </span>
+              <ErrorNote msg={emailError} />
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
+                <SaveButton onSave={handleEmailSave} state={emailSave} label="Send Code" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ backgroundColor: "rgba(139,92,246,0.06)", border: "1.5px solid rgba(139,92,246,0.2)", borderRadius: "10px", padding: "12px 14px", marginBottom: "10px" }}>
+                <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2", lineHeight: 1.5 }}>
+                  A 8-digit code was sent to <strong style={{ color: "#F1F5F9" }}>{newEmail}</strong>. Enter it below to confirm.
+                </p>
+              </div>
+              <input
+                type="text"
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                placeholder="00000000"
+                maxLength={8}
+                style={{ ...inputBase, letterSpacing: "0.25em", fontSize: "18px", textAlign: "center" }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
+              />
+              <ErrorNote msg={emailError} />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px" }}>
+                <button type="button" onClick={() => { setEmailStep("input"); setOtpCode(""); setEmailError(null); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif", padding: 0 }}>
+                  ← Use a different email
+                </button>
+                <SaveButton onSave={handleEmailVerify} state={emailSave} label="Confirm Email" />
+              </div>
+            </>
+          )}
         </div>
 
-        <div style={sectionBox}>
+        {/* Phone */}
+        <div>
           <label style={labelStyle}>Phone Number</label>
-          {currentPhone && <input type="text" readOnly value={currentPhone} style={{ ...readOnlyStyle, marginBottom: "12px" }} />}
-          <input type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder={currentPhone ? "Change phone number" : "Add phone number"} style={inputBase}
+          {currentPhone && (
+            <input type="text" readOnly value={currentPhone} style={{ ...readOnlyStyle, marginBottom: "10px" }} />
+          )}
+          <input type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
+            placeholder={currentPhone ? "Change phone number" : "Add phone number"} style={inputBase}
             onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           <ErrorNote msg={phoneError} />
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}><SaveButton onSave={handlePhoneSave} state={phoneSave} label={currentPhone ? "Update Phone" : "Add Phone"} /></div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
+            <SaveButton onSave={handlePhoneSave} state={phoneSave} label={currentPhone ? "Update Phone" : "Add Phone"} />
+          </div>
         </div>
       </div>
 
-      {divider}
+      {/* ── Security ── */}
+      <DividerSection label="Security" />
 
-      <p style={{ fontSize: "11px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 14px" }}>Security</p>
-      <div style={sectionBox}>
+      <div>
         <label style={labelStyle}>Change Password</label>
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <PasswordInput value={currentPassword} onChange={setCurrentPassword} placeholder="Current password" show={showCurrent} onToggle={() => setShowCurrent((p) => !p)} />
@@ -233,29 +279,38 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
           <PasswordInput value={confirmPassword} onChange={setConfirmPassword} placeholder="Confirm new password" show={showConfirm} onToggle={() => setShowConfirm((p) => !p)} />
         </div>
         <ErrorNote msg={passwordError} />
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}><SaveButton onSave={handlePasswordSave} state={passwordSave} label="Update Password" /></div>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
+          <SaveButton onSave={handlePasswordSave} state={passwordSave} label="Update Password" />
+        </div>
       </div>
 
-      {divider}
+      {/* ── Danger Zone ── */}
+      <DividerSection label="Danger Zone" danger />
 
-      <p style={{ fontSize: "11px", fontWeight: 600, color: "#EF4444", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 14px" }}>Danger Zone</p>
-      <div style={{ backgroundColor: "rgba(239,68,68,0.04)", border: "1.5px solid rgba(239,68,68,0.2)", borderRadius: "12px", padding: "20px" }}>
+      <div>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
           <div>
             <p style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 600, color: "#F1F5F9" }}>Delete Account</p>
-            <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A", lineHeight: 1.5 }}>Permanently delete your account and all your data. This cannot be undone.</p>
+            <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A", lineHeight: 1.5 }}>
+              Permanently delete your account and all your data. This cannot be undone.
+            </p>
           </div>
           <button type="button" onClick={() => setDeleteOpen((p) => !p)}
             style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "6px", padding: "9px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, border: "1.5px solid rgba(239,68,68,0.4)", backgroundColor: "transparent", color: "#EF4444", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}>
             <Trash2 size={13} /> Delete
           </button>
         </div>
+
         {deleteOpen && (
           <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid rgba(239,68,68,0.15)" }}>
-            <p style={{ margin: "0 0 10px", fontSize: "13px", color: "#A3A3C2" }}>Type <strong style={{ color: "#F1F5F9" }}>@{currentUsername}</strong> to confirm deletion:</p>
-            <input type="text" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder={`@${currentUsername}`}
+            <p style={{ margin: "0 0 10px", fontSize: "13px", color: "#A3A3C2" }}>
+              Type <strong style={{ color: "#F1F5F9" }}>@{currentUsername}</strong> to confirm deletion:
+            </p>
+            <input type="text" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={`@${currentUsername}`}
               style={{ ...inputBase, border: "1.5px solid rgba(239,68,68,0.3)", marginBottom: "12px" }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#EF4444")} onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)")} />
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#EF4444")}
+              onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)")} />
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button type="button" onClick={() => { setDeleteOpen(false); setDeleteConfirm(""); }}
                 style={{ padding: "9px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: 500, border: "1.5px solid #2A2A3D", backgroundColor: "transparent", color: "#A3A3C2", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
