@@ -130,7 +130,7 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
           .filter((s) => s.mediaType === "video" && s.mediaUrl && !s.isProcessing)
           .map((s) => s.mediaUrl);
 
-        if (videoUrls.length > 0) setTimeout(() => prewarmHls(videoUrls), 1500);
+        if (videoUrls.length > 0) prewarmHls(videoUrls);
       }
     } catch (err) {
       console.error("[StoryBar] fetch stories error:", err);

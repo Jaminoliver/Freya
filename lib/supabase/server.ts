@@ -4,9 +4,6 @@ import { cookies } from 'next/headers'
 import type { User } from '@supabase/supabase-js'
 
 // ─── Module-level user cache ──────────────────────────────────────────────────
-// Keyed by auth token — same token within 30s = zero extra Supabase auth calls.
-// This prevents 429s when multiple API routes call getUser() simultaneously.
-
 const USER_CACHE_TTL = 30_000;
 
 interface CachedUser {
@@ -16,7 +13,6 @@ interface CachedUser {
 
 const userCache = new Map<string, CachedUser>();
 
-// Clean up expired entries every minute
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of userCache.entries()) {
@@ -49,14 +45,11 @@ export async function createServerSupabaseClient() {
 }
 
 // ─── Cached getUser ───────────────────────────────────────────────────────────
-// Use this in every API route instead of client.auth.getUser().
-// Multiple routes firing at the same time share one Supabase auth call.
 export async function getUser(): Promise<{ user: User | null; error: any }> {
   try {
     const cookieStore = await cookies();
     const allCookies  = cookieStore.getAll();
 
-    // Build cache key from Supabase session cookies
     const cacheKey = allCookies
       .filter((c) => c.name.startsWith('sb-'))
       .map((c) => `${c.name}=${c.value}`)
@@ -70,9 +63,10 @@ export async function getUser(): Promise<{ user: User | null; error: any }> {
       }
     }
 
-    // Cache miss — hit Supabase auth once
+    // Decode JWT locally — no network call, near instant
     const client = await createServerSupabaseClient();
-    const { data: { user }, error } = await client.auth.getUser();
+    const { data: { session }, error } = await client.auth.getSession();
+    const user = session?.user ?? null;
 
     if (user && cacheKey) {
       userCache.set(cacheKey, {
@@ -89,7 +83,6 @@ export async function getUser(): Promise<{ user: User | null; error: any }> {
 }
 
 // ─── Service role client — bypasses RLS ──────────────────────────────────────
-// Use ONLY in server-side webhook handlers and cron jobs
 export function createServiceSupabaseClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

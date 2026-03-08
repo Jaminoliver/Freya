@@ -14,15 +14,19 @@ export const maxDuration = 300;
 // GET /api/stories
 export async function GET(req: NextRequest) {
   try {
+    const t0 = Date.now();
     const { user, error: authErr } = await getUser();
     if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    console.log(`[stories] auth: ${Date.now() - t0}ms`);
 
     const supabase = createServiceSupabaseClient();
 
+    const t1 = Date.now();
     const [{ data: viewerProfile }, { data: subs }] = await Promise.all([
       supabase.from("profiles").select("id, role").eq("id", user.id).single(),
       supabase.from("subscriptions").select("creator_id").eq("fan_id", user.id).eq("status", "active"),
     ]);
+    console.log(`[stories] profile+subs: ${Date.now() - t1}ms`);
 
     if (!viewerProfile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
 
@@ -33,6 +37,7 @@ export async function GET(req: NextRequest) {
 
     if (creatorIds.length === 0) return NextResponse.json({ groups: [] });
 
+    const t2 = Date.now();
     let query = supabase
       .from("stories")
       .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, created_at, expires_at, is_processing")
@@ -46,6 +51,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { data: stories, error: storiesErr } = await query;
+    console.log(`[stories] stories query: ${Date.now() - t2}ms | count: ${stories?.length ?? 0}`);
 
     if (storiesErr) {
       console.error("[GET /api/stories] stories error:", storiesErr);
@@ -57,10 +63,13 @@ export async function GET(req: NextRequest) {
     const uniqueCreatorIds = [...new Set(stories.map((s: any) => s.creator_id))];
     const storyIds         = stories.map((s: any) => s.id);
 
+    const t3 = Date.now();
     const [{ data: profiles }, { data: views }] = await Promise.all([
       supabase.from("profiles").select("id, username, display_name, avatar_url").in("id", uniqueCreatorIds),
       supabase.from("story_views").select("story_id").eq("user_id", user.id).in("story_id", storyIds),
     ]);
+    console.log(`[stories] profiles+views: ${Date.now() - t3}ms`);
+    console.log(`[stories] TOTAL: ${Date.now() - t0}ms`);
 
     const profileMap: Record<string, any> = {};
     for (const p of profiles ?? []) profileMap[p.id] = p;

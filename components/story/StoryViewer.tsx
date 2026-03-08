@@ -20,19 +20,27 @@ const IMG_TIMEOUT_MS    = 4000;
 // Preload HLS manifests + first segments before viewer opens
 export function prewarmHls(urls: string[]) {
   if (typeof window === "undefined") return;
+  console.log(`[prewarm] Starting preload for ${urls.length} video(s)`);
   import("hls.js").then(({ default: Hls }) => {
-    if (!Hls.isSupported()) return;
+    if (!Hls.isSupported()) {
+      console.log("[prewarm] HLS not supported — skipping");
+      return;
+    }
     for (const url of urls) {
       const video = document.createElement("video");
       video.muted   = true;
       video.preload = "auto";
       video.style.cssText = "position:absolute;width:0;height:0;opacity:0;pointer-events:none;";
       document.body.appendChild(video);
-      const hls = new Hls({ maxBufferLength: 10, maxMaxBufferLength: 20 });
+      const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 });
       hls.loadSource(url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, (_: any, data: any) => {
         hls.currentLevel = data.levels.length - 1;
+        console.log(`[prewarm] ✓ Manifest loaded: ${url.split("/").slice(-2, -1)[0]}`);
+      });
+      hls.on(Hls.Events.ERROR, (_: any, data: any) => {
+        if (data.fatal) console.warn(`[prewarm] ✗ Error loading: ${url}`, data);
       });
       setTimeout(() => { hls.destroy(); video.remove(); }, 30000);
     }
