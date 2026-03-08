@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
           displayName:     profile.display_name ?? profile.username ?? "unknown",
           avatarUrl:       profile.avatar_url   ?? null,
           hasUnviewed:     false,
+          latestStoryAt:   null,
           latestThumbnail: null,
           items:           [],
         };
@@ -85,6 +86,9 @@ export async function GET(req: NextRequest) {
 
       const isViewed = viewedSet.has(story.id);
       if (!isViewed) groupMap[cId].hasUnviewed = true;
+
+      // Track the newest story timestamp (stories are ordered asc, so last wins)
+      groupMap[cId].latestStoryAt = story.created_at;
 
       if (!groupMap[cId].latestThumbnail) {
         groupMap[cId].latestThumbnail =
@@ -104,10 +108,11 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const groups = Object.values(groupMap).sort((a: any, b: any) => {
-      if (a.hasUnviewed === b.hasUnviewed) return 0;
-      return a.hasUnviewed ? -1 : 1;
-    });
+    // Split into unviewed / viewed buckets, each sorted by latestStoryAt desc (most recent first)
+    const allGroups   = Object.values(groupMap) as any[];
+    const unviewed    = allGroups.filter((g) =>  g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
+    const viewed      = allGroups.filter((g) => !g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
+    const groups      = [...unviewed, ...viewed];
 
     return NextResponse.json({ groups });
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Bookmark, Users, Lock, BadgeCheck } from "lucide-react";
+import { SavedSkeleton } from "@/components/loadscreen/SavedSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface SavedPost {
@@ -138,7 +139,7 @@ function CreatorCard({ creator, onUnsave }: { creator: SavedCreator; onUnsave: (
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Main Page ─────────────────────────────────────────────────
 export default function SavedPage() {
   const router = useRouter();
   const [activeTab,       setActiveTab]       = useState<"posts" | "creators">("posts");
@@ -171,9 +172,7 @@ export default function SavedPage() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ creator_id: id }),
       });
-    } catch {
-      // silently fail — list already updated optimistically
-    }
+    } catch {}
   }, []);
 
   const handleUnsavePost = useCallback(async (id: string) => {
@@ -186,6 +185,10 @@ export default function SavedPage() {
       });
     } catch {}
   }, []);
+
+  // Show skeleton while loading active tab
+  const isLoading = activeTab === "posts" ? loadingPosts : loadingCreators;
+  if (isLoading) return <SavedSkeleton tab={activeTab} />;
 
   return (
     <div style={{ height: "100svh", overflow: "hidden", backgroundColor: "#0D0D18", fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column" }}>
@@ -230,13 +233,7 @@ export default function SavedPage() {
       {/* Posts tab */}
       {activeTab === "posts" && (
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {loadingPosts ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "2px", padding: "2px" }}>
-              {Array.from({ length: 9 }).map((_, i) => (
-                <div key={i} style={{ aspectRatio: "1", backgroundColor: "#1C1C2E", animation: "pulse 1.5s ease-in-out infinite" }} />
-              ))}
-            </div>
-          ) : savedPosts.length === 0 ? (
+          {savedPosts.length === 0 ? (
             <EmptyState tab="posts" />
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "2px", padding: "2px" }}>
@@ -255,13 +252,7 @@ export default function SavedPage() {
       {/* Creators tab */}
       {activeTab === "creators" && (
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {loadingCreators ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", padding: "8px" }}>
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} style={{ borderRadius: "12px", aspectRatio: "0.75", backgroundColor: "#1C1C2E", animation: "pulse 1.5s ease-in-out infinite" }} />
-              ))}
-            </div>
-          ) : savedCreators.length === 0 ? (
+          {savedCreators.length === 0 ? (
             <EmptyState tab="creators" />
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", padding: "8px" }}>
@@ -272,10 +263,6 @@ export default function SavedPage() {
           )}
         </div>
       )}
-
-      <style>{`
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-      `}</style>
     </div>
   );
 }

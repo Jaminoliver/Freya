@@ -34,7 +34,6 @@ export function prewarmHls(urls: string[]) {
       hls.on(Hls.Events.MANIFEST_PARSED, (_: any, data: any) => {
         hls.currentLevel = data.levels.length - 1;
       });
-      // Clean up after 30s — StoryVideoPlayer will take over by then
       setTimeout(() => { hls.destroy(); video.remove(); }, 30000);
     }
   }).catch(() => {});
@@ -60,19 +59,27 @@ function timeAgo(d: string): string {
   return h < 24 ? `${h}h ago` : `${Math.floor(h/24)}d ago`;
 }
 
-interface Props {
-  groups:            CreatorStoryGroup[];
-  startGroupIndex:   number;
-  onClose:           () => void;
-  onStoriesUpdated?: () => void;
+// Find the index of the first unviewed story in a group, or 0 if all viewed
+function firstUnviewedIndex(group: CreatorStoryGroup): number {
+  const idx = group.items.findIndex((s) => !s.viewed && !s.isProcessing);
+  return idx === -1 ? 0 : idx;
 }
 
-export default function StoryViewer({ groups, startGroupIndex, onClose, onStoriesUpdated }: Props) {
+interface Props {
+  groups:               CreatorStoryGroup[];
+  startGroupIndex:      number;
+  onClose:              () => void;
+  onStoriesUpdated?:    () => void;
+  onGroupFullyViewed?:  (creatorId: string) => void;
+}
+
+export default function StoryViewer({ groups, startGroupIndex, onClose, onStoriesUpdated, onGroupFullyViewed }: Props) {
   const { viewer } = useAppStore();
 
   const [localGroups,  setLocalGroups]  = useState(groups);
   const [groupIdx,     setGroupIdx]     = useState(startGroupIndex);
-  const [storyIdx,     setStoryIdx]     = useState(0);
+  // Start at first unviewed story rather than always index 0
+  const [storyIdx,     setStoryIdx]     = useState(() => firstUnviewedIndex(groups[startGroupIndex]));
   const [paused,       setPaused]       = useState(false);
   const [muted,        setMuted]        = useState(true);
   const [showSpinner,  setShowSpinner]  = useState(false);
@@ -85,8 +92,11 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   const [reply,        setReply]        = useState("");
   const [replyFocused, setReplyFocused] = useState(false);
 
+  // Track which groups have been fully completed this session
+  const fullyViewedRef = useRef<Set<string>>(new Set());
+
   const groupIdxRef    = useRef(startGroupIndex);
-  const storyIdxRef    = useRef(0);
+  const storyIdxRef    = useRef(firstUnviewedIndex(groups[startGroupIndex]));
   const pausedRef      = useRef(false);
   const imgLoadedRef   = useRef(false);
   const mountedRef     = useRef(true);
@@ -94,7 +104,9 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   const storyKeyRef    = useRef("");
   const viewTrackedRef = useRef(false);
   const localGroupsRef = useRef(localGroups);
-  const touchRef       = useRef({ x: 0, y: 0, time: 0, moved: false, holding: false });
+  const touchRef       = useRef({ x: 0, y: 0, time: 0, moved: false, holding: false, draggingDown: false });
+  const dragRef        = useRef({ active: false, startY: 0 });
+  const containerRef   = useRef<HTMLDivElement>(null);
   const barsRef        = useRef<HTMLDivElement>(null);
   const spinnerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imgTimeoutRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -155,16 +167,41 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     fill.style.transform = `scaleX(${pct})`;
   }, [getFill]);
 
+  // Check if all stories in a group have been viewed and fire callback
+  const checkGroupComplete = useCallback((gi: number) => {
+    const gs = localGroupsRef.current;
+    const g  = gs[gi];
+    if (!g) return;
+    const allViewed = g.items.every((s) => s.viewed || s.isProcessing);
+    if (allViewed && !fullyViewedRef.current.has(g.creatorId)) {
+      fullyViewedRef.current.add(g.creatorId);
+      onGroupFullyViewed?.(g.creatorId);
+    }
+  }, [onGroupFullyViewed]);
+
   const goNext = useCallback(() => {
     if (navigatingRef.current) return;
     navigatingRef.current = true;
     const gs = localGroupsRef.current, gi = groupIdxRef.current, si = storyIdxRef.current;
     const g = gs[gi];
     if (!g) { navigatingRef.current = false; return; }
-    if      (si < g.items.length - 1) updateStoryIdx(si + 1);
-    else if (gi < gs.length - 1)      { updateGroupIdx(gi + 1); updateStoryIdx(0); }
-    else                               { navigatingRef.current = false; onClose(); }
-  }, [onClose, updateGroupIdx, updateStoryIdx]);
+
+    if (si < g.items.length - 1) {
+      updateStoryIdx(si + 1);
+    } else {
+      // Finished last story of this group — check if fully viewed
+      checkGroupComplete(gi);
+      if (gi < gs.length - 1) {
+        const nextGroup = gs[gi + 1];
+        updateGroupIdx(gi + 1);
+        // Resume from first unviewed in next group
+        updateStoryIdx(firstUnviewedIndex(nextGroup));
+      } else {
+        navigatingRef.current = false;
+        onClose();
+      }
+    }
+  }, [onClose, updateGroupIdx, updateStoryIdx, checkGroupComplete]);
 
   const goPrev = useCallback(() => {
     const gs = localGroupsRef.current, gi = groupIdxRef.current, si = storyIdxRef.current;
@@ -187,6 +224,13 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   const trackView = useCallback((id: number) => {
     if (viewTrackedRef.current) return;
     viewTrackedRef.current = true;
+    // Mark item as viewed in local state
+    setLocalGroups((prev) =>
+      prev.map((g) => ({
+        ...g,
+        items: g.items.map((s) => s.id === id ? { ...s, viewed: true } : s),
+      }))
+    );
     fetch(`/api/stories/${id}/view`, { method: "POST" }).catch(() => {});
   }, []);
 
@@ -213,6 +257,15 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     }, SPINNER_DELAY_MS);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupIdx, storyIdx]);
+
+  // When groupIdx changes, check completion of previous group
+  const prevGroupIdxRef = useRef(startGroupIndex);
+  useEffect(() => {
+    if (groupIdx !== prevGroupIdxRef.current) {
+      checkGroupComplete(prevGroupIdxRef.current);
+      prevGroupIdxRef.current = groupIdx;
+    }
+  }, [groupIdx, checkGroupComplete]);
 
   const onPhotoLoad = useCallback(() => {
     if (imgLoadedRef.current) return;
@@ -287,9 +340,11 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // On unmount, check if current group is fully viewed
+      checkGroupComplete(groupIdxRef.current);
       [spinnerTimerRef, imgTimeoutRef, holdTimerRef].forEach((r) => { if (r.current) clearTimeout(r.current); });
     };
-  }, []);
+  }, [checkGroupComplete]);
 
   const handleDelete = useCallback(async () => {
     const gs = localGroupsRef.current, gi = groupIdxRef.current, si = storyIdxRef.current;
@@ -315,34 +370,87 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
 
   const sp = { onTouchStart: (e: any) => e.stopPropagation(), onTouchEnd: (e: any) => e.stopPropagation(), onMouseDown: (e: any) => e.stopPropagation(), onMouseUp: (e: any) => e.stopPropagation() };
 
+  const applyDrag = useCallback((dy: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    const clamped = Math.max(0, dy);
+    const scale   = 1 - clamped / 600;
+    const opacity = Math.max(0.2, 1 - clamped / 180);
+    el.style.transform  = `translateY(${clamped}px) scale(${scale})`;
+    el.style.opacity    = String(opacity);
+    el.style.transition = "none";
+  }, []);
+
+  const resetDrag = useCallback((animate: boolean) => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.style.transition = animate ? "transform 0.25s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.25s ease" : "none";
+    el.style.transform  = "translateY(0) scale(1)";
+    el.style.opacity    = "1";
+  }, []);
+
+  const DRAG_CLOSE_PX = 60;
+
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     const t = e.touches[0];
-    touchRef.current = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false, holding: false };
+    touchRef.current = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false, holding: false, draggingDown: false };
+    dragRef.current  = { active: false, startY: t.clientY };
     holdTimerRef.current = setTimeout(() => { touchRef.current.holding = true; setPaused(true); }, HOLD_THRESHOLD_MS);
   }, []);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
-    const t = e.touches[0];
-    const dx = Math.abs(t.clientX - touchRef.current.x), dy = Math.abs(t.clientY - touchRef.current.y);
-    if (dx > MOVE_CANCEL_PX || dy > MOVE_CANCEL_PX) {
+    const t  = e.touches[0];
+    const dx = t.clientX - touchRef.current.x;
+    const dy = t.clientY - touchRef.current.y;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+
+    if (!touchRef.current.moved && (adx > MOVE_CANCEL_PX || ady > MOVE_CANCEL_PX)) {
       touchRef.current.moved = true;
       if (holdTimerRef.current && !touchRef.current.holding) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+      if (dy > 0 && ady > adx) {
+        touchRef.current.draggingDown = true;
+        dragRef.current.active = true;
+        setPaused(true);
+      }
     }
-  }, []);
+
+    if (dragRef.current.active) {
+      e.preventDefault();
+      applyDrag(t.clientY - dragRef.current.startY);
+    }
+  }, [applyDrag]);
 
   const onTouchEnd = useCallback((e: React.TouchEvent) => {
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+
+    if (dragRef.current.active) {
+      dragRef.current.active = false;
+      const dy = e.changedTouches[0].clientY - touchRef.current.y;
+      if (dy > DRAG_CLOSE_PX) {
+        onClose();
+      } else {
+        resetDrag(true);
+        setPaused(false);
+      }
+      return;
+    }
+
     if (touchRef.current.holding) { setPaused(false); return; }
-    const endX = e.changedTouches[0].clientX, endY = e.changedTouches[0].clientY;
-    const dx = endX - touchRef.current.x, dy = endY - touchRef.current.y;
-    const dt = Date.now() - touchRef.current.time;
+
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const dx   = endX - touchRef.current.x;
+    const dy   = endY - touchRef.current.y;
+    const dt   = Date.now() - touchRef.current.time;
+
     if (touchRef.current.moved) {
-      if (dy > SWIPE_DOWN_MIN_PX && Math.abs(dy) > Math.abs(dx)) { onClose(); return; }
-      if (Math.abs(dx) > SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy)) { dx > 0 ? goPrevRef.current() : goNextRef.current(); }
+      if (Math.abs(dx) > SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy)) {
+        dx > 0 ? goPrevRef.current() : goNextRef.current();
+      }
       return;
     }
     if (dt < TAP_MAX_MS) endX < window.innerWidth * 0.35 ? goPrevRef.current() : goNextRef.current();
-  }, [onClose]);
+  }, [onClose, resetDrag]);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button, input")) return;
@@ -384,7 +492,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
         @keyframes sv-spin     { to { transform: rotate(360deg); } }
         @keyframes sv-like     { 0%,100% { transform: scale(1); } 50% { transform: scale(1.4); } }
         .sv-like-anim { animation: sv-like 0.3s ease; }
-        .sv-wrap { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+        .sv-wrap { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; overscroll-behavior: none; }
         .sv-input::placeholder { color: rgba(255,255,255,0.45); }
         .sv-input:focus { outline: none; }
         .sv-arrow { display: none; }
@@ -403,15 +511,13 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
       <div className="sv-wrap" onContextMenu={(e) => e.preventDefault()}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
-        style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#000", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", overscrollBehavior: "none" }}>
 
-        <div style={{ position: "relative", width: "100%", maxWidth: 480, height: "100dvh", overflow: "hidden", background: "#000" }}>
+        <div ref={containerRef} style={{ position: "relative", width: "100%", maxWidth: 480, height: "100dvh", overflow: "hidden", background: "#000", willChange: "transform, opacity" }}>
 
-          {/* Blurred background for images */}
           {!isVideo && thumbSrc && <img src={thumbSrc} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", filter: "blur(20px)", transform: "scale(1.08)" }} />}
           {!isVideo && !thumbSrc && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)" }} />}
 
-          {/* Photo */}
           {!isVideo && (
             <img key={`photo-${storyKey}`} src={story.mediaUrl} alt="story"
               onLoad={onPhotoLoad} onError={onPhotoError} onContextMenu={(e) => e.preventDefault()}
@@ -424,7 +530,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
             </div>
           )}
 
-          {/* Videos — all mounted, only active visible */}
           {group.items.map((item, i) => item.mediaType === "video" ? (
             <StoryVideoPlayer key={item.id} mediaUrl={item.mediaUrl} bunnyVideoId={(item as any).bunnyVideoId ?? null}
               thumbnailUrl={item.thumbnailUrl} muted={muted} paused={paused} active={i === storyIdx} storyIndex={i}
@@ -432,17 +537,13 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
             />
           ) : null)}
 
-          {/* Spinner */}
           {showSpinner && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, pointerEvents: "none" }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid rgba(255,255,255,0.15)", borderTop: "3px solid #fff", animation: "sv-spin 0.8s linear infinite" }} />
             </div>
           )}
 
-          {/* HUD */}
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10 }}>
-
-            {/* Top bar */}
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "calc(env(safe-area-inset-top) + 12px) 12px 0", background: "linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 100%)", pointerEvents: "auto" }}>
               <div ref={barsRef} style={{ display: "flex", gap: 3, marginBottom: 10 }}>
                 {group.items.map((_, i) => (
@@ -485,7 +586,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
               </div>
             </div>
 
-            {/* Bottom bar */}
             <div {...sp} onTouchMove={(e) => e.stopPropagation()}
               style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "48px 16px calc(env(safe-area-inset-bottom) + 20px)", background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)", pointerEvents: "auto" }}>
               {story.caption && (

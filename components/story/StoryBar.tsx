@@ -15,6 +15,7 @@ export interface StoryItem {
   caption:      string | null;
   createdAt:    string;
   expiresAt:    string;
+  viewed:       boolean;
   isProcessing?: boolean;
 }
 
@@ -24,6 +25,7 @@ export interface CreatorStoryGroup {
   displayName:     string;
   avatarUrl:       string | null;
   hasUnviewed:     boolean;
+  latestStoryAt:   string;
   latestThumbnail: string | null;
   items:           StoryItem[];
 }
@@ -87,9 +89,7 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
   const { phase: uploadPhase, uploadPct, compressPct, error: uploadError, storyId: currentStoryId } = storyUpload;
 
   const [groups,        setGroups]        = useState<CreatorStoryGroup[]>([]);
-  // Snapshotted order — set once on fetch, never reshuffled mid-session
   const [orderedGroups, setOrderedGroups] = useState<CreatorStoryGroup[]>([]);
-  const [viewedIds,     setViewedIds]     = useState<Set<string>>(new Set());
   const [loading,       setLoading]       = useState(true);
   const [uploadOpen,    setUploadOpen]    = useState(false);
 
@@ -100,6 +100,13 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
   const isUploading = uploadPhase !== "idle" && uploadPhase !== "done";
   const isCreator   = globalViewer?.role === "creator";
 
+  // Sort groups: unviewed bucket first (by latestStoryAt desc), then viewed bucket (by latestStoryAt desc)
+  const sortGroups = useCallback((fetchedGroups: CreatorStoryGroup[]): CreatorStoryGroup[] => {
+    const unviewed = fetchedGroups.filter((g) =>  g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
+    const viewed   = fetchedGroups.filter((g) => !g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
+    return [...unviewed, ...viewed];
+  }, []);
+
   const fetchStories = useCallback(async () => {
     try {
       const res  = await fetch("/api/stories");
@@ -107,15 +114,7 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
       if (res.ok && data.groups) {
         const fetchedGroups: CreatorStoryGroup[] = data.groups;
         setGroups(fetchedGroups);
-
-        // Snapshot the sorted order once — unviewed first, viewed last.
-        // After this point, viewing a story only changes the ring style,
-        // not the position (WhatsApp behaviour).
-        const sorted = [...fetchedGroups].sort((a, b) => {
-          if (a.hasUnviewed === b.hasUnviewed) return 0;
-          return a.hasUnviewed ? -1 : 1;
-        });
-        setOrderedGroups(sorted);
+        setOrderedGroups(sortGroups(fetchedGroups));
 
         for (const g of fetchedGroups) {
           if (g.latestThumbnail) { const img = new Image(); img.src = g.latestThumbnail; }
@@ -138,9 +137,22 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sortGroups]);
 
   useEffect(() => { fetchStories(); }, [fetchStories]);
+
+  // Called by StoryViewer when all items in a group have been watched
+  const handleGroupFullyViewed = useCallback((creatorId: string) => {
+    setOrderedGroups((prev) => {
+      const updated = prev.map((g) =>
+        g.creatorId === creatorId ? { ...g, hasUnviewed: false } : g
+      );
+      // Re-sort: move newly-viewed group into the viewed bucket
+      const unviewed = updated.filter((g) =>  g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
+      const viewed   = updated.filter((g) => !g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
+      return [...unviewed, ...viewed];
+    });
+  }, []);
 
   // ── Cancel ────────────────────────────────────────────────────────────────
   const cancelUpload = useCallback(async () => {
@@ -234,7 +246,6 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
       if (initData.uploadType === "done") {
         setStoryUpload({ phase: "done" });
         await fetchStories();
-        if (globalViewer?.id) setViewedIds((p) => { const n = new Set(p); n.delete(globalViewer.id); return n; });
         setTimeout(() => resetStoryUpload(), 2000);
         return;
       }
@@ -312,7 +323,6 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
       console.log(`[story-upload] ── DONE ✓ Total: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
       setStoryUpload({ phase: "done", storyId: null });
       await fetchStories();
-      if (globalViewer?.id) setViewedIds((p) => { const n = new Set(p); n.delete(globalViewer.id); return n; });
       setTimeout(() => resetStoryUpload(), 2000);
 
     } catch (err: any) {
@@ -323,27 +333,17 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
       console.error(`[story-upload] ── FAILED: ${msg}`, err);
       setStoryUpload({ phase: "idle", error: msg });
     }
-  }, [fetchStories, globalViewer?.id, setStoryUpload, resetStoryUpload]);
+  }, [fetchStories, setStoryUpload, resetStoryUpload]);
 
   const scroll = (dir: "left" | "right") => {
     scrollRef.current?.scrollBy({ left: dir === "right" ? 220 : -220, behavior: "smooth" });
   };
 
   const handleOpenStory = (index: number) => {
-    const group = orderedGroups[index];
     const viewableGroups = orderedGroups
       .map((g) => ({ ...g, items: g.items.filter((s) => !s.isProcessing) }))
       .filter((g) => g.items.length > 0);
     onOpenViewer?.(viewableGroups, index);
-    if (group) {
-      // Mark as viewed — only updates ring style, does NOT reorder
-      setViewedIds((prev) => new Set([...prev, group.creatorId]));
-      setOrderedGroups((prev) =>
-        prev.map((g) => g.creatorId === group.creatorId ? { ...g, hasUnviewed: false } : g)
-      );
-      const firstItem = group.items.find((s) => !s.isProcessing);
-      if (firstItem) recordView(firstItem.id);
-    }
   };
 
   const statusLabel = isUploading
@@ -464,7 +464,7 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
                 </div>
               ))
             : orderedGroups.map((group, idx) => {
-                const isViewed = viewedIds.has(group.creatorId) || !group.hasUnviewed;
+                const isViewed = !group.hasUnviewed;
                 return (
                   <div
                     key={group.creatorId}
@@ -526,3 +526,7 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
     </>
   );
 }
+
+// Export for StoryViewer to call back into StoryBar
+export type { };
+export { type StoryBarProps };

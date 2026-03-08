@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { signBunnyUrl } from "@/lib/utils/bunny";
+
+function resignImageUrl(storedUrl: string | null): string | null {
+  if (!storedUrl) return null;
+  try {
+    const url  = new URL(storedUrl);
+    const path = url.pathname; // e.g. /posts/userId/filename.jpg
+    return signBunnyUrl(path);
+  } catch {
+    return storedUrl;
+  }
+}
 
 // GET /api/saved/posts           — fetch all saved posts
 // GET /api/saved/posts?post_id=X — check if a single post is saved
@@ -58,14 +70,21 @@ export async function GET(req: NextRequest) {
     const p     = row.posts;
     const media = (p.media ?? []).sort((a: any, b: any) => a.display_order - b.display_order);
     const first = media[0];
+
+    let thumbnail_url: string | null = null;
+
+    if (first?.media_type === "video" && first?.bunny_video_id) {
+      thumbnail_url = `https://${process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net"}/${first.bunny_video_id}/thumbnail.jpg`;
+    } else {
+      thumbnail_url = resignImageUrl(first?.thumbnail_url) ?? resignImageUrl(first?.file_url) ?? null;
+    }
+
     return {
-      id:            String(p.id),
-      thumbnail_url: first?.media_type === "video" && first?.bunny_video_id
-        ? `https://${process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net"}/${first.bunny_video_id}/thumbnail.jpg`
-        : (first?.thumbnail_url ?? first?.file_url ?? null),
-      media_type:    first?.media_type === "video" ? "video" : "image",
-      media_count:   media.length,
-      is_locked:     false,
+      id: String(p.id),
+      thumbnail_url,
+      media_type:  first?.media_type === "video" ? "video" : "image",
+      media_count: media.length,
+      is_locked:   false,
       creator: {
         username:   p.profiles.username,
         name:       p.profiles.display_name || p.profiles.username,
@@ -91,7 +110,7 @@ export async function POST(req: NextRequest) {
     .insert({ user_id: user.id, post_id });
 
   if (error) {
-    if (error.code === "23505") return NextResponse.json({ saved: true }); // already saved
+    if (error.code === "23505") return NextResponse.json({ saved: true });
     console.error("[POST /api/saved/posts] Supabase error:", error);
     return NextResponse.json({ error: error.message, code: error.code }, { status: 500 });
   }
