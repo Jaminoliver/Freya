@@ -7,7 +7,7 @@ import type { Currency } from "@/lib/types/checkout";
 import { CURRENCIES } from "../components/CurrencySwitcher";
 import CurrencySwitcher from "../components/CurrencySwitcher";
 
-const QUICK_AMOUNTS = [500, 1000, 2000, 5000];
+const MIN_TIP = 1000;
 
 interface TipScreenProps {
   creator: User;
@@ -32,12 +32,8 @@ export default function TipScreen({
     onTipAmountChange(Number(cleaned) || 0);
   };
 
-  const handleQuick = (amount: number) => {
-    setInputValue(String(amount));
-    onTipAmountChange(amount);
-  };
-
-  const canProceed = tipAmount > 0;
+  const canProceed = tipAmount >= MIN_TIP;
+  const showMinError = inputValue !== "" && tipAmount > 0 && tipAmount < MIN_TIP;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
@@ -81,13 +77,14 @@ export default function TipScreen({
       <div style={{ height: "1px", backgroundColor: "#1E1E2E", margin: "0 20px" }} />
 
       {/* Amount input */}
-      <div style={{ padding: "20px 20px 12px" }}>
+      <div style={{ padding: "20px 20px 4px" }}>
         <p style={{ margin: "0 0 10px", fontSize: "11px", fontWeight: 600, color: "#6B6B8A", textTransform: "uppercase", letterSpacing: "0.08em" }}>
           Enter amount
         </p>
         <div style={{
           display: "flex", alignItems: "center", gap: "8px",
-          backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid #2A2A3D",
+          backgroundColor: "rgba(255,255,255,0.04)",
+          border: `1px solid ${showMinError ? "#EF4444" : "#2A2A3D"}`,
           borderRadius: "10px", padding: "12px 16px",
           transition: "border-color 0.15s ease",
         }}>
@@ -105,32 +102,23 @@ export default function TipScreen({
             }}
           />
         </div>
+
+        {/* Minimum error */}
+        {showMinError && (
+          <p style={{ margin: "6px 0 0 2px", fontSize: "12px", color: "#EF4444" }}>
+            Minimum tip is {symbol}{MIN_TIP.toLocaleString()}
+          </p>
+        )}
+
+        {/* Hint when empty */}
+        {!showMinError && (
+          <p style={{ margin: "6px 0 0 2px", fontSize: "12px", color: "#4A4A6A" }}>
+            Minimum {symbol}{MIN_TIP.toLocaleString()}
+          </p>
+        )}
       </div>
 
-      {/* Quick amounts */}
-      <div style={{ padding: "0 20px 16px" }}>
-        <div style={{ display: "flex", gap: "8px" }}>
-          {QUICK_AMOUNTS.map((amount) => (
-            <button
-              key={amount}
-              onClick={() => handleQuick(amount)}
-              style={{
-                flex: 1, padding: "7px 4px", borderRadius: "8px",
-                backgroundColor: tipAmount === amount ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)",
-                border: tipAmount === amount ? "1px solid #8B5CF6" : "1px solid #2A2A3D",
-                cursor: "pointer", transition: "all 0.15s ease",
-                fontFamily: "'Inter', sans-serif",
-              }}
-            >
-              <span style={{ fontSize: "12px", fontWeight: 600, color: tipAmount === amount ? "#A78BFA" : "#6B6B8A" }}>
-                {symbol}{(amount / 1000).toFixed(amount >= 1000 ? 0 : 1)}k
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ height: "1px", backgroundColor: "#1E1E2E", margin: "0 20px" }} />
+      <div style={{ height: "1px", backgroundColor: "#1E1E2E", margin: "16px 20px 0" }} />
 
       {/* CTA */}
       <div style={{ padding: "16px 20px 18px" }}>

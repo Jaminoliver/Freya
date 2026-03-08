@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Camera, X, Pencil } from "lucide-react";
+import { useRef, useState, useCallback } from "react";
+import { Camera, X, Pencil, BookImage } from "lucide-react";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { uploadImage } from "@/lib/utils/uploadImage";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
+import StoryUploadModal, { type UploadJob } from "@/components/story/StoryUploadModal";
 
 interface ProfileAvatarProps {
   avatarUrl?: string | null;
@@ -15,6 +16,7 @@ interface ProfileAvatarProps {
   onEditAvatar?: () => void;
   userId?: string;
   onAvatarUpdated?: (url: string) => void;
+  isCreator?: boolean;
 }
 
 const GRADIENT = "linear-gradient(to right, #8B5CF6, #EC4899)";
@@ -27,11 +29,14 @@ export default function ProfileAvatar({
   onEditAvatar,
   userId,
   onAvatarUpdated,
+  isCreator = false,
 }: ProfileAvatarProps) {
-  const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl);
-  const [cropSrc, setCropSrc] = useState<string | null>(null);
-  const [preview, setPreview] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [avatarUrl,    setAvatarUrl]    = useState(initialAvatarUrl);
+  const [cropSrc,      setCropSrc]      = useState<string | null>(null);
+  const [preview,      setPreview]      = useState(false);
+  const [uploading,    setUploading]    = useState(false);
+  const [storyOpen,    setStoryOpen]    = useState(false);
+  const [storyUploading, setStoryUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const firstLetter = (displayName || "?").charAt(0).toUpperCase();
@@ -64,6 +69,27 @@ export default function ProfileAvatar({
     }
   };
 
+  // Background story upload — mirrors StoryBar logic
+  const handleStoryUploadStart = useCallback(async (job: UploadJob) => {
+    setStoryOpen(false);
+    setStoryUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file",      job.file);
+      form.append("mediaType", job.mediaType);
+      if (job.caption)  form.append("caption",   job.caption);
+      form.append("clipStart", String(job.clipStart));
+      form.append("clipEnd",   String(job.clipEnd));
+      const res  = await fetch("/api/stories", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+    } catch (err) {
+      console.error("Story upload failed:", err);
+    } finally {
+      setStoryUploading(false);
+    }
+  }, []);
+
   return (
     <>
       {cropSrc && (
@@ -72,6 +98,13 @@ export default function ProfileAvatar({
           type="avatar"
           onSave={handleCropSave}
           onCancel={() => setCropSrc(null)}
+        />
+      )}
+
+      {storyOpen && (
+        <StoryUploadModal
+          onClose={() => setStoryOpen(false)}
+          onUploadStart={handleStoryUploadStart}
         />
       )}
 
@@ -90,17 +123,57 @@ export default function ProfileAvatar({
             >
               {!avatarUrl && firstLetter}
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px" }}>
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>{displayName}</span>
-              {isEditable && (
-                <button
-                  onClick={() => { setPreview(false); fileInputRef.current?.click(); }}
-                  style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "6px", backgroundColor: "#8B5CF6", border: "none", color: "#fff", fontSize: "12px", fontWeight: 600, fontFamily: "'Inter', sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}
-                >
-                  <Pencil size={12} /> Edit Photo
-                </button>
-              )}
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", gap: "8px" }}>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#F1F5F9", fontFamily: "'Inter', sans-serif", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {displayName}
+              </span>
+
+              <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                {/* Add to Story — creators only */}
+                {isCreator && isEditable && (
+                  <button
+                    onClick={() => { setPreview(false); setStoryOpen(true); }}
+                    disabled={storyUploading}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "5px",
+                      padding: "6px 12px", borderRadius: "6px",
+                      background: storyUploading ? "rgba(139,92,246,0.4)" : GRADIENT,
+                      border: "none", color: "#fff",
+                      fontSize: "12px", fontWeight: 600,
+                      fontFamily: "'Inter', sans-serif",
+                      cursor: storyUploading ? "not-allowed" : "pointer",
+                      whiteSpace: "nowrap", transition: "opacity 0.15s",
+                    }}
+                    onMouseEnter={(e) => { if (!storyUploading) e.currentTarget.style.opacity = "0.85"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                  >
+                    <BookImage size={12} />
+                    {storyUploading ? "Posting…" : "Add to Story"}
+                  </button>
+                )}
+
+                {/* Edit Photo */}
+                {isEditable && (
+                  <button
+                    onClick={() => { setPreview(false); fileInputRef.current?.click(); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "5px",
+                      padding: "6px 12px", borderRadius: "6px",
+                      backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D",
+                      color: "#C4C4D4", fontSize: "12px", fontWeight: 600,
+                      fontFamily: "'Inter', sans-serif",
+                      cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#2A2A3D"; e.currentTarget.style.color = "#fff"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1C1C2E"; e.currentTarget.style.color = "#C4C4D4"; }}
+                  >
+                    <Pencil size={12} /> Edit Photo
+                  </button>
+                )}
+              </div>
             </div>
+
             <button
               onClick={() => setPreview(false)}
               style={{ position: "absolute", top: "10px", right: "10px", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", backdropFilter: "blur(4px)" }}

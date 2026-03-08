@@ -255,3 +255,4 @@ export interface VirtualAccountDisplay {
   reference: string;
   amount?: number;
 }
+

@@ -8,12 +8,14 @@ import CommentSection from "@/components/profile/CommentSection";
 import Lightbox from "@/components/profile/Lightbox";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
 import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
+import CheckoutModal from "@/components/checkout/CheckoutModal";
 import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import { PollDisplay } from "@/components/feed/PollDisplay";
 import type { PollData } from "@/components/feed/PollDisplay";
+import type { User } from "@/lib/types/profile";
 
 interface MediaItem {
   type:              "image" | "video";
@@ -36,7 +38,7 @@ interface Post {
   id:              string;
   content_type?:   string;
   creator: {
-    id:         string;           // needed for save/unsave creator
+    id:         string;
     name:       string;
     username:   string;
     avatar_url: string;
@@ -134,6 +136,7 @@ export function PostCard({
 
   const [commentOpen,      setCommentOpen]      = useState(false);
   const [sheetOpen,        setSheetOpen]        = useState(false);
+  const [tipOpen,          setTipOpen]          = useState(false);
   const [liked,            setLiked]            = useState(post.liked);
   const [likeCount,        setLikeCount]        = useState(post.likes);
   const [commentCount,     setCommentCount]     = useState(post.comments);
@@ -184,7 +187,6 @@ export function PostCard({
       .finally(() => setCommentsLoading(false));
   }, [post.id]);
 
-  // ── Lazy-load saved state when sheet opens ───────────────────────────────
   const savedFetched = useRef(false);
   const handleOpenSheet = useCallback(async () => {
     setSheetOpen(true);
@@ -267,7 +269,6 @@ export function PostCard({
     router.prefetch(`/${post.creator.username}`);
   }, [router, post.creator.username]);
 
-  // ── Save / unsave post ────────────────────────────────────────────────────
   const handleSavePost = useCallback(async () => {
     const next = !savedPost;
     setSavedPost(next);
@@ -282,7 +283,6 @@ export function PostCard({
     }
   }, [savedPost, post.id]);
 
-  // ── Save / unsave creator ─────────────────────────────────────────────────
   const handleSaveCreator = useCallback(async () => {
     const next = !savedCreator;
     setSavedCreator(next);
@@ -300,6 +300,15 @@ export function PostCard({
   const handleBookmark = useCallback(() => {
     handleSavePost();
   }, [handleSavePost]);
+
+  // Build a minimal User shape for CheckoutModal — tips only needs id, username, display_name, avatar_url
+  const creatorAsUser: User = {
+    id:           post.creator.id,
+    username:     post.creator.username,
+    display_name: post.creator.name,
+    avatar_url:   post.creator.avatar_url,
+    role:         "creator",
+  } as User;
 
   const normalizedMedia: NormalizedMedia[] = post.media.map((m) => ({
     type:             m.type,
@@ -321,6 +330,13 @@ export function PostCard({
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
+
+      <CheckoutModal
+        isOpen={tipOpen}
+        onClose={() => setTipOpen(false)}
+        type="tips"
+        creator={creatorAsUser}
+      />
 
       {lightboxOpen && lightboxPost.media.length > 0 && (
         <Lightbox
@@ -420,7 +436,7 @@ export function PostCard({
           isOwnProfile={false}
           onLike={handleLike}
           onComment={() => setCommentOpen((prev) => !prev)}
-          onTip={() => console.log("tip", post.id)}
+          onTip={() => setTipOpen(true)}
           onBookmark={handleBookmark}
         />
         <CommentSection

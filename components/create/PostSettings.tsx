@@ -58,7 +58,6 @@ export function PostSettings({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
 
-      {/* Single settings card */}
       <div style={{
         backgroundColor: "#0D0D18",
         border: "1.5px solid #2A2A3D",
@@ -127,7 +126,6 @@ export function PostSettings({
           {isPPV && (
             <div style={{
               padding: "0 16px 14px",
-              paddingTop: "0",
               display: "flex",
               alignItems: "center",
               gap: "10px",
@@ -142,11 +140,11 @@ export function PostSettings({
                 borderRadius: "8px",
                 padding: "8px 12px",
               }}>
-                <span style={{ color: "#8A8AA0", fontSize: "14px" }}>$</span>
+                <span style={{ color: "#8A8AA0", fontSize: "14px", fontWeight: 600 }}>₦</span>
                 <input
                   type="number"
-                  min="1"
-                  max="50"
+                  min="100"
+                  max="50000"
                   value={ppvPrice}
                   onChange={(e) => onPPVPriceChange(e.target.value)}
                   placeholder="Price"
@@ -162,7 +160,7 @@ export function PostSettings({
                   }}
                 />
               </div>
-              <span style={{ fontSize: "12px", color: "#6B6B8A", flexShrink: 0 }}>Max $50</span>
+              <span style={{ fontSize: "12px", color: "#6B6B8A", flexShrink: 0 }}>Max ₦50,000</span>
             </div>
           )}
         </div>
@@ -187,11 +185,7 @@ export function PostSettings({
           </div>
 
           {isScheduled && (
-            <div style={{
-              padding: "0 16px 14px",
-              display: "flex",
-              gap: "10px",
-            }}>
+            <div style={{ padding: "0 16px 14px", display: "flex", gap: "10px" }}>
               <input
                 type="date"
                 value={schedDate}
@@ -237,49 +231,25 @@ export function PostSettings({
         <button
           onClick={onCancel}
           style={{
-            flex: 1,
-            padding: "12px",
-            borderRadius: "12px",
-            border: "1.5px solid #2A2A3D",
-            backgroundColor: "transparent",
-            color: "#A3A3C2",
-            fontSize: "14px",
-            fontWeight: 600,
-            cursor: "pointer",
-            fontFamily: "'Inter', sans-serif",
-            transition: "all 0.15s",
+            flex: 1, padding: "12px", borderRadius: "12px",
+            border: "1.5px solid #2A2A3D", backgroundColor: "transparent",
+            color: "#A3A3C2", fontSize: "14px", fontWeight: 600,
+            cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s",
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.borderColor = "#4A4A6A";
-            (e.currentTarget as HTMLButtonElement).style.color = "#E2E8F0";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.borderColor = "#2A2A3D";
-            (e.currentTarget as HTMLButtonElement).style.color = "#A3A3C2";
-          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#4A4A6A"; (e.currentTarget as HTMLButtonElement).style.color = "#E2E8F0"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#2A2A3D"; (e.currentTarget as HTMLButtonElement).style.color = "#A3A3C2"; }}
         >
           Cancel
         </button>
         <button
           style={{
-            flex: 2,
-            padding: "12px",
-            borderRadius: "12px",
-            border: "none",
-            backgroundColor: "#8B5CF6",
-            color: "#fff",
-            fontSize: "14px",
-            fontWeight: 700,
-            cursor: "pointer",
-            fontFamily: "'Inter', sans-serif",
-            transition: "opacity 0.15s",
+            flex: 2, padding: "12px", borderRadius: "12px",
+            border: "none", backgroundColor: "#8B5CF6",
+            color: "#fff", fontSize: "14px", fontWeight: 700,
+            cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "opacity 0.15s",
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.opacity = "0.88";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.opacity = "1";
-          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.88"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
         >
           Post
         </button>

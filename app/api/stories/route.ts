@@ -1,0 +1,220 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
+import {
+  uploadPhotoToBunny,
+  createBunnyStoryVideo,
+  uploadBunnyStoryVideo,
+  getBunnyStoryStreamUrls,
+} from "@/lib/utils/bunny";
+
+export const runtime     = "nodejs";
+export const dynamic     = "force-dynamic";
+export const maxDuration = 300;
+
+// GET /api/stories
+export async function GET(req: NextRequest) {
+  try {
+    const { user, error: authErr } = await getUser();
+    if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const supabase = createServiceSupabaseClient();
+
+    const [{ data: viewerProfile }, { data: subs }] = await Promise.all([
+      supabase.from("profiles").select("id, role").eq("id", user.id).single(),
+      supabase.from("subscriptions").select("creator_id").eq("fan_id", user.id).eq("status", "active"),
+    ]);
+
+    if (!viewerProfile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+
+    const now        = new Date().toISOString();
+    const creatorIds = viewerProfile.role === "creator"
+      ? [viewerProfile.id]
+      : (subs ?? []).map((s: any) => s.creator_id);
+
+    if (creatorIds.length === 0) return NextResponse.json({ groups: [] });
+
+    let query = supabase
+      .from("stories")
+      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, created_at, expires_at, is_processing")
+      .in("creator_id", creatorIds)
+      .eq("is_expired", false)
+      .gt("expires_at", now)
+      .order("created_at", { ascending: true });
+
+    if (viewerProfile.role !== "creator") {
+      query = query.eq("is_processing", false);
+    }
+
+    const { data: stories, error: storiesErr } = await query;
+
+    if (storiesErr) {
+      console.error("[GET /api/stories] stories error:", storiesErr);
+      return NextResponse.json({ error: "Failed to fetch stories" }, { status: 500 });
+    }
+
+    if (!stories || stories.length === 0) return NextResponse.json({ groups: [] });
+
+    const uniqueCreatorIds = [...new Set(stories.map((s: any) => s.creator_id))];
+    const storyIds         = stories.map((s: any) => s.id);
+
+    const [{ data: profiles }, { data: views }] = await Promise.all([
+      supabase.from("profiles").select("id, username, display_name, avatar_url").in("id", uniqueCreatorIds),
+      supabase.from("story_views").select("story_id").eq("user_id", user.id).in("story_id", storyIds),
+    ]);
+
+    const profileMap: Record<string, any> = {};
+    for (const p of profiles ?? []) profileMap[p.id] = p;
+
+    const viewedSet = new Set((views ?? []).map((v: any) => v.story_id));
+
+    const groupMap: Record<string, any> = {};
+    for (const story of stories as any[]) {
+      const cId = story.creator_id;
+      if (!groupMap[cId]) {
+        const profile = profileMap[cId] ?? {};
+        groupMap[cId] = {
+          creatorId:       cId,
+          username:        profile.username     ?? "unknown",
+          displayName:     profile.display_name ?? profile.username ?? "unknown",
+          avatarUrl:       profile.avatar_url   ?? null,
+          hasUnviewed:     false,
+          latestThumbnail: null,
+          items:           [],
+        };
+      }
+
+      const isViewed = viewedSet.has(story.id);
+      if (!isViewed) groupMap[cId].hasUnviewed = true;
+
+      if (!groupMap[cId].latestThumbnail) {
+        groupMap[cId].latestThumbnail =
+          story.thumbnail_url ?? (story.media_type === "photo" ? story.media_url : null);
+      }
+
+      groupMap[cId].items.push({
+        id:           story.id,
+        mediaUrl:     story.media_url,
+        mediaType:    story.media_type,
+        thumbnailUrl: story.thumbnail_url ?? null,
+        caption:      story.caption       ?? null,
+        createdAt:    story.created_at,
+        expiresAt:    story.expires_at,
+        viewed:       isViewed,
+        isProcessing: story.is_processing ?? false,
+      });
+    }
+
+    const groups = Object.values(groupMap).sort((a: any, b: any) => {
+      if (a.hasUnviewed === b.hasUnviewed) return 0;
+      return a.hasUnviewed ? -1 : 1;
+    });
+
+    return NextResponse.json({ groups });
+
+  } catch (err) {
+    console.error("[GET /api/stories] unexpected error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// POST /api/stories
+export async function POST(req: NextRequest) {
+  try {
+    const { user, error: authErr } = await getUser();
+    if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const supabase = createServiceSupabaseClient();
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || profile.role !== "creator") {
+      return NextResponse.json({ error: "Only creators can post stories" }, { status: 403 });
+    }
+
+    const formData  = await req.formData();
+    const file      = formData.get("file")       as File   | null;
+    const mediaType = (formData.get("mediaType") as string) ?? "photo";
+    const caption   = (formData.get("caption")   as string) ?? null;
+    const clipStart = parseFloat((formData.get("clipStart") as string) ?? "0") || 0;
+    const clipEnd   = parseFloat((formData.get("clipEnd")   as string) ?? "0") || 0;
+
+    if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (!["photo", "video"].includes(mediaType)) {
+      return NextResponse.json({ error: "Invalid mediaType" }, { status: 400 });
+    }
+
+    const MAX_IMAGE = 50 * 1024 * 1024;
+    if (mediaType === "photo" && file.size > MAX_IMAGE) {
+      return NextResponse.json({ error: "Image too large (max 50MB)" }, { status: 400 });
+    }
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: placeholder, error: placeholderErr } = await supabase
+      .from("stories")
+      .insert({
+        creator_id:    user.id,
+        media_type:    mediaType,
+        media_url:     "",
+        thumbnail_url: null,
+        caption:       caption || null,
+        clip_start:    clipStart > 0 ? clipStart : null,
+        clip_end:      clipEnd   > 0 ? clipEnd   : null,
+        expires_at:    expiresAt,
+        is_expired:    false,
+        is_processing: true,
+      })
+      .select("id")
+      .single();
+
+    if (placeholderErr || !placeholder) {
+      console.error("[POST /api/stories] placeholder insert error:", placeholderErr);
+      return NextResponse.json({ error: "Failed to create story" }, { status: 500 });
+    }
+
+    const storyId = placeholder.id;
+    const buffer  = Buffer.from(await file.arrayBuffer());
+
+    let mediaUrl     = "";
+    let thumbnailUrl: string | null = null;
+
+    try {
+      if (mediaType === "photo") {
+        const { url } = await uploadPhotoToBunny(buffer, user.id, file.name, file.type);
+        mediaUrl = url;
+      } else {
+        const videoId = await createBunnyStoryVideo(`story-${user.id}-${Date.now()}`);
+        await uploadBunnyStoryVideo(buffer, videoId);
+        const { hlsUrl, thumbnailUrl: thumb } = getBunnyStoryStreamUrls(videoId);
+        mediaUrl     = hlsUrl;
+        thumbnailUrl = thumb;
+      }
+    } catch (uploadErr) {
+      await supabase.from("stories").delete().eq("id", storyId);
+      console.error("[POST /api/stories] bunny upload error:", uploadErr);
+      return NextResponse.json({ error: "Media upload failed" }, { status: 500 });
+    }
+
+    const { data: finalStory, error: updateErr } = await supabase
+      .from("stories")
+      .update({ media_url: mediaUrl, thumbnail_url: thumbnailUrl, is_processing: false })
+      .eq("id", storyId)
+      .select("id, media_url, thumbnail_url, media_type, caption, created_at, expires_at")
+      .single();
+
+    if (updateErr) {
+      console.error("[POST /api/stories] update error:", updateErr);
+      return NextResponse.json({ error: "Failed to finalise story" }, { status: 500 });
+    }
+
+    return NextResponse.json({ story: finalStory }, { status: 201 });
+
+  } catch (err) {
+    console.error("[POST /api/stories] unexpected error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

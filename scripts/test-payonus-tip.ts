@@ -25,7 +25,7 @@ async function main() {
   }
 
   console.log("─── PayOnUs Tip Webhook Simulator ───────────────────────");
-  console.log(`Email: ${email}`);
+  console.log(`Email:     ${email}`);
 
   // 1. Look up user by email
   const { data: { users }, error: userError } = await supabase.auth.admin.listUsers();
@@ -43,7 +43,7 @@ async function main() {
   }
 
   const fanId = user.id;
-  console.log(`Fan ID: ${fanId}`);
+  console.log(`Fan ID:    ${fanId}`);
 
   // 2. Fetch latest pending tip transaction for this user
   const { data: transaction, error: fetchError } = await supabase
@@ -97,7 +97,7 @@ async function main() {
 
   const hash = crypto.createHash("sha256").update(verificationString).digest("hex");
 
-  console.log(`Hash:       ${hash}`);
+  console.log(`Hash:      ${hash}`);
   console.log("─────────────────────────────────────────────────────────\n");
   console.log("Sending simulated tip webhook...\n");
 

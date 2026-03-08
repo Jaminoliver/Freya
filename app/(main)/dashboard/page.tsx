@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { PostCard } from "@/components/feed/PostCard";
-import { StoryBar } from "@/components/feed/StoryBar";
+import { StoryBar } from "@/components/story/StoryBar";
+import StoryViewer from "@/components/story/StoryViewer";
 import { FeedSkeleton } from "@/components/loadscreen/FeedSkeleton";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import { useAppStore, isStale } from "@/lib/store/appStore";
 import type { PollData } from "@/components/feed/PollDisplay";
+import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 
 const SCROLL_KEY = "home_feed_scroll";
 const SLIDES_KEY = "home_feed_slides";
@@ -97,7 +99,6 @@ function loadSlides(): Record<string, number> {
   try { return JSON.parse(sessionStorage.getItem(SLIDES_KEY) ?? "{}"); } catch { return {}; }
 }
 
-// Preload thumbnail URLs for first N posts so blur shows immediately when skeleton drops
 function preloadThumbnails(posts: FeedPost[], count = 3): Promise<void> {
   const urls: string[] = [];
   for (const post of posts.slice(0, count)) {
@@ -113,7 +114,7 @@ function preloadThumbnails(posts: FeedPost[], count = 3): Promise<void> {
         new Promise<void>((resolve) => {
           const img = new Image();
           img.onload  = () => resolve();
-          img.onerror = () => resolve(); // never block on error
+          img.onerror = () => resolve();
           img.src = src;
         })
     )
@@ -131,9 +132,14 @@ export default function HomePage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error,       setError]       = useState<string | null>(null);
   const [slideMap,    setSlideMap]    = useState<Record<string, number>>({});
+
+  // Story viewer state
+  const [storyGroups,     setStoryGroups]     = useState<CreatorStoryGroup[]>([]);
+  const [storyStartIdx,   setStoryStartIdx]   = useState(0);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+
   useEffect(() => { setSlideMap(loadSlides()); }, []);
 
-  // Skeleton stays until API done AND first-post thumbnails preloaded
   const showSkeleton = apiLoading || !thumbsReady;
 
   const scrollRestoredRef = useRef(false);
@@ -144,7 +150,6 @@ export default function HomePage() {
   useEffect(() => { nextCursorRef.current = nextCursor; }, [nextCursor]);
   useEffect(() => { loadingMoreRef.current = loadingMore; }, [loadingMore]);
 
-  // ── Save scroll ───────────────────────────────────────────────────────────
   useEffect(() => {
     const onScroll = () => saveScroll(window.scrollY);
     const onHide   = () => saveScroll(window.scrollY);
@@ -159,7 +164,6 @@ export default function HomePage() {
     };
   }, []);
 
-  // ── Restore scroll ────────────────────────────────────────────────────────
   useEffect(() => {
     if (showSkeleton || scrollRestoredRef.current) return;
     scrollRestoredRef.current = true;
@@ -209,7 +213,7 @@ export default function HomePage() {
         setNextCursor(data.nextCursor ?? null);
         setFeed({ posts: merged, nextCursor: data.nextCursor ?? null, fetchedAt: Date.now() });
         setApiLoading(false);
-        // Preload thumbnails for first 3 posts, then reveal feed
+        // Fresh fetch — wait for thumbnails before showing feed
         preloadThumbnails(merged, 5).then(() => setThumbsReady(true));
       }
     } catch {
@@ -225,19 +229,17 @@ export default function HomePage() {
       setPosts(feed.posts);
       setNextCursor(feed.nextCursor);
       setApiLoading(false);
-      // Preload thumbnails even from cache
-      preloadThumbnails(feed.posts, 5).then(() => setThumbsReady(true));
+      // ✅ FIX: Cache hit — thumbnails are already in browser cache, show feed immediately
+      setThumbsReady(true);
       return;
     }
     fetchFeed();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Infinite scroll ───────────────────────────────────────────────────────
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && nextCursorRef.current && !loadingMoreRef.current) {
@@ -248,7 +250,6 @@ export default function HomePage() {
       },
       { rootMargin: "600px" }
     );
-
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [fetchFeed, showSkeleton]);
@@ -266,12 +267,27 @@ export default function HomePage() {
     });
   }, [updateFeedPost]);
 
+  const handleOpenViewer = useCallback((groups: CreatorStoryGroup[], startIndex: number) => {
+    setStoryGroups(groups);
+    setStoryStartIdx(startIndex);
+    setStoryViewerOpen(true);
+  }, []);
+
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>
 
-      <div style={{ padding: "0 16px", borderBottom: "1px solid #1F1F2A", backgroundColor: "#0A0A0F" }}>
-        <StoryBar />
-      </div>
+      {storyViewerOpen && (
+        <StoryViewer
+          groups={storyGroups}
+          startGroupIndex={storyStartIdx}
+          onClose={() => setStoryViewerOpen(false)}
+          onStoriesUpdated={() => setStoryViewerOpen(false)}
+        />
+      )}
+
+      <div style={{ padding: "0 16px", backgroundColor: "#0A0A0F" }}>
+  <StoryBar onOpenViewer={handleOpenViewer} />
+</div>
 
       <div style={{ borderBottom: "1px solid #1F1F2A", padding: "0 16px", backgroundColor: "#0A0A0F" }}>
         <div style={{ display: "flex" }}>

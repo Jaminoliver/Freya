@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { ApiPost } from "@/components/profile/PostRow";
 
-// ── Reduced from 5 min to 30s so profile always refetches after posting ──
 const STALE_MS          = 30 * 1000;
 const FEED_KEY          = "freya_feed_cache";
 const PROFILES_KEY      = "freya_profiles_cache";
@@ -125,6 +124,16 @@ export interface ContentFeedEntry {
   fetchedAt: number;
 }
 
+export type StoryUploadPhase = "idle" | "compressing" | "init" | "uploading" | "completing" | "done";
+
+export interface StoryUploadState {
+  phase:       StoryUploadPhase;
+  uploadPct:   number;
+  compressPct: number;
+  error:       string | null;
+  storyId:     number | null;
+}
+
 // ── Store shape ───────────────────────────────────────────────
 
 interface AppStore {
@@ -145,13 +154,25 @@ interface AppStore {
   contentFeeds: Record<string, ContentFeedEntry>;
   setContentFeed: (key: string, entry: ContentFeedEntry) => void;
   clearContentFeed: (key: string) => void;
+
+  // ── Story upload state (survives tab switches) ────────────────
+  storyUpload: StoryUploadState;
+  setStoryUpload: (patch: Partial<StoryUploadState>) => void;
+  resetStoryUpload: () => void;
 }
+
+const DEFAULT_STORY_UPLOAD: StoryUploadState = {
+  phase:       "idle",
+  uploadPct:   0,
+  compressPct: 0,
+  error:       null,
+  storyId:     null,
+};
 
 // ── Store ─────────────────────────────────────────────────────
 
 export const useAppStore = create<AppStore>((set) => ({
-  // Viewer — always null on init to avoid SSR hydration mismatch.
-  // AppStoreProvider hydrates from sessionStorage after mount.
+  // Viewer
   viewer: null,
   viewerFetchedAt: null,
   setViewer: (viewer) => {
@@ -229,4 +250,13 @@ export const useAppStore = create<AppStore>((set) => ({
       saveContentFeedsToStorage(contentFeeds);
       return { contentFeeds };
     }),
+
+  // Story upload
+  storyUpload: DEFAULT_STORY_UPLOAD,
+
+  setStoryUpload: (patch) =>
+    set((s) => ({ storyUpload: { ...s.storyUpload, ...patch } })),
+
+  resetStoryUpload: () =>
+    set({ storyUpload: DEFAULT_STORY_UPLOAD }),
 }));

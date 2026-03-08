@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
+import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
 const PAGE_SIZE = 20;
@@ -38,9 +38,8 @@ function resolveVideoMedia(m: Record<string, unknown>) {
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { user, error: authErr } = await getUser();
+    if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const cursor  = searchParams.get("cursor");
@@ -106,7 +105,6 @@ export async function GET(req: NextRequest) {
       .order("published_at", { ascending: false })
       .limit(PAGE_SIZE);
 
-    // Show posts from subscribed creators (any audience) OR posts set to everyone
     if (subscribedCreatorIds.length > 0) {
       const quotedIds = subscribedCreatorIds.join(",");
       query = query.or(`creator_id.in.(${quotedIds}),audience.eq.everyone`);
@@ -129,7 +127,6 @@ export async function GET(req: NextRequest) {
 
     const rawCount = (posts ?? []).length;
 
-    // ── nextCursor based on raw posts BEFORE the video filter ────────────────
     const lastRawPost = (posts ?? [])[(posts ?? []).length - 1] as Record<string, unknown> | undefined;
     const nextCursor  = rawCount === PAGE_SIZE ? (lastRawPost?.published_at ?? null) : null;
 
@@ -240,8 +237,6 @@ export async function GET(req: NextRequest) {
       const postAudience = post.audience as string;
       const isSubscribed = subscribedSet.has(post.creator_id as string);
 
-      // audience=everyone → anyone can access (unless PPV)
-      // audience=subscribers → only subs can access (unless PPV)
       const canAccess = !isPpv && (postAudience === "everyone" || isSubscribed);
 
       const mediaItems = (post.media as Record<string, unknown>[] ?? [])
