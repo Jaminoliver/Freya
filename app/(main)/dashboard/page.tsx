@@ -137,6 +137,8 @@ export default function HomePage() {
   const [storyGroups,     setStoryGroups]     = useState<CreatorStoryGroup[]>([]);
   const [storyStartIdx,   setStoryStartIdx]   = useState(0);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  // Holds groups passed back from viewer on close — fed into StoryBar to sync viewed state
+  const [externalGroups,  setExternalGroups]  = useState<CreatorStoryGroup[]>([]);
 
   useEffect(() => { setSlideMap(loadSlides()); }, []);
 
@@ -213,7 +215,6 @@ export default function HomePage() {
         setNextCursor(data.nextCursor ?? null);
         setFeed({ posts: merged, nextCursor: data.nextCursor ?? null, fetchedAt: Date.now() });
         setApiLoading(false);
-        // Fresh fetch — wait for thumbnails before showing feed
         preloadThumbnails(merged, 5).then(() => setThumbsReady(true));
       }
     } catch {
@@ -229,7 +230,6 @@ export default function HomePage() {
       setPosts(feed.posts);
       setNextCursor(feed.nextCursor);
       setApiLoading(false);
-      // ✅ FIX: Cache hit — thumbnails are already in browser cache, show feed immediately
       setThumbsReady(true);
       return;
     }
@@ -273,6 +273,12 @@ export default function HomePage() {
     setStoryViewerOpen(true);
   }, []);
 
+  // Called by StoryViewer on close — receives groups with updated viewed states
+  const handleViewerClose = useCallback((updatedGroups: CreatorStoryGroup[]) => {
+    setStoryViewerOpen(false);
+    setExternalGroups(updatedGroups);
+  }, []);
+
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>
 
@@ -280,14 +286,14 @@ export default function HomePage() {
         <StoryViewer
           groups={storyGroups}
           startGroupIndex={storyStartIdx}
-          onClose={() => setStoryViewerOpen(false)}
+          onClose={handleViewerClose}
           onStoriesUpdated={() => setStoryViewerOpen(false)}
         />
       )}
 
       <div style={{ padding: "0 16px", backgroundColor: "#0A0A0F" }}>
-  <StoryBar onOpenViewer={handleOpenViewer} />
-</div>
+        <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} />
+      </div>
 
       <div style={{ borderBottom: "1px solid #1F1F2A", padding: "0 16px", backgroundColor: "#0A0A0F" }}>
         <div style={{ display: "flex" }}>

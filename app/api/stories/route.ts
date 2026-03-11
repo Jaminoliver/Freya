@@ -30,10 +30,12 @@ export async function GET(req: NextRequest) {
 
     if (!viewerProfile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
 
-    const now        = new Date().toISOString();
-    const creatorIds = viewerProfile.role === "creator"
-      ? [viewerProfile.id]
-      : (subs ?? []).map((s: any) => s.creator_id);
+    const now            = new Date().toISOString();
+    const subscribedIds  = (subs ?? []).map((s: any) => s.creator_id);
+    const creatorIds     = [...new Set([
+      ...(viewerProfile.role === "creator" ? [viewerProfile.id] : []),
+      ...subscribedIds,
+    ])];
 
     if (creatorIds.length === 0) return NextResponse.json({ groups: [] });
 
@@ -118,10 +120,10 @@ export async function GET(req: NextRequest) {
     }
 
     // Split into unviewed / viewed buckets, each sorted by latestStoryAt desc (most recent first)
-    const allGroups   = Object.values(groupMap) as any[];
-    const unviewed    = allGroups.filter((g) =>  g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
-    const viewed      = allGroups.filter((g) => !g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
-    const groups      = [...unviewed, ...viewed];
+    const allGroups = Object.values(groupMap) as any[];
+    const unviewed  = allGroups.filter((g) =>  g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
+    const viewed    = allGroups.filter((g) => !g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
+    const groups    = [...unviewed, ...viewed];
 
     return NextResponse.json({ groups });
 

@@ -67,18 +67,17 @@ function timeAgo(d: string): string {
   return h < 24 ? `${h}h ago` : `${Math.floor(h/24)}d ago`;
 }
 
-// Find the index of the first unviewed story in a group, or 0 if all viewed
 function firstUnviewedIndex(group: CreatorStoryGroup): number {
   const idx = group.items.findIndex((s) => !s.viewed && !s.isProcessing);
   return idx === -1 ? 0 : idx;
 }
 
 interface Props {
-  groups:               CreatorStoryGroup[];
-  startGroupIndex:      number;
-  onClose:              () => void;
-  onStoriesUpdated?:    () => void;
-  onGroupFullyViewed?:  (creatorId: string) => void;
+  groups:              CreatorStoryGroup[];
+  startGroupIndex:     number;
+  onClose:             (updatedGroups: CreatorStoryGroup[]) => void; // passes back viewed state
+  onStoriesUpdated?:   () => void;
+  onGroupFullyViewed?: (creatorId: string) => void;
 }
 
 export default function StoryViewer({ groups, startGroupIndex, onClose, onStoriesUpdated, onGroupFullyViewed }: Props) {
@@ -86,7 +85,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
 
   const [localGroups,  setLocalGroups]  = useState(groups);
   const [groupIdx,     setGroupIdx]     = useState(startGroupIndex);
-  // Start at first unviewed story rather than always index 0
   const [storyIdx,     setStoryIdx]     = useState(() => firstUnviewedIndex(groups[startGroupIndex]));
   const [paused,       setPaused]       = useState(false);
   const [muted,        setMuted]        = useState(true);
@@ -100,7 +98,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   const [reply,        setReply]        = useState("");
   const [replyFocused, setReplyFocused] = useState(false);
 
-  // Track which groups have been fully completed this session
   const fullyViewedRef = useRef<Set<string>>(new Set());
 
   const groupIdxRef    = useRef(startGroupIndex);
@@ -175,7 +172,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     fill.style.transform = `scaleX(${pct})`;
   }, [getFill]);
 
-  // Check if all stories in a group have been viewed and fire callback
   const checkGroupComplete = useCallback((gi: number) => {
     const gs = localGroupsRef.current;
     const g  = gs[gi];
@@ -187,6 +183,11 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     }
   }, [onGroupFullyViewed]);
 
+  // Close and pass back the latest localGroups so parent can sync viewed state
+  const closeWithGroups = useCallback(() => {
+    onClose(localGroupsRef.current);
+  }, [onClose]);
+
   const goNext = useCallback(() => {
     if (navigatingRef.current) return;
     navigatingRef.current = true;
@@ -197,19 +198,17 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     if (si < g.items.length - 1) {
       updateStoryIdx(si + 1);
     } else {
-      // Finished last story of this group — check if fully viewed
       checkGroupComplete(gi);
       if (gi < gs.length - 1) {
         const nextGroup = gs[gi + 1];
         updateGroupIdx(gi + 1);
-        // Resume from first unviewed in next group
         updateStoryIdx(firstUnviewedIndex(nextGroup));
       } else {
         navigatingRef.current = false;
-        onClose();
+        closeWithGroups();
       }
     }
-  }, [onClose, updateGroupIdx, updateStoryIdx, checkGroupComplete]);
+  }, [closeWithGroups, updateGroupIdx, updateStoryIdx, checkGroupComplete]);
 
   const goPrev = useCallback(() => {
     const gs = localGroupsRef.current, gi = groupIdxRef.current, si = storyIdxRef.current;
@@ -232,7 +231,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   const trackView = useCallback((id: number) => {
     if (viewTrackedRef.current) return;
     viewTrackedRef.current = true;
-    // Mark item as viewed in local state
     setLocalGroups((prev) =>
       prev.map((g) => ({
         ...g,
@@ -255,9 +253,12 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     resetBars(storyIdx);
     const s = localGroups[groupIdx]?.items[storyIdx];
     if (!s) return;
+
+    // Mark viewed immediately on entry regardless of media type
+    trackView(s.id);
+
     if (s.mediaType !== "video") {
       startImageBar();
-      trackView(s.id);
       return;
     }
     spinnerTimerRef.current = setTimeout(() => {
@@ -266,7 +267,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupIdx, storyIdx]);
 
-  // When groupIdx changes, check completion of previous group
   const prevGroupIdxRef = useRef(startGroupIndex);
   useEffect(() => {
     if (groupIdx !== prevGroupIdxRef.current) {
@@ -292,9 +292,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     if (si !== storyIdxRef.current) return;
     if (spinnerTimerRef.current) { clearTimeout(spinnerTimerRef.current); spinnerTimerRef.current = null; }
     setShowSpinner(false);
-    const s = localGroupsRef.current[groupIdxRef.current]?.items[storyIdxRef.current];
-    if (s) trackView(s.id);
-  }, [trackView]);
+  }, []);
 
   const handleVideoTimeUpdate = useCallback((pct: number, si: number) => {
     if (si !== storyIdxRef.current) return;
@@ -337,18 +335,17 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     const fn = (e: KeyboardEvent) => {
       if      (e.key === "ArrowRight") goNextRef.current();
       else if (e.key === "ArrowLeft")  goPrevRef.current();
-      else if (e.key === "Escape")     onClose();
+      else if (e.key === "Escape")     closeWithGroups();
       else if (e.key === " ")          { e.preventDefault(); setPaused((p) => !p); }
     };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, [onClose]);
+  }, [closeWithGroups]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      // On unmount, check if current group is fully viewed
       checkGroupComplete(groupIdxRef.current);
       [spinnerTimerRef, imgTimeoutRef, holdTimerRef].forEach((r) => { if (r.current) clearTimeout(r.current); });
     };
@@ -363,7 +360,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
       .map((g, i) => i !== gi ? g : { ...g, items: g.items.filter((item) => item.id !== s.id) })
       .filter((g) => g.items.length > 0);
     setLocalGroups(newGroups);
-    if      (newGroups.length === 0)  onClose();
+    if      (newGroups.length === 0)  closeWithGroups();
     else if (gi >= newGroups.length)  { updateGroupIdx(newGroups.length - 1); updateStoryIdx(newGroups[newGroups.length - 1].items.length - 1); }
     else                               { updateGroupIdx(gi); updateStoryIdx(Math.min(si, newGroups[gi].items.length - 1)); }
     try {
@@ -374,7 +371,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
       setLocalGroups(groups); updateGroupIdx(gi); updateStoryIdx(si);
       setDeleteErr(e.message ?? "Error deleting");
     } finally { setDeleting(false); }
-  }, [deleting, groups, onClose, onStoriesUpdated, updateGroupIdx, updateStoryIdx]);
+  }, [deleting, groups, closeWithGroups, onStoriesUpdated, updateGroupIdx, updateStoryIdx]);
 
   const sp = { onTouchStart: (e: any) => e.stopPropagation(), onTouchEnd: (e: any) => e.stopPropagation(), onMouseDown: (e: any) => e.stopPropagation(), onMouseUp: (e: any) => e.stopPropagation() };
 
@@ -435,7 +432,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
       dragRef.current.active = false;
       const dy = e.changedTouches[0].clientY - touchRef.current.y;
       if (dy > DRAG_CLOSE_PX) {
-        onClose();
+        closeWithGroups();
       } else {
         resetDrag(true);
         setPaused(false);
@@ -458,7 +455,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
       return;
     }
     if (dt < TAP_MAX_MS) endX < window.innerWidth * 0.35 ? goPrevRef.current() : goNextRef.current();
-  }, [onClose, resetDrag]);
+  }, [closeWithGroups, resetDrag]);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button, input")) return;
@@ -588,7 +585,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
                     )}
                   </div>
                 )}
-                <button {...sp} onClick={(e) => { e.stopPropagation(); onClose(); }} style={iconBtn()}>
+                <button {...sp} onClick={(e) => { e.stopPropagation(); closeWithGroups(); }} style={iconBtn()}>
                   <X size={15} />
                 </button>
               </div>

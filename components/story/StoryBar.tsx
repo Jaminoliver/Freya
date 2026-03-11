@@ -6,6 +6,7 @@ import { useAppStore } from "@/lib/store/appStore";
 import StoryUploadModal, { type UploadJob } from "@/components/story/StoryUploadModal";
 import { compressVideoIfNeeded } from "@/lib/utils/compressVideo";
 import { prewarmHls } from "@/components/story/StoryViewer";
+import { createClient } from "@/lib/supabase/client";
 
 export interface StoryItem {
   id:           number;
@@ -31,7 +32,8 @@ export interface CreatorStoryGroup {
 }
 
 interface StoryBarProps {
-  onOpenViewer?: (groups: CreatorStoryGroup[], startIndex: number) => void;
+  onOpenViewer?:   (groups: CreatorStoryGroup[], startIndex: number) => void;
+  externalGroups?: CreatorStoryGroup[]; // injected by parent after viewer closes with updated viewed state
 }
 
 function Avatar({ src, name, size = 64 }: { src: string | null; name: string; size?: number }) {
@@ -82,7 +84,7 @@ function phaseLabel(phase: string, uploadPct: number, compressPct: number): stri
   }
 }
 
-export function StoryBar({ onOpenViewer }: StoryBarProps) {
+export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { viewer: globalViewer, storyUpload, setStoryUpload, resetStoryUpload } = useAppStore();
@@ -140,6 +142,35 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
   }, [sortGroups]);
 
   useEffect(() => { fetchStories(); }, [fetchStories]);
+
+  // When parent passes back updated groups after viewer closes, sync them in without re-fetching
+  useEffect(() => {
+    if (!externalGroups || externalGroups.length === 0) return;
+    setGroups(externalGroups);
+    setOrderedGroups(sortGroups(externalGroups));
+  }, [externalGroups, sortGroups]);
+
+  // Realtime: re-fetch story bar when the current creator inserts a new story
+  useEffect(() => {
+    if (!isCreator || !globalViewer?.id) return;
+
+    const supabase = createClient();
+    const channel  = supabase
+      .channel(`story-bar-creator-${globalViewer.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event:  "INSERT",
+          schema: "public",
+          table:  "stories",
+          filter: `creator_id=eq.${globalViewer.id}`,
+        },
+        () => { fetchStories(); },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [isCreator, globalViewer?.id, fetchStories]);
 
   // Called by StoryViewer when all items in a group have been watched
   const handleGroupFullyViewed = useCallback((creatorId: string) => {
@@ -527,6 +558,5 @@ export function StoryBar({ onOpenViewer }: StoryBarProps) {
   );
 }
 
-// Export for StoryViewer to call back into StoryBar
 export type { };
 export { type StoryBarProps };
