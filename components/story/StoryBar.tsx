@@ -79,6 +79,31 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const cancelledRef    = useRef(false);
   const isCancellingRef = useRef(false);
 
+  const [fakePct,    setFakePct]    = useState(0);
+  const fakePctRef   = useRef(0);
+  const fakeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Slow fake ticker during "processing" phase (0→99%) at ~1% every 2.5s
+  useEffect(() => {
+    if (uploadPhase === "processing") {
+      fakePctRef.current = 50;
+      setFakePct(50);
+      fakeTimerRef.current = setInterval(() => {
+        const next = Math.min(fakePctRef.current + 1, 99);
+        fakePctRef.current = next;
+        setFakePct(next);
+        if (next >= 99 && fakeTimerRef.current) {
+          clearInterval(fakeTimerRef.current);
+          fakeTimerRef.current = null;
+        }
+      }, 2500);
+    } else {
+      if (fakeTimerRef.current) { clearInterval(fakeTimerRef.current); fakeTimerRef.current = null; }
+      if (uploadPhase === "idle" || uploadPhase === "done") { fakePctRef.current = 0; setFakePct(0); }
+    }
+    return () => { if (fakeTimerRef.current) { clearInterval(fakeTimerRef.current); fakeTimerRef.current = null; } };
+  }, [uploadPhase]);
+
   const isUploading = uploadPhase !== "idle" && uploadPhase !== "done";
   const isCreator   = globalViewer?.role === "creator";
 
@@ -282,7 +307,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     ...otherGroups,
   ];
 
-  const displayPct = uploadPct;
+  const displayPct = uploadPhase === "processing" ? fakePct : uploadPct;
 
   const statusLabel = isUploading
     ? `${displayPct}%`
