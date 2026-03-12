@@ -101,10 +101,9 @@ export async function GET(req: NextRequest) {
       // Track the newest story timestamp (stories are ordered asc, so last wins)
       groupMap[cId].latestStoryAt = story.created_at;
 
-      if (!groupMap[cId].latestThumbnail) {
-        groupMap[cId].latestThumbnail =
-          story.thumbnail_url ?? (story.media_type === "photo" ? story.media_url : null);
-      }
+      // Always overwrite so the most recent story's thumbnail wins
+      const thumb = story.thumbnail_url ?? (story.media_type === "photo" ? story.media_url : null);
+      if (thumb) groupMap[cId].latestThumbnail = thumb;
 
       groupMap[cId].items.push({
         id:           story.id,

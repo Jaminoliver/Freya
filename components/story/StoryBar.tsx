@@ -78,7 +78,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
   const cancelledRef    = useRef(false);
   const isCancellingRef = useRef(false);
-  // ── Component-level AbortController so cancelUpload can abort the in-flight fetch ──
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [displayPctState, setDisplayPctState] = useState(0);
@@ -87,7 +86,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const rafRef         = useRef<number | null>(null);
   const { compressPct } = storyUpload;
 
-  // ── Easing loop ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (uploadPhase === "idle" || uploadPhase === "done") {
       if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
@@ -153,7 +151,8 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         const videoUrls = fetchedGroups
           .flatMap((g) => g.items)
           .filter((s) => s.mediaType === "video" && s.mediaUrl && !s.isProcessing)
-          .map((s) => s.mediaUrl);
+          .map((s) => s.mediaUrl)
+          .slice(0, 3);
 
         if (videoUrls.length > 0) prewarmHls(videoUrls);
       }
@@ -168,10 +167,14 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
   useEffect(() => {
     if (!externalGroups || externalGroups.length === 0) return;
-    setOrderedGroups(sortGroups(externalGroups));
+    setOrderedGroups((prev) => {
+      const externalIds = new Set(externalGroups.map((g) => g.creatorId));
+      const kept   = prev.filter((g) => !externalIds.has(g.creatorId));
+      const active = externalGroups.filter((g) => g.items.length > 0);
+      return sortGroups([...kept, ...active]);
+    });
   }, [externalGroups, sortGroups]);
 
-  // ── Realtime ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isCreator || !globalViewer?.id) return;
 
@@ -201,7 +204,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     return () => { supabase.removeChannel(channel); };
   }, [isCreator, globalViewer?.id, fetchStories, setStoryUpload, resetStoryUpload]);
 
-  // ── Fallback poller ───────────────────────────────────────────────────────
   useEffect(() => {
     if (uploadPhase !== "processing" || !currentStoryId) return;
     const interval = setInterval(async () => {
@@ -220,19 +222,16 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     return () => clearInterval(interval);
   }, [uploadPhase, currentStoryId, fetchStories, setStoryUpload, resetStoryUpload]);
 
-  // ── Cancel ────────────────────────────────────────────────────────────────
   const cancelUpload = useCallback(async () => {
     if (isCancellingRef.current) return;
     isCancellingRef.current = true;
     cancelledRef.current    = true;
-    // Abort the in-flight fetch if one exists
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     resetStoryUpload();
     isCancellingRef.current = false;
   }, [resetStoryUpload]);
 
-  // ── Start upload ──────────────────────────────────────────────────────────
   const startUpload = useCallback(async (job: UploadJob) => {
     cancelledRef.current = false;
     resetStoryUpload();
@@ -271,7 +270,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
       setStoryUpload({ uploadPct: 50 });
 
-      // Store controller at component level so cancelUpload() can abort it
       const controller = new AbortController();
       abortControllerRef.current = controller;
       const timer = setTimeout(() => controller.abort(), 300000);
@@ -316,7 +314,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     scrollRef.current?.scrollBy({ left: dir === "right" ? 220 : -220, behavior: "smooth" });
   };
 
-  // ── Groups ────────────────────────────────────────────────────────────────
   const ownGroup    = isCreator && globalViewer
     ? orderedGroups.find((g) => g.creatorId === globalViewer.id) ?? null
     : null;
@@ -496,7 +493,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
               <button
                 onClick={isUploading ? cancelUpload : openUpload}
-                style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 4px", fontSize:12, fontWeight:700, color: isUploading ? "#EF4444" : uploadError ? "#EF4444" : "#FFFFFF", maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", fontFamily:"'Inter',sans-serif", textShadow:"0 1px 4px rgba(0,0,0,0.8)" }}
+                style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 4px", fontSize:12, fontWeight:700, color: isUploading ? "#EF4444" : uploadError ? "#EF4444" : "#C084FC", maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", fontFamily:"'Inter',sans-serif", textShadow:"0 1px 4px rgba(0,0,0,0.8)" }}
               >
                 {isUploading ? "Cancel" : "Add to story"}
               </button>
