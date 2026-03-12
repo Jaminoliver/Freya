@@ -72,16 +72,16 @@ interface Props {
   groups:              CreatorStoryGroup[];
   startGroupIndex:     number;
   onClose:             (updatedGroups: CreatorStoryGroup[]) => void;
-  onStoriesUpdated?:   () => void;
   onGroupFullyViewed?: (creatorId: string) => void;
 }
 
-export default function StoryViewer({ groups, startGroupIndex, onClose, onStoriesUpdated, onGroupFullyViewed }: Props) {
+export default function StoryViewer({ groups, startGroupIndex, onClose, onGroupFullyViewed }: Props) {
   const { viewer } = useAppStore();
 
   const [localGroups,  setLocalGroups]  = useState(groups);
   const [groupIdx,     setGroupIdx]     = useState(startGroupIndex);
   const [storyIdx,     setStoryIdx]     = useState(() => firstUnviewedIndex(groups[startGroupIndex]));
+  const [refreshKey,   setRefreshKey]   = useState(0);
   const [paused,       setPaused]       = useState(false);
   const [muted,        setMuted]        = useState(true);
   const [showSpinner,  setShowSpinner]  = useState(false);
@@ -94,24 +94,24 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   const [reply,        setReply]        = useState("");
   const [replyFocused, setReplyFocused] = useState(false);
 
-  const fullyViewedRef = useRef<Set<string>>(new Set());
-  const groupIdxRef    = useRef(startGroupIndex);
-  const storyIdxRef    = useRef(firstUnviewedIndex(groups[startGroupIndex]));
-  const pausedRef      = useRef(false);
-  const imgLoadedRef   = useRef(false);
-  const mountedRef     = useRef(true);
-  const navigatingRef  = useRef(false);
-  const storyKeyRef    = useRef("");
-  const viewTrackedRef = useRef(false);
-  const localGroupsRef = useRef(localGroups);
-  const touchRef       = useRef({ x: 0, y: 0, time: 0, moved: false, holding: false, draggingDown: false });
-  const dragRef        = useRef({ active: false, startY: 0 });
-  const containerRef   = useRef<HTMLDivElement>(null);
-  const barsRef        = useRef<HTMLDivElement>(null);
+  const fullyViewedRef  = useRef<Set<string>>(new Set());
+  const groupIdxRef     = useRef(startGroupIndex);
+  const storyIdxRef     = useRef(firstUnviewedIndex(groups[startGroupIndex]));
+  const pausedRef       = useRef(false);
+  const imgLoadedRef    = useRef(false);
+  const mountedRef      = useRef(true);
+  const navigatingRef   = useRef(false);
+  const storyKeyRef     = useRef("");
+  const viewTrackedRef  = useRef(false);
+  const localGroupsRef  = useRef(localGroups);
+  const touchRef        = useRef({ x: 0, y: 0, time: 0, moved: false, holding: false, draggingDown: false });
+  const dragRef         = useRef({ active: false, startY: 0 });
+  const containerRef    = useRef<HTMLDivElement>(null);
+  const barsRef         = useRef<HTMLDivElement>(null);
   const spinnerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const goNextRef      = useRef<() => void>(() => {});
-  const goPrevRef      = useRef<() => void>(() => {});
+  const goNextRef       = useRef<() => void>(() => {});
+  const goPrevRef       = useRef<() => void>(() => {});
 
   useEffect(() => { localGroupsRef.current = localGroups; }, [localGroups]);
   useEffect(() => { pausedRef.current = paused; },          [paused]);
@@ -227,9 +227,9 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     fetch(`/api/stories/${id}/view`, { method: "POST" }).catch(() => {});
   }, []);
 
-  // Story change
+  // Story change — refreshKey forces re-fire when groupIdx/storyIdx stay the same (e.g. after delete)
   useEffect(() => {
-    const key = `${groupIdx}-${storyIdx}`;
+    const key = `${groupIdx}-${storyIdx}-${refreshKey}`;
     storyKeyRef.current = key;
     navigatingRef.current = viewTrackedRef.current = false;
     imgLoadedRef.current = false;
@@ -250,7 +250,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
       if (storyKeyRef.current === key && mountedRef.current) setShowSpinner(true);
     }, SPINNER_DELAY_MS);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupIdx, storyIdx]);
+  }, [groupIdx, storyIdx, refreshKey]);
 
   const prevGroupIdxRef = useRef(startGroupIndex);
   useEffect(() => {
@@ -340,27 +340,65 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     };
   }, [checkGroupComplete]);
 
+  // ── Delete ────────────────────────────────────────────────────────────────
   const handleDelete = useCallback(async () => {
-    const gs = localGroupsRef.current, gi = groupIdxRef.current, si = storyIdxRef.current;
-    const s = gs[gi]?.items[si];
+    const gs = localGroupsRef.current;
+    const gi = groupIdxRef.current;
+    const si = storyIdxRef.current;
+    const s  = gs[gi]?.items[si];
     if (!s || deleting) return;
-    setDeleting(true); setMenuOpen(false);
+
+    setDeleting(true);
+    setMenuOpen(false);
+
     const newGroups = gs
       .map((g, i) => i !== gi ? g : { ...g, items: g.items.filter((item) => item.id !== s.id) })
       .filter((g) => g.items.length > 0);
+
+    // Update ref synchronously so any close call carries the correct groups
+    localGroupsRef.current = newGroups;
     setLocalGroups(newGroups);
-    if      (newGroups.length === 0)  closeWithGroups();
-    else if (gi >= newGroups.length)  { updateGroupIdx(newGroups.length - 1); updateStoryIdx(newGroups[newGroups.length - 1].items.length - 1); }
-    else                               { updateGroupIdx(gi); updateStoryIdx(Math.min(si, newGroups[gi].items.length - 1)); }
+
+    // If no stories left anywhere — close immediately and delete in background
+    if (newGroups.length === 0) {
+      onClose(newGroups);
+      fetch(`/api/stories/${s.id}`, { method: "DELETE" }).catch(() => {});
+      setDeleting(false);
+      return;
+    }
+
+    // Navigate to the correct next story inside the viewer
+    if (gi >= newGroups.length) {
+      // Deleted last group's last story — go to new last group
+      const newGi = newGroups.length - 1;
+      const newSi = newGroups[newGi].items.length - 1;
+      updateGroupIdx(newGi);
+      updateStoryIdx(newSi);
+      if (newGi === gi && newSi === si) setRefreshKey((k) => k + 1);
+    } else {
+      // Same group, clamp story index
+      const newSi = Math.min(si, newGroups[gi].items.length - 1);
+      updateGroupIdx(gi);
+      updateStoryIdx(newSi);
+      // Same index means React won't re-fire the effect — force it
+      if (newSi === si) setRefreshKey((k) => k + 1);
+    }
+
+    // Delete from server
     try {
       const r = await fetch(`/api/stories/${s.id}`, { method: "DELETE" });
       if (!r.ok) throw new Error("Failed to delete");
-      onStoriesUpdated?.();
     } catch (e: any) {
-      setLocalGroups(groups); updateGroupIdx(gi); updateStoryIdx(si);
+      // Rollback
+      localGroupsRef.current = gs;
+      setLocalGroups(gs);
+      updateGroupIdx(gi);
+      updateStoryIdx(si);
       setDeleteErr(e.message ?? "Error deleting");
-    } finally { setDeleting(false); }
-  }, [deleting, groups, closeWithGroups, onStoriesUpdated, updateGroupIdx, updateStoryIdx]);
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleting, onClose, updateGroupIdx, updateStoryIdx]);
 
   const sp = {
     onTouchStart: (e: any) => e.stopPropagation(),

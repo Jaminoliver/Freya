@@ -1,8 +1,4 @@
 import crypto from "crypto";
-import dns from "dns";
-
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
-
 function env() {
   return {
     STORAGE_ZONE:    process.env.BUNNY_STORAGE_ZONE!,
@@ -22,8 +18,6 @@ function env() {
     STORY_CDN_HOST:  process.env.BUNNY_STORY_CDN_HOSTNAME ?? "vz-7e0f0c7a-29e.b-cdn.net",
 
     // ─── Story CDN Token Key (Pull Zone → Security → Token Auth Key) ───────
-    // Add BUNNY_STORY_CDN_TOKEN_KEY to your .env.local
-    // If not set, HLS URLs will be unsigned (dev only)
     STORY_CDN_TOKEN_KEY: process.env.BUNNY_STORY_CDN_TOKEN_KEY ?? "",
 
     STORAGE_BASE_URL: `https://storage.bunnycdn.com/${process.env.BUNNY_STORAGE_ZONE}`,
@@ -47,9 +41,6 @@ function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 8000): 
 }
 
 // ─── signBunnyUrl — single file (photos, avatars) ────────────────────────────
-// Uses your main CDN pull zone token key.
-// DO NOT use for HLS — segments will 403. Use signBunnyHlsUrl() instead.
-
 export function signBunnyUrl(path: string, expiresInSeconds = 86400): string {
   const { CDN_URL, CDN_TOKEN_KEY } = env();
   const expires   = Math.floor(Date.now() / 1000) + expiresInSeconds;
@@ -60,36 +51,17 @@ export function signBunnyUrl(path: string, expiresInSeconds = 86400): string {
 }
 
 // ─── signBunnyHlsUrl — HLS directory token (story videos) ────────────────────
-//
-// HLS streams have a playlist.m3u8 + many .ts segment files, all in /{videoId}/.
-// Signing only the playlist URL means every .ts request will 403.
-//
-// Solution: sign the DIRECTORY using token_path=/{videoId}/
-// Bunny will accept any file inside that directory with this single token.
-// The browser hls.js player automatically appends the token to segment requests.
-//
-// Algorithm: Bunny Token Auth V2 (SHA256)
-//   hashableBase = securityKey + signaturePath + expires + parameterData
-//   parameterData = "token_path=/{videoId}/" (sorted alphabetically)
-//   token = base64(sha256_raw(hashableBase)), replace +→- /→_ remove =
-//
-// Docs: https://docs.bunny.net/docs/cdn-token-authentication
-// Blog: https://bunny.net/blog/were-bringing-token-authentication-to-the-next-level/
-
 export function signBunnyHlsUrl(videoId: string, expiresInSeconds = 21600): string {
   const { STORY_CDN_HOST, STORY_CDN_TOKEN_KEY } = env();
 
-  // No token key configured — return unsigned (dev/testing only)
   if (!STORY_CDN_TOKEN_KEY) {
     return `https://${STORY_CDN_HOST}/${videoId}/playlist.m3u8`;
   }
 
   const expires       = Math.floor(Date.now() / 1000) + expiresInSeconds;
   const signaturePath = `/${videoId}/`;
-  // Only one extra parameter — token_path. Must be sorted alphabetically.
   const parameterData = `token_path=${signaturePath}`;
-
-  const hashableBase = STORY_CDN_TOKEN_KEY + signaturePath + expires + parameterData;
+  const hashableBase  = STORY_CDN_TOKEN_KEY + signaturePath + expires + parameterData;
 
   const token = crypto
     .createHash("sha256")
@@ -99,12 +71,10 @@ export function signBunnyHlsUrl(videoId: string, expiresInSeconds = 21600): stri
     .replace(/\//g, "_")
     .replace(/=/g, "");
 
-  // Bunny automatically propagates this token to all segment requests in the directory
   return `https://${STORY_CDN_HOST}/${videoId}/playlist.m3u8?token=${token}&expires=${expires}&token_path=${encodeURIComponent(signaturePath)}`;
 }
 
-// ─── signBunnyStoryThumbnail — single file token for story thumbnails ─────────
-
+// ─── signBunnyStoryThumbnail ──────────────────────────────────────────────────
 export function signBunnyStoryThumbnail(videoId: string, expiresInSeconds = 86400): string {
   const { STORY_CDN_HOST, STORY_CDN_TOKEN_KEY } = env();
 
@@ -112,9 +82,8 @@ export function signBunnyStoryThumbnail(videoId: string, expiresInSeconds = 8640
     return `https://${STORY_CDN_HOST}/${videoId}/thumbnail.jpg`;
   }
 
-  const path    = `/${videoId}/thumbnail.jpg`;
-  const expires = Math.floor(Date.now() / 1000) + expiresInSeconds;
-  // Single file: no token_path — just securityKey + path + expires
+  const path         = `/${videoId}/thumbnail.jpg`;
+  const expires      = Math.floor(Date.now() / 1000) + expiresInSeconds;
   const hashableBase = STORY_CDN_TOKEN_KEY + path + expires;
   const token = crypto
     .createHash("sha256")
@@ -128,7 +97,6 @@ export function signBunnyStoryThumbnail(videoId: string, expiresInSeconds = 8640
 }
 
 // ─── TUS Credentials — Posts library ─────────────────────────────────────────
-
 export function getBunnyTusCredentials(videoId: string): {
   tusEndpoint: string; expireTime: number; signature: string; libraryId: string;
 } {
@@ -140,7 +108,6 @@ export function getBunnyTusCredentials(videoId: string): {
 }
 
 // ─── TUS Credentials — Stories library ───────────────────────────────────────
-
 export function getBunnyStoryTusCredentials(videoId: string): {
   tusEndpoint: string; expireTime: number; signature: string; libraryId: string;
 } {
@@ -152,7 +119,6 @@ export function getBunnyStoryTusCredentials(videoId: string): {
 }
 
 // ─── Photo Upload ─────────────────────────────────────────────────────────────
-
 export async function uploadPhotoToBunny(
   buffer: Buffer, userId: string, filename: string, mimeType: string
 ): Promise<UploadPhotoResult> {
@@ -172,7 +138,6 @@ export async function uploadPhotoToBunny(
 }
 
 // ─── Posts Video (watermarked library) ───────────────────────────────────────
-
 export async function createBunnyVideo(title: string): Promise<string> {
   const { STREAM_BASE_URL, STREAM_API_KEY } = env();
   const MAX_RETRIES = 3;
@@ -228,7 +193,6 @@ export function getBunnyStreamUrls(videoId: string): { hlsUrl: string; thumbnail
 }
 
 // ─── Stories Video (no watermark) ────────────────────────────────────────────
-
 export async function createBunnyStoryVideo(title: string): Promise<string> {
   const { STORY_LIBRARY, STORY_API_KEY } = env();
   const MAX_RETRIES = 3;
@@ -279,10 +243,6 @@ export async function uploadBunnyStoryVideo(buffer: Buffer, videoId: string): Pr
   if (!res.ok) throw new Error(`Bunny Story upload failed: ${res.status} — ${await res.text()}`);
 }
 
-// ─── getBunnyStoryStreamUrls ──────────────────────────────────────────────────
-// Returns signed HLS URL (directory token) + signed thumbnail URL.
-// Use this everywhere you build story items for the client.
-
 export function getBunnyStoryStreamUrls(videoId: string): { hlsUrl: string; thumbnailUrl: string } {
   return {
     hlsUrl:       signBunnyHlsUrl(videoId),
@@ -298,7 +258,6 @@ export async function deleteBunnyStoryVideo(videoId: string): Promise<void> {
 }
 
 // ─── Watermark (posts library only) ──────────────────────────────────────────
-
 export async function uploadBunnyWatermark(pngBuffer: Buffer): Promise<void> {
   const { STREAM_LIBRARY, BUNNY_API_KEY } = env();
   const res = await fetchWithTimeout(`https://api.bunny.net/videolibrary/${STREAM_LIBRARY}/watermark`, {
@@ -323,7 +282,6 @@ export async function enableBunnyWatermark(options?: {
 }
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
-
 export async function deleteBunnyPhoto(path: string): Promise<void> {
   const { STORAGE_BASE_URL, STORAGE_API_KEY } = env();
   await fetchWithTimeout(`${STORAGE_BASE_URL}${path}`, { method: "DELETE", headers: { AccessKey: STORAGE_API_KEY } }, 8000);

@@ -78,6 +78,8 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
   const cancelledRef    = useRef(false);
   const isCancellingRef = useRef(false);
+  // ── Component-level AbortController so cancelUpload can abort the in-flight fetch ──
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [displayPctState, setDisplayPctState] = useState(0);
   const displayPctRef  = useRef(0);
@@ -85,7 +87,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const rafRef         = useRef<number | null>(null);
   const { compressPct } = storyUpload;
 
-  // Easing loop — runs while uploading, moves displayPct toward targetPct
+  // ── Easing loop ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (uploadPhase === "idle" || uploadPhase === "done") {
       if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
@@ -95,7 +97,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       return;
     }
 
-    // Set target ceiling per phase
     if      (uploadPhase === "compressing") targetPctRef.current = 20;
     else if (uploadPhase === "uploading")   targetPctRef.current = 55;
     else if (uploadPhase === "processing")  targetPctRef.current = 99;
@@ -114,11 +115,9 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     };
 
     if (!rafRef.current) rafRef.current = requestAnimationFrame(tick);
-
     return () => { if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; } };
   }, [uploadPhase]);
 
-  // Drive compressing target with real compress progress
   useEffect(() => {
     if (uploadPhase === "compressing" && compressPct > 0) {
       targetPctRef.current = Math.min(20, (compressPct / 100) * 20);
@@ -172,26 +171,22 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     setOrderedGroups(sortGroups(externalGroups));
   }, [externalGroups, sortGroups]);
 
-  // Realtime: re-fetch on INSERT or UPDATE for the creator's own stories.
+  // ── Realtime ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isCreator || !globalViewer?.id) return;
 
     const supabase = createClient();
     const channel  = supabase
       .channel(`story-bar-${globalViewer.id}`)
-      .on(
-        "postgres_changes",
+      .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "stories", filter: `creator_id=eq.${globalViewer.id}` },
         () => { fetchStories(); },
       )
-      .on(
-        "postgres_changes",
+      .on("postgres_changes",
         { event: "UPDATE", schema: "public", table: "stories", filter: `creator_id=eq.${globalViewer.id}` },
         (payload: { new: Record<string, any>; old: Record<string, any> }) => {
-          console.log(`[story-realtime] UPDATE received — is_processing: ${payload.new?.is_processing}`);
           fetchStories();
           if (payload.new?.is_processing === false && payload.old?.is_processing === true) {
-            console.log(`[story-realtime] ✓ Transcode complete for story ${payload.new?.id}`);
             const currentPhase = useAppStore.getState().storyUpload.phase;
             if (currentPhase === "processing") {
               targetPctRef.current = 100;
@@ -204,17 +199,15 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [isCreator, globalViewer?.id, fetchStories]);
+  }, [isCreator, globalViewer?.id, fetchStories, setStoryUpload, resetStoryUpload]);
 
-  // ── Fallback poller — if Realtime misses the UPDATE, poll every 3s ──────────
+  // ── Fallback poller ───────────────────────────────────────────────────────
   useEffect(() => {
     if (uploadPhase !== "processing" || !currentStoryId) return;
-    console.log(`[story-poller] Starting poll for story ${currentStoryId}`);
     const interval = setInterval(async () => {
       try {
         const res  = await fetch(`/api/stories/${currentStoryId}/status`);
         const data = await res.json();
-        console.log(`[story-poller] story ${currentStoryId} isProcessing: ${data.isProcessing}`);
         if (res.ok && data.isProcessing === false) {
           clearInterval(interval);
           await fetchStories();
@@ -232,6 +225,9 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     if (isCancellingRef.current) return;
     isCancellingRef.current = true;
     cancelledRef.current    = true;
+    // Abort the in-flight fetch if one exists
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     resetStoryUpload();
     isCancellingRef.current = false;
   }, [resetStoryUpload]);
@@ -241,8 +237,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     cancelledRef.current = false;
     resetStoryUpload();
 
-    console.log(`[story-upload] ── START ──────────────────────────────────`);
-
     try {
       let fileToUpload = job.file;
 
@@ -250,10 +244,8 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         setStoryUpload({ phase: "compressing" });
         fileToUpload = await compressVideoIfNeeded(job.file, (p) => {
           setStoryUpload({ compressPct: p.percent });
-          console.log(`[story-upload] Compression: ${p.message}`);
         });
         if (cancelledRef.current) return;
-        console.log(`[story-upload] Compression done | New size: ${(fileToUpload.size / 1024 / 1024).toFixed(2)} MB`);
       }
 
       setStoryUpload({ phase: "uploading", uploadPct: 0 });
@@ -279,9 +271,12 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
       setStoryUpload({ uploadPct: 50 });
 
+      // Store controller at component level so cancelUpload() can abort it
       const controller = new AbortController();
-      const timer      = setTimeout(() => controller.abort(), 300000);
-      let   initRes: Response;
+      abortControllerRef.current = controller;
+      const timer = setTimeout(() => controller.abort(), 300000);
+
+      let initRes: Response;
       try {
         initRes = await fetch("/api/stories/init", {
           method:  "POST",
@@ -291,6 +286,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         });
       } finally {
         clearTimeout(timer);
+        abortControllerRef.current = null;
       }
 
       if (cancelledRef.current) return;
@@ -299,7 +295,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       if (!initRes.ok) throw new Error(initData.error ?? "Upload failed");
 
       if (job.mediaType === "video") {
-        console.log(`[story-upload] ── WAITING FOR TRANSCODE (storyId: ${initData.storyId})`);
         setStoryUpload({ phase: "processing", storyId: initData.storyId, uploadPct: 100 });
         await fetchStories();
       } else {
@@ -313,7 +308,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       const msg = err?.name === "AbortError"
         ? "Upload timed out — please try again"
         : (err.message ?? "Upload failed");
-      console.error(`[story-upload] ── FAILED: ${msg}`, err);
       setStoryUpload({ phase: "idle", error: msg });
     }
   }, [fetchStories, setStoryUpload, resetStoryUpload]);
@@ -322,43 +316,49 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     scrollRef.current?.scrollBy({ left: dir === "right" ? 220 : -220, behavior: "smooth" });
   };
 
-  const handleOpenStory = (groupIndex: number) => {
+  // ── Groups ────────────────────────────────────────────────────────────────
+  const ownGroup    = isCreator && globalViewer
+    ? orderedGroups.find((g) => g.creatorId === globalViewer.id) ?? null
+    : null;
+
+  const otherGroups = orderedGroups.filter(
+    (g) => g.creatorId !== globalViewer?.id && !allProcessing(g)
+  );
+
+  const displayGroups: CreatorStoryGroup[] = otherGroups;
+
+  const handleOpenOwnStories = useCallback(() => {
+    if (!ownGroup || isUploading) return;
+    const viewable = { ...ownGroup, items: ownGroup.items.filter((s) => !s.isProcessing) };
+    if (viewable.items.length === 0) return;
+    onOpenViewer?.([viewable], 0);
+  }, [ownGroup, isUploading, onOpenViewer]);
+
+  const handleOpenStory = useCallback((groupIndex: number) => {
     const clickedCreatorId = displayGroups[groupIndex]?.creatorId;
     if (!clickedCreatorId) return;
 
     const viewableGroups = displayGroups
       .map((g) => ({ ...g, items: g.items.filter((s) => !s.isProcessing) }))
-      .filter((g) => g.items.length > 0 || g.creatorId === clickedCreatorId);
+      .filter((g) => g.items.length > 0);
 
-    const filtered = viewableGroups.filter(
-      (g) => g.items.length > 0 || g.creatorId === clickedCreatorId
-    );
-
-    const viewableIndex = filtered.findIndex((g) => g.creatorId === clickedCreatorId);
+    const viewableIndex = viewableGroups.findIndex((g) => g.creatorId === clickedCreatorId);
     if (viewableIndex === -1) return;
-    if (filtered[viewableIndex].items.length === 0) return;
+    if (viewableGroups[viewableIndex].items.length === 0) return;
 
-    onOpenViewer?.(filtered, viewableIndex);
-  };
+    onOpenViewer?.(viewableGroups, viewableIndex);
+  }, [displayGroups, onOpenViewer]);
 
-  const ownGroup    = isCreator && globalViewer
-    ? orderedGroups.find((g) => g.creatorId === globalViewer.id) ?? null
-    : null;
-  const otherGroups = orderedGroups.filter((g) => !allProcessing(g) && g.creatorId !== globalViewer?.id);
-  const displayGroups: CreatorStoryGroup[] = [
-    ...(ownGroup ? [ownGroup] : []),
-    ...otherGroups,
-  ];
+  const openUpload = useCallback(() => {
+    if (isUploading) return;
+    setStoryUpload({ error: null });
+    setUploadOpen(true);
+  }, [isUploading, setStoryUpload]);
 
   const displayPct = displayPctState;
 
-  const statusLabel = isUploading
-    ? `${displayPct}%`
-    : uploadError
-      ? "Failed"
-      : uploadPhase === "done"
-        ? "Posted ✓"
-        : "Your Story";
+  const ownThumbnail  = ownGroup?.latestThumbnail ?? null;
+  const hasOwnStories = (ownGroup?.items.filter((s) => !s.isProcessing).length ?? 0) > 0;
 
   return (
     <>
@@ -373,6 +373,10 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
           50%      { box-shadow:0 0 20px rgba(139,92,246,0.8),0 0 40px rgba(236,72,153,0.5); }
         }
         @keyframes sb-spin { to { transform:rotate(360deg); } }
+        .sb-own-circle { cursor:pointer; transition:opacity 0.15s; }
+        .sb-own-circle:hover { opacity:0.88; }
+        .sb-plus-btn { transition:transform 0.15s; }
+        .sb-plus-btn:hover { transform:scale(1.12); }
         .sb-upload-overlay { background: rgba(0,0,0,0.5); transition: background 0.15s; }
         .sb-upload-overlay:hover { background: rgba(0,0,0,0.7); }
         .sb-upload-overlay:hover .sb-upload-pct { display:none; }
@@ -403,26 +407,50 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
           className="sb-scroll"
           style={{ display:"flex", gap:16, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none" }}
         >
-          {/* ── Add Story button (creator only) ── */}
+          {/* ── Creator own bubble ── */}
           {isCreator && globalViewer && (
             <div
               className="sb-item"
-              onClick={() => { if (!isUploading) { setStoryUpload({ error: null }); setUploadOpen(true); } }}
-              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, flexShrink:0, cursor: isUploading ? "default" : "pointer" }}
+              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, flexShrink:0 }}
             >
               <div style={{ position: "relative" }}>
-                <div style={{
-                  padding:      "2.5px",
-                  borderRadius: "50%",
-                  background:   isUploading ? "transparent" : "#2A2A3D",
-                  border:       isUploading ? "none" : "2px dashed #4A4A6A",
-                }}>
-                  <div style={{ padding: "2.5px", borderRadius: "50%", backgroundColor: "#0A0A0F" }}>
-                    <Avatar
-                      src={globalViewer.avatar_url ?? null}
-                      name={globalViewer.display_name || globalViewer.username || "?"}
-                      size={80}
-                    />
+
+                <div
+                  className={!isUploading && hasOwnStories ? "sb-own-circle" : undefined}
+                  onClick={!isUploading && hasOwnStories ? handleOpenOwnStories : undefined}
+                  style={{
+                    padding:      "2.5px",
+                    borderRadius: "50%",
+                    background:   isUploading
+                      ? "transparent"
+                      : hasOwnStories
+                        ? GRADIENT
+                        : "#2A2A3D",
+                    border:       isUploading || hasOwnStories ? "none" : "2px dashed #4A4A6A",
+                    boxShadow:    !isUploading && hasOwnStories ? GLOW : "none",
+                  }}
+                >
+                  <div style={{ padding: "2.5px", borderRadius: "50%", backgroundColor: "#0A0A0F", position: "relative", overflow: "hidden" }}>
+                    {isUploading ? (
+                      <Avatar
+                        src={globalViewer.avatar_url ?? null}
+                        name={globalViewer.display_name || globalViewer.username || "?"}
+                        size={80}
+                      />
+                    ) : hasOwnStories && ownThumbnail ? (
+                      <ThumbnailWithFallback
+                        src={ownThumbnail}
+                        name={globalViewer.display_name || globalViewer.username || "?"}
+                        avatarUrl={globalViewer.avatar_url ?? null}
+                        size={80}
+                      />
+                    ) : (
+                      <Avatar
+                        src={globalViewer.avatar_url ?? null}
+                        name={globalViewer.display_name || globalViewer.username || "?"}
+                        size={80}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -445,45 +473,41 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                   </div>
                 )}
 
-                {!isUploading && uploadPhase !== "done" && !uploadError && (
-                  <div style={{ position:"absolute", bottom:0, right:0, width:22, height:22, borderRadius:"50%", background:GRADIENT, border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                {!isUploading && (
+                  <button
+                    className="sb-plus-btn"
+                    onClick={(e) => { e.stopPropagation(); openUpload(); }}
+                    style={{ position:"absolute", bottom:0, right:0, width:24, height:24, borderRadius:"50%", background:GRADIENT, border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0, zIndex:4 }}
+                  >
                     <Plus size={12} color="#fff" strokeWidth={2.5} />
-                  </div>
+                  </button>
                 )}
+
                 {uploadError && !isUploading && (
-                  <div
+                  <button
                     title={uploadError}
                     onClick={(e) => { e.stopPropagation(); setStoryUpload({ error: null }); setUploadOpen(true); }}
-                    style={{ position:"absolute", bottom:0, right:0, width:22, height:22, borderRadius:"50%", background:"#EF4444", border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}
+                    style={{ position:"absolute", bottom:0, right:0, width:22, height:22, borderRadius:"50%", background:"#EF4444", border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0, zIndex:4 }}
                   >
                     <AlertCircle size={12} color="#fff" />
-                  </div>
+                  </button>
                 )}
               </div>
-              {isUploading && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); cancelUpload(); }}
-                  style={{ marginTop:2, background:"none", border:"none", cursor:"pointer", fontSize:11, fontWeight:600, color:"#EF4444", fontFamily:"'Inter',sans-serif", padding:"2px 8px" }}
-                >
-                  Cancel
-                </button>
-              )}
-              {!isUploading && (
-                <span
-                  className="sb-label"
-                  style={{ fontSize:12, fontWeight:700, color: uploadPhase === "done" ? "#10B981" : "#FFFFFF", maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", transition:"color 0.2s", fontFamily:"'Inter',sans-serif", textShadow:"0 1px 4px rgba(0,0,0,0.8)" }}
-                >
-                  {statusLabel}
-                </span>
-              )}
+
+              <button
+                onClick={isUploading ? cancelUpload : openUpload}
+                style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 4px", fontSize:12, fontWeight:700, color: isUploading ? "#EF4444" : uploadError ? "#EF4444" : "#FFFFFF", maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", fontFamily:"'Inter',sans-serif", textShadow:"0 1px 4px rgba(0,0,0,0.8)" }}
+              >
+                {isUploading ? "Cancel" : "Add to story"}
+              </button>
             </div>
           )}
 
-          {/* ── Story groups ── */}
+          {/* ── Other creator story groups ── */}
           {loading
             ? Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, flexShrink:0 }}>
-                  <div style={{ width:88, height:88, borderRadius:"50%", backgroundColor:"#1C1C2E", animation:"sb-pulse 1.8s ease-in-out infinite" }} />
+                  <div style={{ width:88, height:88, borderRadius:"50%", backgroundColor:"#1C1C2E" }} />
                   <div style={{ width:44, height:10, borderRadius:4, backgroundColor:"#1C1C2E" }} />
                 </div>
               ))
@@ -512,19 +536,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                     </div>
                     <span
                       className="sb-label"
-                      style={{
-                        fontSize:     12,
-                        fontWeight:   700,
-                        color:        isViewed ? "#888899" : "#FFFFFF",
-                        maxWidth:     80,
-                        overflow:     "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace:   "nowrap",
-                        textAlign:    "center",
-                        transition:   "color 0.4s ease",
-                        fontFamily:   "'Inter',sans-serif",
-                        textShadow:   isViewed ? "none" : "0 1px 4px rgba(0,0,0,0.8)",
-                      }}
+                      style={{ fontSize:12, fontWeight:700, color: isViewed ? "#888899" : "#FFFFFF", maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", transition:"color 0.4s ease", fontFamily:"'Inter',sans-serif", textShadow: isViewed ? "none" : "0 1px 4px rgba(0,0,0,0.8)" }}
                     >
                       {group.username}
                     </span>

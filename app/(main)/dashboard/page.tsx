@@ -137,7 +137,7 @@ export default function HomePage() {
   const [storyGroups,     setStoryGroups]     = useState<CreatorStoryGroup[]>([]);
   const [storyStartIdx,   setStoryStartIdx]   = useState(0);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
-  // Holds groups passed back from viewer on close — fed into StoryBar to sync viewed state
+  // Holds groups passed back from viewer on close — fed into StoryBar to sync viewed + deleted state
   const [externalGroups,  setExternalGroups]  = useState<CreatorStoryGroup[]>([]);
 
   useEffect(() => { setSlideMap(loadSlides()); }, []);
@@ -273,13 +273,13 @@ export default function HomePage() {
     setStoryViewerOpen(true);
   }, []);
 
-  // Called by StoryViewer on close — receives groups with updated viewed states
+  // Called by StoryViewer on close (including after delete empties all stories)
+  // updatedGroups reflects deletions and viewed state — StoryBar reads this via externalGroups
   const handleViewerClose = useCallback((updatedGroups: CreatorStoryGroup[]) => {
     setStoryViewerOpen(false);
     setExternalGroups(updatedGroups);
   }, []);
 
-  // Sync hasUnviewed back to StoryBar when viewer marks a group fully viewed
   const handleGroupFullyViewed = useCallback((creatorId: string) => {
     setExternalGroups((prev) =>
       prev.map((g) => g.creatorId === creatorId ? { ...g, hasUnviewed: false } : g)
@@ -294,7 +294,6 @@ export default function HomePage() {
           groups={storyGroups}
           startGroupIndex={storyStartIdx}
           onClose={handleViewerClose}
-          onStoriesUpdated={() => setStoryViewerOpen(false)}
           onGroupFullyViewed={handleGroupFullyViewed}
         />
       )}

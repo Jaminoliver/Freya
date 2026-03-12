@@ -5,51 +5,97 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    console.log("[bunny-story webhook] Received:", JSON.stringify(body));
+  const receivedAt = new Date().toISOString();
+  console.log(`[bunny-webhook] ── RECEIVED at ${receivedAt} ──────────────────`);
 
-    const { VideoGuid, Status } = body;
+  try {
+    // Log raw headers so we can confirm Bunny is actually hitting this endpoint
+    const headers: Record<string, string> = {};
+    req.headers.forEach((value, key) => { headers[key] = value; });
+    console.log(`[bunny-webhook] Headers:`, JSON.stringify(headers));
+
+    const rawBody = await req.text();
+    console.log(`[bunny-webhook] Raw body:`, rawBody);
+
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (parseErr) {
+      console.error(`[bunny-webhook] ✗ Failed to parse JSON body:`, parseErr);
+      return NextResponse.json({ received: true }, { status: 200 });
+    }
+
+    console.log(`[bunny-webhook] Parsed body:`, JSON.stringify(body));
+
+    const { VideoGuid, Status } = body as { VideoGuid?: string; Status?: number };
+
+    console.log(`[bunny-webhook] VideoGuid: ${VideoGuid ?? "MISSING"}`);
+    console.log(`[bunny-webhook] Status: ${Status ?? "MISSING"} (type: ${typeof Status})`);
 
     if (!VideoGuid) {
+      console.warn(`[bunny-webhook] ✗ No VideoGuid in payload — ignoring`);
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
     const supabase = createServiceSupabaseClient();
 
-    console.log(`[bunny-story webhook] VideoGuid: ${VideoGuid} | Status: ${Status}`);
+    // Always do the DB lookup regardless of status, so we can see if the VideoGuid is even stored
+    console.log(`[bunny-webhook] Looking up story with bunny_video_id = ${VideoGuid}`);
+    const { data: story, error: lookupErr } = await supabase
+      .from("stories")
+      .select("id, is_processing, bunny_video_id")
+      .eq("bunny_video_id", VideoGuid)
+      .single();
 
+    if (lookupErr) {
+      console.error(`[bunny-webhook] ✗ DB lookup error:`, lookupErr.message, lookupErr.code);
+    }
+
+    if (!story) {
+      console.warn(`[bunny-webhook] ✗ No story found for VideoGuid: ${VideoGuid}`);
+      console.warn(`[bunny-webhook] This means either bunny_video_id was not saved correctly, or the VideoGuid in the webhook doesn't match what was stored`);
+    } else {
+      console.log(`[bunny-webhook] ✓ Story found — id: ${story.id}, is_processing: ${story.is_processing}, stored bunny_video_id: ${story.bunny_video_id}`);
+    }
+
+    // Status 4 = encoding complete
     if (Status === 4) {
-      const { data: story } = await supabase
-        .from("stories")
-        .select("id")
-        .eq("bunny_video_id", VideoGuid)
-        .single();
+      console.log(`[bunny-webhook] Status 4 received — transcoding complete`);
 
       if (story) {
-        const { error } = await supabase
+        console.log(`[bunny-webhook] Updating story ${story.id} → is_processing = false`);
+        const { error: updateErr } = await supabase
           .from("stories")
           .update({ is_processing: false })
           .eq("id", story.id);
 
-        if (error) {
-          console.error("[bunny-story webhook] DB update error:", error.message);
+        if (updateErr) {
+          console.error(`[bunny-webhook] ✗ DB update error:`, updateErr.message, updateErr.code);
         } else {
-          console.log(`[bunny-story webhook] ✓ Story ${story.id} marked ready`);
+          console.log(`[bunny-webhook] ✓ Story ${story.id} marked ready`);
         }
       } else {
-        console.log(`[bunny-story webhook] No story found for VideoGuid: ${VideoGuid}`);
+        console.error(`[bunny-webhook] ✗ Cannot update — no story matched VideoGuid: ${VideoGuid}`);
       }
+    } else if (Status === 5) {
+      console.error(`[bunny-webhook] ✗ Bunny encoding FAILED for VideoGuid: ${VideoGuid}`);
+      if (story) {
+        // Mark as failed so the UI can surface the error instead of polling forever
+        await supabase
+          .from("stories")
+          .update({ is_processing: false })
+          .eq("id", story.id);
+        console.log(`[bunny-webhook] Marked story ${story.id} as not-processing after encode failure`);
+      }
+    } else {
+      console.log(`[bunny-webhook] Status ${Status} — not a terminal state, no action taken`);
     }
 
-    if (Status === 5) {
-      console.error(`[bunny-story webhook] ✗ Encoding FAILED for VideoGuid: ${VideoGuid}`);
-    }
-
+    console.log(`[bunny-webhook] ── DONE ────────────────────────────────────`);
     return NextResponse.json({ received: true }, { status: 200 });
 
   } catch (err) {
-    console.error("[bunny-story webhook] Unexpected error:", err);
+    console.error(`[bunny-webhook] ✗ Unexpected error:`, err);
     return NextResponse.json({ received: true }, { status: 200 });
   }
 }
