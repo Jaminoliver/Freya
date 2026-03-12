@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic";
 
 // POST /api/stories/complete
 // Body: { storyId: number }
+// NOTE: is_processing stays true here — it is flipped to false only by the
+// Bunny webhook (/api/webhooks/bunny-story) when transcoding finishes.
 export async function POST(req: NextRequest) {
   try {
     const { user, error: authErr } = await getUser();
@@ -27,16 +29,6 @@ export async function POST(req: NextRequest) {
 
     if (!story) return NextResponse.json({ error: "Story not found" }, { status: 404 });
     if (story.creator_id !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-    const { error: updateErr } = await supabase
-      .from("stories")
-      .update({ is_processing: false })
-      .eq("id", storyId);
-
-    if (updateErr) {
-      console.error("[POST /api/stories/complete] update error:", updateErr);
-      return NextResponse.json({ error: "Failed to complete story" }, { status: 500 });
-    }
 
     return NextResponse.json({ success: true });
 

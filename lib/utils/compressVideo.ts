@@ -1,6 +1,6 @@
 "use client";
 
-const COMPRESS_THRESHOLD_MB = 200; // only compress truly large files
+const COMPRESS_THRESHOLD_MB = 30; // compress anything over 30MB
 
 let ffmpegInstance: import("@ffmpeg/ffmpeg").FFmpeg | null = null;
 let ffmpegLoaded = false;
@@ -25,7 +25,7 @@ export async function compressVideoIfNeeded(
     return file;
   }
 
-  console.log(`[compress] Starting compression (1080p, H.264, CRF 16)`);
+  console.log(`[compress] Starting compression (1080p, H.264, CRF 26)`);
   onProgress?.({ phase: "loading", percent: 0, message: "Loading compressor…" });
 
   const { FFmpeg }               = await import("@ffmpeg/ffmpeg");
@@ -65,10 +65,10 @@ export async function compressVideoIfNeeded(
     "-i",        inputName,
     "-vf",       "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:flags=lanczos",
     "-c:v",      "libx264",
-    "-crf",      "16",
-    "-preset",   "slow",
+    "-crf",      "26",
+    "-preset",   "ultrafast",
     "-c:a",      "aac",
-    "-b:a",      "192k",
+    "-b:a",      "128k",
     "-movflags", "+faststart",
     "-y",        outputName,
   ]);

@@ -3,33 +3,28 @@
 import { useRef, useEffect, useCallback } from "react";
 
 const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
-function getBunnyHLS(videoId: string) {
-  return `https://${BUNNY_PULL_ZONE}/${videoId}/playlist.m3u8`;
-}
 
 interface Props {
-  mediaUrl:      string;
-  bunnyVideoId?: string | null;
-  thumbnailUrl:  string | null;
-  muted:         boolean;
-  paused:        boolean;
-  active:        boolean;
-  storyIndex:    number;
-  onPlaying:     (storyIndex: number) => void;
-  onTimeUpdate:  (pct: number, storyIndex: number) => void;
-  onEnded:       (storyIndex: number) => void;
-  onBuffering:   (buffering: boolean) => void;
+  mediaUrl:     string;
+  thumbnailUrl: string | null;
+  muted:        boolean;
+  paused:       boolean;
+  active:       boolean;
+  storyIndex:   number;
+  onPlaying:    (storyIndex: number) => void;
+  onTimeUpdate: (pct: number, storyIndex: number) => void;
+  onEnded:      (storyIndex: number) => void;
+  onBuffering:  (buffering: boolean) => void;
 }
 
 export default function StoryVideoPlayer({
-  mediaUrl, bunnyVideoId, thumbnailUrl, muted, paused, active, storyIndex,
+  mediaUrl, thumbnailUrl, muted, paused, active, storyIndex,
   onPlaying, onTimeUpdate, onEnded, onBuffering,
 }: Props) {
   const videoRef       = useRef<HTMLVideoElement>(null);
   const hlsRef         = useRef<any>(null);
   const hasInitialized = useRef(false);
   const rafRef         = useRef<number | null>(null);
-  const videoOpacityRef = useRef<HTMLVideoElement>(null);
 
   const activeRef       = useRef(active);
   const pausedRef       = useRef(paused);
@@ -62,22 +57,41 @@ export default function StoryVideoPlayer({
     rafRef.current = requestAnimationFrame(tick);
   }, [storyIndex, stopRaf]);
 
-  // Init HLS once on mount
+  const tryPlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !activeRef.current || pausedRef.current) return;
+    video.play().catch(() => {});
+  }, []);
+
+  // Init HLS once on mount — mediaUrl already contains the full Bunny HLS URL
   useEffect(() => {
     const video = videoRef.current;
     if (!video || hasInitialized.current) return;
     hasInitialized.current = true;
 
-    const url = bunnyVideoId ? getBunnyHLS(bunnyVideoId) : mediaUrl;
+    // Derive HLS URL: if the mediaUrl is already an m3u8 use it directly,
+    // otherwise assume it's a Bunny video ID and build the playlist URL.
+    const url = mediaUrl.includes(".m3u8")
+      ? mediaUrl
+      : `https://${BUNNY_PULL_ZONE}/${mediaUrl}/playlist.m3u8`;
 
+    // Native HLS (Safari / iOS)
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = url;
       video.load();
+      video.addEventListener("loadedmetadata", tryPlay, { once: true });
       return;
     }
 
+    // hls.js path
     import("hls.js").then(({ default: Hls }) => {
-      if (!Hls.isSupported()) { video.src = url; video.load(); return; }
+      if (!Hls.isSupported()) {
+        video.src = url;
+        video.load();
+        video.addEventListener("loadedmetadata", tryPlay, { once: true });
+        return;
+      }
+
       const hls = new Hls({
         capLevelToPlayerSize:   false,
         lowLatencyMode:         false,
@@ -86,21 +100,29 @@ export default function StoryVideoPlayer({
         abrBandWidthUpFactor:   1,
         maxLoadingDelay:        2,
       });
+
       hls.on(Hls.Events.MANIFEST_PARSED, (_: any, data: any) => {
         const highest = data.levels.length - 1;
         hls.currentLevel = highest;
         hls.loadLevel    = highest;
+        tryPlay();
       });
+
       hls.loadSource(url);
       hls.attachMedia(video);
+
       hls.on(Hls.Events.ERROR, (_: any, data: any) => {
         if (!data.fatal) return;
         if      (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
         else if (data.type === Hls.ErrorTypes.MEDIA_ERROR)   hls.recoverMediaError();
         else { hls.destroy(); hlsRef.current = null; video.src = url; video.load(); }
       });
+
       hlsRef.current = hls;
-    }).catch(() => { video.src = url; video.load(); });
+    }).catch(() => {
+      video.src = url;
+      video.load();
+    });
 
     return () => {
       stopRaf();
@@ -109,21 +131,18 @@ export default function StoryVideoPlayer({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Active change — seek and play, or pause
+  // Active change — play or pause
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     if (active) {
-      // Hide video until onPlaying fires to avoid first-frame flash
-      video.style.opacity = "0";
-      video.muted = muted;
+      video.muted       = muted;
       video.currentTime = 0;
-      video.play().catch(() => {});
+      tryPlay();
     } else {
       stopRaf();
       video.pause();
       video.currentTime = 0;
-      video.style.opacity = "0";
     }
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -137,8 +156,14 @@ export default function StoryVideoPlayer({
     const video = videoRef.current;
     if (!video || !active) return;
     if (paused) { stopRaf(); video.pause(); }
-    else        { video.play().catch(() => {}); }
-  }, [paused, active, stopRaf]); // eslint-disable-line react-hooks/exhaustive-deps
+    else        { tryPlay(); }
+  }, [paused, active, stopRaf, tryPlay]);
+
+  // Merged: both waiting and pause just stop the RAF and signal buffering
+  const handleStall = useCallback(() => {
+    stopRaf();
+    onBufferingRef.current(true);
+  }, [stopRaf]);
 
   const handleCanPlay = useCallback(() => {
     if (!activeRef.current) return;
@@ -153,25 +178,18 @@ export default function StoryVideoPlayer({
     startRaf();
   }, [storyIndex, startRaf]);
 
-  const handleWaiting = useCallback(() => {
-    stopRaf();
-    onBufferingRef.current(true);
-  }, [stopRaf]);
-
   const handleEnded = useCallback(() => {
     stopRaf();
     onEndedRef.current(storyIndex);
   }, [storyIndex, stopRaf]);
 
-  const handlePause = useCallback(() => { stopRaf(); }, [stopRaf]);
-
   return (
-    // opacity instead of display:none — keeps video loaded on iOS Safari
     <div style={{
-      position: "absolute", inset: 0,
-      opacity: active ? 1 : 0,
+      position:      "absolute",
+      inset:         0,
+      opacity:       active ? 1 : 0,
       pointerEvents: active ? "auto" : "none",
-      zIndex: active ? 1 : 0,
+      zIndex:        active ? 1 : 0,
     }}>
       {thumbnailUrl && (
         <img src={thumbnailUrl} alt="" style={{
@@ -187,13 +205,17 @@ export default function StoryVideoPlayer({
         onContextMenu={(e) => e.preventDefault()}
         onCanPlay={handleCanPlay}
         onPlaying={handlePlaying}
-        onWaiting={handleWaiting}
-        onPause={handlePause}
+        onWaiting={handleStall}
+        onPause={handleStall}
         onEnded={handleEnded}
         style={{
-          position: "absolute", inset: 0, width: "100%", height: "100%",
-          objectFit: "contain", pointerEvents: "none",
-          opacity: 0, // hidden until onPlaying fires
+          position:      "absolute",
+          inset:         0,
+          width:         "100%",
+          height:        "100%",
+          objectFit:     "contain",
+          pointerEvents: "none",
+          opacity:       0,
         }}
       />
     </div>

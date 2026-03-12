@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, MoreVertical, Trash2, Volume2, VolumeX, Heart, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import type { CreatorStoryGroup, StoryItem } from "@/components/story/StoryBar";
@@ -13,11 +13,7 @@ const PRELOAD_AHEAD     = 3;
 const HOLD_THRESHOLD_MS = 200;
 const TAP_MAX_MS        = 300;
 const SWIPE_MIN_PX      = 60;
-const SWIPE_DOWN_MIN_PX = 80;
-const MOVE_CANCEL_PX    = 10;
-const IMG_TIMEOUT_MS    = 4000;
 
-// Preload HLS manifests + first segments before viewer opens
 export function prewarmHls(urls: string[]) {
   if (typeof window === "undefined") return;
   console.log(`[prewarm] Starting preload for ${urls.length} video(s)`);
@@ -75,7 +71,7 @@ function firstUnviewedIndex(group: CreatorStoryGroup): number {
 interface Props {
   groups:              CreatorStoryGroup[];
   startGroupIndex:     number;
-  onClose:             (updatedGroups: CreatorStoryGroup[]) => void; // passes back viewed state
+  onClose:             (updatedGroups: CreatorStoryGroup[]) => void;
   onStoriesUpdated?:   () => void;
   onGroupFullyViewed?: (creatorId: string) => void;
 }
@@ -99,7 +95,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   const [replyFocused, setReplyFocused] = useState(false);
 
   const fullyViewedRef = useRef<Set<string>>(new Set());
-
   const groupIdxRef    = useRef(startGroupIndex);
   const storyIdxRef    = useRef(firstUnviewedIndex(groups[startGroupIndex]));
   const pausedRef      = useRef(false);
@@ -114,7 +109,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   const containerRef   = useRef<HTMLDivElement>(null);
   const barsRef        = useRef<HTMLDivElement>(null);
   const spinnerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const imgTimeoutRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const goNextRef      = useRef<() => void>(() => {});
   const goPrevRef      = useRef<() => void>(() => {});
@@ -134,12 +128,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
   const hasPrev  = storyIdx > 0 || groupIdx > 0;
   const hasNext  = storyIdx < (group?.items.length ?? 1) - 1 || groupIdx < localGroups.length - 1;
   const storyKey = `${groupIdx}-${storyIdx}`;
-
-  const allFlat = useMemo(() => localGroups.flatMap((g) => g.items), [localGroups]);
-  const flatIdx = useMemo(
-    () => localGroups.slice(0, groupIdx).reduce((a, g) => a + g.items.length, 0) + storyIdx,
-    [localGroups, groupIdx, storyIdx],
-  );
 
   const getFill = useCallback((idx: number) =>
     barsRef.current?.querySelector<HTMLDivElement>(`[data-fill="${idx}"]`), []);
@@ -183,7 +171,6 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     }
   }, [onGroupFullyViewed]);
 
-  // Close and pass back the latest localGroups so parent can sync viewed state
   const closeWithGroups = useCallback(() => {
     onClose(localGroupsRef.current);
   }, [onClose]);
@@ -249,12 +236,10 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     setImgLoaded(false); setImgError(false); setMenuOpen(false);
     setDeleteErr(null); setLiked(false); setShowSpinner(false);
     if (spinnerTimerRef.current) { clearTimeout(spinnerTimerRef.current); spinnerTimerRef.current = null; }
-    if (imgTimeoutRef.current)   { clearTimeout(imgTimeoutRef.current);   imgTimeoutRef.current = null; }
     resetBars(storyIdx);
     const s = localGroups[groupIdx]?.items[storyIdx];
     if (!s) return;
 
-    // Mark viewed immediately on entry regardless of media type
     trackView(s.id);
 
     if (s.mediaType !== "video") {
@@ -279,12 +264,10 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     if (imgLoadedRef.current) return;
     imgLoadedRef.current = true;
     setImgLoaded(true);
-    if (imgTimeoutRef.current) { clearTimeout(imgTimeoutRef.current); imgTimeoutRef.current = null; }
   }, []);
 
   const onPhotoError = useCallback(() => {
     setImgError(true);
-    if (imgTimeoutRef.current) { clearTimeout(imgTimeoutRef.current); imgTimeoutRef.current = null; }
     startImageBar();
   }, [startImageBar]);
 
@@ -322,14 +305,20 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
 
   useEffect(() => { setPaused(replyFocused); }, [replyFocused]);
 
+  // Preload upcoming stories
   useEffect(() => {
-    const upcoming = allFlat.slice(flatIdx + 1, flatIdx + 1 + PRELOAD_AHEAD);
-    for (const s of upcoming) {
-      if (s.mediaType === "photo" && s.mediaUrl) { const img = new window.Image(); img.src = s.mediaUrl; }
-      if (s.thumbnailUrl) { const img = new window.Image(); img.src = s.thumbnailUrl; }
+    let count = 0;
+    for (let gi = groupIdx; gi < localGroups.length && count < PRELOAD_AHEAD; gi++) {
+      const startSi = gi === groupIdx ? storyIdx + 1 : 0;
+      for (let si = startSi; si < localGroups[gi].items.length && count < PRELOAD_AHEAD; si++) {
+        const s = localGroups[gi].items[si];
+        if (s.mediaType === "photo" && s.mediaUrl) { const img = new window.Image(); img.src = s.mediaUrl; }
+        if (s.thumbnailUrl) { const img = new window.Image(); img.src = s.thumbnailUrl; }
+        count++;
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flatIdx]);
+  }, [groupIdx, storyIdx]);
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
@@ -347,7 +336,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     return () => {
       mountedRef.current = false;
       checkGroupComplete(groupIdxRef.current);
-      [spinnerTimerRef, imgTimeoutRef, holdTimerRef].forEach((r) => { if (r.current) clearTimeout(r.current); });
+      [spinnerTimerRef, holdTimerRef].forEach((r) => { if (r.current) clearTimeout(r.current); });
     };
   }, [checkGroupComplete]);
 
@@ -373,7 +362,12 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     } finally { setDeleting(false); }
   }, [deleting, groups, closeWithGroups, onStoriesUpdated, updateGroupIdx, updateStoryIdx]);
 
-  const sp = { onTouchStart: (e: any) => e.stopPropagation(), onTouchEnd: (e: any) => e.stopPropagation(), onMouseDown: (e: any) => e.stopPropagation(), onMouseUp: (e: any) => e.stopPropagation() };
+  const sp = {
+    onTouchStart: (e: any) => e.stopPropagation(),
+    onTouchEnd:   (e: any) => e.stopPropagation(),
+    onMouseDown:  (e: any) => e.stopPropagation(),
+    onMouseUp:    (e: any) => e.stopPropagation(),
+  };
 
   const applyDrag = useCallback((dy: number) => {
     const el = containerRef.current;
@@ -409,7 +403,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     const dy = t.clientY - touchRef.current.y;
     const adx = Math.abs(dx), ady = Math.abs(dy);
 
-    if (!touchRef.current.moved && (adx > MOVE_CANCEL_PX || ady > MOVE_CANCEL_PX)) {
+    if (!touchRef.current.moved && (adx > 10 || ady > 10)) {
       touchRef.current.moved = true;
       if (holdTimerRef.current && !touchRef.current.holding) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
       if (dy > 0 && ady > adx) {
@@ -431,12 +425,8 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
     if (dragRef.current.active) {
       dragRef.current.active = false;
       const dy = e.changedTouches[0].clientY - touchRef.current.y;
-      if (dy > DRAG_CLOSE_PX) {
-        closeWithGroups();
-      } else {
-        resetDrag(true);
-        setPaused(false);
-      }
+      if (dy > DRAG_CLOSE_PX) { closeWithGroups(); }
+      else                     { resetDrag(true); setPaused(false); }
       return;
     }
 
@@ -536,7 +526,7 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onStorie
           )}
 
           {group.items.map((item, i) => item.mediaType === "video" ? (
-            <StoryVideoPlayer key={item.id} mediaUrl={item.mediaUrl} bunnyVideoId={(item as any).bunnyVideoId ?? null}
+            <StoryVideoPlayer key={item.id} mediaUrl={item.mediaUrl}
               thumbnailUrl={item.thumbnailUrl} muted={muted} paused={paused} active={i === storyIdx} storyIndex={i}
               onPlaying={handleVideoPlaying} onTimeUpdate={handleVideoTimeUpdate} onEnded={handleVideoEnded} onBuffering={handleVideoBuffering}
             />

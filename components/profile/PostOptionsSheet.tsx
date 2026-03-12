@@ -36,7 +36,7 @@ export default function CreatorPostOptionsSheet({
     return () => document.removeEventListener("keydown", handleKey);
   }, [isOpen, onClose]);
 
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined" || !isOpen) return null;
 
   const items = [
     { icon: <Pencil size={18} />, label: "Edit caption", action: onEdit,   danger: false },
@@ -54,9 +54,6 @@ export default function CreatorPostOptionsSheet({
           zIndex:          100,
           backgroundColor: "rgba(0,0,0,0.6)",
           backdropFilter:  "blur(2px)",
-          opacity:         isOpen ? 1 : 0,
-          pointerEvents:   isOpen ? "auto" : "none",
-          transition:      "opacity 0.25s ease",
         }}
       />
 
@@ -67,12 +64,11 @@ export default function CreatorPostOptionsSheet({
           position:        "fixed",
           bottom:          0,
           left:            "50%",
-          transform:       isOpen ? "translateX(-50%) translateY(0)" : "translateX(-50%) translateY(100%)",
+          transform:       "translateX(-50%) translateY(0)",
           zIndex:          101,
           backgroundColor: "#13131F",
           borderRadius:    "20px 20px 0 0",
           padding:         "0 0 calc(env(safe-area-inset-bottom) + 12px)",
-          transition:      "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
           width:           "100%",
           maxWidth:        "480px",
           boxShadow:       "0 -8px 40px rgba(0,0,0,0.5)",

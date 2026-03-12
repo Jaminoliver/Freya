@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, ImagePlus, Video, Send, Music, Crop, Smile, Type, Pen, Volume2 } from "lucide-react";
 
-// ─── Exported so StoryBar can type the upload job ─────────────────────────────
 export interface UploadJob {
   file:      File;
   caption:   string;
@@ -33,13 +33,13 @@ function fmtSize(bytes: number) {
 }
 
 export default function StoryUploadModal({ onClose, onUploadStart }: StoryUploadModalProps) {
-  const imageInputRef  = useRef<HTMLInputElement>(null);
-  const videoInputRef  = useRef<HTMLInputElement>(null);
+  const imageInputRef   = useRef<HTMLInputElement>(null);
+  const videoInputRef   = useRef<HTMLInputElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
-  const scrubRef       = useRef<HTMLDivElement>(null);
-  const isDragging     = useRef(false);
-  const dragStartX     = useRef(0);
-  const dragStartClip  = useRef(0);
+  const scrubRef        = useRef<HTMLDivElement>(null);
+  const isDragging      = useRef(false);
+  const dragStartX      = useRef(0);
+  const dragStartClip   = useRef(0);
 
   const [phase,         setPhase]         = useState<Phase>("pick");
   const [file,          setFile]          = useState<File | null>(null);
@@ -54,13 +54,21 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
   const [thumbsLoading, setThumbsLoading] = useState(false);
   const [fileSizeStr,   setFileSizeStr]   = useState("");
 
-  // Seek preview video when clip window moves
+  // Lock scroll and hide mobile nav/header while modal is open
+  useEffect(() => {
+    document.body.classList.add("story-modal-open");
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.classList.remove("story-modal-open");
+      document.body.style.overflow = "";
+    };
+  }, []);
+
   useEffect(() => {
     if (phase !== "clip" || !previewVideoRef.current) return;
     previewVideoRef.current.currentTime = clipStart;
   }, [clipStart, phase]);
 
-  // Global drag listeners for scrubber window
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (!isDragging.current || !scrubRef.current) return;
@@ -77,7 +85,6 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
       setClipStart((prev) => Math.max(0, Math.min(videoDuration - CLIP_DURATION, dragStartClip.current + dSec)));
     };
     const onUp = () => { isDragging.current = false; };
-
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup",   onUp);
     window.addEventListener("touchmove", onTouchMove, { passive: true });
@@ -90,7 +97,6 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
     };
   }, [videoDuration]);
 
-  // Generate filmstrip thumbnail frames
   const generateThumbnails = useCallback(async (url: string, duration: number) => {
     setThumbsLoading(true);
     try {
@@ -99,13 +105,11 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
       vid.muted     = true;
       vid.preload   = "auto";
       await new Promise<void>((res) => { vid.onloadeddata = () => res(); vid.load(); });
-
       const canvas  = document.createElement("canvas");
       canvas.width  = 44;
       canvas.height = 64;
       const ctx     = canvas.getContext("2d")!;
       const thumbs: string[] = [];
-
       for (let i = 0; i < THUMB_COUNT; i++) {
         const time = (i / (THUMB_COUNT - 1)) * duration;
         await new Promise<void>((res) => {
@@ -132,14 +136,12 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
     const isImage = f.type.startsWith("image/");
     if (!isVideo && !isImage) { setError("Only images and videos are supported."); return; }
     if (isImage && f.size > 20 * 1024 * 1024) { setError("Image must be under 20MB."); return; }
-
     setError(null);
     setFile(f);
     setMType(isVideo ? "video" : "photo");
     setFileSizeStr(fmtSize(f.size));
     const url = URL.createObjectURL(f);
     setPreview(url);
-
     if (isVideo) {
       const tmp = document.createElement("video");
       tmp.src   = url;
@@ -171,7 +173,6 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
     if (f) handleFile(f);
   };
 
-  // Fire upload job to parent, then close — no uploading phase in this modal
   const handleSend = () => {
     if (!file) return;
     const clipEnd = mediaType === "video"
@@ -186,7 +187,6 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
     setError(null); setThumbnails([]); setPhase("pick");
   };
 
-  // Clip window geometry
   const clipWindowLeft  = videoDuration > 0 ? (clipStart / videoDuration) * 100 : 0;
   const clipWindowWidth = videoDuration > 0 ? Math.min(100, (CLIP_DURATION / videoDuration) * 100) : 100;
   const clipDuration    = Math.min(CLIP_DURATION, videoDuration);
@@ -203,7 +203,9 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
     dragStartClip.current = clipStart;
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <>
       <style>{`
         @keyframes sum-in { from{opacity:0;transform:scale(0.96)} to{opacity:1;transform:scale(1)} }
@@ -213,11 +215,14 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
         .sum-pick-btn:hover { background:rgba(255,255,255,0.06) !important; }
         .sum-scrub { cursor:grab; }
         .sum-scrub:active { cursor:grabbing; }
+        .sum-post-btn { display:none; }
+        @media (min-width: 768px) { .sum-post-btn { display:flex !important; } }
       `}</style>
 
+      {/* z-index 9998 — sits above tab bar and all page chrome, just below StoryViewer (9999) */}
       <div
         onClick={phase === "pick" ? onClose : undefined}
-        style={{ position:"fixed", inset:0, zIndex:1100, backgroundColor:"rgba(0,0,0,0.95)", backdropFilter:"blur(8px)", display:"flex", alignItems:"center", justifyContent:"center" }}
+        style={{ position:"fixed", inset:0, zIndex:9998, background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}
       >
 
         {/* ── PICK ────────────────────────────────────────────────────────── */}
@@ -227,13 +232,24 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
             onClick={(e) => e.stopPropagation()}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
-            style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:32, padding:24 }}
+            style={{ position:"relative", width:"100%", height:"100dvh", maxWidth:480, backgroundColor:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:32, padding:24 }}
           >
+            {/* Close — top left */}
             <button
               onClick={onClose}
               style={{ position:"fixed", top:20, left:20, background:"rgba(255,255,255,0.1)", border:"none", borderRadius:"50%", width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#fff" }}
             >
               <X size={18} />
+            </button>
+
+            {/* Post Story — top right, desktop only */}
+            <button
+              className="sum-post-btn"
+              onClick={() => imageInputRef.current?.click()}
+              style={{ position:"fixed", top:20, right:20, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", border:"none", borderRadius:24, padding:"10px 20px", display:"none", alignItems:"center", gap:8, cursor:"pointer", color:"#fff", fontSize:13, fontWeight:700, fontFamily:"'Inter',sans-serif", boxShadow:"0 4px 16px rgba(139,92,246,0.4)" }}
+            >
+              <ImagePlus size={15} />
+              Post Story
             </button>
 
             <p style={{ margin:0, fontSize:13, color:"rgba(255,255,255,0.4)", fontFamily:"'Inter',sans-serif", letterSpacing:"0.04em", textTransform:"uppercase" }}>
@@ -280,9 +296,8 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
           <div
             className="sum-wrap"
             onClick={(e) => e.stopPropagation()}
-            style={{ position:"relative", width:"100%", height:"100%", maxWidth:480, backgroundColor:"#000", display:"flex", flexDirection:"column" }}
+            style={{ position:"relative", width:"100%", height:"100dvh", maxWidth:480, backgroundColor:"#000", display:"flex", flexDirection:"column" }}
           >
-            {/* Video preview fills available space */}
             <div style={{ flex:1, position:"relative", overflow:"hidden", minHeight:0 }}>
               <video
                 ref={previewVideoRef}
@@ -296,7 +311,6 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
                 }}
               />
 
-              {/* Top toolbar */}
               <div style={{ position:"absolute", top:0, left:0, right:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px", paddingTop:"calc(env(safe-area-inset-top) + 16px)" }}>
                 <button
                   onClick={reset}
@@ -304,8 +318,6 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
                 >
                   <X size={18} />
                 </button>
-
-                {/* WhatsApp-style tool icons — visual stubs */}
                 <div style={{ display:"flex", gap:18, alignItems:"center" }}>
                   {[Music, Crop, Smile, Type, Pen].map((Icon, i) => (
                     <button key={i} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.85)", padding:4, display:"flex" }}>
@@ -313,15 +325,11 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
                     </button>
                   ))}
                 </div>
-
                 <div style={{ width:38 }} />
               </div>
             </div>
 
-            {/* Bottom — filmstrip + caption */}
             <div style={{ backgroundColor:"#000", flexShrink:0 }}>
-
-              {/* Info bar */}
               <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 16px 6px" }}>
                 <Volume2 size={14} color="rgba(255,255,255,0.55)" />
                 <span style={{ fontSize:12, color:"rgba(255,255,255,0.55)", fontFamily:"'Inter',sans-serif" }}>
@@ -332,13 +340,11 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
                 </span>
               </div>
 
-              {/* Filmstrip scrubber */}
               <div
                 ref={scrubRef}
                 className="sum-scrub"
                 style={{ position:"relative", height:68, margin:"0 4px 16px", borderRadius:6, overflow:"hidden" }}
               >
-                {/* Thumbnail frames */}
                 <div style={{ display:"flex", height:"100%", width:"100%" }}>
                   {thumbsLoading
                     ? Array.from({ length: THUMB_COUNT }).map((_, i) => (
@@ -352,39 +358,20 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
                       ))
                   }
                 </div>
-
-                {/* Dim overlay outside clip window */}
                 <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.55)", pointerEvents:"none" }} />
-
-                {/* Clip window — draggable */}
                 <div
-                  style={{
-                    position:     "absolute",
-                    top:          0,
-                    left:         `${clipWindowLeft}%`,
-                    width:        `${clipWindowWidth}%`,
-                    height:       "100%",
-                    border:       "3px solid #fff",
-                    borderRadius: 4,
-                    boxSizing:    "border-box",
-                    boxShadow:    "0 0 0 1000px rgba(0,0,0,0.55)",
-                    zIndex:       2,
-                    cursor:       "grab",
-                  }}
+                  style={{ position:"absolute", top:0, left:`${clipWindowLeft}%`, width:`${clipWindowWidth}%`, height:"100%", border:"3px solid #fff", borderRadius:4, boxSizing:"border-box", boxShadow:"0 0 0 1000px rgba(0,0,0,0.55)", zIndex:2, cursor:"grab" }}
                   onMouseDown={onScrubMouseDown}
                   onTouchStart={onScrubTouchStart}
                 >
-                  {/* Handles */}
                   <div style={{ position:"absolute", left:5, top:"50%", transform:"translateY(-50%)", width:3, height:22, backgroundColor:"rgba(255,255,255,0.85)", borderRadius:2 }} />
                   <div style={{ position:"absolute", right:5, top:"50%", transform:"translateY(-50%)", width:3, height:22, backgroundColor:"rgba(255,255,255,0.85)", borderRadius:2 }} />
-                  {/* Time label below window */}
                   <span style={{ position:"absolute", bottom:-18, left:"50%", transform:"translateX(-50%)", fontSize:10, color:"rgba(255,255,255,0.6)", fontFamily:"'Inter',sans-serif", whiteSpace:"nowrap", pointerEvents:"none" }}>
                     {fmtDuration(clipStart)} – {fmtDuration(clipStart + clipDuration)}
                   </span>
                 </div>
               </div>
 
-              {/* Caption + send */}
               <div style={{ display:"flex", alignItems:"center", gap:12, padding:"0 16px 20px", paddingBottom:"calc(env(safe-area-inset-bottom) + 20px)" }}>
                 <div style={{ flex:1, background: captionFocus ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.1)", borderRadius:24, padding:"10px 16px", border: captionFocus ? "1px solid rgba(255,255,255,0.3)" : "1px solid rgba(255,255,255,0.08)", transition:"all 0.2s" }}>
                   <input
@@ -413,29 +400,35 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
           <div
             className="sum-wrap"
             onClick={(e) => e.stopPropagation()}
-            style={{ position:"relative", width:"100%", height:"100%", maxWidth:480, backgroundColor:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}
+            style={{ position:"relative", width:"100%", height:"100dvh", maxWidth:480, backgroundColor:"#000", display:"flex", flexDirection:"column" }}
           >
-            {mediaType === "video" ? (
-              <video src={previewUrl} autoPlay muted loop playsInline style={{ width:"100%", height:"100%", objectFit:"contain", display:"block" }} />
-            ) : (
-              <img src={previewUrl} alt="preview" style={{ width:"100%", height:"100%", objectFit:"contain", display:"block" }} />
-            )}
+            {/* Close button */}
+            <div style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 16px)", left:16, zIndex:2 }}>
+              <button
+                onClick={reset}
+                style={{ background:"rgba(0,0,0,0.5)", border:"none", borderRadius:"50%", width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#fff" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-            <button
-              onClick={reset}
-              style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 16px)", left:16, background:"rgba(0,0,0,0.45)", border:"none", borderRadius:"50%", width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#fff" }}
-            >
-              <X size={18} />
-            </button>
+            {/* Media — fills remaining space above caption bar */}
+            <div style={{ flex:1, position:"relative", overflow:"hidden", minHeight:0 }}>
+              {mediaType === "video" ? (
+                <video src={previewUrl} autoPlay muted loop playsInline style={{ width:"100%", height:"100%", objectFit:"contain", display:"block" }} />
+              ) : (
+                <img src={previewUrl} alt="preview" style={{ width:"100%", height:"100%", objectFit:"contain", display:"block" }} />
+              )}
+              {error && (
+                <div style={{ position:"absolute", top:64, left:"50%", transform:"translateX(-50%)", backgroundColor:"rgba(239,68,68,0.9)", borderRadius:8, padding:"7px 16px", fontSize:12, color:"#fff", fontFamily:"'Inter',sans-serif", whiteSpace:"nowrap" }}>
+                  {error}
+                </div>
+              )}
+            </div>
 
-            {error && (
-              <div style={{ position:"absolute", top:64, left:"50%", transform:"translateX(-50%)", backgroundColor:"rgba(239,68,68,0.9)", borderRadius:8, padding:"7px 16px", fontSize:12, color:"#fff", fontFamily:"'Inter',sans-serif", whiteSpace:"nowrap" }}>
-                {error}
-              </div>
-            )}
-
-            <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"20px 16px", paddingBottom:"calc(env(safe-area-inset-bottom) + 20px)", background:"linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 100%)", display:"flex", alignItems:"center", gap:12 }}>
-              <div style={{ flex:1, background: captionFocus ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.1)", borderRadius:24, padding:"10px 16px", border: captionFocus ? "1px solid rgba(255,255,255,0.3)" : "1px solid rgba(255,255,255,0.08)", transition:"all 0.2s" }}>
+            {/* Caption bar — solid, always visible, never overlapped by media */}
+            <div style={{ flexShrink:0, backgroundColor:"#0D0D18", borderTop:"1px solid #1A1A2E", display:"flex", alignItems:"center", gap:12, padding:"12px 16px", paddingBottom:"calc(env(safe-area-inset-bottom) + 12px)" }}>
+              <div style={{ flex:1, background: captionFocus ? "#1C1C2E" : "#13131F", borderRadius:24, padding:"10px 16px", border: captionFocus ? "1px solid #8B5CF6" : "1px solid #2A2A3D", transition:"all 0.2s" }}>
                 <input
                   className="sum-caption"
                   value={caption}
@@ -448,7 +441,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
               </div>
               <button
                 onClick={handleSend}
-                style={{ width:50, height:50, borderRadius:"50%", border:"none", cursor:"pointer", background:"linear-gradient(135deg, #8B5CF6, #EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 4px 16px rgba(139,92,246,0.5)", transition:"transform 0.15s" }}
+                style={{ width:50, height:50, borderRadius:"50%", border:"none", cursor:"pointer", background:"linear-gradient(135deg, #8B5CF6, #EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 4px 16px rgba(139,92,246,0.5)" }}
               >
                 <Send size={20} color="#fff" style={{ marginLeft:2 }} />
               </button>
@@ -458,5 +451,5 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
 
       </div>
     </>
-  );
+  , document.body);
 }

@@ -16,14 +16,13 @@ export function MobileBottomNav() {
         .mobile-bottom-nav { display: flex !important; }
         @media (min-width: 768px) { .mobile-bottom-nav { display: none !important; } }
 
-        /* Fix #1 — account for safe-area by adding it on top of fixed height,
-           not inside it, so flex centering is never disturbed */
+        /* Hide when story upload modal is open */
+        body.story-modal-open .mobile-bottom-nav { display: none !important; }
+
         .mobile-bottom-nav {
           height: calc(64px + env(safe-area-inset-bottom));
           padding-bottom: env(safe-area-inset-bottom);
         }
-
-        /* Fix #2 — ensure nav items always receive touch events */
         .mobile-bottom-nav a,
         .mobile-bottom-nav button {
           -webkit-tap-highlight-color: transparent;
@@ -37,7 +36,7 @@ export function MobileBottomNav() {
         style={{
           position: "fixed", bottom: 0, left: 0, right: 0,
           backgroundColor: "#13131F", borderTop: "1px solid #1F1F2A",
-          zIndex: 200, // raised above main scroll container
+          zIndex: 200,
           fontFamily: "'Inter', sans-serif",
           alignItems: "center", justifyContent: "space-evenly",
           boxSizing: "border-box",
@@ -59,7 +58,6 @@ export function MobileBottomNav() {
           <span style={{ fontSize: "10px", lineHeight: 1 }}>Messages</span>
         </Link>
 
-        {/* ＋ button */}
         <Link
           href="/create"
           style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#8B5CF6", textDecoration: "none", flexShrink: 0 }}

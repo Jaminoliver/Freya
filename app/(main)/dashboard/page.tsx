@@ -14,20 +14,20 @@ const SCROLL_KEY = "home_feed_scroll";
 const SLIDES_KEY = "home_feed_slides";
 
 interface FeedPost {
-  id:           number;
-  creator_id:   string;
-  content_type: string;
-  caption:      string | null;
-  is_free:      boolean;
-  is_ppv:       boolean;
-  ppv_price:    number | null;
-  like_count:   number;
+  id:            number;
+  creator_id:    string;
+  content_type:  string;
+  caption:       string | null;
+  is_free:       boolean;
+  is_ppv:        boolean;
+  ppv_price:     number | null;
+  like_count:    number;
   comment_count: number;
-  published_at: string;
-  liked:        boolean;
-  can_access:   boolean;
-  locked:       boolean;
-  poll?:        PollData | null;
+  published_at:  string;
+  liked:         boolean;
+  can_access:    boolean;
+  locked:        boolean;
+  poll?:         PollData | null;
   profiles: {
     username:     string;
     display_name: string | null;
@@ -112,10 +112,10 @@ function preloadThumbnails(posts: FeedPost[], count = 3): Promise<void> {
     urls.map(
       (src) =>
         new Promise<void>((resolve) => {
-          const img = new Image();
+          const img    = new Image();
           img.onload  = () => resolve();
           img.onerror = () => resolve();
-          img.src = src;
+          img.src      = src;
         })
     )
   ).then(() => undefined);
@@ -279,6 +279,13 @@ export default function HomePage() {
     setExternalGroups(updatedGroups);
   }, []);
 
+  // Sync hasUnviewed back to StoryBar when viewer marks a group fully viewed
+  const handleGroupFullyViewed = useCallback((creatorId: string) => {
+    setExternalGroups((prev) =>
+      prev.map((g) => g.creatorId === creatorId ? { ...g, hasUnviewed: false } : g)
+    );
+  }, []);
+
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>
 
@@ -288,6 +295,7 @@ export default function HomePage() {
           startGroupIndex={storyStartIdx}
           onClose={handleViewerClose}
           onStoriesUpdated={() => setStoryViewerOpen(false)}
+          onGroupFullyViewed={handleGroupFullyViewed}
         />
       )}
 
@@ -302,12 +310,18 @@ export default function HomePage() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
-                flex: 1, padding: "12px 0", background: "none", border: "none",
+                flex:         1,
+                padding:      "12px 0",
+                background:   "none",
+                border:       "none",
                 borderBottom: activeTab === tab ? "2px solid #8B5CF6" : "2px solid transparent",
-                color: activeTab === tab ? "#FFFFFF" : "#6B6B8A",
-                fontSize: "14px", fontWeight: activeTab === tab ? 700 : 400,
-                cursor: "pointer", fontFamily: "'Inter', sans-serif",
-                transition: "all 0.15s", letterSpacing: "0.01em",
+                color:        activeTab === tab ? "#FFFFFF" : "#6B6B8A",
+                fontSize:     "14px",
+                fontWeight:   activeTab === tab ? 700 : 400,
+                cursor:       "pointer",
+                fontFamily:   "'Inter', sans-serif",
+                transition:   "all 0.15s",
+                letterSpacing: "0.01em",
               }}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
