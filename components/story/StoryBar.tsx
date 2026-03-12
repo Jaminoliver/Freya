@@ -70,7 +70,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { viewer: globalViewer, storyUpload, setStoryUpload, resetStoryUpload } = useAppStore();
-  const { phase: uploadPhase, uploadPct, error: uploadError } = storyUpload;
+  const { phase: uploadPhase, uploadPct, error: uploadError, storyId: currentStoryId } = storyUpload;
 
   const [orderedGroups, setOrderedGroups] = useState<CreatorStoryGroup[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -79,30 +79,51 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const cancelledRef    = useRef(false);
   const isCancellingRef = useRef(false);
 
-  const [fakePct,    setFakePct]    = useState(0);
-  const fakePctRef   = useRef(0);
-  const fakeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [displayPctState, setDisplayPctState] = useState(0);
+  const displayPctRef  = useRef(0);
+  const targetPctRef   = useRef(0);
+  const rafRef         = useRef<number | null>(null);
+  const { compressPct } = storyUpload;
 
-  // Slow fake ticker during "processing" phase (0→99%) at ~1% every 2.5s
+  // Easing loop — runs while uploading, moves displayPct toward targetPct
   useEffect(() => {
-    if (uploadPhase === "processing") {
-      fakePctRef.current = 50;
-      setFakePct(50);
-      fakeTimerRef.current = setInterval(() => {
-        const next = Math.min(fakePctRef.current + 1, 99);
-        fakePctRef.current = next;
-        setFakePct(next);
-        if (next >= 99 && fakeTimerRef.current) {
-          clearInterval(fakeTimerRef.current);
-          fakeTimerRef.current = null;
-        }
-      }, 2500);
-    } else {
-      if (fakeTimerRef.current) { clearInterval(fakeTimerRef.current); fakeTimerRef.current = null; }
-      if (uploadPhase === "idle" || uploadPhase === "done") { fakePctRef.current = 0; setFakePct(0); }
+    if (uploadPhase === "idle" || uploadPhase === "done") {
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      displayPctRef.current = uploadPhase === "done" ? 100 : 0;
+      setDisplayPctState(displayPctRef.current);
+      targetPctRef.current = displayPctRef.current;
+      return;
     }
-    return () => { if (fakeTimerRef.current) { clearInterval(fakeTimerRef.current); fakeTimerRef.current = null; } };
+
+    // Set target ceiling per phase
+    if      (uploadPhase === "compressing") targetPctRef.current = 20;
+    else if (uploadPhase === "uploading")   targetPctRef.current = 55;
+    else if (uploadPhase === "processing")  targetPctRef.current = 99;
+
+    const tick = () => {
+      const current = displayPctRef.current;
+      const target  = targetPctRef.current;
+      const diff    = target - current;
+      if (Math.abs(diff) < 0.2) {
+        displayPctRef.current = target;
+      } else {
+        displayPctRef.current = current + diff * 0.04;
+      }
+      setDisplayPctState(Math.round(displayPctRef.current));
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    if (!rafRef.current) rafRef.current = requestAnimationFrame(tick);
+
+    return () => { if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; } };
   }, [uploadPhase]);
+
+  // Drive compressing target with real compress progress
+  useEffect(() => {
+    if (uploadPhase === "compressing" && compressPct > 0) {
+      targetPctRef.current = Math.min(20, (compressPct / 100) * 20);
+    }
+  }, [uploadPhase, compressPct]);
 
   const isUploading = uploadPhase !== "idle" && uploadPhase !== "done";
   const isCreator   = globalViewer?.role === "creator";
@@ -173,6 +194,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
             console.log(`[story-realtime] ✓ Transcode complete for story ${payload.new?.id}`);
             const currentPhase = useAppStore.getState().storyUpload.phase;
             if (currentPhase === "processing") {
+              targetPctRef.current = 100;
               setStoryUpload({ phase: "done" });
               setTimeout(() => resetStoryUpload(), 2000);
             }
@@ -183,6 +205,27 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
     return () => { supabase.removeChannel(channel); };
   }, [isCreator, globalViewer?.id, fetchStories]);
+
+  // ── Fallback poller — if Realtime misses the UPDATE, poll every 3s ──────────
+  useEffect(() => {
+    if (uploadPhase !== "processing" || !currentStoryId) return;
+    console.log(`[story-poller] Starting poll for story ${currentStoryId}`);
+    const interval = setInterval(async () => {
+      try {
+        const res  = await fetch(`/api/stories/${currentStoryId}/status`);
+        const data = await res.json();
+        console.log(`[story-poller] story ${currentStoryId} isProcessing: ${data.isProcessing}`);
+        if (res.ok && data.isProcessing === false) {
+          clearInterval(interval);
+          await fetchStories();
+          targetPctRef.current = 100;
+          setStoryUpload({ phase: "done" });
+          setTimeout(() => resetStoryUpload(), 2000);
+        }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [uploadPhase, currentStoryId, fetchStories, setStoryUpload, resetStoryUpload]);
 
   // ── Cancel ────────────────────────────────────────────────────────────────
   const cancelUpload = useCallback(async () => {
@@ -307,7 +350,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     ...otherGroups,
   ];
 
-  const displayPct = uploadPhase === "processing" ? fakePct : uploadPct;
+  const displayPct = displayPctState;
 
   const statusLabel = isUploading
     ? `${displayPct}%`
