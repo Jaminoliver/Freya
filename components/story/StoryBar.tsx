@@ -62,23 +62,6 @@ const GRADIENT    = "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)";
 const GLOW        = "0 0 12px rgba(139,92,246,0.55), 0 0 24px rgba(236,72,153,0.35)";
 const VIEWED_RING = "#2A2A3D";
 
-// Maps all upload phases to a single unified 0-100 percentage so the creator
-// sees one continuous number from tap-send to story-ready.
-function overallPct(phase: string, uploadPct: number, compressPct: number): number {
-  switch (phase) {
-    case "compressing": return Math.round((compressPct / 100) * 25);
-    case "init":        return 27;
-    case "uploading":   return 30 + Math.round((uploadPct  / 100) * 50);
-    case "completing":  return 82;
-    case "processing":  return 0; // handled via fake ticker in component
-    case "done":        return 100;
-    default:            return 0;
-  }
-}
-
-// Returns true if a group should be hidden from the bar.
-// A group is hidden when every one of its items is still processing
-// (Bunny hasn't finished transcoding — thumbnail would 404).
 function allProcessing(group: CreatorStoryGroup): boolean {
   return group.items.length > 0 && group.items.every((s) => s.isProcessing);
 }
@@ -87,40 +70,14 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { viewer: globalViewer, storyUpload, setStoryUpload, resetStoryUpload } = useAppStore();
-  const { phase: uploadPhase, uploadPct, compressPct, error: uploadError, storyId: currentStoryId } = storyUpload;
+  const { phase: uploadPhase, uploadPct, error: uploadError } = storyUpload;
 
   const [orderedGroups, setOrderedGroups] = useState<CreatorStoryGroup[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [uploadOpen,    setUploadOpen]    = useState(false);
 
-  const [fakePct, setFakePct] = useState(0);
-  const fakePctRef   = useRef(0);
-  const fakeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const tusUploadRef    = useRef<any>(null);
   const cancelledRef    = useRef(false);
   const isCancellingRef = useRef(false);
-
-  // Drive a slow fake ticker during "processing" phase (85→99%).
-  useEffect(() => {
-    if (uploadPhase === "processing") {
-      fakePctRef.current = 85;
-      setFakePct(85);
-      fakeTimerRef.current = setInterval(() => {
-        const next = Math.min(fakePctRef.current + 1, 99);
-        fakePctRef.current = next;
-        setFakePct(next);
-        if (next >= 99 && fakeTimerRef.current) {
-          clearInterval(fakeTimerRef.current);
-          fakeTimerRef.current = null;
-        }
-      }, 1400);
-    } else {
-      if (fakeTimerRef.current) { clearInterval(fakeTimerRef.current); fakeTimerRef.current = null; }
-      if (uploadPhase === "idle" || uploadPhase === "done") { fakePctRef.current = 0; setFakePct(0); }
-    }
-    return () => { if (fakeTimerRef.current) { clearInterval(fakeTimerRef.current); fakeTimerRef.current = null; } };
-  }, [uploadPhase]);
 
   const isUploading = uploadPhase !== "idle" && uploadPhase !== "done";
   const isCreator   = globalViewer?.role === "creator";
@@ -169,27 +126,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     setOrderedGroups(sortGroups(externalGroups));
   }, [externalGroups, sortGroups]);
 
-  // Fallback poller — if Realtime WebSocket drops during "processing" phase,
-  // poll every 4s until is_processing flips to false on the current story.
-  useEffect(() => {
-    if (uploadPhase !== "processing" || !currentStoryId) return;
-    const interval = setInterval(async () => {
-      try {
-        const res  = await fetch(`/api/stories/${currentStoryId}/status`);
-        const data = await res.json();
-        if (res.ok && data.isProcessing === false) {
-          clearInterval(interval);
-          fetchStories();
-          setStoryUpload({ phase: "done" });
-          setTimeout(() => resetStoryUpload(), 2000);
-        }
-      } catch {}
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [uploadPhase, currentStoryId, fetchStories, setStoryUpload, resetStoryUpload]);
-
   // Realtime: re-fetch on INSERT or UPDATE for the creator's own stories.
-  // Merged into a single channel to avoid duplicate subscriptions.
   useEffect(() => {
     if (!isCreator || !globalViewer?.id) return;
 
@@ -205,8 +142,10 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "stories", filter: `creator_id=eq.${globalViewer.id}` },
         (payload: { new: Record<string, any>; old: Record<string, any> }) => {
+          console.log(`[story-realtime] UPDATE received — is_processing: ${payload.new?.is_processing}`);
+          fetchStories();
           if (payload.new?.is_processing === false && payload.old?.is_processing === true) {
-            fetchStories();
+            console.log(`[story-realtime] ✓ Transcode complete for story ${payload.new?.id}`);
             const currentPhase = useAppStore.getState().storyUpload.phase;
             if (currentPhase === "processing") {
               setStoryUpload({ phase: "done" });
@@ -218,39 +157,22 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [isCreator, globalViewer?.id, fetchStories, setStoryUpload, resetStoryUpload]);
+  }, [isCreator, globalViewer?.id, fetchStories]);
 
   // ── Cancel ────────────────────────────────────────────────────────────────
   const cancelUpload = useCallback(async () => {
     if (isCancellingRef.current) return;
     isCancellingRef.current = true;
     cancelledRef.current    = true;
-
-    if (tusUploadRef.current) {
-      try { tusUploadRef.current.abort(); } catch {}
-      tusUploadRef.current = null;
-    }
-
-    if (currentStoryId) {
-      try {
-        await fetch("/api/stories/cancel", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ storyId: currentStoryId }),
-        });
-      } catch {}
-    }
-
     resetStoryUpload();
     isCancellingRef.current = false;
-  }, [currentStoryId, resetStoryUpload]);
+  }, [resetStoryUpload]);
 
   // ── Start upload ──────────────────────────────────────────────────────────
   const startUpload = useCallback(async (job: UploadJob) => {
     cancelledRef.current = false;
     resetStoryUpload();
 
-    const startTime = Date.now();
     console.log(`[story-upload] ── START ──────────────────────────────────`);
 
     try {
@@ -266,129 +188,57 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         console.log(`[story-upload] Compression done | New size: ${(fileToUpload.size / 1024 / 1024).toFixed(2)} MB`);
       }
 
-      setStoryUpload({ phase: "init", compressPct: 0 });
+      setStoryUpload({ phase: "uploading", uploadPct: 0 });
 
-      const initBody: Record<string, unknown> = {
+      const base64 = await new Promise<string>((res, rej) => {
+        const reader = new FileReader();
+        reader.onload  = () => res((reader.result as string).split(",")[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(fileToUpload);
+      });
+
+      if (cancelledRef.current) return;
+
+      const body: Record<string, unknown> = {
         mediaType: job.mediaType,
         caption:   job.caption,
         clipStart: job.clipStart,
         clipEnd:   job.clipEnd,
         fileName:  fileToUpload.name,
         mimeType:  fileToUpload.type,
+        fileData:  base64,
       };
 
-      if (job.mediaType === "photo") {
-        const base64 = await new Promise<string>((res, rej) => {
-          const reader = new FileReader();
-          reader.onload  = () => res((reader.result as string).split(",")[1]);
-          reader.onerror = rej;
-          reader.readAsDataURL(fileToUpload);
-        });
-        initBody.fileData = base64;
-      }
+      setStoryUpload({ uploadPct: 50 });
 
-      if (cancelledRef.current) return;
-
-      const initController = new AbortController();
-      const initTimer      = setTimeout(() => initController.abort(), 15000);
+      const controller = new AbortController();
+      const timer      = setTimeout(() => controller.abort(), 300000);
       let   initRes: Response;
       try {
         initRes = await fetch("/api/stories/init", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify(initBody),
-          signal:  initController.signal,
+          body:    JSON.stringify(body),
+          signal:  controller.signal,
         });
       } finally {
-        clearTimeout(initTimer);
+        clearTimeout(timer);
       }
+
+      if (cancelledRef.current) return;
 
       const initData = await initRes.json();
-      if (!initRes.ok) throw new Error(initData.error ?? "Init failed");
-      if (cancelledRef.current) return;
+      if (!initRes.ok) throw new Error(initData.error ?? "Upload failed");
 
-      if (initData.storyId) setStoryUpload({ storyId: initData.storyId });
-
-      if (initData.uploadType === "done") {
-        setStoryUpload({ phase: "done" });
+      if (job.mediaType === "video") {
+        console.log(`[story-upload] ── WAITING FOR TRANSCODE (storyId: ${initData.storyId})`);
+        setStoryUpload({ phase: "processing", storyId: initData.storyId, uploadPct: 100 });
+        await fetchStories();
+      } else {
+        setStoryUpload({ phase: "done", uploadPct: 100 });
         await fetchStories();
         setTimeout(() => resetStoryUpload(), 2000);
-        return;
       }
-
-      setStoryUpload({ phase: "uploading", uploadPct: 0 });
-      const { storyId, tusEndpoint, videoId, signature, expireTime, libraryId } = initData;
-      if (storyId) setStoryUpload({ storyId });
-
-      const tusStart      = Date.now();
-      let   lastLoggedPct = -1;
-
-      await new Promise<void>((resolve, reject) => {
-        import("tus-js-client").then(({ Upload }) => {
-          if (cancelledRef.current) { resolve(); return; }
-
-          const upload = new Upload(fileToUpload, {
-            endpoint:    tusEndpoint,
-            chunkSize:   5 * 1024 * 1024,
-            retryDelays: [0, 3000, 5000, 10000, 20000],
-            headers: {
-              AuthorizationSignature: signature,
-              AuthorizationExpire:    String(expireTime),
-              VideoId:                videoId,
-              LibraryId:              libraryId,
-            },
-            metadata: { filetype: fileToUpload.type, title: `story-${videoId}` },
-            onChunkComplete(_chunkSize, bytesAccepted, bytesTotal) {
-              if (cancelledRef.current) return;
-              const pct = Math.round((bytesAccepted / bytesTotal) * 100);
-              setStoryUpload({ uploadPct: pct });
-              if (pct >= lastLoggedPct + 10) {
-                const elapsed  = (Date.now() - tusStart) / 1000;
-                const speedMBs = (bytesAccepted / 1024 / 1024 / elapsed).toFixed(2);
-                const remainMB = ((bytesTotal - bytesAccepted) / 1024 / 1024).toFixed(1);
-                console.log(`[story-upload] TUS ${pct}% | ${speedMBs} MB/s | ~${remainMB} MB left`);
-                lastLoggedPct = pct;
-              }
-            },
-            onError(err) {
-              if (cancelledRef.current) { resolve(); return; }
-              reject(err);
-            },
-            onSuccess() {
-              console.log(`[story-upload] TUS done in ${((Date.now() - tusStart) / 1000).toFixed(1)}s`);
-              resolve();
-            },
-          });
-
-          tusUploadRef.current = upload;
-          upload.start();
-        }).catch(reject);
-      });
-
-      if (cancelledRef.current) return;
-      tusUploadRef.current = null;
-
-      setStoryUpload({ phase: "completing" });
-
-      const completeController = new AbortController();
-      const completeTimer      = setTimeout(() => completeController.abort(), 10000);
-      try {
-        const completeRes = await fetch("/api/stories/complete", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ storyId }),
-          signal:  completeController.signal,
-        });
-        if (!completeRes.ok) throw new Error("Failed to complete story");
-      } finally {
-        clearTimeout(completeTimer);
-      }
-
-      if (cancelledRef.current) return;
-
-      console.log(`[story-upload] ── UPLOAD DONE ✓ Total: ${((Date.now() - startTime) / 1000).toFixed(1)}s — waiting for Bunny transcoding`);
-      setStoryUpload({ phase: "processing", uploadPct: 0 });
-      await fetchStories();
 
     } catch (err: any) {
       if (cancelledRef.current) return;
@@ -408,29 +258,21 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     const clickedCreatorId = displayGroups[groupIndex]?.creatorId;
     if (!clickedCreatorId) return;
 
-    // Strip processing items from each group, but keep groups that have
-    // at least one ready item — OR the creator's own group (always openable).
     const viewableGroups = displayGroups
       .map((g) => ({ ...g, items: g.items.filter((s) => !s.isProcessing) }))
       .filter((g) => g.items.length > 0 || g.creatorId === clickedCreatorId);
 
-    // Remove empty groups except the clicked one (creator with all-processing items)
     const filtered = viewableGroups.filter(
       (g) => g.items.length > 0 || g.creatorId === clickedCreatorId
     );
 
     const viewableIndex = filtered.findIndex((g) => g.creatorId === clickedCreatorId);
     if (viewableIndex === -1) return;
-
-    // Don't open viewer if the clicked group has no viewable items
     if (filtered[viewableIndex].items.length === 0) return;
 
     onOpenViewer?.(filtered, viewableIndex);
   };
 
-  // ── Derive display list ───────────────────────────────────────────────────
-  // 1. Pin creator's own group at position 0 (always shown even while processing)
-  // 2. Other groups hidden until transcoding finishes (no broken thumbnails for fans)
   const ownGroup    = isCreator && globalViewer
     ? orderedGroups.find((g) => g.creatorId === globalViewer.id) ?? null
     : null;
@@ -440,9 +282,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     ...otherGroups,
   ];
 
-  const displayPct = uploadPhase === "processing"
-    ? fakePct
-    : overallPct(uploadPhase, uploadPct, compressPct);
+  const displayPct = uploadPct;
 
   const statusLabel = isUploading
     ? `${displayPct}%`

@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
 import {
-  createBunnyStoryVideo,
-  getBunnyStoryTusCredentials,
   uploadPhotoToBunny,
+  createBunnyStoryVideo,
+  uploadBunnyStoryVideo,
   getBunnyStoryStreamUrls,
 } from "@/lib/utils/bunny";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime     = "nodejs";
+export const dynamic     = "force-dynamic";
+export const maxDuration = 300;
 
 // POST /api/stories/init
 export async function POST(req: NextRequest) {
@@ -41,13 +42,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid mediaType" }, { status: 400 });
     }
 
+    if (!fileData) return NextResponse.json({ error: "No fileData provided" }, { status: 400 });
+
+    const buffer    = Buffer.from(fileData, "base64");
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     // ── PHOTO ─────────────────────────────────────────────────────────────
     if (mediaType === "photo") {
-      if (!fileData) return NextResponse.json({ error: "No fileData for photo" }, { status: 400 });
-
-      const buffer = Buffer.from(fileData, "base64");
       const { url } = await uploadPhotoToBunny(buffer, user.id, fileName, mimeType);
 
       const { data: story, error: insertErr } = await supabase
@@ -76,8 +77,8 @@ export async function POST(req: NextRequest) {
 
     // ── VIDEO ─────────────────────────────────────────────────────────────
     const videoId = await createBunnyStoryVideo(`story-${user.id}-${Date.now()}`);
+    await uploadBunnyStoryVideo(buffer, videoId);
     const { hlsUrl, thumbnailUrl } = getBunnyStoryStreamUrls(videoId);
-    const tus = getBunnyStoryTusCredentials(videoId);
 
     const { data: story, error: insertErr } = await supabase
       .from("stories")
@@ -102,15 +103,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to create story" }, { status: 500 });
     }
 
-    return NextResponse.json({
-      storyId:     story.id,
-      uploadType:  "tus",
-      videoId,
-      tusEndpoint: tus.tusEndpoint,
-      signature:   tus.signature,
-      expireTime:  tus.expireTime,
-      libraryId:   tus.libraryId,
-    });
+    return NextResponse.json({ storyId: story.id, uploadType: "done" });
 
   } catch (err) {
     console.error("[POST /api/stories/init] unexpected error:", err);

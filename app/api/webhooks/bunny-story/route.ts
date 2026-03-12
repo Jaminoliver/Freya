@@ -17,6 +17,8 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceSupabaseClient();
 
+    console.log(`[bunny-story webhook] VideoGuid: ${VideoGuid} | Status: ${Status}`);
+
     if (Status === 4) {
       const { data: story } = await supabase
         .from("stories")
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (Status === 5) {
-      console.error(`[bunny-story webhook] Encoding failed for VideoGuid: ${VideoGuid}`);
+      console.error(`[bunny-story webhook] ✗ Encoding FAILED for VideoGuid: ${VideoGuid}`);
     }
 
     return NextResponse.json({ received: true }, { status: 200 });
