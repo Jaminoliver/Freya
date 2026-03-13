@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
 function resignImageUrl(storedUrl: string | null): string | null {
   if (!storedUrl) return null;
   try {
     const url  = new URL(storedUrl);
-    const path = url.pathname; // e.g. /posts/userId/filename.jpg
+    const path = url.pathname;
     return signBunnyUrl(path);
   } catch {
     return storedUrl;
@@ -34,14 +34,18 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Full list ──────────────────────────────────────────────────────────────
-  const { data, error } = await supabase
+  const service = createServiceSupabaseClient();
+
+  const { data, error } = await service
     .from("saved_posts")
     .select(`
       post_id,
       posts (
         id,
         content_type,
-        caption,
+        is_ppv,
+        audience,
+        creator_id,
         published_at,
         media:media (
           id,
@@ -66,25 +70,57 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const postIds = (data ?? []).map((row: any) => Number(row.posts?.id)).filter(Boolean);
+
+  // Fetch subscriptions and PPV unlocks in parallel
+  const [{ data: subsRaw }, { data: ppvUnlocksRaw }] = await Promise.all([
+    postIds.length > 0
+      ? service
+          .from("subscriptions")
+          .select("creator_id")
+          .eq("fan_id", user.id)
+          .eq("status", "active")
+      : Promise.resolve({ data: [] }),
+    postIds.length > 0
+      ? service
+          .from("ppv_unlocks")
+          .select("post_id")
+          .eq("fan_id", user.id)
+          .in("post_id", postIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const subscribedSet = new Set((subsRaw ?? []).map((s: any) => s.creator_id));
+  const unlockedSet   = new Set((ppvUnlocksRaw ?? []).map((u: any) => Number(u.post_id)));
+
+  const STREAM_CDN = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
+
   const posts = (data ?? []).map((row: any) => {
-    const p     = row.posts;
-    const media = (p.media ?? []).sort((a: any, b: any) => a.display_order - b.display_order);
-    const first = media[0];
+    const p      = row.posts;
+    const media  = (p.media ?? []).sort((a: any, b: any) => a.display_order - b.display_order);
+    const first  = media[0];
+    const isPpv  = p.is_ppv as boolean;
+    const postId = Number(p.id);
 
+    const isSubscribed = subscribedSet.has(p.creator_id);
+    const isLocked     = isPpv
+      ? !unlockedSet.has(postId)
+      : !(p.audience === "everyone" || isSubscribed);
+
+    // Always return thumbnail regardless of lock status — used for blur preview
     let thumbnail_url: string | null = null;
-
     if (first?.media_type === "video" && first?.bunny_video_id) {
-      thumbnail_url = `https://${process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net"}/${first.bunny_video_id}/thumbnail.jpg`;
+      thumbnail_url = `https://${STREAM_CDN}/${first.bunny_video_id}/thumbnail.jpg`;
     } else {
       thumbnail_url = resignImageUrl(first?.thumbnail_url) ?? resignImageUrl(first?.file_url) ?? null;
     }
 
     return {
-      id: String(p.id),
+      id:           String(p.id),
       thumbnail_url,
-      media_type:  first?.media_type === "video" ? "video" : "image",
-      media_count: media.length,
-      is_locked:   false,
+      media_type:   first?.media_type === "video" ? "video" : "image",
+      media_count:  media.length,
+      is_locked:    isLocked,
       creator: {
         username:   p.profiles.username,
         name:       p.profiles.display_name || p.profiles.username,

@@ -10,6 +10,7 @@ interface PostActionsProps {
   liked?: boolean;
   bookmarked?: boolean;
   isSubscribed: boolean;
+  isFree?: boolean;
   isOwnProfile?: boolean;
   onLike?: () => void;
   onComment?: () => void;
@@ -20,7 +21,7 @@ interface PostActionsProps {
 export default function PostActions({
   likes, comments, tips = 0, liked: likedProp = false,
   bookmarked: bookmarkedProp = false,
-  isSubscribed, isOwnProfile = false,
+  isSubscribed, isFree = false, isOwnProfile = false,
   onLike, onComment, onTip, onBookmark,
 }: PostActionsProps) {
   const [liked,      setLiked]      = React.useState(likedProp);
@@ -36,8 +37,10 @@ export default function PostActions({
     setBookmarked(bookmarkedProp);
   }, [bookmarkedProp]);
 
+  const canLike = isSubscribed || isOwnProfile || isFree;
+
   const handleLike = () => {
-    if (!isSubscribed && !isOwnProfile) return;
+    if (!canLike) return;
     const next = liked ? likeCount - 1 : likeCount + 1;
     setLiked(!liked);
     setLikeCount(next);
@@ -48,8 +51,6 @@ export default function PostActions({
     setBookmarked(!bookmarked);
     onBookmark?.();
   };
-
-  const canLike = isSubscribed || isOwnProfile;
 
   return (
     <div style={{ padding: "4px 0 4px", fontFamily: "'Inter', sans-serif" }}>
@@ -147,8 +148,8 @@ export default function PostActions({
         )}
       </div>
 
-      {/* Subscribe nudge */}
-      {!isSubscribed && !isOwnProfile && (
+      {/* Subscribe nudge — only for locked posts */}
+      {!isSubscribed && !isOwnProfile && !isFree && (
         <p style={{ margin: "8px 0 0 4px", fontSize: "12px", color: "#4A4A6A", fontFamily: "'Inter', sans-serif" }}>
           Subscribe to like this post
         </p>

@@ -26,9 +26,10 @@ export interface ApiPost {
   liked:         boolean;
   can_access:    boolean;
   locked:        boolean;
+  audience:      "subscribers" | "everyone";
   poll?:         PollData | null;
   profiles: {
-    id:           string;          // creator_id — needed for save/unsave
+    id:           string;
     username:     string;
     display_name: string | null;
     avatar_url:   string | null;
@@ -153,6 +154,9 @@ export default function PostRow({
   const isLiking = React.useRef(false);
 
   const firstMedia = post.media?.[0];
+
+  // A post is free/public if audience is 'everyone'
+  const isFreePost = post.audience === "everyone";
 
   const viewerMedia = React.useMemo(() => {
     if (!post.media?.length) return [];
@@ -316,8 +320,7 @@ export default function PostRow({
           onClose={() => setSheetOpen(false)}
           onSavePost={handleSavePost}
           onSaveCreator={handleSaveCreator}
-          onAddToList={() => console.log("add to list")}
-          onHidePost={() => console.log("hide post")}
+          onNotInterested={() => console.log("not interested")}
           onReport={() => console.log("report")}
           onBlockCreator={() => console.log("block creator")}
           savedPost={savedPost}
@@ -397,6 +400,7 @@ export default function PostRow({
             liked={liked}
             bookmarked={savedPost}
             isSubscribed={isSubscribed}
+            isFree={isFreePost}
             isOwnProfile={isOwnProfile}
             onLike={handleLike}
             onComment={() => setCommentOpen((p) => !p)}

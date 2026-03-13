@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Bookmark, UserPlus, ListPlus, EyeOff, Flag, Ban } from "lucide-react";
+import { Bookmark, UserPlus, ThumbsDown, Flag, Ban } from "lucide-react";
 import { createPortal } from "react-dom";
 
 interface PostOptionsSheetProps {
@@ -9,8 +9,7 @@ interface PostOptionsSheetProps {
   onClose:         () => void;
   onSavePost:      () => void;
   onSaveCreator:   () => void;
-  onAddToList:     () => void;
-  onHidePost:      () => void;
+  onNotInterested: () => void;
   onReport:        () => void;
   onBlockCreator:  () => void;
   savedPost?:      boolean;
@@ -23,8 +22,7 @@ const options = (
   handlers: {
     onSavePost:     () => void;
     onSaveCreator:  () => void;
-    onAddToList:    () => void;
-    onHidePost:     () => void;
+    onNotInterested: () => void;
     onReport:       () => void;
     onBlockCreator: () => void;
   }
@@ -43,17 +41,11 @@ const options = (
     danger: false,
     filled: savedCreator,
   },
+
   {
-    icon:   <ListPlus size={18} />,
-    label:  "Add to list",
-    action: handlers.onAddToList,
-    danger: false,
-    filled: false,
-  },
-  {
-    icon:   <EyeOff size={18} />,
-    label:  "Hide post",
-    action: handlers.onHidePost,
+    icon:   <ThumbsDown size={18} />,
+    label:  "Not interested",
+    action: handlers.onNotInterested,
     danger: false,
     filled: false,
   },
@@ -78,8 +70,7 @@ export default function PostOptionsSheet({
   onClose,
   onSavePost,
   onSaveCreator,
-  onAddToList,
-  onHidePost,
+  onNotInterested,
   onReport,
   onBlockCreator,
   savedPost    = false,
@@ -109,8 +100,7 @@ export default function PostOptionsSheet({
   const items = options(savedPost, savedCreator, {
     onSavePost,
     onSaveCreator,
-    onAddToList,
-    onHidePost,
+    onNotInterested,
     onReport,
     onBlockCreator,
   });

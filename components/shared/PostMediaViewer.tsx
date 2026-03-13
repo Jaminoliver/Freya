@@ -176,7 +176,10 @@ export default function PostMediaViewer({
 
   // ── Locked (PPV) ─────────────────────────────────────────────────────────
   if (isLocked) {
-    const blurSrc = first.thumbnailUrl ?? thumbSrc;
+    // Stream thumbnails are public — bypass signed thumbnailUrl for videos
+    const blurSrc = isVideo
+      ? (first.bunnyVideoId ? getBunnyThumbnail(first.bunnyVideoId) : first.thumbnailUrl ?? undefined)
+      : (first.thumbnailUrl ?? first.url ?? undefined);
     const isPPV   = price != null && price > 0;
 
     return (
@@ -197,7 +200,7 @@ export default function PostMediaViewer({
               style={{
                 position: "absolute", inset: 0, width: "100%", height: "100%",
                 objectFit: "cover",
-                filter: "blur(18px) brightness(0.45)",
+                filter: "blur(6px) brightness(0.45)",
                 transform: "scale(1.08)",
                 zIndex: 1,
               }}

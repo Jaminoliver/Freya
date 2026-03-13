@@ -48,6 +48,7 @@ interface Post {
   caption:         string;
   media:           MediaItem[];
   isLocked:        boolean;
+  is_ppv:          boolean;
   price:           number | null;
   likes:           number;
   comments:        number;
@@ -66,7 +67,6 @@ let viewerPromise: Promise<Viewer | null> | null = null;
 function fetchViewer(): Promise<Viewer | null> {
   if (cachedViewer) return Promise.resolve(cachedViewer);
   if (viewerPromise) return viewerPromise;
-
   viewerPromise = (async () => {
     try {
       const supabase = createClient();
@@ -78,22 +78,13 @@ function fetchViewer(): Promise<Viewer | null> {
         .eq("id", user.id)
         .single();
       if (data) {
-        cachedViewer = {
-          id:           user.id,
-          username:     data.username,
-          display_name: data.display_name || data.username,
-          avatar_url:   data.avatar_url || "",
-        };
+        cachedViewer = { id: user.id, username: data.username, display_name: data.display_name || data.username, avatar_url: data.avatar_url || "" };
         return cachedViewer;
       }
       return null;
-    } catch {
-      return null;
-    } finally {
-      viewerPromise = null;
-    }
+    } catch { return null; }
+    finally { viewerPromise = null; }
   })();
-
   return viewerPromise;
 }
 
@@ -119,15 +110,16 @@ function toLightboxPost(post: Post): LightboxPost {
   };
 }
 
-// ── Main PostCard ─────────────────────────────────────────────────────────────
 export function PostCard({
   post,
   onLike,
+  onUnlock,
   initialSlide = 0,
   onSlideChange,
 }: {
   post:           Post;
   onLike?:        (postId: string) => void;
+  onUnlock?:      (postId: string) => void;
   initialSlide?:  number;
   onSlideChange?: (postId: string, index: number) => void;
 }) {
@@ -147,8 +139,8 @@ export function PostCard({
   const [pollData,         setPollData]         = useState<PollData | null>(post.poll ?? null);
   const [savedPost,        setSavedPost]        = useState(false);
   const [savedCreator,     setSavedCreator]     = useState(false);
+  const [timestamp,        setTimestamp]        = useState("");
 
-  const [timestamp, setTimestamp] = useState("");
   useEffect(() => {
     function getRelativeTime(dateStr: string): string {
       const diff  = Date.now() - new Date(dateStr).getTime();
@@ -243,15 +235,8 @@ export function PostCard({
     reply_to_id?: string | number | null
   ) => {
     await fetch(`/api/posts/${id}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content:            text,
-        gif_url:            gif_url ?? null,
-        parent_comment_id:  parent_comment_id ?? null,
-        reply_to_username:  reply_to_username ?? null,
-        reply_to_id:        reply_to_id ?? null,
-      }),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text, gif_url: gif_url ?? null, parent_comment_id: parent_comment_id ?? null, reply_to_username: reply_to_username ?? null, reply_to_id: reply_to_id ?? null }),
     });
     setCommentCount((c) => c + 1);
     postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: commentCount + 1 });
@@ -261,113 +246,55 @@ export function PostCard({
     }
   }, [liked, likeCount, commentCount]);
 
-  const handleSlideChange = useCallback((index: number) => {
-    onSlideChange?.(post.id, index);
-  }, [post.id, onSlideChange]);
-
-  const handleCreatorMouseEnter = useCallback(() => {
-    router.prefetch(`/${post.creator.username}`);
-  }, [router, post.creator.username]);
-
   const handleSavePost = useCallback(async () => {
     const next = !savedPost;
     setSavedPost(next);
     try {
-      await fetch("/api/saved/posts", {
-        method:  next ? "POST" : "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ post_id: post.id }),
-      });
-    } catch {
-      setSavedPost(!next);
-    }
+      await fetch("/api/saved/posts", { method: next ? "POST" : "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ post_id: post.id }) });
+    } catch { setSavedPost(!next); }
   }, [savedPost, post.id]);
 
   const handleSaveCreator = useCallback(async () => {
     const next = !savedCreator;
     setSavedCreator(next);
     try {
-      await fetch("/api/saved/creators", {
-        method:  next ? "POST" : "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ creator_id: post.creator.id }),
-      });
-    } catch {
-      setSavedCreator(!next);
-    }
+      await fetch("/api/saved/creators", { method: next ? "POST" : "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creator_id: post.creator.id }) });
+    } catch { setSavedCreator(!next); }
   }, [savedCreator, post.creator.id]);
 
-  const handleBookmark = useCallback(() => {
-    handleSavePost();
-  }, [handleSavePost]);
-
-  // Build a minimal User shape for CheckoutModal — tips only needs id, username, display_name, avatar_url
   const creatorAsUser: User = {
-    id:           post.creator.id,
-    username:     post.creator.username,
-    display_name: post.creator.name,
-    avatar_url:   post.creator.avatar_url,
-    role:         "creator",
+    id: post.creator.id, username: post.creator.username,
+    display_name: post.creator.name, avatar_url: post.creator.avatar_url, role: "creator",
   } as User;
 
   const normalizedMedia: NormalizedMedia[] = post.media.map((m) => ({
-    type:             m.type,
-    url:              m.url,
-    bunnyVideoId:     m.bunnyVideoId,
-    thumbnailUrl:     m.thumbnailUrl,
-    processingStatus: m.processingStatus,
-    rawVideoUrl:      m.rawVideoUrl,
-    blurHash:         m.blurHash ?? null,
-    width:            m.width ?? null,
-    height:           m.height ?? null,
-    aspectRatio:      m.aspectRatio ?? null,
+    type: m.type, url: m.url, bunnyVideoId: m.bunnyVideoId, thumbnailUrl: m.thumbnailUrl,
+    processingStatus: m.processingStatus, rawVideoUrl: m.rawVideoUrl,
+    blurHash: m.blurHash ?? null, width: m.width ?? null, height: m.height ?? null, aspectRatio: m.aspectRatio ?? null,
   }));
 
   const lightboxPost = toLightboxPost(post);
-
-  const isTextPost = post.content_type === "text";
-  const isPollPost = post.content_type === "poll";
+  const isTextPost   = post.content_type === "text";
+  const isPollPost   = post.content_type === "poll";
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
 
-      <CheckoutModal
-        isOpen={tipOpen}
-        onClose={() => setTipOpen(false)}
-        type="tips"
-        creator={creatorAsUser}
-      />
+      <CheckoutModal isOpen={tipOpen} onClose={() => setTipOpen(false)} type="tips" creator={creatorAsUser} />
 
       {lightboxOpen && lightboxPost.media.length > 0 && (
-        <Lightbox
-          post={lightboxPost}
-          allPosts={[lightboxPost]}
-          initialMediaIndex={lightboxMediaIdx}
-          onClose={() => setLightboxOpen(false)}
-          onNavigate={() => {}}
-        />
+        <Lightbox post={lightboxPost} allPosts={[lightboxPost]} initialMediaIndex={lightboxMediaIdx} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
       )}
 
       <PostOptionsSheet
-        isOpen={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        onSavePost={handleSavePost}
-        onSaveCreator={handleSaveCreator}
-        onAddToList={() => console.log("add to list")}
-        onHidePost={() => console.log("hide post")}
-        onReport={() => console.log("report")}
-        onBlockCreator={() => console.log("block creator")}
-        savedPost={savedPost}
-        savedCreator={savedCreator}
+        isOpen={sheetOpen} onClose={() => setSheetOpen(false)}
+        onSavePost={handleSavePost} onSaveCreator={handleSaveCreator}
+        onNotInterested={() => {}} onReport={() => {}} onBlockCreator={() => {}}
+        savedPost={savedPost} savedCreator={savedCreator}
       />
 
-      {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div
-          style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
-          onClick={() => router.push(`/${post.creator.username}`)}
-          onMouseEnter={handleCreatorMouseEnter}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => router.push(`/${post.creator.username}`)} onMouseEnter={() => router.prefetch(`/${post.creator.username}`)}>
           <img src={post.creator.avatar_url || ""} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -379,20 +306,12 @@ export function PostCard({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{timestamp}</span>
-          <button
-            onClick={() => handleOpenSheet()}
-            style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
-            </svg>
+          <button onClick={handleOpenSheet} style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
           </button>
         </div>
       </div>
 
-      {/* Caption */}
       {post.caption && (
         <p style={{ fontSize: isTextPost ? "15px" : "14px", color: "#C4C4D4", lineHeight: isTextPost ? 1.7 : 1.6, margin: "0", padding: isTextPost ? "0 16px 14px" : "0 16px 10px", whiteSpace: "pre-wrap" }}>
           {post.caption}
@@ -412,9 +331,9 @@ export function PostCard({
           price={post.price}
           onDoubleTap={handleDoubleTapLike}
           onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
-          onUnlock={() => {}}
+          onUnlock={() => onUnlock?.(post.id)}
           initialSlide={initialSlide}
-          onSlideChange={handleSlideChange}
+          onSlideChange={(index) => onSlideChange?.(post.id, index)}
         />
       )}
 
@@ -427,29 +346,8 @@ export function PostCard({
       )}
 
       <div style={{ padding: "0 16px" }}>
-        <PostActions
-          likes={likeCount}
-          comments={commentCount}
-          liked={liked}
-          bookmarked={savedPost}
-          isSubscribed={true}
-          isOwnProfile={false}
-          onLike={handleLike}
-          onComment={() => setCommentOpen((prev) => !prev)}
-          onTip={() => setTipOpen(true)}
-          onBookmark={handleBookmark}
-        />
-        <CommentSection
-          postId={post.id}
-          comments={comments}
-          viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null}
-          viewerUserId={viewer?.id}
-          isOpen={commentOpen}
-          onAddComment={handleAddComment}
-          isLoading={commentsLoading}
-          totalCommentCount={commentCount}
-          onClose={() => setCommentOpen(false)}
-        />
+        <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={true} isOwnProfile={false} onLike={handleLike} onComment={() => setCommentOpen((p) => !p)} onTip={() => setTipOpen(true)} onBookmark={handleSavePost} />
+        <CommentSection postId={post.id} comments={comments} viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null} viewerUserId={viewer?.id} isOpen={commentOpen} onAddComment={handleAddComment} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} />
       </div>
     </div>
   );
@@ -457,12 +355,7 @@ export function PostCard({
 
 function TaggedCreatorCard({ creator, onClick }: { creator: TaggedCreator; onClick: () => void }) {
   return (
-    <div
-      onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "12px", border: "1px solid #2A2A3D", backgroundColor: "#0D0D18", cursor: "pointer" }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "#1C1C2E"; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "#0D0D18"; }}
-    >
+    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderRadius: "12px", border: "1px solid #2A2A3D", backgroundColor: "#0D0D18", cursor: "pointer" }} onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "#1C1C2E"; }} onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = "#0D0D18"; }}>
       <div style={{ padding: "2.5px", borderRadius: "50%", background: "linear-gradient(to right, #8B5CF6, #EC4899)", flexShrink: 0 }}>
         <div style={{ padding: "2px", borderRadius: "50%", backgroundColor: "#0D0D18" }}>
           <img src={creator.avatar_url} alt={creator.name} loading="lazy" style={{ width: "52px", height: "52px", borderRadius: "50%", objectFit: "cover", display: "block" }} />

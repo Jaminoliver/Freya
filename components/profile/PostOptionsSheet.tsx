@@ -51,7 +51,7 @@ export default function CreatorPostOptionsSheet({
         style={{
           position:        "fixed",
           inset:           0,
-          zIndex:          100,
+          zIndex:          200,
           backgroundColor: "rgba(0,0,0,0.6)",
           backdropFilter:  "blur(2px)",
         }}
@@ -65,7 +65,7 @@ export default function CreatorPostOptionsSheet({
           bottom:          0,
           left:            "50%",
           transform:       "translateX(-50%) translateY(0)",
-          zIndex:          101,
+          zIndex:          201,
           backgroundColor: "#13131F",
           borderRadius:    "20px 20px 0 0",
           padding:         "0 0 calc(env(safe-area-inset-bottom) + 12px)",
