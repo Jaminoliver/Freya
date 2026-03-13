@@ -51,7 +51,18 @@ function saveContentFeedsToStorage(feeds: Record<string, ContentFeedEntry>) {
 
 export interface Viewer { id: string; username: string; display_name: string; avatar_url: string | null; role: string; }
 export interface FeedEntry { posts: any[]; nextCursor: string | null; fetchedAt: number; }
-export interface ProfileEntry { viewer: any; profile: any; totalLikes: number; tierId: number | undefined; isFollowing: boolean; isSubscribed: boolean; subscriptionPeriodEnd: string | null; apiPosts: ApiPost[]; fetchedAt: number; }
+export interface ProfileEntry {
+  viewer: any;
+  profile: any;
+  totalLikes: number;
+  tierId: number | undefined;
+  isFollowing: boolean;
+  isSubscribed: boolean;
+  subscriptionPeriodEnd: string | null;
+  apiPosts: ApiPost[];
+  fetchedAt: number;
+  fanSubscription?: any | null;
+}
 export interface ContentFeedEntry { posts: ApiPost[]; media: any[]; fetchedAt: number; }
 
 // "processing" = TUS upload done, Bunny is still transcoding.

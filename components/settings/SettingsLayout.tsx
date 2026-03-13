@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { User, Shield, CreditCard, Lock, Bell, ChevronRight, TrendingUp, Wallet } from "lucide-react";
+import { User, Shield, CreditCard, Lock, Bell, ChevronRight, TrendingUp, Wallet, Users } from "lucide-react";
 import ProfileSettings from "@/components/settings/sections/ProfileSettings";
 import AccountSettings from "@/components/settings/sections/AccountSettings";
 import PricingSettings from "@/components/settings/sections/pricing/PricingSettings";
@@ -11,17 +11,33 @@ import PrivacySettings from "@/components/settings/sections/PrivacySettings";
 import NotificationsSettings from "@/components/settings/sections/NotificationsSettings";
 import EarningsSettings from "@/components/settings/sections/EarningsSettings";
 import PayoutsSettings from "@/components/settings/sections/PayoutsSettings";
+import FansSettings from "@/components/settings/sections/FansSettings";
 import { SettingsSkeleton } from "@/components/loadscreen/SettingsSkeleton";
 import { useAppStore } from "@/lib/store/appStore";
 
-type SettingsTab = "profile" | "account" | "pricing" | "privacy" | "notifications" | "earnings" | "payouts";
+type SettingsTab =
+  | "profile"
+  | "account"
+  | "pricing"
+  | "privacy"
+  | "notifications"
+  | "earnings"
+  | "payouts"
+  | "fans";
 
-const tabs: { id: SettingsTab; label: string; icon: React.ElementType; description: string }[] = [
+const allTabs: {
+  id: SettingsTab;
+  label: string;
+  icon: React.ElementType;
+  description: string;
+  creatorOnly?: boolean;
+}[] = [
   { id: "profile",       label: "Profile",       icon: User,       description: "Name, bio, links"           },
   { id: "account",       label: "Account",       icon: Shield,     description: "Email, password, phone"     },
-  { id: "pricing",       label: "Pricing",       icon: CreditCard, description: "Subscription & bundles"     },
-  { id: "earnings",      label: "Earnings",      icon: TrendingUp, description: "Revenue & breakdown"        },
-  { id: "payouts",       label: "Payouts",       icon: Wallet,     description: "Bank account & withdrawals" },
+  { id: "pricing",       label: "Pricing",       icon: CreditCard, description: "Subscription & bundles",    creatorOnly: true },
+  { id: "earnings",      label: "Earnings",      icon: TrendingUp, description: "Revenue & breakdown",       creatorOnly: true },
+  { id: "payouts",       label: "Payouts",       icon: Wallet,     description: "Bank account & withdrawals", creatorOnly: true },
+  { id: "fans",          label: "Fans",          icon: Users,      description: "Subscribers & activity",    creatorOnly: true },
   { id: "privacy",       label: "Privacy",       icon: Lock,       description: "Visibility & blocking"      },
   { id: "notifications", label: "Notifications", icon: Bell,       description: "Alerts & preferences"       },
 ];
@@ -32,11 +48,23 @@ function SettingsLayoutInner() {
 
   const { viewer } = useAppStore();
 
-  const [activeTab,   setActiveTab]   = useState<SettingsTab>("profile");
-  const [mobileView,  setMobileView]  = useState<"menu" | "content">("menu");
-  const [username,    setUsername]    = useState<string>(viewer?.username ?? "");
-  const [loading,     setLoading]     = useState(!viewer?.username);
-  const [revealed,    setRevealed]    = useState(!!viewer?.username);
+  const initialPanel = searchParams.get("panel");
+  const [activeTab,  setActiveTab]  = useState<SettingsTab>(
+    initialPanel === "fans" ? "fans" :
+    initialPanel === "pricing" ? "pricing" :
+    initialPanel === "subscriptions" ? "account" : "profile"
+  );
+  const [mobileView, setMobileView] = useState<"menu" | "content">(
+    initialPanel === "fans" || initialPanel === "pricing" || initialPanel === "subscriptions"
+      ? "content"
+      : "menu"
+  );
+  const [username,   setUsername]   = useState<string>(viewer?.username ?? "");
+  const [loading,    setLoading]    = useState(!viewer?.username);
+  const [revealed,   setRevealed]   = useState(!!viewer?.username);
+
+  const isCreator = viewer?.role === "creator";
+  const tabs = allTabs.filter((t) => !t.creatorOnly || isCreator);
 
   useEffect(() => {
     if (viewer?.username) {
@@ -72,6 +100,10 @@ function SettingsLayoutInner() {
       setActiveTab("account");
       setMobileView("content");
       router.replace("/settings");
+    } else if (panel === "fans") {
+      setActiveTab("fans");
+      setMobileView("content");
+      // Keep ?panel=fans in URL so browser back from fan profile returns here
     }
   }, [searchParams, router]);
 
@@ -80,7 +112,7 @@ function SettingsLayoutInner() {
     setMobileView("content");
   };
 
-  const handleBack    = () => setMobileView("menu");
+  const handleBack     = () => setMobileView("menu");
   const handleWithdraw = () => { setActiveTab("payouts"); setMobileView("content"); };
 
   const renderSection = () => {
@@ -92,6 +124,7 @@ function SettingsLayoutInner() {
       case "notifications": return <NotificationsSettings onBack={handleBack} />;
       case "earnings":      return <EarningsSettings onBack={handleBack} onWithdraw={handleWithdraw} />;
       case "payouts":       return <PayoutsSettings onBack={handleBack} />;
+      case "fans":          return <FansSettings onBack={handleBack} />;
     }
   };
 

@@ -55,7 +55,6 @@ function useMediaRatio(
     img.src = thumbSrc;
   }, [thumbSrc]);
 
-  // Lowered video minRatio from 4/5 to 9/16 — allows taller portrait videos
   const minRatio = isVideo ? (9 / 16) : 0.5;
 
   if (item?.aspectRatio != null && item.aspectRatio > 0) {
@@ -175,31 +174,127 @@ export default function PostMediaViewer({
 
   if (!media.length || !first) return null;
 
-  // ── Locked ───────────────────────────────────────────────────────────────
+  // ── Locked (PPV) ─────────────────────────────────────────────────────────
   if (isLocked) {
     const blurSrc = first.thumbnailUrl ?? thumbSrc;
+    const isPPV   = price != null && price > 0;
+
     return (
       <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
-        <div style={{ position: "relative", width: "100%", maxHeight: "85svh", aspectRatio: String(ratio), backgroundColor: "#000", overflow: "hidden" }}>
+        {/* Blurred thumbnail background */}
+        <div style={{ position: "relative", width: "100%", maxHeight: "85svh", aspectRatio: String(ratio), backgroundColor: "#0A0A0F", overflow: "hidden" }}>
           {first.blurHash && (
-            <BlurHashCanvas hash={first.blurHash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />
+            <BlurHashCanvas
+              hash={first.blurHash}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }}
+            />
           )}
           {blurSrc && (
             <img
               src={blurSrc}
               alt=""
               loading="lazy"
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(16px)", transform: "scale(1.05)", zIndex: 1 }}
+              style={{
+                position: "absolute", inset: 0, width: "100%", height: "100%",
+                objectFit: "cover",
+                filter: "blur(18px) brightness(0.45)",
+                transform: "scale(1.08)",
+                zIndex: 1,
+              }}
             />
           )}
-        </div>
-        <div style={{ position: "absolute", inset: 0, zIndex: 2, backgroundColor: "rgba(10,10,15,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px" }}>
-          <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.2)", border: "1.5px solid #8B5CF6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Lock size={18} color="#8B5CF6" />
+
+          {/* Dark overlay */}
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 2,
+            background: "linear-gradient(to bottom, rgba(10,10,15,0.3) 0%, rgba(10,10,15,0.65) 100%)",
+          }} />
+
+          {/* Lock UI */}
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 3,
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            gap: "16px",
+          }}>
+            {/* Lock icon ring */}
+            <div style={{
+              width: "56px", height: "56px", borderRadius: "50%",
+              background: "rgba(139,92,246,0.15)",
+              border: "1.5px solid rgba(139,92,246,0.6)",
+              backdropFilter: "blur(8px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 0 24px rgba(139,92,246,0.3)",
+            }}>
+              <Lock size={22} color="#A78BFA" strokeWidth={2} />
+            </div>
+
+            {isPPV ? (
+              <>
+                {/* PPV label */}
+                <div style={{ textAlign: "center" }}>
+                  <div style={{
+                    fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em",
+                    color: "#A78BFA", textTransform: "uppercase",
+                    fontFamily: "'Inter', sans-serif", marginBottom: "4px",
+                  }}>
+                    Pay-Per-View
+                  </div>
+                  <div style={{
+                    fontSize: "26px", fontWeight: 800,
+                    color: "#FFFFFF", fontFamily: "'Inter', sans-serif",
+                    letterSpacing: "-0.5px",
+                  }}>
+                    ₦{(price! / 100).toLocaleString("en-NG")}
+                  </div>
+                </div>
+
+                {/* Unlock button */}
+                <button
+                  onClick={onUnlock}
+                  style={{
+                    padding: "11px 28px",
+                    borderRadius: "10px",
+                    background: "linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)",
+                    border: "none",
+                    color: "#fff",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "'Inter', sans-serif",
+                    boxShadow: "0 4px 16px rgba(139,92,246,0.45)",
+                    transition: "opacity 0.15s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                >
+                  Unlock for ₦{price!.toLocaleString("en-NG")}
+                </button>
+              </>
+            ) : (
+              /* Subscribe to unlock */
+              <button
+                onClick={onUnlock}
+                style={{
+                  padding: "11px 28px",
+                  borderRadius: "10px",
+                  background: "linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)",
+                  border: "none",
+                  color: "#fff",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "'Inter', sans-serif",
+                  boxShadow: "0 4px 16px rgba(139,92,246,0.45)",
+                  transition: "opacity 0.15s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+              >
+                Subscribe to unlock
+              </button>
+            )}
           </div>
-          <button onClick={onUnlock} style={{ padding: "8px 20px", borderRadius: "8px", backgroundColor: "#8B5CF6", border: "none", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-            {price ? `Unlock for ₦${(price / 100).toLocaleString("en-NG")}` : "Subscribe to unlock"}
-          </button>
         </div>
       </div>
     );

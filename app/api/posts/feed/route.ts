@@ -106,11 +106,13 @@ export async function GET(req: NextRequest) {
       .limit(PAGE_SIZE);
 
     if (subscribedCreatorIds.length > 0) {
-      const quotedIds = subscribedCreatorIds.join(",");
-      query = query.or(`creator_id.in.(${quotedIds}),audience.eq.everyone`);
-    } else {
-      query = query.eq("audience", "everyone");
-    }
+  const quotedIds = subscribedCreatorIds.join(",");
+  query = query.or(
+    `and(creator_id.in.(${quotedIds}),audience.eq.subscribers),and(audience.eq.everyone)`
+  );
+} else {
+  query = query.eq("audience", "everyone");
+}
 
     query = query.neq("creator_id", user.id);
 
@@ -135,11 +137,20 @@ export async function GET(req: NextRequest) {
 
     const postIds = (posts ?? []).map((p: { id: number }) => Number(p.id));
 
+    // ── Fetch likes, polls, and PPV unlocks in parallel ──────────────────
     const likesPromise = postIds.length > 0
       ? service
           .from("likes")
           .select("post_id")
           .eq("user_id", user.id)
+          .in("post_id", postIds)
+      : Promise.resolve({ data: [] });
+
+    const ppvUnlocksPromise = postIds.length > 0
+      ? service
+          .from("ppv_unlocks")
+          .select("post_id")
+          .eq("fan_id", user.id)
           .in("post_id", postIds)
       : Promise.resolve({ data: [] });
 
@@ -168,13 +179,19 @@ export async function GET(req: NextRequest) {
     const removedByFilter = rawCount - filteredPosts.length;
     console.log(`[Feed:DEBUG] After video filter: ${filteredPosts.length} (removed ${removedByFilter})`);
 
-    const [{ data: userLikes }, { data: pollsRaw }] = await Promise.all([
+    const [{ data: userLikes }, { data: ppvUnlocksRaw }, { data: pollsRaw }] = await Promise.all([
       likesPromise,
+      ppvUnlocksPromise,
       pollsPromise,
     ]);
 
     const likedSet = new Set(
       (userLikes ?? []).map((l: { post_id: number | string }) => Number(l.post_id))
+    );
+
+    // Set of post_ids the user has already unlocked via PPV payment
+    const ppvUnlockedSet = new Set(
+      (ppvUnlocksRaw ?? []).map((u: { post_id: number | string }) => Number(u.post_id))
     );
 
     const pollIds = (pollsRaw ?? []).map((p: { id: number }) => p.id);
@@ -236,8 +253,14 @@ export async function GET(req: NextRequest) {
       const isPpv        = post.is_ppv as boolean;
       const postAudience = post.audience as string;
       const isSubscribed = subscribedSet.has(post.creator_id as string);
+      const postId       = Number(post.id);
 
-      const canAccess = !isPpv && (postAudience === "everyone" || isSubscribed);
+      // canAccess logic:
+      // - Non-PPV: accessible if audience is "everyone" OR user is subscribed
+      // - PPV: accessible only if user has a ppv_unlock record for this post
+      const canAccess = isPpv
+        ? ppvUnlockedSet.has(postId)
+        : (postAudience === "everyone" || isSubscribed);
 
       const mediaItems = (post.media as Record<string, unknown>[] ?? [])
         .sort((a, b) => (a.display_order as number) - (b.display_order as number))
@@ -272,10 +295,10 @@ export async function GET(req: NextRequest) {
         ...post,
         audience:   postAudience,
         media:      mediaItems,
-        liked:      likedSet.has(Number(post.id)),
+        liked:      likedSet.has(postId),
         can_access: canAccess,
         locked:     !canAccess,
-        poll:       pollByPostId.get(Number(post.id)) ?? null,
+        poll:       pollByPostId.get(postId) ?? null,
       };
     });
 

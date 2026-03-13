@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Camera, Image, Heart, Users, FileText } from "lucide-react";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { uploadImage } from "@/lib/utils/uploadImage";
@@ -38,6 +39,7 @@ export default function ProfileBanner({
   userId,
   onBannerUpdated,
 }: ProfileBannerProps) {
+  const router = useRouter();
   const [bannerUrl, setBannerUrl] = useState(initialBannerUrl);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -74,6 +76,40 @@ export default function ProfileBanner({
       setUploading(false);
     }
   };
+
+  const statItems = stats
+    ? [
+        {
+          icon: <FileText size={16} strokeWidth={2} />,
+          value: formatCount(stats.posts),
+          label: "Posts",
+          onClick: undefined,
+        },
+        {
+          icon: <Image size={16} strokeWidth={2} />,
+          value: formatCount(stats.media),
+          label: "Media",
+          onClick: undefined,
+        },
+        {
+          icon: <Heart size={16} strokeWidth={2} />,
+          value: formatCount(stats.likes),
+          label: "Likes",
+          onClick: undefined,
+        },
+        {
+          icon: <Users size={16} strokeWidth={2} />,
+          value: formatCount(stats.subscribers),
+          label: "Subs",
+          onClick: isEditable && isCreator
+            ? (e: React.MouseEvent) => {
+                e.stopPropagation();
+                router.push("/settings?panel=fans");
+              }
+            : undefined,
+        },
+      ]
+    : [];
 
   return (
     <>
@@ -115,17 +151,35 @@ export default function ProfileBanner({
 
         {stats && (
           <div style={{ position: "absolute", bottom: "12px", right: "14px", zIndex: 2, display: "flex", alignItems: "center", gap: "14px" }}>
-            {[
-              { icon: <FileText size={16} strokeWidth={2} />, value: formatCount(stats.posts), label: "Posts" },
-              { icon: <Image size={16} strokeWidth={2} />, value: formatCount(stats.media), label: "Media" },
-              { icon: <Heart size={16} strokeWidth={2} />, value: formatCount(stats.likes), label: "Likes" },
-              { icon: <Users size={16} strokeWidth={2} />, value: formatCount(stats.subscribers), label: "Subs" },
-            ].map((stat) => (
-              <div key={stat.label} style={{ display: "flex", alignItems: "center", gap: "5px", color: "#FFFFFF" }}>
-                <span style={{ opacity: 0.85 }}>{stat.icon}</span>
-                <span style={{ fontSize: "13px", fontWeight: 600, fontFamily: "'Inter', sans-serif", textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>{stat.value}</span>
-              </div>
-            ))}
+            {statItems.map((stat) =>
+              stat.onClick ? (
+                <button
+                  key={stat.label}
+                  onClick={stat.onClick}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "5px",
+                    color: "#FFFFFF", background: "none", border: "none",
+                    cursor: "pointer", padding: 0,
+                    opacity: 1, transition: "opacity 0.15s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.75")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                  title="View fans"
+                >
+                  <span style={{ opacity: 0.85 }}>{stat.icon}</span>
+                  <span style={{ fontSize: "13px", fontWeight: 600, fontFamily: "'Inter', sans-serif", textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>
+                    {stat.value}
+                  </span>
+                </button>
+              ) : (
+                <div key={stat.label} style={{ display: "flex", alignItems: "center", gap: "5px", color: "#FFFFFF" }}>
+                  <span style={{ opacity: 0.85 }}>{stat.icon}</span>
+                  <span style={{ fontSize: "13px", fontWeight: 600, fontFamily: "'Inter', sans-serif", textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>
+                    {stat.value}
+                  </span>
+                </div>
+              )
+            )}
           </div>
         )}
 

@@ -30,46 +30,46 @@ const options = (
   }
 ) => [
   {
-    icon:    <Bookmark size={18} />,
-    label:   savedPost ? "Unsave post" : "Save post",
-    action:  handlers.onSavePost,
-    danger:  false,
-    filled:  savedPost,
+    icon:   <Bookmark size={18} />,
+    label:  savedPost ? "Unsave post" : "Save post",
+    action: handlers.onSavePost,
+    danger: false,
+    filled: savedPost,
   },
   {
-    icon:    <UserPlus size={18} />,
-    label:   savedCreator ? "Unsave creator" : "Save creator",
-    action:  handlers.onSaveCreator,
-    danger:  false,
-    filled:  savedCreator,
+    icon:   <UserPlus size={18} />,
+    label:  savedCreator ? "Unsave creator" : "Save creator",
+    action: handlers.onSaveCreator,
+    danger: false,
+    filled: savedCreator,
   },
   {
-    icon:    <ListPlus size={18} />,
-    label:   "Add to list",
-    action:  handlers.onAddToList,
-    danger:  false,
-    filled:  false,
+    icon:   <ListPlus size={18} />,
+    label:  "Add to list",
+    action: handlers.onAddToList,
+    danger: false,
+    filled: false,
   },
   {
-    icon:    <EyeOff size={18} />,
-    label:   "Hide post",
-    action:  handlers.onHidePost,
-    danger:  false,
-    filled:  false,
+    icon:   <EyeOff size={18} />,
+    label:  "Hide post",
+    action: handlers.onHidePost,
+    danger: false,
+    filled: false,
   },
   {
-    icon:    <Flag size={18} />,
-    label:   "Report",
-    action:  handlers.onReport,
-    danger:  false,
-    filled:  false,
+    icon:   <Flag size={18} />,
+    label:  "Report",
+    action: handlers.onReport,
+    danger: false,
+    filled: false,
   },
   {
-    icon:    <Ban size={18} />,
-    label:   "Block creator",
-    action:  handlers.onBlockCreator,
-    danger:  true,
-    filled:  false,
+    icon:   <Ban size={18} />,
+    label:  "Block creator",
+    action: handlers.onBlockCreator,
+    danger: true,
+    filled: false,
   },
 ];
 
@@ -104,7 +104,7 @@ export default function PostOptionsSheet({
     return () => document.removeEventListener("keydown", handleKey);
   }, [isOpen, onClose]);
 
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined" || !isOpen) return null;
 
   const items = options(savedPost, savedCreator, {
     onSavePost,
@@ -121,14 +121,11 @@ export default function PostOptionsSheet({
       <div
         onClick={onClose}
         style={{
-          position:         "fixed",
-          inset:            0,
-          zIndex:           100,
-          backgroundColor:  "rgba(0,0,0,0.6)",
-          backdropFilter:   "blur(2px)",
-          opacity:          isOpen ? 1 : 0,
-          pointerEvents:    isOpen ? "auto" : "none",
-          transition:       "opacity 0.25s ease",
+          position:        "fixed",
+          inset:           0,
+          zIndex:          200,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          backdropFilter:  "blur(2px)",
         }}
       />
 
@@ -139,12 +136,11 @@ export default function PostOptionsSheet({
           position:        "fixed",
           bottom:          0,
           left:            "50%",
-          transform:       isOpen ? "translateX(-50%) translateY(0)" : "translateX(-50%) translateY(100%)",
-          zIndex:          101,
+          transform:       "translateX(-50%)",
+          zIndex:          201,
           backgroundColor: "#13131F",
           borderRadius:    "20px 20px 0 0",
           padding:         "0 0 calc(env(safe-area-inset-bottom) + 12px)",
-          transition:      "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
           width:           "100%",
           maxWidth:        "480px",
           boxShadow:       "0 -8px 40px rgba(0,0,0,0.5)",

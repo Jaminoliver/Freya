@@ -130,6 +130,14 @@ export async function GET(
           .in("post_id", postIds)
       : Promise.resolve({ data: [] });
 
+    const ppvUnlocksPromise = user && postIds.length > 0
+      ? service
+          .from("ppv_unlocks")
+          .select("post_id")
+          .eq("fan_id", user.id)
+          .in("post_id", postIds)
+      : Promise.resolve({ data: [] });
+
     const pollPostIds = (posts ?? [])
       .filter((p: Record<string, unknown>) => p.content_type === "poll")
       .map((p: Record<string, unknown>) => Number(p.id));
@@ -152,12 +160,14 @@ export async function GET(
       return !hasUnreadyVideo;
     });
 
-    const [{ data: likes }, { data: pollsRaw }] = await Promise.all([
+    const [{ data: likes }, { data: pollsRaw }, { data: ppvUnlocks }] = await Promise.all([
       likesPromise,
       pollsPromise,
+      ppvUnlocksPromise,
     ]);
 
-    const likedSet = new Set((likes ?? []).map((l: { post_id: number }) => l.post_id));
+    const likedSet    = new Set((likes ?? []).map((l: { post_id: number }) => l.post_id));
+    const unlockedSet = new Set((ppvUnlocks ?? []).map((u: { post_id: number }) => u.post_id));
 
     const pollIds = (pollsRaw ?? []).map((p: { id: number }) => p.id);
 
@@ -217,10 +227,11 @@ export async function GET(
     const processed = filteredPosts.map((post: Record<string, unknown>) => {
       const isPpv        = post.is_ppv as boolean;
       const postAudience = post.audience as string;
+      const postId       = post.id as number;
 
-      // FIX: audience=everyone → anyone can access (unless PPV)
-      // audience=subscribers → only subs/owner can access (unless PPV)
-      const canAccess = isOwnProfile || (!isPpv && (postAudience === "everyone" || isSubscribed));
+      const canAccess = isOwnProfile
+        || (isPpv && unlockedSet.has(postId))
+        || (!isPpv && (postAudience === "everyone" || isSubscribed));
 
       const mediaItems = (post.media as Record<string, unknown>[] ?? [])
         .sort((a, b) => (a.display_order as number) - (b.display_order as number))
@@ -260,10 +271,10 @@ export async function GET(
         ...post,
         audience:   postAudience,
         media:      mediaItems,
-        liked:      likedSet.has(post.id as number),
+        liked:      likedSet.has(postId),
         can_access: canAccess,
         locked:     !canAccess,
-        poll:       pollByPostId.get(Number(post.id)) ?? null,
+        poll:       pollByPostId.get(postId) ?? null,
       };
     });
 

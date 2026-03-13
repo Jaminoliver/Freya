@@ -334,7 +334,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     scrollRef.current?.scrollBy({ left: dir === "right" ? 220 : -220, behavior: "smooth" });
   };
 
-  const ownGroup    = isCreator && globalViewer
+  const ownGroup = isCreator && globalViewer
     ? orderedGroups.find((g) => g.creatorId === globalViewer.id) ?? null
     : null;
 
@@ -376,6 +376,9 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
   const ownThumbnail  = ownGroup?.latestThumbnail ?? null;
   const hasOwnStories = (ownGroup?.items.filter((s) => !s.isProcessing).length ?? 0) > 0;
+
+  // Hide the entire bar for fans when there are no stories
+  if (!loading && !isCreator && displayGroups.length === 0) return null;
 
   return (
     <>
@@ -561,12 +564,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                 );
               })
           }
-
-          {!loading && displayGroups.length === 0 && !isCreator && (
-            <div style={{ display:"flex", alignItems:"center", color:"#4A4A6A", fontSize:13, padding:"8px 4px", whiteSpace:"nowrap" }}>
-              No stories yet
-            </div>
-          )}
         </div>
 
         <button
