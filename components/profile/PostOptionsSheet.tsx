@@ -5,10 +5,11 @@ import { Pencil, Trash2 } from "lucide-react";
 import { createPortal } from "react-dom";
 
 interface CreatorPostOptionsSheetProps {
-  isOpen:    boolean;
-  onClose:   () => void;
-  onEdit:    () => void;
-  onDelete:  () => void;
+  isOpen:      boolean;
+  onClose:     () => void;
+  onEdit:      () => void;
+  onDelete:    () => void;
+  onEditPPV?:  () => void;
 }
 
 export default function CreatorPostOptionsSheet({
@@ -16,6 +17,7 @@ export default function CreatorPostOptionsSheet({
   onClose,
   onEdit,
   onDelete,
+  onEditPPV,
 }: CreatorPostOptionsSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
 
@@ -39,9 +41,10 @@ export default function CreatorPostOptionsSheet({
   if (typeof window === "undefined" || !isOpen) return null;
 
   const items = [
-    { icon: <Pencil size={18} />, label: "Edit caption", action: onEdit,   danger: false },
-    { icon: <Trash2 size={18} />, label: "Delete post",  action: onDelete, danger: true  },
-  ];
+    { icon: <Pencil size={18} />,     label: "Edit caption",       action: onEdit,      danger: false },
+    { icon: <span style={{ fontSize: "16px", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>₦</span>, label: "Edit PPV price", action: onEditPPV, danger: false, hidden: !onEditPPV },
+    { icon: <Trash2 size={18} />,     label: "Delete post",        action: onDelete,    danger: true  },
+  ].filter((item) => !item.hidden);
 
   return createPortal(
     <>
@@ -84,7 +87,7 @@ export default function CreatorPostOptionsSheet({
           {items.map((item, i) => (
             <button
               key={i}
-              onClick={() => { item.action(); onClose(); }}
+              onClick={() => { item.action?.(); onClose(); }}
               style={{
                 width:           "100%",
                 display:         "flex",

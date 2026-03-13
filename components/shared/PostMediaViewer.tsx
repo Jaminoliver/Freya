@@ -176,15 +176,14 @@ export default function PostMediaViewer({
 
   // ── Locked (PPV) ─────────────────────────────────────────────────────────
   if (isLocked) {
-    // Stream thumbnails are public — bypass signed thumbnailUrl for videos
     const blurSrc = isVideo
       ? (first.bunnyVideoId ? getBunnyThumbnail(first.bunnyVideoId) : first.thumbnailUrl ?? undefined)
       : (first.thumbnailUrl ?? first.url ?? undefined);
     const isPPV   = price != null && price > 0;
+    const displayPrice = isPPV ? price! / 100 : 0; // convert kobo → naira once
 
     return (
       <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
-        {/* Blurred thumbnail background */}
         <div style={{ position: "relative", width: "100%", maxHeight: "85svh", aspectRatio: String(ratio), backgroundColor: "#0A0A0F", overflow: "hidden" }}>
           {first.blurHash && (
             <BlurHashCanvas
@@ -234,7 +233,6 @@ export default function PostMediaViewer({
 
             {isPPV ? (
               <>
-                {/* PPV label */}
                 <div style={{ textAlign: "center" }}>
                   <div style={{
                     fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em",
@@ -248,11 +246,10 @@ export default function PostMediaViewer({
                     color: "#FFFFFF", fontFamily: "'Inter', sans-serif",
                     letterSpacing: "-0.5px",
                   }}>
-                    ₦{(price! / 100).toLocaleString("en-NG")}
+                    ₦{displayPrice.toLocaleString("en-NG")}
                   </div>
                 </div>
 
-                {/* Unlock button */}
                 <button
                   onClick={onUnlock}
                   style={{
@@ -271,11 +268,10 @@ export default function PostMediaViewer({
                   onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
                 >
-                  Unlock for ₦{price!.toLocaleString("en-NG")}
+                  Unlock for ₦{displayPrice.toLocaleString("en-NG")}
                 </button>
               </>
             ) : (
-              /* Subscribe to unlock */
               <button
                 onClick={onUnlock}
                 style={{

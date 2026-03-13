@@ -266,7 +266,6 @@ export default function ContentFeed({
     [apiPosts, searchQuery]
   );
 
-  // FIX: use p.locked (set by API based on audience + subscription) instead of p.is_free
   const { freePosts, lockedPosts } = React.useMemo(() => {
     if (isSubscribed || isOwnProfile) {
       return { freePosts: filteredPosts, lockedPosts: [] };
@@ -313,6 +312,19 @@ export default function ContentFeed({
     setApiMedia((prev) => prev.filter((m) => String(m.post_id) !== id));
   };
 
+  const handlePPVUpdated = React.useCallback((id: string, priceKobo: number) => {
+    setApiPosts((prev) => {
+      const updated = prev.map((p) =>
+        String(p.id) === id
+          ? { ...p, is_ppv: priceKobo > 0, ppv_price: priceKobo > 0 ? priceKobo : null }
+          : p
+      );
+      const c = feedPostsCache.get(cacheKey);
+      if (c) feedPostsCache.set(cacheKey, { ...c, posts: updated });
+      return updated;
+    });
+  }, [cacheKey]);
+
   const openLightbox = (p: LightboxPost, index: number) => {
     setLightboxMediaIndex(index);
     setLightboxPost(p);
@@ -331,6 +343,7 @@ export default function ContentFeed({
       onUnlock={onUnlock}
       onDelete={handleDeletePost}
       onImageClick={(p, index) => openLightbox(p, index)}
+      onPPVUpdated={handlePPVUpdated}
     />
   );
 

@@ -233,8 +233,7 @@ export async function PATCH(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body    = await req.json();
-    const caption = typeof body.caption === "string" ? body.caption.trim() : null;
+    const body = await req.json();
 
     const service = createServiceSupabaseClient();
 
@@ -248,17 +247,33 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    // Build update payload — only include fields that were sent
+    const updates: Record<string, unknown> = {};
+
+    if ("caption" in body) {
+      updates.caption = typeof body.caption === "string" ? body.caption.trim() : null;
+    }
+
+    if ("is_ppv" in body) {
+      updates.is_ppv = !!body.is_ppv;
+    }
+
+    if ("ppv_price" in body) {
+      const price = Number(body.ppv_price);
+      updates.ppv_price = isNaN(price) ? null : price;
+    }
+
     const { error } = await service
       .from("posts")
-      .update({ caption })
+      .update(updates)
       .eq("id", postId);
 
     if (error) {
       console.error("[PATCH Post] Supabase error:", error.message);
-      return NextResponse.json({ error: "Failed to update caption" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to update post" }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, caption });
+    return NextResponse.json({ success: true, ...updates });
 
   } catch (err) {
     console.error("[PATCH Post] Error:", err);
