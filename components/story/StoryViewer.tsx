@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, MoreVertical, Trash2, Volume2, VolumeX, Heart, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import type { CreatorStoryGroup, StoryItem } from "@/components/story/StoryBar";
+import { addLocalViewed } from "@/components/story/StoryBar";
 import { useAppStore } from "@/lib/store/appStore";
 import StoryVideoPlayer from "@/components/story/StoryVideoPlayer";
 
@@ -218,6 +219,8 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onGroupF
   const trackView = useCallback((id: number) => {
     if (viewTrackedRef.current) return;
     viewTrackedRef.current = true;
+    // Save to sessionStorage so ring clears even if API call fails
+    addLocalViewed(id);
     setLocalGroups((prev) =>
       prev.map((g) => ({
         ...g,
@@ -355,11 +358,9 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onGroupF
       .map((g, i) => i !== gi ? g : { ...g, items: g.items.filter((item) => item.id !== s.id) })
       .filter((g) => g.items.length > 0);
 
-    // Update ref synchronously so any close call carries the correct groups
     localGroupsRef.current = newGroups;
     setLocalGroups(newGroups);
 
-    // If no stories left anywhere — close immediately and delete in background
     if (newGroups.length === 0) {
       onClose(newGroups);
       fetch(`/api/stories/${s.id}`, { method: "DELETE" }).catch(() => {});
@@ -367,29 +368,23 @@ export default function StoryViewer({ groups, startGroupIndex, onClose, onGroupF
       return;
     }
 
-    // Navigate to the correct next story inside the viewer
     if (gi >= newGroups.length) {
-      // Deleted last group's last story — go to new last group
       const newGi = newGroups.length - 1;
       const newSi = newGroups[newGi].items.length - 1;
       updateGroupIdx(newGi);
       updateStoryIdx(newSi);
       if (newGi === gi && newSi === si) setRefreshKey((k) => k + 1);
     } else {
-      // Same group, clamp story index
       const newSi = Math.min(si, newGroups[gi].items.length - 1);
       updateGroupIdx(gi);
       updateStoryIdx(newSi);
-      // Same index means React won't re-fire the effect — force it
       if (newSi === si) setRefreshKey((k) => k + 1);
     }
 
-    // Delete from server
     try {
       const r = await fetch(`/api/stories/${s.id}`, { method: "DELETE" });
       if (!r.ok) throw new Error("Failed to delete");
     } catch (e: any) {
-      // Rollback
       localGroupsRef.current = gs;
       setLocalGroups(gs);
       updateGroupIdx(gi);

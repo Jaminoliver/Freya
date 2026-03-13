@@ -41,7 +41,8 @@ export default function ProfileAvatar({
 
   const firstLetter = (displayName || "?").charAt(0).toUpperCase();
 
-  const handleAvatarClick = () => { if (isEditable) setPreview(true); };
+  // Allow anyone to open the preview to see a bigger avatar
+  const handleAvatarClick = () => { setPreview(true); };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,7 +70,6 @@ export default function ProfileAvatar({
     }
   };
 
-  // Background story upload — mirrors StoryBar logic
   const handleStoryUploadStart = useCallback(async (job: UploadJob) => {
     setStoryOpen(false);
     setStoryUploading(true);
@@ -108,7 +108,7 @@ export default function ProfileAvatar({
         />
       )}
 
-      {/* Preview Modal */}
+      {/* Preview Modal — visible to everyone */}
       {preview && (
         <div
           onClick={() => setPreview(false)}
@@ -129,32 +129,31 @@ export default function ProfileAvatar({
                 {displayName}
               </span>
 
-              <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-                {/* Add to Story — creators only */}
-                {isCreator && isEditable && (
-                  <button
-                    onClick={() => { setPreview(false); setStoryOpen(true); }}
-                    disabled={storyUploading}
-                    style={{
-                      display: "flex", alignItems: "center", gap: "5px",
-                      padding: "6px 12px", borderRadius: "6px",
-                      background: storyUploading ? "rgba(139,92,246,0.4)" : GRADIENT,
-                      border: "none", color: "#fff",
-                      fontSize: "12px", fontWeight: 600,
-                      fontFamily: "'Inter', sans-serif",
-                      cursor: storyUploading ? "not-allowed" : "pointer",
-                      whiteSpace: "nowrap", transition: "opacity 0.15s",
-                    }}
-                    onMouseEnter={(e) => { if (!storyUploading) e.currentTarget.style.opacity = "0.85"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
-                  >
-                    <BookImage size={12} />
-                    {storyUploading ? "Posting…" : "Add to Story"}
-                  </button>
-                )}
+              {/* Only show edit controls if editable */}
+              {isEditable && (
+                <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                  {isCreator && (
+                    <button
+                      onClick={() => { setPreview(false); setStoryOpen(true); }}
+                      disabled={storyUploading}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "5px",
+                        padding: "6px 12px", borderRadius: "6px",
+                        background: storyUploading ? "rgba(139,92,246,0.4)" : GRADIENT,
+                        border: "none", color: "#fff",
+                        fontSize: "12px", fontWeight: 600,
+                        fontFamily: "'Inter', sans-serif",
+                        cursor: storyUploading ? "not-allowed" : "pointer",
+                        whiteSpace: "nowrap", transition: "opacity 0.15s",
+                      }}
+                      onMouseEnter={(e) => { if (!storyUploading) e.currentTarget.style.opacity = "0.85"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                    >
+                      <BookImage size={12} />
+                      {storyUploading ? "Posting…" : "Add to Story"}
+                    </button>
+                  )}
 
-                {/* Edit Photo */}
-                {isEditable && (
                   <button
                     onClick={() => { setPreview(false); fileInputRef.current?.click(); }}
                     style={{
@@ -170,8 +169,8 @@ export default function ProfileAvatar({
                   >
                     <Pencil size={12} /> Edit Photo
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             <button
@@ -187,7 +186,7 @@ export default function ProfileAvatar({
       <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
 
       <div style={{ position: "relative", marginTop: "-42px", marginLeft: "10px", display: "inline-block" }}>
-        <div onClick={handleAvatarClick} style={{ cursor: isEditable ? "pointer" : "default", position: "relative" }}>
+        <div onClick={handleAvatarClick} style={{ cursor: "pointer", position: "relative" }}>
           <Avatar
             src={avatarUrl ?? undefined}
             alt={displayName ?? "?"}

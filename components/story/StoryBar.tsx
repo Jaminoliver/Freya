@@ -61,6 +61,26 @@ function Avatar({ src, name, size = 64 }: { src: string | null; name: string; si
 const GRADIENT    = "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)";
 const GLOW        = "0 0 12px rgba(139,92,246,0.55), 0 0 24px rgba(236,72,153,0.35)";
 const VIEWED_RING = "#2A2A3D";
+const VIEWED_KEY  = "sb_viewed_story_ids";
+
+function getLocalViewed(): Set<number> {
+  try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) ?? "[]")); } catch { return new Set(); }
+}
+export function addLocalViewed(id: number) {
+  try {
+    const s = getLocalViewed(); s.add(id);
+    sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...s]));
+  } catch {}
+}
+function applyLocalViewed(groups: CreatorStoryGroup[]): CreatorStoryGroup[] {
+  const viewed = getLocalViewed();
+  if (viewed.size === 0) return groups;
+  return groups.map((g) => {
+    const items = g.items.map((s) => viewed.has(s.id) ? { ...s, viewed: true } : s);
+    const hasUnviewed = items.some((s) => !s.viewed && !s.isProcessing);
+    return { ...g, items, hasUnviewed };
+  });
+}
 
 function allProcessing(group: CreatorStoryGroup): boolean {
   return group.items.length > 0 && group.items.every((s) => s.isProcessing);
@@ -136,7 +156,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       const res  = await fetch("/api/stories");
       const data = await res.json();
       if (res.ok && data.groups) {
-        const fetchedGroups: CreatorStoryGroup[] = data.groups;
+        const fetchedGroups: CreatorStoryGroup[] = applyLocalViewed(data.groups);
         setOrderedGroups(sortGroups(fetchedGroups));
 
         for (const g of fetchedGroups) {

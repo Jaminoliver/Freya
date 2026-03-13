@@ -279,7 +279,9 @@ export default function HomePage() {
       const map = new Map(prev.map((g) => [g.creatorId, g]));
       for (const g of updatedGroups) {
         if (g.items.length > 0) {
-          map.set(g.creatorId, g);
+          // Recalculate hasUnviewed from actual item viewed states
+          const hasUnviewed = g.items.some((s) => !s.viewed && !s.isProcessing);
+          map.set(g.creatorId, { ...g, hasUnviewed });
         } else {
           map.delete(g.creatorId);
         }
