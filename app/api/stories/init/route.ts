@@ -3,15 +3,24 @@ import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
 import {
   uploadPhotoToBunny,
   createBunnyStoryVideo,
-  uploadBunnyStoryVideo,
+  getBunnyStoryTusCredentials,
   getBunnyStoryStreamUrls,
 } from "@/lib/utils/bunny";
 
-export const runtime     = "nodejs";
-export const dynamic     = "force-dynamic";
-export const maxDuration = 300;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // POST /api/stories/init
+//
+// Video: JSON body { mediaType:"video", caption, clipStart, clipEnd }
+//   → creates Bunny video, inserts DB placeholder (is_processing=true)
+//   → returns { storyId, uploadType:"tus", videoId, tusEndpoint, expireTime, signature, libraryId }
+//   → client uploads file directly to Bunny via TUS, then calls /api/stories/complete
+//
+// Photo: FormData body { file, mediaType:"photo", caption }
+//   → uploads to Bunny storage, inserts DB record (is_processing=false)
+//   → returns { storyId, uploadType:"done" }
+
 export async function POST(req: NextRequest) {
   try {
     const { user, error: authErr } = await getUser();
@@ -29,27 +38,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Only creators can post stories" }, { status: 403 });
     }
 
-    const body      = await req.json();
-    const mediaType = body.mediaType as "photo" | "video";
-    const caption   = (body.caption  as string) || null;
-    const clipStart = parseFloat(body.clipStart) || 0;
-    const clipEnd   = parseFloat(body.clipEnd)   || 0;
-    const fileName  = (body.fileName  as string) || "story";
-    const mimeType  = (body.mimeType  as string) || "video/mp4";
-    const fileData  = (body.fileData  as string) || null;
+    const contentType = req.headers.get("content-type") ?? "";
+    const expiresAt   = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-    if (!["photo", "video"].includes(mediaType)) {
-      return NextResponse.json({ error: "Invalid mediaType" }, { status: 400 });
-    }
+    // ── PHOTO — FormData ───────────────────────────────────────────────────
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      const file     = formData.get("file") as File | null;
+      const caption  = (formData.get("caption") as string) || null;
 
-    if (!fileData) return NextResponse.json({ error: "No fileData provided" }, { status: 400 });
+      if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
-    const buffer    = Buffer.from(fileData, "base64");
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const MAX_IMAGE = 50 * 1024 * 1024;
+      if (file.size > MAX_IMAGE) {
+        return NextResponse.json({ error: "Image too large (max 50MB)" }, { status: 400 });
+      }
 
-    // ── PHOTO ─────────────────────────────────────────────────────────────
-    if (mediaType === "photo") {
-      const { url } = await uploadPhotoToBunny(buffer, user.id, fileName, mimeType);
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const { url } = await uploadPhotoToBunny(buffer, user.id, file.name, file.type);
 
       const { data: story, error: insertErr } = await supabase
         .from("stories")
@@ -75,10 +81,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ storyId: story.id, uploadType: "done" });
     }
 
-    // ── VIDEO ─────────────────────────────────────────────────────────────
-    const videoId = await createBunnyStoryVideo(`story-${user.id}-${Date.now()}`);
-    await uploadBunnyStoryVideo(buffer, videoId);
-    const { hlsUrl, thumbnailUrl } = getBunnyStoryStreamUrls(videoId);
+    // ── VIDEO — JSON, TUS ──────────────────────────────────────────────────
+    const body      = await req.json();
+    const mediaType = body.mediaType as string;
+    const caption   = (body.caption  as string) || null;
+    const clipStart = parseFloat(body.clipStart) || 0;
+    const clipEnd   = parseFloat(body.clipEnd)   || 0;
+
+    if (mediaType !== "video") {
+      return NextResponse.json({ error: "Invalid mediaType" }, { status: 400 });
+    }
+
+    const videoId                                    = await createBunnyStoryVideo(`story-${user.id}-${Date.now()}`);
+    const { hlsUrl, thumbnailUrl }                   = getBunnyStoryStreamUrls(videoId);
+    const { tusEndpoint, expireTime, signature, libraryId } = getBunnyStoryTusCredentials(videoId);
 
     const { data: story, error: insertErr } = await supabase
       .from("stories")
@@ -103,7 +119,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to create story" }, { status: 500 });
     }
 
-    return NextResponse.json({ storyId: story.id, uploadType: "done" });
+    return NextResponse.json({
+      storyId:     story.id,
+      uploadType:  "tus",
+      videoId,
+      tusEndpoint,
+      expireTime,
+      signature,
+      libraryId,
+    });
 
   } catch (err) {
     console.error("[POST /api/stories/init] unexpected error:", err);

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useRef, useState, useCallback, useEffect } from "react";
 import * as tus from "tus-js-client";
+import { compressPhotoIfNeeded } from "@/lib/utils/compressPhoto";
 
 export interface UploadItem {
   id:       string;
@@ -25,7 +26,6 @@ export interface UploadItem {
   _videoId?:      string;
 }
 
-// Serialisable shape stored in sessionStorage (no File/Blob/callbacks)
 interface PersistedUpload {
   id:       string;
   fileName: string;
@@ -52,7 +52,7 @@ function savePersistedUploads(uploads: UploadItem[]) {
       id, fileName, progress, phase, mediaId, error,
     }));
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(serialisable));
-  } catch { /* quota exceeded — silently ignore */ }
+  } catch {}
 }
 
 interface UploadContextValue {
@@ -95,8 +95,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   const [uploads, setUploads] = useState<UploadItem[]>(() => {
     return loadPersistedUploads().map((u) => ({
       ...u,
-      phase:    u.phase === "uploading" || u.phase === "processing" ? "error" : u.phase,
-      error:    u.phase === "uploading" || u.phase === "processing" ? "Upload interrupted — please retry" : u.error,
+      phase: u.phase === "uploading" || u.phase === "processing" ? "error" : u.phase,
+      error: u.phase === "uploading" || u.phase === "processing" ? "Upload interrupted — please retry" : u.error,
     }));
   });
 
@@ -125,15 +125,14 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
   }, []);
 
-  // ── Watermark check — runs once after transcoding completes ───────────────
   const checkWatermark = useCallback(async (uploadId: string, videoId: string) => {
     try {
       const res  = await fetch(`/api/upload/video/watermark-check?videoId=${videoId}`);
       const data = await res.json();
       if (data.hasWatermark) {
-        console.log(`✅ [watermark] videoId=${videoId} — watermark confirmed on transcoded video`);
+        console.log(`✅ [watermark] videoId=${videoId} — watermark confirmed`);
       } else {
-        console.warn(`⚠️ [watermark] videoId=${videoId} — NO watermark detected. hasWatermark=${data.hasWatermark} watermarkVersion=${data.watermarkVersion} status=${data.status}`);
+        console.warn(`⚠️ [watermark] videoId=${videoId} — NO watermark detected`);
       }
     } catch (err) {
       console.error(`[watermark] check failed for videoId=${videoId}:`, err);
@@ -155,12 +154,11 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           delete pollTimers.current[uploadId];
           updateUpload(uploadId, { progress: 100, phase: "done" });
 
-          // Check watermark after transcoding completes
           const bunnyVideoId = videoId ?? data.bunnyVideoId;
           if (bunnyVideoId) {
             checkWatermark(uploadId, bunnyVideoId);
           } else {
-            console.warn(`[watermark] no videoId available for uploadId=${uploadId} — skipping check`);
+            console.warn(`[watermark] no videoId for uploadId=${uploadId} — skipping`);
           }
 
         } else if (data.status === "failed") {
@@ -178,7 +176,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           delete pollTimers.current[uploadId];
           updateUpload(uploadId, { phase: "error", error: "Processing timed out" });
         }
-      } catch { /* ignore network blips */ }
+      } catch {}
     }, 3000);
   }, [updateUpload, checkWatermark]);
 
@@ -208,12 +206,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     onError: (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
-
     setUploads((prev) => [...prev, {
       id: uploadId, fileName: label, progress: 0, phase: "uploading",
       _isText: true, _onDone: onDone, _onError: onError,
     }]);
-
     runTextPost(uploadId, onDone, onError);
     return uploadId;
   }, [runTextPost]);
@@ -244,12 +240,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     onError: (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
-
     setUploads((prev) => [...prev, {
       id: uploadId, fileName: label, progress: 0, phase: "uploading",
       _isPoll: true, _onDone: onDone, _onError: onError,
     }]);
-
     runPollPost(uploadId, onDone, onError);
     return uploadId;
   }, [runPollPost]);
@@ -262,10 +256,15 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     onError:   (err: string) => void,
   ) => {
     try {
-      updateUpload(uploadId, { progress: 30 });
+      updateUpload(uploadId, { progress: 10 });
+
+      // Compress before upload — reduces mobile failure rate
+      const compressed = await compressPhotoIfNeeded(file);
+
+      updateUpload(uploadId, { progress: 40 });
 
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", compressed);
 
       updateUpload(uploadId, { progress: 60 });
 
@@ -295,12 +294,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     onError:   (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
-
     setUploads((prev) => [...prev, {
       id: uploadId, fileName: file.name, progress: 0, phase: "uploading",
       file, _onMediaId: onMediaId, _onError: onError, _isPhoto: true,
     }]);
-
     runPhotoUpload(uploadId, file, onMediaId, onError);
     return uploadId;
   }, [runPhotoUpload]);
@@ -313,12 +310,17 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     onError:    (err: string) => void,
   ) => {
     try {
-      updateUpload(uploadId, { progress: 20 });
+      updateUpload(uploadId, { progress: 10 });
+
+      // Compress all photos before upload
+      const compressed = await Promise.all(files.map((f) => compressPhotoIfNeeded(f)));
+
+      updateUpload(uploadId, { progress: 40 });
 
       const formData = new FormData();
-      for (const f of files) formData.append("file", f);
+      for (const f of compressed) formData.append("file", f);
 
-      updateUpload(uploadId, { progress: 50 });
+      updateUpload(uploadId, { progress: 60 });
 
       const res  = await fetch("/api/upload/photo", { method: "POST", body: formData });
       const data = await res.json();
@@ -347,12 +349,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
     const label    = `${files.length} photos`;
-
     setUploads((prev) => [...prev, {
       id: uploadId, fileName: label, progress: 0, phase: "uploading",
       files, _onMediaIds: onMediaIds, _onError: onError, _isMultiPhoto: true,
     }]);
-
     runMultiPhotoUpload(uploadId, files, onMediaIds, onError);
     return uploadId;
   }, [runMultiPhotoUpload]);
@@ -375,9 +375,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           const res  = await fetch("/api/upload/thumbnail", { method: "POST", body: formData });
           const data = await res.json();
           if (res.ok) customThumbnailUrl = data.url;
-        } catch {
-          // non-fatal
-        }
+        } catch {}
       }
 
       const initRes  = await fetch("/api/upload/video", {
@@ -396,7 +394,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         libraryId:   string;
       };
 
-      // Save videoId on the upload item so watermark check can use it
       updateUpload(uploadId, { _videoId: videoId });
 
       await new Promise<void>((resolve, reject) => {
@@ -425,7 +422,6 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
             reject(new Error(`Upload failed: ${err.message} — ${responseBody}`));
           },
         });
-
         upload.start();
       });
 
@@ -461,12 +457,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     onError:        (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
-
     setUploads((prev) => [...prev, {
       id: uploadId, fileName: file.name, progress: 0, phase: "uploading",
       file, _title: title, _onMediaId: onMediaId, _onError: onError, _thumbnailBlob: thumbnailBlob,
     }]);
-
     runUpload(uploadId, file, title, thumbnailBlob, onMediaId, onError);
     return uploadId;
   }, [runUpload]);

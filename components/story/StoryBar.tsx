@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Plus, AlertCircle, X } from "lucide-react";
+import * as tus from "tus-js-client";
 import { useAppStore } from "@/lib/store/appStore";
 import StoryUploadModal, { type UploadJob } from "@/components/story/StoryUploadModal";
 import { compressVideoIfNeeded } from "@/lib/utils/compressVideo";
@@ -269,38 +270,59 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
       setStoryUpload({ phase: "uploading", uploadPct: 0 });
 
-      const base64 = await new Promise<string>((res, rej) => {
-        const reader = new FileReader();
-        reader.onload  = () => res((reader.result as string).split(",")[1]);
-        reader.onerror = rej;
-        reader.readAsDataURL(fileToUpload);
-      });
+      // ── PHOTO — FormData, streams directly, no base64 ─────────────────
+      if (job.mediaType === "photo") {
+        const formData = new FormData();
+        formData.append("file",      fileToUpload);
+        formData.append("mediaType", "photo");
+        if (job.caption) formData.append("caption", job.caption);
 
-      if (cancelledRef.current) return;
+        setStoryUpload({ uploadPct: 30 });
 
-      const body: Record<string, unknown> = {
-        mediaType: job.mediaType,
-        caption:   job.caption,
-        clipStart: job.clipStart,
-        clipEnd:   job.clipEnd,
-        fileName:  fileToUpload.name,
-        mimeType:  fileToUpload.type,
-        fileData:  base64,
-      };
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        const timer = setTimeout(() => controller.abort(), 120000);
 
-      setStoryUpload({ uploadPct: 50 });
+        let initRes: Response;
+        try {
+          initRes = await fetch("/api/stories/init", {
+            method: "POST",
+            body:   formData,
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+          abortControllerRef.current = null;
+        }
 
+        if (cancelledRef.current) return;
+
+        const initData = await initRes.json();
+        if (!initRes.ok) throw new Error(initData.error ?? "Upload failed");
+
+        setStoryUpload({ phase: "done", uploadPct: 100 });
+        await fetchStories();
+        setTimeout(() => resetStoryUpload(), 2000);
+        return;
+      }
+
+      // ── VIDEO — get TUS credentials, upload directly to Bunny ─────────
       const controller = new AbortController();
       abortControllerRef.current = controller;
-      const timer = setTimeout(() => controller.abort(), 300000);
+      const timer = setTimeout(() => controller.abort(), 30000);
 
       let initRes: Response;
       try {
         initRes = await fetch("/api/stories/init", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify(body),
-          signal:  controller.signal,
+          body:    JSON.stringify({
+            mediaType: "video",
+            caption:   job.caption,
+            clipStart: job.clipStart,
+            clipEnd:   job.clipEnd,
+          }),
+          signal: controller.signal,
         });
       } finally {
         clearTimeout(timer);
@@ -312,14 +334,35 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       const initData = await initRes.json();
       if (!initRes.ok) throw new Error(initData.error ?? "Upload failed");
 
-      if (job.mediaType === "video") {
-        setStoryUpload({ phase: "processing", storyId: initData.storyId, uploadPct: 100 });
-        await fetchStories();
-      } else {
-        setStoryUpload({ phase: "done", uploadPct: 100 });
-        await fetchStories();
-        setTimeout(() => resetStoryUpload(), 2000);
-      }
+      const { storyId, videoId, tusEndpoint, expireTime, signature, libraryId } = initData;
+
+      await new Promise<void>((resolve, reject) => {
+        const upload = new tus.Upload(fileToUpload, {
+          endpoint:    tusEndpoint,
+          chunkSize:   5 * 1024 * 1024,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          storeFingerprintForResuming: false,
+          headers: {
+            AuthorizationSignature: signature,
+            AuthorizationExpire:    String(expireTime),
+            VideoId:                videoId,
+            LibraryId:              libraryId,
+          },
+          metadata: { filetype: fileToUpload.type, title: `story-${videoId}` },
+          onProgress(bytesUploaded, bytesTotal) {
+            const pct = Math.round((bytesUploaded / bytesTotal) * 75) + 20;
+            setStoryUpload({ uploadPct: pct });
+          },
+          onSuccess() { resolve(); },
+          onError(err)  { reject(new Error(`TUS upload failed: ${err.message}`)); },
+        });
+        upload.start();
+      });
+
+      if (cancelledRef.current) return;
+
+      setStoryUpload({ phase: "processing", storyId, uploadPct: 100 });
+      await fetchStories();
 
     } catch (err: any) {
       if (cancelledRef.current) return;
@@ -377,7 +420,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const ownThumbnail  = ownGroup?.latestThumbnail ?? null;
   const hasOwnStories = (ownGroup?.items.filter((s) => !s.isProcessing).length ?? 0) > 0;
 
-  // Hide the entire bar for fans when there are no stories
   if (!loading && !isCreator && displayGroups.length === 0) return null;
 
   return (
@@ -427,49 +469,30 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
           className="sb-scroll"
           style={{ display:"flex", gap:16, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none" }}
         >
-          {/* ── Creator own bubble ── */}
           {isCreator && globalViewer && (
             <div
               className="sb-item"
               style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, flexShrink:0 }}
             >
               <div style={{ position: "relative" }}>
-
                 <div
                   className={!isUploading && hasOwnStories ? "sb-own-circle" : undefined}
                   onClick={!isUploading && hasOwnStories ? handleOpenOwnStories : undefined}
                   style={{
                     padding:      "2.5px",
                     borderRadius: "50%",
-                    background:   isUploading
-                      ? "transparent"
-                      : hasOwnStories
-                        ? GRADIENT
-                        : "#2A2A3D",
+                    background:   isUploading ? "transparent" : hasOwnStories ? GRADIENT : "#2A2A3D",
                     border:       isUploading || hasOwnStories ? "none" : "2px dashed #4A4A6A",
                     boxShadow:    !isUploading && hasOwnStories ? GLOW : "none",
                   }}
                 >
                   <div style={{ padding: "2.5px", borderRadius: "50%", backgroundColor: "#0A0A0F", position: "relative", overflow: "hidden" }}>
                     {isUploading ? (
-                      <Avatar
-                        src={globalViewer.avatar_url ?? null}
-                        name={globalViewer.display_name || globalViewer.username || "?"}
-                        size={80}
-                      />
+                      <Avatar src={globalViewer.avatar_url ?? null} name={globalViewer.display_name || globalViewer.username || "?"} size={80} />
                     ) : hasOwnStories && ownThumbnail ? (
-                      <ThumbnailWithFallback
-                        src={ownThumbnail}
-                        name={globalViewer.display_name || globalViewer.username || "?"}
-                        avatarUrl={globalViewer.avatar_url ?? null}
-                        size={80}
-                      />
+                      <ThumbnailWithFallback src={ownThumbnail} name={globalViewer.display_name || globalViewer.username || "?"} avatarUrl={globalViewer.avatar_url ?? null} size={80} />
                     ) : (
-                      <Avatar
-                        src={globalViewer.avatar_url ?? null}
-                        name={globalViewer.display_name || globalViewer.username || "?"}
-                        size={80}
-                      />
+                      <Avatar src={globalViewer.avatar_url ?? null} name={globalViewer.display_name || globalViewer.username || "?"} size={80} />
                     )}
                   </div>
                 </div>
@@ -523,7 +546,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
             </div>
           )}
 
-          {/* ── Other creator story groups ── */}
           {loading
             ? Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, flexShrink:0 }}>
@@ -543,12 +565,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                     <div style={{ padding:"2.5px", borderRadius:"50%", background: isViewed ? VIEWED_RING : GRADIENT, boxShadow: isViewed ? "none" : GLOW, animation: isViewed ? "none" : "sb-pulse 3s ease-in-out infinite", transition:"all 0.4s ease" }}>
                       <div style={{ padding:"2.5px", borderRadius:"50%", backgroundColor:"#0A0A0F", position:"relative", overflow:"hidden" }}>
                         {group.latestThumbnail ? (
-                          <ThumbnailWithFallback
-                            src={group.latestThumbnail}
-                            name={group.displayName}
-                            avatarUrl={group.avatarUrl}
-                            size={80}
-                          />
+                          <ThumbnailWithFallback src={group.latestThumbnail} name={group.displayName} avatarUrl={group.avatarUrl} size={80} />
                         ) : (
                           <Avatar src={group.avatarUrl} name={group.displayName} size={80} />
                         )}
