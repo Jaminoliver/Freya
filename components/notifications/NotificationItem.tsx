@@ -1,0 +1,131 @@
+"use client";
+
+import { Heart, MessageCircle, Banknote, UserPlus, Lock, Sparkles } from "lucide-react";
+import type { NotificationItem as NotificationItemType } from "@/lib/types/notifications";
+
+interface Props {
+  notification: NotificationItemType;
+  onClick?:     () => void;
+}
+
+function TypeIcon({ type }: { type: NotificationItemType["type"] }) {
+  const configs = {
+    tip:          { icon: Banknote,       bg: "#1A2A1A", color: "#10B981" },
+    subscription: { icon: UserPlus,       bg: "#1A1A2E", color: "#8B5CF6" },
+    message:      { icon: MessageCircle,  bg: "#1A1A2E", color: "#8B5CF6" },
+    like:         { icon: Heart,          bg: "#2A1A1A", color: "#EC4899" },
+    comment:      { icon: MessageCircle,  bg: "#1A2028", color: "#3B82F6" },
+    ppv_unlock:   { icon: Lock,           bg: "#2A2A10", color: "#F5A623" },
+  };
+
+  const { icon: Icon, bg, color } = configs[type];
+
+  return (
+    <div style={{
+      width:           "22px",
+      height:          "22px",
+      borderRadius:    "50%",
+      backgroundColor: bg,
+      display:         "flex",
+      alignItems:      "center",
+      justifyContent:  "center",
+      flexShrink:      0,
+      position:        "absolute",
+      bottom:          "-2px",
+      right:           "-2px",
+      border:          "2px solid #0A0A0F",
+    }}>
+      <Icon size={11} color={color} strokeWidth={2.2} />
+    </div>
+  );
+}
+
+export function NotificationItem({ notification, onClick }: Props) {
+  const { actorName, actorAvatar, actorHandle, bodyText, subText, createdAt, isUnread, type } = notification;
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display:         "flex",
+        alignItems:      "center",
+        gap:             "14px",
+        padding:         "14px 20px",
+        borderBottom:    "1px solid #1A1A2A",
+        cursor:          "pointer",
+        backgroundColor: isUnread ? "rgba(139,92,246,0.04)" : "transparent",
+        transition:      "background-color 0.15s ease",
+        position:        "relative",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#111120")}
+      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isUnread ? "rgba(139,92,246,0.04)" : "transparent")}
+    >
+      {/* Unread left bar */}
+      {isUnread && (
+        <div style={{
+          position:        "absolute",
+          left:            0,
+          top:             0,
+          bottom:          0,
+          width:           "3px",
+          backgroundColor: "#8B5CF6",
+          borderRadius:    "0 2px 2px 0",
+        }} />
+      )}
+
+      {/* Avatar + type icon */}
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <div style={{
+          width:           "48px",
+          height:          "48px",
+          borderRadius:    "50%",
+          overflow:        "hidden",
+          backgroundColor: "#2A2A3D",
+        }}>
+          {actorAvatar ? (
+            <img
+              src={actorAvatar}
+              alt={actorName}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            <div style={{
+              width:           "100%",
+              height:          "100%",
+              backgroundColor: "#8B5CF6",
+              display:         "flex",
+              alignItems:      "center",
+              justifyContent:  "center",
+              color:           "#FFFFFF",
+              fontSize:        "18px",
+              fontWeight:      700,
+            }}>
+              {actorName[0].toUpperCase()}
+            </div>
+          )}
+        </div>
+        <TypeIcon type={type} />
+      </div>
+
+      {/* Text */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: "0 0 3px", fontSize: "14px", color: "#FFFFFF", lineHeight: 1.4 }}>
+          <span style={{ fontWeight: 700 }}>{actorName}</span>
+          {" "}
+          <span style={{ color: "#C4C4D4" }}>{bodyText}</span>
+        </p>
+        <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {subText}
+        </p>
+      </div>
+
+      {/* Right — timestamp + unread dot */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px", flexShrink: 0 }}>
+        <span style={{ fontSize: "12px", color: "#4A4A6A", whiteSpace: "nowrap" }}>{createdAt}</span>
+        {isUnread && (
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#8B5CF6" }} />
+        )}
+      </div>
+    </div>
+  );
+}

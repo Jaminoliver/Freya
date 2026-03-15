@@ -10,6 +10,10 @@ export function MobileBottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
+  const inChat = pathname.startsWith("/messages/");
+
+  if (inChat) return null;
+
   return (
     <>
       <style>{`

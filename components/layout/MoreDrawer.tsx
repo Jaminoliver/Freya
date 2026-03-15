@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { User, Bookmark, Settings, Wallet, HelpCircle, LogOut, X, Sparkles } from "lucide-react";
+import { User, Bookmark, Settings, Wallet, HelpCircle, LogOut, X, Sparkles, Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAppStore } from "@/lib/store/appStore";
@@ -37,10 +37,11 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
   };
 
   const navItems = [
-    { label: "Profile",  icon: User,     href: viewer ? `/${viewer.username}` : "#" },
-    { label: "Saved",    icon: Bookmark, href: "/saved" },
-    { label: "Settings", icon: Settings, href: "/settings"  },
-    { label: "Wallet",   icon: Wallet,   href: "/wallet"    },
+    { label: "Profile",       icon: User,     href: viewer ? `/${viewer.username}` : "#" },
+    { label: "Notifications", icon: Bell,     href: "/notifications" },
+    { label: "Saved",         icon: Bookmark, href: "/saved"         },
+    { label: "Settings",      icon: Settings, href: "/settings"      },
+    { label: "Wallet",        icon: Wallet,   href: "/wallet"        },
   ];
 
   if (!isOpen) return null;

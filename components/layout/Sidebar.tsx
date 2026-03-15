@@ -45,7 +45,6 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
   const viewer   = useAppStore((s) => s.viewer);
   const username = viewer?.username ?? null;
 
-  // ── Instant active state ──────────────────────────────────────────────────
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -68,8 +67,6 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
   const [searching,      setSearching]      = useState(false);
   const [exploreData,    setExploreData]    = useState<Creator[]>([]);
   const [exploreLoading, setExploreLoading] = useState(false);
-
-  // ── Always show header when search is open ───────────────────────────────
 
   const inputRef    = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -155,25 +152,42 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
         <div
           className="md:hidden"
           style={{
-            position:   "fixed",
-            top:        0,
-            left:       0,
-            right:      0,
-            zIndex:     100,
+            position:        "fixed",
+            top:             0,
+            left:            0,
+            right:           0,
+            zIndex:          100,
             backgroundColor: "#13131F",
             borderBottom:    "1px solid #1F1F2A",
-            height:     "56px",
-            fontFamily: "'Inter', sans-serif",
-            transform:  headerVisible ? "translateY(0)" : "translateY(-100%)",
-            transition: "transform 0.25s ease",
+            height:          "56px",
+            fontFamily:      "'Inter', sans-serif",
+            transform:       headerVisible ? "translateY(0)" : "translateY(-100%)",
+            transition:      "transform 0.25s ease",
           }}
         >
+          {/* Default state — logo + icons */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
             <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
-            <button onClick={() => setSearchOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px" }}>
-              <Search size={22} strokeWidth={1.8} />
-            </button>
+
+            {/* Right icons — Search + Bell */}
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <button
+                onClick={() => setSearchOpen(true)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
+              >
+                <Search size={22} strokeWidth={1.8} />
+              </button>
+              <Link
+                href="/notifications"
+                onClick={() => handleNavClick("/notifications")}
+                style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2" }}
+              >
+                <Bell size={22} strokeWidth={1.8} />
+              </Link>
+            </div>
           </div>
+
+          {/* Search state */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 12px", height: "100%", opacity: searchOpen ? 1 : 0, transform: searchOpen ? "translateY(0)" : "translateY(-10px)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "auto" : "none", position: "absolute", inset: 0 }}>
             <button onClick={closeSearch} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", flexShrink: 0 }}>
               <ArrowLeft size={22} strokeWidth={1.8} />
@@ -313,7 +327,6 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
   );
 }
 
-// ── Mobile creator card ───────────────────────────────────────────────────────
 function MobileCreatorCard({ creator, onClick }: { creator: Creator; onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
   return (

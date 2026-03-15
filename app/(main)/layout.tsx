@@ -13,13 +13,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const isSettings      = pathname.startsWith("/settings");
   const isSubscriptions = pathname.startsWith("/subscriptions");
+  const isMessages      = pathname.startsWith("/messages");
+  const isNotifications = pathname.startsWith("/notifications");
   const isDashboard     = pathname === "/dashboard";
   const isPostPage      = pathname.startsWith("/posts/");
 
-  const showRightPanel = !isSettings && !isSubscriptions;
-  const noTopbar       = !isDashboard || isPostPage;
+  const showRightPanel = !isSettings && !isSubscriptions && !isMessages;
+  const noTopbar       = !isDashboard || isPostPage || isNotifications;
 
-  // ── Hide/show header on scroll ────────────────────────────────────────────
   const [headerVisible, setHeaderVisible] = useState(true);
   const lastScrollY = useRef(0);
   const ticking     = useRef(false);
@@ -63,12 +64,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             style={{
               flex: 1,
               minWidth: 0,
-              maxWidth: isSettings ? "100%" : "720px",
+              maxWidth: isSettings || isMessages || isNotifications ? "100%" : "720px",
               height: "100vh",
               borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
-              overflowY: "auto",
+              overflowY: isMessages || isNotifications ? "hidden" : "auto",
               overflowX: "hidden",
-              paddingBottom: "72px",
+              paddingBottom: isMessages || isNotifications ? "0" : "72px",
               scrollbarWidth: "none",
               msOverflowStyle: "none",
               WebkitOverflowScrolling: "touch",
