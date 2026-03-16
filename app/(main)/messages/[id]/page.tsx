@@ -23,12 +23,12 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
 
-  // ✅ Start empty — column-reverse means no scroll jump, messages appear at bottom instantly
   const [messages, setMessages] = useState<Message[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setActiveConversationId(conversationId);
@@ -46,7 +46,6 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     });
   }, []);
 
-  // ✅ Fetch latest messages — update cache + state silently
   useEffect(() => {
     async function load() {
       try {
@@ -71,13 +70,14 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
         setHasMore(!!msgsData.nextCursor);
       } catch {
         if (!conversation) setNotFound(true);
+      } finally {
+        setLoaded(true);
       }
     }
 
     load();
   }, [id]);
 
-  // ✅ Load older messages when user scrolls to top
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !nextCursor) return;
     setLoadingMore(true);
@@ -125,7 +125,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  if (!conversation || !currentUserId || messages.length === 0) {
+  if (!loaded || !conversation || !currentUserId) {
     return (
       <div style={{ height: "100%", backgroundColor: "#0A0A0F" }} />
     );
