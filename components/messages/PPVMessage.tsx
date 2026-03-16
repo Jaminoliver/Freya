@@ -104,7 +104,7 @@ export function PPVMessage({ message, conversation, isOwn, onUnlock }: Props) {
               </span>
             </div>
             <button
-              onClick={() => onUnlock?.(message.id)}
+              onClick={() => onUnlock?.(String(message.id))}
               style={{
                 padding:         "6px 16px",
                 borderRadius:    "20px",
