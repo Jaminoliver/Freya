@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { MessageBubble } from "@/components/messages/MessageBubble";
 import { MediaGrid } from "@/components/messages/MediaGrid";
 import { TypingBubble } from "@/components/messages/TypingBubble";
@@ -12,6 +12,9 @@ interface Props {
   currentUserId?: string;
   isTyping?:      boolean;
   onReply?:       (message: Message) => void;
+  onLoadMore?:    () => void;
+  hasMore?:       boolean;
+  loadingMore?:   boolean;
 }
 
 function InlineAvatar({ src, name }: { src: string | null; name: string }) {
@@ -50,37 +53,98 @@ function ReadTick({ isRead }: { isRead: boolean }) {
   );
 }
 
-export function MessagesList({ messages, conversation, currentUserId = "me", isTyping = false, onReply }: Props) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+export function MessagesList({ messages, conversation, currentUserId = "me", isTyping = false, onReply, onLoadMore, hasMore = false, loadingMore = false }: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevMessageIdsRef = useRef<Set<number>>(new Set(messages.map((m) => m.id)));
+  const [animatingIds, setAnimatingIds] = useState<Set<number>>(new Set());
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping]);
+  // ✅ Detect newly prepended messages and animate them
+  useEffect(() => {
+    const prevIds = prevMessageIdsRef.current;
+    const newIds = new Set(messages.map((m) => m.id));
+    const added = new Set<number>();
+
+    for (const id of newIds) {
+      if (!prevIds.has(id)) added.add(id);
+    }
+
+    prevMessageIdsRef.current = newIds;
+
+    // Only animate if messages were prepended (older loaded), not appended (new sent/received)
+    if (added.size > 0 && messages.length > 0) {
+      // Check if added messages are at the start (older) not the end (newer)
+      const firstAddedIdx = messages.findIndex((m) => added.has(m.id));
+      const lastAddedIdx = messages.length - 1 - [...messages].reverse().findIndex((m) => added.has(m.id));
+      const allAtStart = lastAddedIdx < messages.length - 1;
+
+      if (allAtStart && added.size > 1) {
+        setAnimatingIds(added);
+        setTimeout(() => setAnimatingIds(new Set()), 450);
+      }
+    }
+  }, [messages]);
+
+  // ✅ Scroll-to-top detection for loading older messages
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !onLoadMore || !hasMore || loadingMore) return;
+    // In column-reverse, scrollTop is 0 at bottom, negative going up
+    // distanceFromTop = how far from the oldest messages
+    const distanceFromTop = el.scrollHeight + el.scrollTop - el.clientHeight;
+    if (distanceFromTop < 200) {
+      onLoadMore();
+    }
+  }, [onLoadMore, hasMore, loadingMore]);
 
   return (
-    <div style={{
-      flex:                    1,
-      minHeight:               0,
-      overflowY:               messages.length > 0 || isTyping ? "auto" : "hidden",
-      overflowX:               "hidden",
-      padding:                 "80px 16px 100px",
-      display:                 "flex",
-      flexDirection:           "column",
-      gap:                     "4px",
-      scrollbarWidth:          "none",
-      overscrollBehavior:      "contain",
-      touchAction:             "pan-y",
-      WebkitOverflowScrolling: "touch" as any,
-      fontFamily:              "'Inter',sans-serif",
-    }}>
-      {messages.map((msg, i) => {
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      style={{
+        flex:                    1,
+        minHeight:               0,
+        overflowY:               "auto",
+        overflowX:               "hidden",
+        padding:                 "16px 16px",
+        display:                 "flex",
+        flexDirection:           "column-reverse",
+        gap:                     "4px",
+        scrollbarWidth:          "none",
+        overscrollBehavior:      "contain",
+        touchAction:             "pan-y",
+        WebkitOverflowScrolling: "touch" as any,
+        fontFamily:              "'Inter',sans-serif",
+      }}
+    >
+      <style>{`
+        @keyframes msgFadeIn {
+          from { opacity: 0; transform: translateY(-12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .msg-fade-in {
+          animation: msgFadeIn 0.4s ease-out both;
+        }
+        @keyframes spinLoader {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+      {/* ✅ column-reverse: content order is visually reversed, so we render bottom-first */}
+      {/* Typing bubble goes first (appears at bottom) */}
+      {isTyping && <TypingBubble />}
+
+      {/* Messages in reverse order — newest first in DOM, appears at bottom visually */}
+      {[...messages].reverse().map((msg, _ri, reversedArr) => {
+        // Get the original index for neighbor checks
+        const originalIndex = messages.length - 1 - _ri;
         const isOwn       = msg.senderId === currentUserId;
-        const prevMsg     = messages[i - 1];
+        const prevMsg     = originalIndex > 0 ? messages[originalIndex - 1] : undefined;
         const isSameGroup = prevMsg && prevMsg.senderId === msg.senderId;
         const showTime    = !prevMsg || (
           new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime() > 5 * 60 * 1000
         );
 
         return (
-          <div key={msg.id} style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}>
+          <div key={msg.id} className={animatingIds.has(msg.id) ? "msg-fade-in" : ""} style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}>
             {showTime && (
               <div style={{ textAlign: "center", margin: "6px 0" }}>
                 <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{formatMessageTime(msg.createdAt)}</span>
@@ -135,8 +199,13 @@ export function MessagesList({ messages, conversation, currentUserId = "me", isT
         );
       })}
 
-      {isTyping && <TypingBubble />}
-      <div ref={bottomRef} />
+      {/* Loading indicator at top when fetching older messages */}
+      {loadingMore && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "16px 0" }}>
+          <div style={{ width: "18px", height: "18px", borderRadius: "50%", border: "2px solid #2A2A3D", borderTopColor: "#8B5CF6", animation: "spinLoader 0.7s linear infinite" }} />
+          <span style={{ fontSize: "12px", color: "#4A4A6A" }}>Loading older messages...</span>
+        </div>
+      )}
     </div>
   );
 }

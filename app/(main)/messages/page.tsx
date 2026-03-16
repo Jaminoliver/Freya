@@ -19,6 +19,31 @@ const typingTimers     = new Map<number, ReturnType<typeof setTimeout>>();
 let   typingConvIds    = new Set<number>();
 const typingChannels   = new Map<number, any>();
 
+// ✅ Message cache — keyed by conversation ID, stores only latest page
+const messageCache = new Map<number, { messages: Message[]; timestamp: number }>();
+
+export function getCachedMessages(conversationId: number): Message[] | null {
+  const entry = messageCache.get(conversationId);
+  if (!entry) return null;
+  // Only use cache if under 30 seconds old
+  if (Date.now() - entry.timestamp > 30000) return null;
+  return entry.messages;
+}
+
+export function setCachedMessages(conversationId: number, messages: Message[]) {
+  messageCache.set(conversationId, { messages, timestamp: Date.now() });
+}
+
+export function appendCachedMessage(conversationId: number, message: Message) {
+  const entry = messageCache.get(conversationId);
+  if (!entry) {
+    messageCache.set(conversationId, { messages: [message], timestamp: Date.now() });
+    return;
+  }
+  if (entry.messages.some((m) => m.id === message.id)) return;
+  messageCache.set(conversationId, { messages: [...entry.messages, message], timestamp: Date.now() });
+}
+
 export function setActiveConversation(id: number | null) {
   console.log("[setActiveConversation] setting to:", id);
   if (activeConversationId !== null && id === null) {
@@ -33,7 +58,7 @@ export function setMessageDispatcher(fn: ((msg: Message) => void) | null) {
   messageDispatcher = fn;
 }
 
-function updateConversations(updater: Conversation[] | ((prev: Conversation[]) => Conversation[])) {
+export function updateConversations(updater: Conversation[] | ((prev: Conversation[]) => Conversation[])) {
   const next = typeof updater === "function"
     ? updater(cachedConversations ?? [])
     : updater;
@@ -66,6 +91,17 @@ function subscribeTyping(supabase: any, conversationId: number) {
   typingChannels.set(conversationId, channel);
 }
 
+export function sendTypingEvent(conversationId: number, userId: string) {
+  const channel = typingChannels.get(conversationId);
+  console.log("[sendTypingEvent] conversationId:", conversationId, "channel:", !!channel, "typingChannels size:", typingChannels.size);
+  if (!channel) return;
+  channel.send({
+    type:    "broadcast",
+    event:   "typing",
+    payload: { userId },
+  });
+}
+
 function startGlobalRealtime() {
   if (realtimeStarted) return;
   realtimeStarted = true;
@@ -92,6 +128,9 @@ function startGlobalRealtime() {
           ? { id: row.id, conversationId: row.conversation_id, senderId: row.sender_id, type: "media", text: row.content ?? undefined, mediaUrls: row.media_url ? [row.media_url] : [], thumbnailUrl: row.thumbnail_url ?? null, isRead: row.is_read ?? false, createdAt: row.created_at, replyToId: row.reply_to_id ?? null }
           : { id: row.id, conversationId: row.conversation_id, senderId: row.sender_id, type: "text",  text: row.content ?? "", isRead: row.is_read ?? false, createdAt: row.created_at, replyToId: row.reply_to_id ?? null };
 
+        // ✅ Update message cache
+        appendCachedMessage(row.conversation_id, newMessage);
+
         if (messageDispatcher) messageDispatcher(newMessage);
         setTyping(row.conversation_id, false);
 
@@ -102,7 +141,7 @@ function startGlobalRealtime() {
               ...c,
               lastMessage:   row.content ?? (row.media_type ? "📎 Media" : ""),
               lastMessageAt: row.created_at,
-              unreadCount:   isOwn ? c.unreadCount : c.unreadCount + 1,
+              unreadCount:   isOwn || c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
               hasMedia:      !!row.media_type,
             };
           });

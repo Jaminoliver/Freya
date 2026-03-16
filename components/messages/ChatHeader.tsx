@@ -34,13 +34,12 @@ export function ChatHeader({ conversation, onBack }: Props) {
         }
         .chat-dropdown { animation: dropdownIn 0.15s ease forwards; }
         @media (min-width: 768px) {
-          .chat-header-fixed { display: none !important; }
-          .chat-header-mobile { position: static !important; }
+          .chat-header-mobile { display: none !important; }
         }
       `}</style>
 
       <div
-        className="chat-header-fixed"
+        className="chat-header-mobile"
         style={{
           display:         "flex",
           alignItems:      "center",
@@ -51,11 +50,9 @@ export function ChatHeader({ conversation, onBack }: Props) {
           backgroundColor: "#0D0D1A",
           borderBottom:    "1px solid #1E1E2E",
           fontFamily:      "'Inter', sans-serif",
-          position:        "fixed",
-          top:             "env(safe-area-inset-top, 0px)",
-          left:            0,
-          right:           0,
           zIndex:          50,
+          touchAction:     "none",
+          userSelect:      "none",
         }}
       >
         {/* Left — back + avatar + name */}

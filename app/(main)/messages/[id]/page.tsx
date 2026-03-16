@@ -5,7 +5,7 @@ import { getBrowserClient } from "@/lib/supabase/browserClient";
 import { useRouter } from "next/navigation";
 import { ChatPanel } from "@/components/messages/ChatPanel";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
-import { useConversations, setActiveConversation, setMessageDispatcher } from "@/app/(main)/messages/page";
+import { useConversations, setActiveConversation, setMessageDispatcher, setCachedMessages, appendCachedMessage } from "@/app/(main)/messages/page";
 import type { Conversation, Message } from "@/lib/types/messages";
 
 export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,19 +15,20 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
   const { conversations } = useConversations();
   const { setActiveConversationId, registerMessageHandler, unregisterMessageHandler, setTypingConversationId } = useMessagesContext();
-  const typingTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const setTypingRef     = useRef(setTypingConversationId);
-  setTypingRef.current   = setTypingConversationId;
 
-  // ✅ Try to get conversation instantly from sidebar cache
   const cached = conversations.find((c) => c.id === conversationId) ?? null;
 
   const [conversation,  setConversation]  = useState<Conversation | null>(cached);
-  const [currentUserId, setCurrentUserId] = useState<string>("me");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
-  const [messages,  setMessages]  = useState<Message[]>([]);
-  const [notFound,  setNotFound]  = useState(false);
+
+  // ✅ Start empty — column-reverse means no scroll jump, messages appear at bottom instantly
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [notFound, setNotFound] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
     setActiveConversationId(conversationId);
@@ -45,12 +46,11 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     });
   }, []);
 
-  // ✅ Load messages only — conversation already available from cache
+  // ✅ Fetch latest messages — update cache + state silently
   useEffect(() => {
     async function load() {
       try {
         const [convoRes, msgsRes] = await Promise.all([
-          // Only fetch conversation if not in cache
           conversation ? Promise.resolve(null) : fetch(`/api/conversations/${id}`),
           fetch(`/api/conversations/${id}/messages`),
         ]);
@@ -64,7 +64,11 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
         if (!msgsRes.ok) throw new Error("Failed to load messages");
         const msgsData = await msgsRes.json();
-        setMessages(msgsData.messages ?? []);
+        const fresh: Message[] = msgsData.messages ?? [];
+        setMessages(fresh);
+        setCachedMessages(conversationId, fresh);
+        setNextCursor(msgsData.nextCursor ?? null);
+        setHasMore(!!msgsData.nextCursor);
       } catch {
         if (!conversation) setNotFound(true);
       }
@@ -73,12 +77,36 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     load();
   }, [id]);
 
+  // ✅ Load older messages when user scrolls to top
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/conversations/${id}/messages?cursor=${encodeURIComponent(nextCursor)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const older: Message[] = data.messages ?? [];
+      if (older.length === 0) {
+        setHasMore(false);
+        return;
+      }
+      setMessages((prev) => [...older, ...prev]);
+      setNextCursor(data.nextCursor ?? null);
+      setHasMore(!!data.nextCursor);
+    } catch {
+      // silently fail
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [id, loadingMore, hasMore, nextCursor]);
+
   const handleNewMessage = useCallback((message: Message) => {
     setMessages((prev) => {
       if (prev.some((m) => m.id === message.id)) return prev;
       return [...prev, message];
     });
-  }, []);
+    appendCachedMessage(conversationId, message);
+  }, [conversationId]);
 
   useEffect(() => {
     registerMessageHandler(handleNewMessage);
@@ -89,20 +117,6 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     };
   }, [handleNewMessage, registerMessageHandler, unregisterMessageHandler]);
 
-  useEffect(() => {
-    const supabase = getBrowserClient();
-    const channel  = supabase.channel(`typing:${conversationId}`);
-    channel
-      .on("broadcast", { event: "typing" }, (payload: any) => {
-        if (payload.payload?.userId === currentUserIdRef.current) return;
-        setTypingRef.current(conversationId);
-        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-        typingTimerRef.current = setTimeout(() => setTypingRef.current(null), 2000);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [conversationId]);
-
   if (notFound) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#4A4A6A", fontFamily: "'Inter',sans-serif" }}>
@@ -111,13 +125,9 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  // ✅ Render immediately if we have conversation from cache — messages stream in
-  if (!conversation) {
+  if (!conversation || !currentUserId || messages.length === 0) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", backgroundColor: "#0A0A0F" }}>
-        <div style={{ width: "24px", height: "24px", borderRadius: "50%", border: "2px solid #2A2A3D", borderTopColor: "#8B5CF6", animation: "spin 0.7s linear infinite" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
+      <div style={{ height: "100%", backgroundColor: "#0A0A0F" }} />
     );
   }
 
@@ -128,6 +138,9 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       onBack={() => router.push("/messages")}
       onNewMessage={handleNewMessage}
       currentUserId={currentUserId}
+      onLoadMore={loadMore}
+      hasMore={hasMore}
+      loadingMore={loadingMore}
     />
   );
 }

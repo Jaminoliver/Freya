@@ -62,10 +62,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             ref={mainRef}
             className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}${isMessages ? " messages" : ""}`}
             style={{
-              flex: 1,
-              minWidth: 0,
-              maxWidth: isSettings || isMessages || isNotifications ? "100%" : "720px",
-              height: isMessages || isNotifications ? "100dvh" : "100vh",
+  flex: 1,
+  minWidth: 0,
+  maxWidth: isSettings || isMessages || isNotifications ? "100%" : "720px",
+  height: isMessages || isNotifications ? "100dvh" : "100vh",
+  boxSizing: "border-box",
               borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
               overflowY: isMessages || isNotifications ? "hidden" : "auto",
               overflowX: "hidden",

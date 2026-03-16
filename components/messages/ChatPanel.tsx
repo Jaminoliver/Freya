@@ -7,6 +7,7 @@ import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
 import { useTypingConversations } from "@/app/(main)/messages/page";
+import { updateConversations } from "@/app/(main)/messages/page";
 import { ChatHeader } from "@/components/messages/ChatHeader";
 import { MessagesList } from "@/components/messages/MessagesList";
 import { MessageInput } from "@/components/messages/MessageInput";
@@ -19,9 +20,12 @@ interface Props {
   onBack:         () => void;
   onNewMessage:   (message: Message) => void;
   currentUserId?: string;
+  onLoadMore?:    () => void;
+  hasMore?:       boolean;
+  loadingMore?:   boolean;
 }
 
-export function ChatPanel({ conversation, messages, onBack, onNewMessage, currentUserId = "me" }: Props) {
+export function ChatPanel({ conversation, messages, onBack, onNewMessage, currentUserId = "me", onLoadMore, hasMore, loadingMore }: Props) {
   const { participant } = conversation;
   const router = useRouter();
   const handleBack = () => router.push("/messages");
@@ -44,6 +48,14 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
     if (isTyping) setTypingConversationId(conversation.id);
     else setTypingConversationId(null);
   }, [isTyping, conversation.id, setTypingConversationId]);
+
+  // ✅ Mark as read on mount + clear sidebar unread immediately
+  useEffect(() => {
+    updateConversations((prev) =>
+      prev.map((c) => c.id === conversation.id ? { ...c, unreadCount: 0 } : c)
+    );
+    fetch(`/api/conversations/${conversation.id}/read`, { method: "PATCH" }).catch(() => {});
+  }, [conversation.id]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -95,7 +107,13 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
 
   const wrappedOnNewMessage = useCallback((message: Message) => {
     onNewMessage(message);
-  }, [onNewMessage]);
+    if (message.senderId !== currentUserId) {
+      updateConversations((prev) =>
+        prev.map((c) => c.id === conversation.id ? { ...c, unreadCount: 0 } : c)
+      );
+      fetch(`/api/conversations/${conversation.id}/read`, { method: "PATCH" }).catch(() => {});
+    }
+  }, [onNewMessage, currentUserId, conversation.id]);
 
   const menuItems = [
     { icon: Star,   label: "Favourite",     action: () => setDropdownOpen(false) },
@@ -116,6 +134,32 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
         .chat-panel-dropdown { animation: dropdownIn 0.15s ease forwards; }
         .chat-desktop-header { display: flex; }
         @media (max-width: 767px) { .chat-desktop-header { display: none !important; } }
+
+        .chat-panel-root {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          max-height: 100%;
+          background-color: #0A0A0F;
+          font-family: 'Inter', sans-serif;
+          position: relative;
+          overflow: hidden;
+        }
+        @media (max-width: 767px) {
+          .chat-panel-root {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            z-index: 100;
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+            box-sizing: border-box;
+          }
+        }
       `}</style>
 
       {reportOpen && (
@@ -127,8 +171,7 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
         />
       )}
 
-      {/* ✅ height: 100% instead of 100dvh — stays inside the chat column */}
-      <div style={{ display: "flex", flexDirection: "column", height: "100%", maxHeight: "100%", backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif", position: "relative", overflow: "hidden" }}>
+      <div className="chat-panel-root">
         <ChatHeader conversation={conversation} onBack={onBack} />
 
         {/* Desktop inline header */}
@@ -211,6 +254,9 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
           currentUserId={currentUserId}
           isTyping={isTyping}
           onReply={(msg) => setReplyTo(msg)}
+          onLoadMore={onLoadMore}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
         />
         <MessageInput
           onSend={handleSend}

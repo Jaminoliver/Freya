@@ -53,27 +53,18 @@ export function MessageInput({ onSend, onTyping, disabled = false, replyTo, onCa
 
   return (
     <div
-      className="msg-input-wrap"
       style={{
         borderTop:       "1px solid #1E1E2E",
         backgroundColor: "#0D0D1A",
         fontFamily:      "'Inter',sans-serif",
         flexShrink:      0,
         zIndex:          50,
+        touchAction:     "none",
+        userSelect:      "none",
+        paddingBottom:   "env(safe-area-inset-bottom, 0px)",
       }}
     >
-      <style>{`
-        @media (max-width: 767px) {
-          .msg-input-wrap {
-            position: fixed !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            padding-bottom: env(safe-area-inset-bottom, 0px) !important;
-          }
-        }
-      `}</style>
-      {/* ✅ WhatsApp-style reply bar */}
+      {/* WhatsApp-style reply bar */}
       {replyTo && (
         <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderBottom: "1px solid #1E1E2E", backgroundColor: "#13131F" }}>
           <div style={{ width: "3px", height: "36px", borderRadius: "2px", backgroundColor: "#8B5CF6", flexShrink: 0 }} />
