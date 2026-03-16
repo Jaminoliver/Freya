@@ -60,12 +60,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
           <main
             ref={mainRef}
-            className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}`}
+            className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}${isMessages ? " messages" : ""}`}
             style={{
               flex: 1,
               minWidth: 0,
               maxWidth: isSettings || isMessages || isNotifications ? "100%" : "720px",
-              height: "100vh",
+              height: isMessages || isNotifications ? "100dvh" : "100vh",
               borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
               overflowY: isMessages || isNotifications ? "hidden" : "auto",
               overflowX: "hidden",
@@ -78,7 +78,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <style>{`
               main::-webkit-scrollbar { display: none; }
               @media (min-width: 768px) { .main-scroll { padding-top: 0 !important; } }
-              @media (max-width: 767px) { .main-scroll { padding-top: 56px; } .main-scroll.no-topbar { padding-top: 0 !important; } }
+              @media (max-width: 767px) {
+                .main-scroll { padding-top: 56px; }
+                .main-scroll.no-topbar { padding-top: 0 !important; }
+                /* ✅ Messages uses safe-area-inset for status bar */
+                .main-scroll.messages { padding-top: env(safe-area-inset-top, 0px) !important; }
+              }
             `}</style>
             {children}
           </main>

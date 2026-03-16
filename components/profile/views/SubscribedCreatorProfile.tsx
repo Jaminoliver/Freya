@@ -21,6 +21,7 @@ interface Props {
   onCancelled:           () => void;
   onFollow:              () => void;
   onTip:                 () => void;
+  onMessage:             () => void;
   onLike:                (id: string) => void;
   onComment:             (id: string) => void;
   onUnlock:              (id: string) => void;
@@ -31,7 +32,8 @@ const padded: React.CSSProperties = { padding: "0 16px" };
 export default function SubscribedCreatorProfile({
   profile, apiPosts, feedRefreshKey, totalLikes,
   isFollowing, subscriptionPeriodEnd, subscriptionId,
-  onCancelled, onFollow, onTip, onLike, onComment, onUnlock,
+  onCancelled, onFollow, onTip, onMessage,
+  onLike, onComment, onUnlock,
 }: Props) {
   const bannerStats = {
     posts:       profile.post_count ?? 0,
@@ -69,9 +71,8 @@ export default function SubscribedCreatorProfile({
         <div style={{ paddingBottom: "12px" }}>
           <ProfileActions
             viewContext="fanViewingCreator"
-            onMessage={() => console.log("Message")}
+            onMessage={onMessage}
             onTip={onTip}
-            onShare={() => console.log("Share")}
             onFollow={onFollow}
             isFollowing={isFollowing}
           />

@@ -11,12 +11,14 @@ import { useAppStore } from "@/lib/store/appStore";
 import type { Conversation, FilterTab } from "@/lib/types/messages";
 
 interface Props {
-  conversations: Conversation[];
-  activeId:      string | null;
-  onSelect?:     (id: string) => void;
+  conversations:        Conversation[];
+  activeId:             number | null;
+  onSelect?:            (id: string) => void;
+  onNewConversation?:   (conv: Conversation) => void;
+  typingConversations?: Set<number>;
 }
 
-export function MessagesSidebar({ conversations, activeId, onSelect }: Props) {
+export function MessagesSidebar({ conversations, activeId, onSelect, onNewConversation, typingConversations = new Set() }: Props) {
   const router   = useRouter();
   const pathname = usePathname();
   const { viewer } = useAppStore();
@@ -63,7 +65,6 @@ export function MessagesSidebar({ conversations, activeId, onSelect }: Props) {
           to   { opacity: 1; transform: translateY(0); }
         }
         .gear-dropdown { animation: dropdownIn 0.18s ease forwards; }
-        /* Desktop inline header — hidden on mobile */
         .sidebar-desktop-header { display: flex; }
         @media (max-width: 767px) {
           .sidebar-desktop-header { display: none !important; }
@@ -91,10 +92,8 @@ export function MessagesSidebar({ conversations, activeId, onSelect }: Props) {
           overflow:        "hidden",
         }}
       >
-        {/* Mobile: full-width fixed header */}
         <MessagesHeader />
 
-        {/* Desktop: inline header scoped to this sidebar column */}
         <div
           className="sidebar-desktop-header"
           style={{
@@ -208,12 +207,12 @@ export function MessagesSidebar({ conversations, activeId, onSelect }: Props) {
           unreadCount={unreadCount}
         />
 
-        {/* Scrollable conversation list */}
         <div style={{ flex: 1, overflowY: "auto" }}>
           <ConversationList
             conversations={filtered}
             activeId={urlActiveId}
             onSelect={handleSelect}
+            typingConversations={typingConversations}
           />
         </div>
       </div>

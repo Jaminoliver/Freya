@@ -13,12 +13,13 @@ interface Props {
   totalLikes:      number;
   fromFanList:     boolean;
   fanSubscription: Subscription | null;
+  onMessage:       () => void;
 }
 
 const padded: React.CSSProperties = { padding: "0 16px" };
 
 export default function CreatorViewingFan({
-  profile, totalLikes, fromFanList, fanSubscription,
+  profile, totalLikes, fromFanList, fanSubscription, onMessage,
 }: Props) {
   const router = useRouter();
 
@@ -65,7 +66,7 @@ export default function CreatorViewingFan({
           isOnline={false}
         />
         <div style={{ paddingBottom: "12px" }}>
-          <ProfileActions viewContext="creatorViewingFan" onMessage={() => console.log("Message fan")} />
+          <ProfileActions viewContext="creatorViewingFan" onMessage={onMessage} />
         </div>
       </div>
       <div style={{ padding: "8px 16px 0" }}>
@@ -75,35 +76,19 @@ export default function CreatorViewingFan({
       {fanSubscription && (
         <div style={{ padding: "12px 16px 0" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(139,92,246,0.06)" }}>
-            <span style={{
-              fontSize: "10px", fontWeight: 700,
-              color: fanSubscription.status === "cancelled" ? "#EF4444" : "#8B5CF6",
-              letterSpacing: "0.06em", fontFamily: "'Inter', sans-serif", flexShrink: 0,
-            }}>
+            <span style={{ fontSize: "10px", fontWeight: 700, color: fanSubscription.status === "cancelled" ? "#EF4444" : "#8B5CF6", letterSpacing: "0.06em", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
               {fanSubscription.status === "cancelled" ? "SUBSCRIPTION CANCELLED" : "YOUR FAN"}
             </span>
             <div style={{ width: "1px", height: "16px", backgroundColor: "#2A2A3D" }} />
             <span style={{ fontSize: "12px", color: "#94A3B8", fontFamily: "'Inter', sans-serif" }}>
-              Since{" "}
-              <span style={{ color: "#F1F5F9", fontWeight: 600 }}>
-                {new Date(fanSubscription.subscribed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </span>
+              Since <span style={{ color: "#F1F5F9", fontWeight: 600 }}>{new Date(fanSubscription.subscribed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
             </span>
             <div style={{ width: "1px", height: "16px", backgroundColor: "#2A2A3D" }} />
             <span style={{ fontSize: "12px", color: "#94A3B8", fontFamily: "'Inter', sans-serif" }}>
-              Spent{" "}
-              <span style={{ color: "#10B981", fontWeight: 600 }}>
-                ₦{(fanSubscription.total_spent ?? 0).toLocaleString("en-NG")}
-              </span>
+              Spent <span style={{ color: "#10B981", fontWeight: 600 }}>₦{(fanSubscription.total_spent ?? 0).toLocaleString("en-NG")}</span>
             </span>
             <div style={{ width: "1px", height: "16px", backgroundColor: "#2A2A3D" }} />
-            <span style={{
-              fontSize: "10px", fontWeight: 600,
-              color: fanSubscription.status === "active" ? "#10B981" : "#F59E0B",
-              backgroundColor: fanSubscription.status === "active" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
-              borderRadius: "4px", padding: "2px 7px",
-              textTransform: "capitalize", fontFamily: "'Inter', sans-serif",
-            }}>
+            <span style={{ fontSize: "10px", fontWeight: 600, color: fanSubscription.status === "active" ? "#10B981" : "#F59E0B", backgroundColor: fanSubscription.status === "active" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)", borderRadius: "4px", padding: "2px 7px", textTransform: "capitalize", fontFamily: "'Inter', sans-serif" }}>
               {fanSubscription.status}
             </span>
           </div>

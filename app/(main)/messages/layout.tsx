@@ -1,23 +1,34 @@
 "use client";
 
+import { useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { MessagesSidebar } from "@/components/messages/MessagesSidebar";
-import { DUMMY_CONVERSATIONS } from "@/app/(main)/messages/page";
+import { MessagesProvider, useMessagesContext } from "@/lib/context/MessagesContext";
+import { useConversations, useTypingConversations } from "@/app/(main)/messages/page";
+import type { Conversation } from "@/lib/types/messages";
 
-export default function MessagesLayout({ children }: { children: React.ReactNode }) {
+function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const inChat   = pathname !== "/messages";
+  const { conversations, setConversations } = useConversations();
+  const { typingConversationId } = useMessagesContext();
+  const typingConversations = useTypingConversations();
+
+  // ✅ Realtime fully removed — handled globally in messages/page.tsx
+
+  const handleNewConversation = useCallback((conv: Conversation) => {
+    setConversations((prev) => [conv, ...prev.filter((c) => c.id !== conv.id)]);
+  }, [setConversations]);
 
   return (
     <div
       style={{
         display:         "flex",
-        height:          "100vh",
+        height:          "100%",
         backgroundColor: "#0A0A0F",
         overflow:        "hidden",
         width:           "100%",
         fontFamily:      "'Inter', sans-serif",
-        paddingTop:      "env(safe-area-inset-top, 44px)",
         boxSizing:       "border-box",
       }}
     >
@@ -34,6 +45,8 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
           flex: 1;
           flex-direction: column;
           overflow: hidden;
+          height: 100%;
+          min-height: 0;
         }
         @media (max-width: 767px) {
           .msg-sidebar-wrap {
@@ -49,8 +62,10 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
 
       <div className="msg-sidebar-wrap">
         <MessagesSidebar
-          conversations={DUMMY_CONVERSATIONS}
+          conversations={conversations}
           activeId={null}
+          onNewConversation={handleNewConversation}
+          typingConversations={typingConversations}
         />
       </div>
 
@@ -58,5 +73,13 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
         {children}
       </div>
     </div>
+  );
+}
+
+export default function MessagesLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <MessagesProvider>
+      <MessagesLayoutInner>{children}</MessagesLayoutInner>
+    </MessagesProvider>
   );
 }

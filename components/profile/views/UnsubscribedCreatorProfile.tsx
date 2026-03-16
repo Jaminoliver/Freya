@@ -68,9 +68,7 @@ export default function UnsubscribedCreatorProfile({
         <div style={{ paddingBottom: "12px" }}>
           <ProfileActions
             viewContext="fanViewingCreator"
-            onMessage={() => console.log("Message")}
             onTip={onTip}
-            onShare={() => console.log("Share")}
             onFollow={onFollow}
             isFollowing={isFollowing}
           />

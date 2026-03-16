@@ -14,23 +14,24 @@ import type { ApiPost } from "@/components/profile/PostRow";
 import type { SubscriptionTier } from "@/lib/types/checkout";
 
 interface Props {
-  profile:                User;
-  apiPosts:               ApiPost[];
-  feedRefreshKey:         number;
-  totalLikes:             number;
-  fromFanList:            boolean;
-  isSubscribed:           boolean;
-  isFollowing:            boolean;
-  subscriptionPeriodEnd:  string | null;
-  subscriptionId:         number | undefined;
-  fanSubscription:        Subscription | null;
-  onSubscribe:            (tier: SubscriptionTier) => void;
-  onCancelled:            () => void;
-  onFollow:               () => void;
-  onTip:                  () => void;
-  onLike:                 (id: string) => void;
-  onComment:              (id: string) => void;
-  onUnlock:               (id: string) => void;
+  profile:               User;
+  apiPosts:              ApiPost[];
+  feedRefreshKey:        number;
+  totalLikes:            number;
+  fromFanList:           boolean;
+  isSubscribed:          boolean;
+  isFollowing:           boolean;
+  subscriptionPeriodEnd: string | null;
+  subscriptionId:        number | undefined;
+  fanSubscription:       Subscription | null;
+  onSubscribe:           (tier: SubscriptionTier) => void;
+  onCancelled:           () => void;
+  onFollow:              () => void;
+  onTip:                 () => void;
+  onMessage:             () => void;
+  onLike:                (id: string) => void;
+  onComment:             (id: string) => void;
+  onUnlock:              (id: string) => void;
 }
 
 const padded: React.CSSProperties = { padding: "0 16px" };
@@ -40,7 +41,7 @@ export default function CreatorViewingDualRole({
   fromFanList, isSubscribed, isFollowing,
   subscriptionPeriodEnd, subscriptionId,
   fanSubscription, onSubscribe, onCancelled,
-  onFollow, onTip, onLike, onComment, onUnlock,
+  onFollow, onTip, onMessage, onLike, onComment, onUnlock,
 }: Props) {
   const router = useRouter();
 
@@ -85,9 +86,8 @@ export default function CreatorViewingDualRole({
         <div style={{ paddingBottom: "12px" }}>
           <ProfileActions
             viewContext="fanViewingCreator"
-            onMessage={() => console.log("Message")}
+            onMessage={isSubscribed ? onMessage : undefined}
             onTip={onTip}
-            onShare={() => console.log("Share")}
             onFollow={onFollow}
             isFollowing={isFollowing}
           />
@@ -123,35 +123,19 @@ export default function CreatorViewingDualRole({
       {fanSubscription && (
         <div style={{ padding: "0 16px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(139,92,246,0.06)" }}>
-            <span style={{
-              fontSize: "10px", fontWeight: 700,
-              color: fanSubscription.status === "cancelled" ? "#EF4444" : "#8B5CF6",
-              letterSpacing: "0.06em", fontFamily: "'Inter', sans-serif", flexShrink: 0,
-            }}>
+            <span style={{ fontSize: "10px", fontWeight: 700, color: fanSubscription.status === "cancelled" ? "#EF4444" : "#8B5CF6", letterSpacing: "0.06em", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
               {fanSubscription.status === "cancelled" ? "SUBSCRIPTION CANCELLED" : "YOUR FAN"}
             </span>
             <div style={{ width: "1px", height: "16px", backgroundColor: "#2A2A3D" }} />
             <span style={{ fontSize: "12px", color: "#94A3B8", fontFamily: "'Inter', sans-serif" }}>
-              Since{" "}
-              <span style={{ color: "#F1F5F9", fontWeight: 600 }}>
-                {new Date(fanSubscription.subscribed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-              </span>
+              Since <span style={{ color: "#F1F5F9", fontWeight: 600 }}>{new Date(fanSubscription.subscribed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
             </span>
             <div style={{ width: "1px", height: "16px", backgroundColor: "#2A2A3D" }} />
             <span style={{ fontSize: "12px", color: "#94A3B8", fontFamily: "'Inter', sans-serif" }}>
-              Spent{" "}
-              <span style={{ color: "#10B981", fontWeight: 600 }}>
-                ₦{(fanSubscription.total_spent ?? 0).toLocaleString("en-NG")}
-              </span>
+              Spent <span style={{ color: "#10B981", fontWeight: 600 }}>₦{(fanSubscription.total_spent ?? 0).toLocaleString("en-NG")}</span>
             </span>
             <div style={{ width: "1px", height: "16px", backgroundColor: "#2A2A3D" }} />
-            <span style={{
-              fontSize: "10px", fontWeight: 600,
-              color: fanSubscription.status === "active" ? "#10B981" : "#F59E0B",
-              backgroundColor: fanSubscription.status === "active" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
-              borderRadius: "4px", padding: "2px 7px",
-              textTransform: "capitalize", fontFamily: "'Inter', sans-serif",
-            }}>
+            <span style={{ fontSize: "10px", fontWeight: 600, color: fanSubscription.status === "active" ? "#10B981" : "#F59E0B", backgroundColor: fanSubscription.status === "active" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)", borderRadius: "4px", padding: "2px 7px", textTransform: "capitalize", fontFamily: "'Inter', sans-serif" }}>
               {fanSubscription.status}
             </span>
           </div>

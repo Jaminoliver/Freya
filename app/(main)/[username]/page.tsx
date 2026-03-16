@@ -85,19 +85,37 @@ function ProfilePageInner() {
 
   const openTip = () => openCheckout("tips");
 
-  // FIX: correctly determine checkout type and price from post data
   const handleUnlock = (id: string) => {
     const post = apiPosts.find((p) => String(p.id) === id);
     if (!post) return;
     if (post.is_ppv) {
       setLockedPostId(post.id);
-      setLockedPostPrice((post.ppv_price ?? 0) / 100); // convert kobo to naira
+      setLockedPostPrice((post.ppv_price ?? 0) / 100);
       setCheckoutType("ppv");
       setCheckoutOpen(true);
     } else {
       openCheckout("subscription");
     }
   };
+
+  // ── Message handler ──────────────────────────────────────────────────────────
+  const handleMessage = React.useCallback(async () => {
+    if (!profile) return;
+    try {
+      const res  = await fetch("/api/conversations", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ targetUserId: profile.id }),
+      });
+      const data = await res.json();
+      if (data.conversationId) {
+        window.history.replaceState(null, '', '/messages');
+        router.push(`/messages/${data.conversationId}`);
+      }
+    } catch (err) {
+      console.error("[ProfilePage] handleMessage error:", err);
+    }
+  }, [profile, router]);
 
   const fetchSubscriptionStatus = React.useCallback(async (creatorId: string) => {
     try {
@@ -132,7 +150,6 @@ function ProfilePageInner() {
         fetch(`/api/subscriptions/status?creatorId=${creatorId}`),
         fetch(`/api/posts/creator/${creatorUsername}`),
       ]);
-
       if (subRes.status === "fulfilled" && subRes.value.ok) {
         const data = await subRes.value.json();
         const subscribedVal = !!data.active;
@@ -141,7 +158,6 @@ function ProfilePageInner() {
         setSubscriptionPeriodEnd(periodEndVal);
         updateProfile(creatorUsername, { isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal });
       }
-
       if (postsRes.status === "fulfilled" && postsRes.value.ok) {
         const data = await postsRes.value.json();
         const freshPosts: ApiPost[] = data.posts || [];
@@ -284,7 +300,6 @@ function ProfilePageInner() {
                 setFanSubscription(data.subscription);
               }
             }
-
           } else {
             const [fanPostsRes, fanSubRes2] = await Promise.allSettled([
               fetch(`/api/posts/creator/${profileRaw.username}`),
@@ -331,16 +346,12 @@ function ProfilePageInner() {
   const prevUploadPhases = React.useRef<Record<string, string>>({});
   React.useEffect(() => {
     if (!profile || !viewer || viewer.id !== profile.id) return;
-
     let shouldRefresh = false;
     for (const u of uploads) {
       const prev = prevUploadPhases.current[u.id];
-      if (prev && prev !== "done" && u.phase === "done") {
-        shouldRefresh = true;
-      }
+      if (prev && prev !== "done" && u.phase === "done") shouldRefresh = true;
       prevUploadPhases.current[u.id] = u.phase;
     }
-
     if (shouldRefresh) refreshPosts(profile.username);
   }, [uploads, profile, viewer, refreshPosts]);
 
@@ -427,10 +438,10 @@ function ProfilePageInner() {
     finally { setFollowLoading(false); }
   };
 
-  const isOwnProfile           = viewer?.id === profile?.id;
-  const isCreatorViewingFan    = viewer?.role === "creator" && profile?.role === "fan" && !isOwnProfile;
+  const isOwnProfile             = viewer?.id === profile?.id;
+  const isCreatorViewingFan      = viewer?.role === "creator" && profile?.role === "fan" && !isOwnProfile;
   const isCreatorViewingDualRole = viewer?.role === "creator" && profile?.role === "creator" && !isOwnProfile && !!fanSubscription;
-  const isViewingCreator       = profile?.role === "creator" && !isOwnProfile && !isCreatorViewingFan;
+  const isViewingCreator         = profile?.role === "creator" && !isOwnProfile && !isCreatorViewingFan;
 
   const handlePost     = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
@@ -444,10 +455,8 @@ function ProfilePageInner() {
         <div style={{ textAlign: "center" }}>
           <h1 style={{ fontSize: "28px", fontWeight: 700, color: "#F1F5F9", marginBottom: "12px" }}>Something went wrong</h1>
           <p style={{ fontSize: "16px", color: "#94A3B8", marginBottom: "24px" }}>Could not load this profile. Check your connection.</p>
-          <button
-            onClick={() => { setFetchError(false); setApiLoading(true); setRevealed(false); }}
-            style={{ padding: "12px 24px", borderRadius: "10px", background: "#8B5CF6", color: "#fff", border: "none", cursor: "pointer", fontSize: "15px", fontWeight: 600 }}
-          >
+          <button onClick={() => { setFetchError(false); setApiLoading(true); setRevealed(false); }}
+            style={{ padding: "12px 24px", borderRadius: "10px", background: "#8B5CF6", color: "#fff", border: "none", cursor: "pointer", fontSize: "15px", fontWeight: 600 }}>
             Try Again
           </button>
         </div>
@@ -494,99 +503,66 @@ function ProfilePageInner() {
 
           {isOwnProfile && profile?.role === "creator" && (
             <OwnCreatorProfile
-              profile={profile}
-              apiPosts={apiPosts}
-              feedRefreshKey={feedRefreshKey}
+              profile={profile} apiPosts={apiPosts} feedRefreshKey={feedRefreshKey}
               totalLikes={totalLikes}
               onBannerUpdated={(url) => setProfile((p) => p ? { ...p, banner_url: url } : p)}
               onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
               onEditProfile={() => router.push("/settings")}
-              onPost={handlePost}
-              onSchedule={handleSchedule}
-              onLike={handleLike}
-              onComment={handleComment}
-              onTip={handleTip}
-              onUnlock={handleUnlock}
+              onPost={handlePost} onSchedule={handleSchedule}
+              onLike={handleLike} onComment={handleComment} onTip={handleTip} onUnlock={handleUnlock}
             />
           )}
 
           {isOwnProfile && profile?.role === "fan" && (
             <OwnFanProfile
-              profile={profile}
-              apiPosts={apiPosts}
-              feedRefreshKey={feedRefreshKey}
+              profile={profile} apiPosts={apiPosts} feedRefreshKey={feedRefreshKey}
               totalLikes={totalLikes}
               onAvatarUpdated={(url) => setProfile((p) => p ? { ...p, avatar_url: url } : p)}
               onEditProfile={() => router.push("/settings")}
-              onLike={handleLike}
-              onComment={handleComment}
-              onTip={handleTip}
-              onUnlock={handleUnlock}
+              onLike={handleLike} onComment={handleComment} onTip={handleTip} onUnlock={handleUnlock}
             />
           )}
 
           {isCreatorViewingFan && profile && (
             <CreatorViewingFan
-              profile={profile}
-              totalLikes={totalLikes}
-              fromFanList={fromFanList}
-              fanSubscription={fanSubscription}
+              profile={profile} totalLikes={totalLikes}
+              fromFanList={fromFanList} fanSubscription={fanSubscription}
+              onMessage={handleMessage}
             />
           )}
 
           {isCreatorViewingDualRole && profile && (
             <CreatorViewingDualRole
-              profile={profile}
-              apiPosts={apiPosts}
-              feedRefreshKey={feedRefreshKey}
-              totalLikes={totalLikes}
-              fromFanList={fromFanList}
-              isSubscribed={isSubscribed}
-              isFollowing={isFollowing}
-              subscriptionPeriodEnd={subscriptionPeriodEnd}
-              subscriptionId={subscriptionId}
+              profile={profile} apiPosts={apiPosts} feedRefreshKey={feedRefreshKey}
+              totalLikes={totalLikes} fromFanList={fromFanList}
+              isSubscribed={isSubscribed} isFollowing={isFollowing}
+              subscriptionPeriodEnd={subscriptionPeriodEnd} subscriptionId={subscriptionId}
               fanSubscription={fanSubscription}
               onSubscribe={(tier) => openCheckout("subscription", tier)}
-              onCancelled={handleCancelled}
-              onFollow={handleFollow}
-              onTip={openTip}
-              onLike={handleLike}
-              onComment={handleComment}
-              onUnlock={handleUnlock}
+              onCancelled={handleCancelled} onFollow={handleFollow}
+              onTip={openTip} onMessage={handleMessage}
+              onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
             />
           )}
 
           {isViewingCreator && isSubscribed && profile && !isCreatorViewingDualRole && (
             <SubscribedCreatorProfile
-              profile={profile}
-              apiPosts={apiPosts}
-              feedRefreshKey={feedRefreshKey}
-              totalLikes={totalLikes}
-              isFollowing={isFollowing}
-              subscriptionPeriodEnd={subscriptionPeriodEnd}
-              subscriptionId={subscriptionId}
-              onCancelled={handleCancelled}
-              onFollow={handleFollow}
-              onTip={openTip}
-              onLike={handleLike}
-              onComment={handleComment}
-              onUnlock={handleUnlock}
+              profile={profile} apiPosts={apiPosts} feedRefreshKey={feedRefreshKey}
+              totalLikes={totalLikes} isFollowing={isFollowing}
+              subscriptionPeriodEnd={subscriptionPeriodEnd} subscriptionId={subscriptionId}
+              onCancelled={handleCancelled} onFollow={handleFollow}
+              onTip={openTip} onMessage={handleMessage}
+              onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
             />
           )}
 
           {isViewingCreator && !isSubscribed && profile && !isCreatorViewingDualRole && (
             <UnsubscribedCreatorProfile
-              profile={profile}
-              apiPosts={apiPosts}
-              feedRefreshKey={feedRefreshKey}
-              totalLikes={totalLikes}
-              isFollowing={isFollowing}
+              profile={profile} apiPosts={apiPosts} feedRefreshKey={feedRefreshKey}
+              totalLikes={totalLikes} isFollowing={isFollowing}
               onSubscribe={(tier) => openCheckout("subscription", tier)}
-              onFollow={handleFollow}
-              onTip={openTip}
-              onLike={handleLike}
-              onComment={handleComment}
-              onUnlock={handleUnlock}
+              onFollow={handleFollow} onTip={openTip}
+              onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
             />
           )}
 

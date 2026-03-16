@@ -35,8 +35,6 @@ const STATUS_LABEL: Record<SubscriptionStatus, string> = {
   attention: "Attention",
 };
 
-// ── Subscription List ─────────────────────────────────────────────────────────
-
 export function SubscriptionList({
   subscriptions,
   onRefresh,
@@ -46,7 +44,6 @@ export function SubscriptionList({
 }) {
   const [filter, setFilter] = useState("all");
 
-  // Fix #8 — memoize counts so they don't recalculate every render
   const counts = useMemo(() => ({
     all:       subscriptions.length,
     active:    subscriptions.filter((s) => s.status === "active").length,
@@ -72,18 +69,12 @@ export function SubscriptionList({
       <SubscriptionFilterTabs active={filter} counts={counts} onChange={setFilter} />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
         {filtered.map((s) => (
-          <SubscriptionCard
-            key={s.id}
-            subscription={s}
-            onCancelled={onRefresh}
-          />
+          <SubscriptionCard key={s.id} subscription={s} onCancelled={onRefresh} />
         ))}
       </div>
     </div>
   );
 }
-
-// ── Subscription Card ─────────────────────────────────────────────────────────
 
 export function SubscriptionCard({
   subscription: s,
@@ -93,8 +84,9 @@ export function SubscriptionCard({
   onCancelled?: () => void;
 }) {
   const router = useRouter();
-  const [menuOpen,   setMenuOpen]   = useState(false);
-  const [cancelling, setCancelling] = useState(false);
+  const [menuOpen,    setMenuOpen]    = useState(false);
+  const [cancelling,  setCancelling]  = useState(false);
+  const [messaging,   setMessaging]   = useState(false);
 
   const handleCancel = async () => {
     if (!confirm("Cancel subscription? You'll keep access until the period ends.")) return;
@@ -112,25 +104,35 @@ export function SubscriptionCard({
     }
   };
 
+  const handleMessage = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (messaging) return;
+    setMessaging(true);
+    try {
+      const res  = await fetch("/api/conversations", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ targetUserId: s.creatorId }),
+      });
+      const data = await res.json();
+      if (data.conversationId) {
+        window.history.replaceState(null, '', '/messages');
+        router.push(`/messages/${data.conversationId}`);
+      }
+    } catch (err) {
+      console.error("[SubscriptionCard] handleMessage error:", err);
+    } finally {
+      setMessaging(false);
+    }
+  };
+
   return (
     <div style={{ backgroundColor: "transparent", borderRadius: "12px", overflow: "hidden", fontFamily: "'Inter', sans-serif", position: "relative" }}>
 
-      {/* Banner cover — Fix #5: Next Image, Fix #7: Link with prefetch */}
-      <Link
-        href={`/${s.username}`}
-        prefetch
-        style={{ display: "block", position: "relative", height: "160px", cursor: "pointer", textDecoration: "none" }}
-      >
-        {/* Banner */}
+      <Link href={`/${s.username}`} prefetch style={{ display: "block", position: "relative", height: "160px", cursor: "pointer", textDecoration: "none" }}>
         {s.banner_url ? (
-          <Image
-            src={s.banner_url}
-            alt={s.creatorName}
-            fill
-            sizes="(max-width: 768px) 100vw, 320px"
-            style={{ objectFit: "cover" }}
-            priority={false}
-          />
+          <Image src={s.banner_url} alt={s.creatorName} fill sizes="(max-width: 768px) 100vw, 320px" style={{ objectFit: "cover" }} priority={false} />
         ) : (
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #1C1C2E, #2A2A3D)" }} />
         )}
@@ -158,23 +160,15 @@ export function SubscriptionCard({
               <MoreHorizontal size={14} />
             </button>
             {menuOpen && (
-              <div
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                style={{ position: "absolute", top: "34px", right: 0, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "8px", overflow: "hidden", minWidth: "140px", zIndex: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
-              >
+              <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ position: "absolute", top: "34px", right: 0, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "8px", overflow: "hidden", minWidth: "140px", zIndex: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                 {s.status === "active" && (
-                  <button
-                    onClick={handleCancel}
-                    disabled={cancelling}
-                    style={{ width: "100%", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 500, color: "#EF4444", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
-                  >
+                  <button onClick={handleCancel} disabled={cancelling}
+                    style={{ width: "100%", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 500, color: "#EF4444", textAlign: "left", fontFamily: "'Inter', sans-serif" }}>
                     {cancelling ? "Cancelling…" : "Cancel subscription"}
                   </button>
                 )}
-                <button
-                  onClick={(e) => { e.preventDefault(); setMenuOpen(false); }}
-                  style={{ width: "100%", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 500, color: "#94A3B8", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
-                >
+                <button onClick={(e) => { e.preventDefault(); setMenuOpen(false); }}
+                  style={{ width: "100%", padding: "10px 14px", backgroundColor: "transparent", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 500, color: "#94A3B8", textAlign: "left", fontFamily: "'Inter', sans-serif" }}>
                   Close
                 </button>
               </div>
@@ -182,17 +176,11 @@ export function SubscriptionCard({
           </div>
         </div>
 
-        {/* Avatar + name — Fix #6: no pravatar fallback, use initials div instead */}
+        {/* Avatar + name */}
         <div style={{ position: "absolute", bottom: "12px", left: "12px", display: "flex", alignItems: "center", gap: "10px", zIndex: 2 }}>
           <div style={{ position: "relative", width: "72px", height: "72px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.9)", overflow: "hidden", flexShrink: 0, backgroundColor: "#2A2A3D" }}>
             {s.avatar_url ? (
-              <Image
-                src={s.avatar_url}
-                alt={s.creatorName}
-                fill
-                sizes="72px"
-                style={{ objectFit: "cover" }}
-              />
+              <Image src={s.avatar_url} alt={s.creatorName} fill sizes="72px" style={{ objectFit: "cover" }} />
             ) : (
               <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", fontWeight: 700, color: "#8B5CF6" }}>
                 {s.creatorName.charAt(0).toUpperCase()}
@@ -208,38 +196,42 @@ export function SubscriptionCard({
           </div>
         </div>
 
-        {/* Favorite + Message icons */}
+        {/* Favourite + Message icons */}
         <div style={{ position: "absolute", bottom: "12px", right: "12px", display: "flex", gap: "8px", zIndex: 2 }}>
-          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Star size={15} strokeWidth={1.6} />
           </button>
-          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <MessageCircle size={15} strokeWidth={1.6} />
-          </button>
+          {s.status === "active" && (
+            <button
+              onClick={handleMessage}
+              disabled={messaging}
+              style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: messaging ? "rgba(139,92,246,0.5)" : "rgba(0,0,0,0.5)", border: "none", cursor: messaging ? "default" : "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", transition: "background-color 0.15s ease" }}
+            >
+              <MessageCircle size={15} strokeWidth={1.6} />
+            </button>
+          )}
         </div>
       </Link>
 
-      {/* Divider */}
       <div style={{ height: "1px", backgroundColor: "#1E1E2E", margin: "0 4px" }} />
 
-      {/* Body */}
       <div style={{ padding: "10px 4px", display: "flex", flexDirection: "column", gap: "10px", backgroundColor: "transparent" }}>
         <div style={{ display: "flex", gap: "6px" }}>
           {s.status === "active" ? (
             <>
               <button style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#94A3B8", fontSize: "11px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Subscribed</button>
-              <button
-                onClick={() => setMenuOpen((v) => !v)}
-                style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "none", backgroundColor: "#8B5CF6", color: "#fff", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
-              >Manage</button>
+              <button onClick={() => setMenuOpen((v) => !v)}
+                style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "none", backgroundColor: "#8B5CF6", color: "#fff", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                Manage
+              </button>
             </>
           ) : (
             <>
-              <Link
-                href={`/${s.username}`}
-                prefetch
-                style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "none", backgroundColor: "#8B5CF6", color: "#fff", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
-              >Resubscribe</Link>
+              <Link href={`/${s.username}`} prefetch
+                style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "none", backgroundColor: "#8B5CF6", color: "#fff", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                Resubscribe
+              </Link>
               <button style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#94A3B8", fontSize: "11px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>For free</button>
             </>
           )}
@@ -254,11 +246,9 @@ export function SubscriptionCard({
   );
 }
 
-// ── Filter tabs ────────────────────────────────────────────────────────────────
-
 interface FilterTabsProps {
-  active: string;
-  counts: Record<string, number>;
+  active:   string;
+  counts:   Record<string, number>;
   onChange: (val: string) => void;
 }
 
@@ -276,19 +266,8 @@ export function SubscriptionFilterTabs({ active, counts, onChange }: FilterTabsP
         const isActive = active === t.key;
         const count    = counts[t.key] ?? 0;
         return (
-          <button
-            key={t.key}
-            onClick={() => onChange(t.key)}
-            style={{
-              padding: "6px 14px", borderRadius: "50px",
-              border: `1px solid ${isActive ? "#8B5CF6" : "#2A2A3D"}`,
-              backgroundColor: isActive ? "#8B5CF6" : "transparent",
-              color: isActive ? "#fff" : "#94A3B8",
-              fontSize: "12px", fontWeight: 500,
-              cursor: "pointer", fontFamily: "'Inter', sans-serif",
-              whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.15s",
-            }}
-          >
+          <button key={t.key} onClick={() => onChange(t.key)}
+            style={{ padding: "6px 14px", borderRadius: "50px", border: `1px solid ${isActive ? "#8B5CF6" : "#2A2A3D"}`, backgroundColor: isActive ? "#8B5CF6" : "transparent", color: isActive ? "#fff" : "#94A3B8", fontSize: "12px", fontWeight: 500, cursor: "pointer", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.15s" }}>
             {t.label}{count > 0 ? ` [${count}]` : ""}
           </button>
         );

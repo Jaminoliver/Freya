@@ -4,12 +4,13 @@ import { ConversationRow } from "@/components/messages/ConversationRow";
 import type { Conversation } from "@/lib/types/messages";
 
 interface Props {
-  conversations: Conversation[];
-  activeId:      string | null;
-  onSelect:      (id: string) => void;
+  conversations:        Conversation[];
+  activeId:             string | null;
+  onSelect:             (id: string) => void;
+  typingConversations?: Set<number>;
 }
 
-export function ConversationList({ conversations, activeId, onSelect }: Props) {
+export function ConversationList({ conversations, activeId, onSelect, typingConversations = new Set() }: Props) {
   if (conversations.length === 0) {
     return (
       <div
@@ -21,6 +22,7 @@ export function ConversationList({ conversations, activeId, onSelect }: Props) {
           color:          "#4A4A6A",
           fontSize:       "14px",
           fontFamily:     "'Inter', sans-serif",
+          padding:        "40px 16px",
         }}
       >
         No conversations
@@ -29,19 +31,14 @@ export function ConversationList({ conversations, activeId, onSelect }: Props) {
   }
 
   return (
-    <div
-      style={{
-        flex:           1,
-        overflowY:      "auto",
-        scrollbarWidth: "none",
-      }}
-    >
+    <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
       {conversations.map((conversation) => (
         <ConversationRow
           key={conversation.id}
           conversation={conversation}
-          isActive={conversation.id === activeId}
-          onSelect={() => onSelect(conversation.id)}
+          isActive={String(conversation.id) === activeId}
+          isTyping={typingConversations.has(conversation.id)}
+          onSelect={() => onSelect(String(conversation.id))}
         />
       ))}
     </div>
