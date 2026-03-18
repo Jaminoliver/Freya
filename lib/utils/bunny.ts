@@ -47,7 +47,9 @@ export function signBunnyUrl(path: string, expiresInSeconds = 86400): string {
   const hashInput = CDN_TOKEN_KEY + path + expires;
   const token     = crypto.createHash("sha256").update(hashInput).digest("base64")
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-  return `${CDN_URL}${path}?token=${token}&expires=${expires}`;
+  const signed = `${CDN_URL}${path}?token=${token}&expires=${expires}`;
+  console.log("[signBunnyUrl] path:", path, "| signed:", signed);
+  return signed;
 }
 
 // ─── signBunnyHlsUrl — HLS directory token (story videos) ────────────────────

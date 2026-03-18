@@ -23,7 +23,15 @@ export interface UploadItem {
   _isMultiPhoto?: boolean;
   _isText?:       boolean;
   _isPoll?:       boolean;
+  _isMessage?:    boolean;
   _videoId?:      string;
+  // Message upload specific
+  _conversationId?: number;
+  _isPPV?:          boolean;
+  _ppvPrice?:       number;
+  _content?:        string;
+  _onMessageSent?:  (message: any) => void;
+  _tempId?:         string;
 }
 
 interface PersistedUpload {
@@ -84,6 +92,17 @@ interface UploadContextValue {
     onDone:  () => void;
     onError: (err: string) => void;
   }) => string;
+  startMessageUpload: (params: {
+    files:          File[];
+    conversationId: number;
+    content?:       string;
+    isPPV?:         boolean;
+    ppvPrice?:      number; // in kobo
+    tempId:         string;
+    onProgress:     (progress: number) => void;
+    onSent:         (message: any) => void;
+    onError:        (err: string) => void;
+  }) => string;
   dismissUpload: (id: string) => void;
   retryUpload:   (id: string) => void;
   clearDone:     () => void;
@@ -100,7 +119,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }));
   });
 
-  const pollTimers = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const pollTimers     = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const progressCbs    = useRef<Record<string, (progress: number) => void>>({});
+  const sentCbs        = useRef<Record<string, (message: any) => void>>({});
+  const errorCbs       = useRef<Record<string, (err: string) => void>>({});
 
   useEffect(() => {
     savePersistedUploads(uploads);
@@ -155,11 +177,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           updateUpload(uploadId, { progress: 100, phase: "done" });
 
           const bunnyVideoId = videoId ?? data.bunnyVideoId;
-          if (bunnyVideoId) {
-            checkWatermark(uploadId, bunnyVideoId);
-          } else {
-            console.warn(`[watermark] no videoId for uploadId=${uploadId} — skipping`);
-          }
+          if (bunnyVideoId) checkWatermark(uploadId, bunnyVideoId);
 
         } else if (data.status === "failed") {
           clearInterval(pollTimers.current[uploadId]);
@@ -180,11 +198,113 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }, 3000);
   }, [updateUpload, checkWatermark]);
 
+  // ── Message upload (real progress via XMLHttpRequest) ─────────────────────
+  const runMessageUpload = useCallback(async (
+    uploadId:       string,
+    files:          File[],
+    conversationId: number,
+    content:        string | undefined,
+    isPPV:          boolean,
+    ppvPrice:       number | undefined,
+    tempId:         string,
+  ) => {
+    const onProgress = progressCbs.current[uploadId];
+    const onSent     = sentCbs.current[uploadId];
+    const onError    = errorCbs.current[uploadId];
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+      if (content?.trim()) formData.append("content", content.trim());
+      if (isPPV && ppvPrice) formData.append("price", String(ppvPrice));
+
+      const endpoint = isPPV
+        ? `/api/conversations/${conversationId}/messages/ppv`
+        : `/api/conversations/${conversationId}/messages/media`;
+
+      // Use XMLHttpRequest for real upload progress
+      const data = await new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            // Map upload progress to 0–90% (remaining 10% for server processing)
+            const pct = Math.round((e.loaded / e.total) * 90);
+            updateUpload(uploadId, { progress: pct });
+            onProgress?.(pct);
+          }
+        };
+
+        xhr.onload = () => {
+          try {
+            const json = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(json);
+            } else {
+              reject(new Error(json.error ?? `Upload failed (${xhr.status})`));
+            }
+          } catch {
+            reject(new Error(`Upload failed (${xhr.status})`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.ontimeout = () => reject(new Error("Upload timed out"));
+        xhr.timeout = 120000; // 2 min timeout
+
+        xhr.open("POST", endpoint);
+        xhr.send(formData);
+      });
+
+      updateUpload(uploadId, { progress: 100, phase: "done" });
+      onProgress?.(100);
+      onSent?.({ ...data.message, tempId });
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      updateUpload(uploadId, { phase: "error", error: msg });
+      onError?.(msg);
+    } finally {
+      delete progressCbs.current[uploadId];
+      delete sentCbs.current[uploadId];
+      delete errorCbs.current[uploadId];
+    }
+  }, [updateUpload]);
+
+  const startMessageUpload = useCallback(({
+    files, conversationId, content, isPPV = false, ppvPrice, tempId,
+    onProgress, onSent, onError,
+  }: {
+    files:          File[];
+    conversationId: number;
+    content?:       string;
+    isPPV?:         boolean;
+    ppvPrice?:      number;
+    tempId:         string;
+    onProgress:     (progress: number) => void;
+    onSent:         (message: any) => void;
+    onError:        (err: string) => void;
+  }): string => {
+    const uploadId = `msg_${Date.now()}_${Math.random()}`;
+    const label    = `${files.length} file${files.length > 1 ? "s" : ""}`;
+
+    progressCbs.current[uploadId] = onProgress;
+    sentCbs.current[uploadId]     = onSent;
+    errorCbs.current[uploadId]    = onError;
+
+    setUploads((prev) => [...prev, {
+      id: uploadId, fileName: label, progress: 0, phase: "uploading",
+      files, _isMessage: true, _conversationId: conversationId,
+      _isPPV: isPPV, _ppvPrice: ppvPrice, _content: content, _tempId: tempId,
+    }]);
+
+    runMessageUpload(uploadId, files, conversationId, content, isPPV, ppvPrice, tempId);
+    return uploadId;
+  }, [runMessageUpload]);
+
   // ── Text post ─────────────────────────────────────────────────────────────
   const runTextPost = useCallback(async (
-    uploadId: string,
-    onDone:   () => void,
-    onError:  (err: string) => void,
+    uploadId: string, onDone: () => void, onError: (err: string) => void,
   ) => {
     try {
       updateUpload(uploadId, { progress: 50 });
@@ -198,12 +318,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }
   }, [updateUpload]);
 
-  const startTextPost = useCallback(({
-    label, onDone, onError,
-  }: {
-    label:   string;
-    onDone:  () => void;
-    onError: (err: string) => void;
+  const startTextPost = useCallback(({ label, onDone, onError }: {
+    label: string; onDone: () => void; onError: (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
     setUploads((prev) => [...prev, {
@@ -216,9 +332,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
   // ── Poll post ─────────────────────────────────────────────────────────────
   const runPollPost = useCallback(async (
-    uploadId: string,
-    onDone:   () => void,
-    onError:  (err: string) => void,
+    uploadId: string, onDone: () => void, onError: (err: string) => void,
   ) => {
     try {
       updateUpload(uploadId, { progress: 50 });
@@ -232,12 +346,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }
   }, [updateUpload]);
 
-  const startPollPost = useCallback(({
-    label, onDone, onError,
-  }: {
-    label:   string;
-    onDone:  () => void;
-    onError: (err: string) => void;
+  const startPollPost = useCallback(({ label, onDone, onError }: {
+    label: string; onDone: () => void; onError: (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
     setUploads((prev) => [...prev, {
@@ -250,35 +360,23 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
   // ── Single photo upload ───────────────────────────────────────────────────
   const runPhotoUpload = useCallback(async (
-    uploadId:  string,
-    file:      File,
-    onMediaId: (mediaId: number) => void,
-    onError:   (err: string) => void,
+    uploadId: string, file: File,
+    onMediaId: (mediaId: number) => void, onError: (err: string) => void,
   ) => {
     try {
       updateUpload(uploadId, { progress: 10 });
-
-      // Compress before upload — reduces mobile failure rate
       const compressed = await compressPhotoIfNeeded(file);
-
       updateUpload(uploadId, { progress: 40 });
-
       const formData = new FormData();
       formData.append("file", compressed);
-
       updateUpload(uploadId, { progress: 60 });
-
       const res  = await fetch("/api/upload/photo", { method: "POST", body: formData });
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Photo upload failed");
-
       const mediaId = data.results?.[0]?.mediaId;
       if (!mediaId) throw new Error("No media ID returned from upload");
-
       updateUpload(uploadId, { progress: 100, phase: "done", mediaId });
       onMediaId(mediaId);
-
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed";
       updateUpload(uploadId, { phase: "error", error: msg });
@@ -286,12 +384,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }
   }, [updateUpload]);
 
-  const startPhotoUpload = useCallback(({
-    file, onMediaId, onError,
-  }: {
-    file:      File;
-    onMediaId: (mediaId: number) => void;
-    onError:   (err: string) => void;
+  const startPhotoUpload = useCallback(({ file, onMediaId, onError }: {
+    file: File; onMediaId: (mediaId: number) => void; onError: (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
     setUploads((prev) => [...prev, {
@@ -304,35 +398,23 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
   // ── Multi photo upload ────────────────────────────────────────────────────
   const runMultiPhotoUpload = useCallback(async (
-    uploadId:   string,
-    files:      File[],
-    onMediaIds: (mediaIds: number[]) => void,
-    onError:    (err: string) => void,
+    uploadId: string, files: File[],
+    onMediaIds: (mediaIds: number[]) => void, onError: (err: string) => void,
   ) => {
     try {
       updateUpload(uploadId, { progress: 10 });
-
-      // Compress all photos before upload
       const compressed = await Promise.all(files.map((f) => compressPhotoIfNeeded(f)));
-
       updateUpload(uploadId, { progress: 40 });
-
       const formData = new FormData();
       for (const f of compressed) formData.append("file", f);
-
       updateUpload(uploadId, { progress: 60 });
-
       const res  = await fetch("/api/upload/photo", { method: "POST", body: formData });
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Photo upload failed");
-
       const mediaIds: number[] = (data.results as { mediaId: number }[]).map((r) => r.mediaId);
       if (!mediaIds.length) throw new Error("No media IDs returned from upload");
-
       updateUpload(uploadId, { progress: 100, phase: "done" });
       onMediaIds(mediaIds);
-
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed";
       updateUpload(uploadId, { phase: "error", error: msg });
@@ -340,17 +422,12 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }
   }, [updateUpload]);
 
-  const startMultiPhotoUpload = useCallback(({
-    files, onMediaIds, onError,
-  }: {
-    files:      File[];
-    onMediaIds: (mediaIds: number[]) => void;
-    onError:    (err: string) => void;
+  const startMultiPhotoUpload = useCallback(({ files, onMediaIds, onError }: {
+    files: File[]; onMediaIds: (mediaIds: number[]) => void; onError: (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
-    const label    = `${files.length} photos`;
     setUploads((prev) => [...prev, {
-      id: uploadId, fileName: label, progress: 0, phase: "uploading",
+      id: uploadId, fileName: `${files.length} photos`, progress: 0, phase: "uploading",
       files, _onMediaIds: onMediaIds, _onError: onError, _isMultiPhoto: true,
     }]);
     runMultiPhotoUpload(uploadId, files, onMediaIds, onError);
@@ -359,12 +436,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
   // ── Video upload ──────────────────────────────────────────────────────────
   const runUpload = useCallback(async (
-    uploadId:      string,
-    file:          File,
-    title:         string,
-    thumbnailBlob: Blob | undefined,
-    onMediaId:     (mediaId: number) => void,
-    onError:       (err: string) => void,
+    uploadId: string, file: File, title: string, thumbnailBlob: Blob | undefined,
+    onMediaId: (mediaId: number) => void, onError: (err: string) => void,
   ) => {
     try {
       let customThumbnailUrl: string | null = null;
@@ -379,35 +452,24 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       }
 
       const initRes  = await fetch("/api/upload/video", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ title, customThumbnailUrl }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, customThumbnailUrl }),
       });
       const initData = await initRes.json();
       if (!initRes.ok) throw new Error(initData.error || "Failed to initialise upload");
 
       const { videoId, tusEndpoint, expireTime, signature, libraryId } = initData as {
-        videoId:     string;
-        tusEndpoint: string;
-        expireTime:  number;
-        signature:   string;
-        libraryId:   string;
+        videoId: string; tusEndpoint: string; expireTime: number; signature: string; libraryId: string;
       };
 
       updateUpload(uploadId, { _videoId: videoId });
 
       await new Promise<void>((resolve, reject) => {
         const upload = new tus.Upload(file, {
-          endpoint:    tusEndpoint,
-          chunkSize:   5 * 1024 * 1024,
+          endpoint: tusEndpoint, chunkSize: 5 * 1024 * 1024,
           retryDelays: [0, 3000, 5000, 10000, 20000],
           storeFingerprintForResuming: false,
-          headers: {
-            AuthorizationSignature: signature,
-            AuthorizationExpire:    String(expireTime),
-            VideoId:                videoId,
-            LibraryId:              libraryId,
-          },
+          headers: { AuthorizationSignature: signature, AuthorizationExpire: String(expireTime), VideoId: videoId, LibraryId: libraryId },
           metadata: { filetype: file.type, title },
           onProgress(bytesUploaded, bytesTotal) {
             updateUpload(uploadId, { progress: Math.round((bytesUploaded / bytesTotal) * 80) });
@@ -428,9 +490,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       updateUpload(uploadId, { progress: 82, phase: "processing" });
 
       const completeRes  = await fetch("/api/upload/video/complete", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size, customThumbnailUrl }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size, customThumbnailUrl }),
       });
       const completeData = await completeRes.json();
       if (!completeRes.ok) throw new Error(completeData.error || "Failed to save record");
@@ -447,14 +508,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }
   }, [updateUpload, startPolling]);
 
-  const startVideoUpload = useCallback(({
-    file, title, thumbnailBlob, onMediaId, onError,
-  }: {
-    file:           File;
-    title:          string;
-    thumbnailBlob?: Blob;
-    onMediaId:      (mediaId: number) => void;
-    onError:        (err: string) => void;
+  const startVideoUpload = useCallback(({ file, title, thumbnailBlob, onMediaId, onError }: {
+    file: File; title: string; thumbnailBlob?: Blob;
+    onMediaId: (mediaId: number) => void; onError: (err: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
     setUploads((prev) => [...prev, {
@@ -474,7 +530,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     setUploads((prev) => prev.map((u) => u.id === id ? { ...u, progress: 0, phase: "uploading", error: undefined } : u));
     setUploads((prev) => {
       const item = prev.find((u) => u.id === id);
-      if (item?._isText && item._onDone && item._onError) {
+      if (item?._isMessage && item.files && item._conversationId && item._tempId) {
+        runMessageUpload(id, item.files, item._conversationId, item._content, item._isPPV ?? false, item._ppvPrice, item._tempId);
+      } else if (item?._isText && item._onDone && item._onError) {
         runTextPost(id, item._onDone, item._onError);
       } else if (item?._isPoll && item._onDone && item._onError) {
         runPollPost(id, item._onDone, item._onError);
@@ -487,7 +545,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
       }
       return prev;
     });
-  }, [runUpload, runPhotoUpload, runMultiPhotoUpload, runTextPost, runPollPost]);
+  }, [runUpload, runPhotoUpload, runMultiPhotoUpload, runTextPost, runPollPost, runMessageUpload]);
 
   const clearDone = useCallback(() => {
     setUploads((prev) => prev.filter((u) => u.phase !== "done"));
@@ -495,15 +553,8 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <UploadContext.Provider value={{
-      uploads,
-      startVideoUpload,
-      startPhotoUpload,
-      startMultiPhotoUpload,
-      startTextPost,
-      startPollPost,
-      dismissUpload,
-      retryUpload,
-      clearDone,
+      uploads, startVideoUpload, startPhotoUpload, startMultiPhotoUpload,
+      startTextPost, startPollPost, startMessageUpload, dismissUpload, retryUpload, clearDone,
     }}>
       {children}
     </UploadContext.Provider>

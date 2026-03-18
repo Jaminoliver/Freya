@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, getUser } from "@/lib/supabase/server";
-import {
-  uploadPhotoToBunny,
-  createBunnyVideo,
-  uploadVideoToBunny,
-  getBunnyStreamUrls,
-} from "@/lib/utils/bunny";
+import { signBunnyUrl } from "@/lib/utils/bunny";
+
+const BUNNY_STORAGE_ZONE    = process.env.BUNNY_STORAGE_ZONE!;
+const BUNNY_STORAGE_API_KEY = process.env.BUNNY_STORAGE_API_KEY!;
+const BUNNY_STORAGE_HOST    = process.env.BUNNY_STORAGE_HOST ?? "storage.bunnycdn.com";
+const BUNNY_CDN_URL         = process.env.BUNNY_CDN_URL!;
+
+async function uploadToBunny(buffer: ArrayBuffer, filename: string, contentType: string): Promise<string> {
+  const path = `/messages/ppv/${filename}`;
+  const res  = await fetch(`https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}${path}`, {
+    method:  "PUT",
+    headers: { "AccessKey": BUNNY_STORAGE_API_KEY, "Content-Type": contentType },
+    body:    buffer,
+  });
+  if (!res.ok) throw new Error(`Bunny upload failed: ${res.status}`);
+  return signBunnyUrl(path);
+}
 
 export async function POST(
   request: Request,
@@ -13,17 +24,11 @@ export async function POST(
 ) {
   const supabase = await createServerSupabaseClient();
   const { user, error: authError } = await getUser();
-
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const conversationId = parseInt(id, 10);
-
-  if (isNaN(conversationId)) {
-    return NextResponse.json({ error: "Invalid conversation id" }, { status: 400 });
-  }
+  if (isNaN(conversationId)) return NextResponse.json({ error: "Invalid conversation id" }, { status: 400 });
 
   const { data: convo } = await supabase
     .from("conversations")
@@ -32,103 +37,98 @@ export async function POST(
     .or(`creator_id.eq.${user.id},fan_id.eq.${user.id}`)
     .single();
 
-  if (!convo) {
-    return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
-  }
+  if (!convo)           return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (convo.is_blocked) return NextResponse.json({ error: "Conversation is blocked" }, { status: 403 });
 
-  if (convo.is_blocked) {
-    return NextResponse.json({ error: "Conversation is blocked" }, { status: 403 });
-  }
-
+  // Only creators can send PPV messages
   if (convo.creator_id !== user.id) {
     return NextResponse.json({ error: "Only creators can send PPV messages" }, { status: 403 });
   }
 
   const formData = await request.formData();
-  const file = formData.get("file") as File | null;
-  const content = formData.get("content") as string | null;
-  const priceRaw = formData.get("price") as string | null;
+  const files    = formData.getAll("files") as File[];
+  const content  = (formData.get("content") as string | null)?.trim() ?? null;
+  const priceRaw = formData.get("price");
+  const price    = priceRaw ? parseInt(String(priceRaw), 10) : 0;
 
-  if (!file) {
-    return NextResponse.json({ error: "File is required for PPV messages" }, { status: 400 });
+  if (!files || files.length === 0) {
+    return NextResponse.json({ error: "No files provided" }, { status: 400 });
   }
 
-  const price = parseInt(priceRaw ?? "0", 10);
   if (!price || price <= 0) {
-    return NextResponse.json({ error: "A valid price is required" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid price" }, { status: 400 });
   }
 
-  const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"];
-  if (!allowedTypes.includes(file.type)) {
-    return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
-  }
-
-  const mediaType: "photo" | "video" = file.type.startsWith("video/") ? "video" : "photo";
-  const buffer = Buffer.from(await file.arrayBuffer());
-  let mediaUrl: string;
-  let thumbnailUrl: string | null = null;
-
-  if (mediaType === "video") {
-    const videoId = await createBunnyVideo(`ppv-msg-${conversationId}-${Date.now()}`);
-    await uploadVideoToBunny(buffer, videoId);
-    const urls = getBunnyStreamUrls(videoId);
-    mediaUrl = urls.hlsUrl;
-    thumbnailUrl = urls.thumbnailUrl;
-  } else {
-    const result = await uploadPhotoToBunny(buffer, user.id, file.name, file.type);
-    mediaUrl = result.url;
-  }
+  const receiverId     = convo.fan_id;
+  const firstMediaType = files[0].type.startsWith("video/") ? "video" : "photo";
 
   const { data: message, error: insertError } = await supabase
     .from("messages")
     .insert({
       conversation_id: conversationId,
-      sender_id: user.id,
-      receiver_id: convo.fan_id,
-      content: content?.trim() ?? null,
-      media_type: mediaType,
-      media_url: mediaUrl,
-      thumbnail_url: thumbnailUrl,
-      is_ppv: true,
-      ppv_price: price,
-      is_unlocked: false,
+      sender_id:       user.id,
+      receiver_id:     receiverId,
+      content:         content,
+      is_ppv:          true,
+      ppv_price:       price,
+      is_unlocked:     false,
+      media_type:      firstMediaType,
     })
-    .select("id, conversation_id, sender_id, content, media_type, media_url, thumbnail_url, ppv_price, created_at")
+    .select("id, conversation_id, sender_id, content, created_at, is_read")
     .single();
 
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
+  if (insertError || !message) {
+    return NextResponse.json({ error: insertError?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  await supabase.rpc("increment_unread_count", {
-    p_conversation_id: conversationId,
-    p_field: "unread_count_fan",
-  });
+  const mediaUrls: string[] = [];
+
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const file      = files[i];
+      const ext       = file.name.split(".").pop() ?? "bin";
+      const filename  = `${crypto.randomUUID()}.${ext}`;
+      const buffer    = await file.arrayBuffer();
+      const url       = await uploadToBunny(buffer, filename, file.type);
+      const mediaType = file.type.startsWith("video/") ? "video" : "photo";
+      mediaUrls.push(url);
+
+      await supabase.from("message_media").insert({
+        message_id:    message.id,
+        url,
+        media_type:    mediaType,
+        display_order: i,
+      });
+    }
+  } catch {
+    await supabase.from("messages").delete().eq("id", message.id);
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+  }
 
   await supabase
     .from("conversations")
     .update({
-      last_message_preview: `🔒 PPV — ₦${price.toLocaleString()}`,
-      last_message_at: message.created_at,
-      updated_at: new Date().toISOString(),
+      last_message_preview: "🔒 PPV message",
+      last_message_at:      message.created_at,
+      updated_at:           new Date().toISOString(),
     })
     .eq("id", conversationId);
 
   return NextResponse.json({
     message: {
-      id: message.id,
+      id:             message.id,
       conversationId: message.conversation_id,
-      senderId: message.sender_id,
-      type: "ppv",
-      text: message.content ?? undefined,
-      mediaUrls: [message.media_url],
-      thumbnailUrl: message.thumbnail_url ?? null,
+      senderId:       message.sender_id,
+      type:           "ppv",
+      text:           message.content ?? undefined,
+      mediaUrls,
+      createdAt:      message.created_at,
+      isRead:         message.is_read ?? false,
       ppv: {
-        price: message.ppv_price,
-        isUnlocked: false,
+        price,
+        isUnlocked:    false,
         unlockedCount: 0,
       },
-      createdAt: message.created_at,
     },
   }, { status: 201 });
 }

@@ -23,12 +23,12 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [notFound, setNotFound] = useState(false);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [messages,    setMessages]    = useState<Message[]>([]);
+  const [notFound,    setNotFound]    = useState(false);
+  const [nextCursor,  setNextCursor]  = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [loaded, setLoaded] = useState(false);
+  const [hasMore,     setHasMore]     = useState(true);
+  const [loaded,      setLoaded]      = useState(false);
 
   useEffect(() => {
     setActiveConversationId(conversationId);
@@ -56,11 +56,19 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
         if (convoRes) {
           if (convoRes.status === 404) { setNotFound(true); return; }
-          if (!convoRes.ok) throw new Error("Failed to load");
+          if (convoRes.status === 401) {
+            setTimeout(() => load(), 800);
+            return;
+          }
+          if (!convoRes.ok) throw new Error("Failed to load conversation");
           const convoData = await convoRes.json();
           setConversation(convoData.conversation);
         }
 
+        if (msgsRes.status === 401) {
+          setTimeout(() => load(), 800);
+          return;
+        }
         if (!msgsRes.ok) throw new Error("Failed to load messages");
         const msgsData = await msgsRes.json();
         const fresh: Message[] = msgsData.messages ?? [];
@@ -86,10 +94,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       if (!res.ok) return;
       const data = await res.json();
       const older: Message[] = data.messages ?? [];
-      if (older.length === 0) {
-        setHasMore(false);
-        return;
-      }
+      if (older.length === 0) { setHasMore(false); return; }
       setMessages((prev) => [...older, ...prev]);
       setNextCursor(data.nextCursor ?? null);
       setHasMore(!!data.nextCursor);
@@ -102,11 +107,25 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
   const handleNewMessage = useCallback((message: Message) => {
     setMessages((prev) => {
+      // Status update — update tick in place, don't add new message
+      if ((message as any)._isStatusUpdate) {
+        return prev.map((m) =>
+          m.id === message.id
+            ? { ...m, isDelivered: message.isDelivered, isRead: message.isRead }
+            : m
+        );
+      }
       if (prev.some((m) => m.id === message.id)) return prev;
       return [...prev, message];
     });
-    appendCachedMessage(conversationId, message);
+    if (!(message as any)._isStatusUpdate) {
+      appendCachedMessage(conversationId, message);
+    }
   }, [conversationId]);
+
+  const handleClearMessages = useCallback(() => {
+    setMessages([]);
+  }, []);
 
   useEffect(() => {
     registerMessageHandler(handleNewMessage);
@@ -137,6 +156,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       messages={messages}
       onBack={() => router.push("/messages")}
       onNewMessage={handleNewMessage}
+      onClearMessages={handleClearMessages}
       currentUserId={currentUserId}
       onLoadMore={loadMore}
       hasMore={hasMore}

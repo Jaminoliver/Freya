@@ -19,6 +19,10 @@ export async function GET() {
       last_message_preview,
       unread_count_creator,
       unread_count_fan,
+      deleted_for_creator,
+      deleted_for_fan,
+      deleted_before_creator,
+      deleted_before_fan,
       creator:profiles!conversations_creator_id_fkey (
         id, username, display_name, avatar_url, is_verified
       ),
@@ -34,27 +38,34 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const conversations = (data ?? []).map((row: any) => {
-    const isCreator   = row.creator_id === user.id;
-    const participant = isCreator ? row.fan : row.creator;
-    const unreadCount = isCreator ? row.unread_count_creator : row.unread_count_fan;
+  const conversations = (data ?? [])
+    .filter((row: any) => {
+      const isCreator = row.creator_id === user.id;
+      if (isCreator && row.deleted_for_creator) return false;
+      if (!isCreator && row.deleted_for_fan)    return false;
+      return true;
+    })
+    .map((row: any) => {
+      const isCreator   = row.creator_id === user.id;
+      const participant = isCreator ? row.fan : row.creator;
+      const unreadCount = isCreator ? row.unread_count_creator : row.unread_count_fan;
 
-    return {
-      id:            row.id,
-      participant: {
-        id:         participant.id,
-        name:       participant.display_name ?? participant.username,
-        username:   participant.username,
-        avatarUrl:  participant.avatar_url ?? null,
-        isVerified: participant.is_verified ?? false,
-        isOnline:   false,
-      },
-      lastMessage:   row.last_message_preview ?? "",
-      lastMessageAt: row.last_message_at ?? "",
-      unreadCount:   unreadCount ?? 0,
-      hasMedia:      false,
-    };
-  });
+      return {
+        id:          row.id,
+        participant: {
+          id:         participant.id,
+          name:       participant.display_name ?? participant.username,
+          username:   participant.username,
+          avatarUrl:  participant.avatar_url ?? null,
+          isVerified: participant.is_verified ?? false,
+          isOnline:   false,
+        },
+        lastMessage:   row.last_message_preview ?? "",
+        lastMessageAt: row.last_message_at ?? "",
+        unreadCount:   unreadCount ?? 0,
+        hasMedia:      false,
+      };
+    });
 
   return NextResponse.json({ conversations });
 }
@@ -78,7 +89,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cannot message yourself" }, { status: 400 });
   }
 
-  // Fetch both profiles to determine who is creator and who is fan
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
     .select("id, role")
@@ -95,10 +105,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Determine creator_id and fan_id
-  // Conversations are always stored as creator_id / fan_id
   let creatorId: string;
-  let fanId: string;
+  let fanId:     string;
 
   if (currentUserProfile.role === "creator" && targetUserProfile.role === "fan") {
     creatorId = user.id;
@@ -107,16 +115,13 @@ export async function POST(request: Request) {
     creatorId = targetUserId;
     fanId     = user.id;
   } else if (currentUserProfile.role === "creator" && targetUserProfile.role === "creator") {
-    // Both creators — use alphabetical order for consistency
     creatorId = user.id < targetUserId ? user.id : targetUserId;
     fanId     = user.id < targetUserId ? targetUserId : user.id;
   } else {
-    // Both fans — same logic
     creatorId = user.id < targetUserId ? user.id : targetUserId;
     fanId     = user.id < targetUserId ? targetUserId : user.id;
   }
 
-  // Check if conversation already exists
   const { data: existing } = await supabase
     .from("conversations")
     .select("id")
@@ -125,6 +130,14 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (existing) {
+    // If conversation was soft-deleted for this user, restore it
+    const isCreator = creatorId === user.id;
+    const field     = isCreator ? "deleted_for_creator" : "deleted_for_fan";
+    await supabase
+      .from("conversations")
+      .update({ [field]: false, updated_at: new Date().toISOString() })
+      .eq("id", existing.id);
+
     return NextResponse.json({ conversationId: existing.id });
   }
 

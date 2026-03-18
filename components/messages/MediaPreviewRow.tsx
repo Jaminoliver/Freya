@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { X, Plus } from "lucide-react";
-import { useRef } from "react";
 
 interface Props {
   files:    File[];
@@ -45,7 +44,6 @@ export function MediaPreviewRow({ files, onRemove, onAdd }: Props) {
         <FileThumb key={index} file={file} onRemove={() => onRemove(index)} />
       ))}
 
-      {/* Add more button */}
       <button
         onClick={() => fileRef.current?.click()}
         style={{
@@ -71,8 +69,48 @@ export function MediaPreviewRow({ files, onRemove, onAdd }: Props) {
 }
 
 function FileThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
-  const [url] = useState(() => URL.createObjectURL(file));
   const isVideo = file.type.startsWith("video/");
+  const [blobUrl]   = useState(() => URL.createObjectURL(file));
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isVideo) return;
+
+    // Generate canvas thumbnail — works on Safari iOS
+    const video = document.createElement("video");
+    video.src        = blobUrl;
+    video.muted      = true;
+    video.playsInline = true;
+    video.preload    = "metadata";
+
+    const onLoaded = () => {
+      video.currentTime = 0.001;
+    };
+
+    const onSeeked = () => {
+      try {
+        const canvas    = document.createElement("canvas");
+        canvas.width    = 144;
+        canvas.height   = 144;
+        const ctx       = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, 144, 144);
+          setThumbUrl(canvas.toDataURL("image/jpeg", 0.8));
+        }
+      } catch {}
+      video.removeEventListener("seeked",         onSeeked);
+      video.removeEventListener("loadedmetadata", onLoaded);
+    };
+
+    video.addEventListener("loadedmetadata", onLoaded);
+    video.addEventListener("seeked",         onSeeked);
+    video.load();
+
+    return () => {
+      video.removeEventListener("loadedmetadata", onLoaded);
+      video.removeEventListener("seeked",         onSeeked);
+    };
+  }, [blobUrl, isVideo]);
 
   return (
     <div
@@ -87,20 +125,28 @@ function FileThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
       }}
     >
       {isVideo ? (
-        <video
-          src={url}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          muted
-        />
+        thumbUrl ? (
+          <img
+            src={thumbUrl}
+            alt=""
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          // Fallback while thumbnail generates
+          <div style={{ width: "100%", height: "100%", backgroundColor: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <polygon points="7,4 17,10 7,16" fill="rgba(255,255,255,0.4)" />
+            </svg>
+          </div>
+        )
       ) : (
         <img
-          src={url}
+          src={blobUrl}
           alt=""
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
       )}
 
-      {/* Remove button */}
       <button
         onClick={onRemove}
         style={{

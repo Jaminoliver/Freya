@@ -7,7 +7,8 @@ import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
 import { useTypingConversations } from "@/app/(main)/messages/page";
-import { updateConversations } from "@/app/(main)/messages/page";
+import { updateConversations, clearCachedMessages } from "@/app/(main)/messages/page";
+import { useUpload } from "@/lib/context/UploadContext";
 import { ChatHeader } from "@/components/messages/ChatHeader";
 import { MessagesList } from "@/components/messages/MessagesList";
 import { MessageInput } from "@/components/messages/MessageInput";
@@ -15,41 +16,96 @@ import { ReportModal } from "@/components/messages/ReportModal";
 import type { Conversation, Message } from "@/lib/types/messages";
 
 interface Props {
-  conversation:   Conversation;
-  messages:       Message[];
-  onBack:         () => void;
-  onNewMessage:   (message: Message) => void;
-  currentUserId?: string;
-  onLoadMore?:    () => void;
-  hasMore?:       boolean;
-  loadingMore?:   boolean;
+  conversation:     Conversation;
+  messages:         Message[];
+  onBack:           () => void;
+  onNewMessage:     (message: Message) => void;
+  onClearMessages?: () => void;
+  currentUserId?:   string;
+  onLoadMore?:      () => void;
+  hasMore?:         boolean;
+  loadingMore?:     boolean;
 }
 
-export function ChatPanel({ conversation, messages, onBack, onNewMessage, currentUserId = "me", onLoadMore, hasMore, loadingMore }: Props) {
+export function ChatPanel({
+  conversation,
+  messages: initialMessages,
+  onBack,
+  onNewMessage,
+  onClearMessages,
+  currentUserId = "me",
+  onLoadMore,
+  hasMore,
+  loadingMore,
+}: Props) {
   const { participant } = conversation;
-  const router = useRouter();
-  const handleBack = () => router.push("/messages");
+  const router          = useRouter();
+  const handleBack      = () => router.push("/messages");
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [reportOpen,   setReportOpen]   = useState(false);
   const [sending,      setSending]      = useState(false);
   const [replyTo,      setReplyTo]      = useState<Message | null>(null);
+  const [messages,     setMessages]     = useState<Message[]>(initialMessages);
+
+  const { startMessageUpload, uploads } = useUpload();
+
+  // Restore in-progress uploads as optimistic messages when returning to this chat
+  useEffect(() => {
+    const inProgress = uploads.filter(
+      (u) => u._isMessage && u._conversationId === conversation.id && (u.phase === "uploading" || u.phase === "processing")
+    );
+    if (inProgress.length === 0) return;
+
+    setMessages((prev) => {
+      let updated = [...prev];
+      for (const u of inProgress) {
+        const alreadyExists = updated.some((m) => m.tempId === u._tempId);
+        if (alreadyExists) continue;
+        updated.push({
+          id:             Date.now() + Math.random(),
+          conversationId: conversation.id,
+          senderId:       currentUserId,
+          type:           u._isPPV ? "ppv" : "media",
+          text:           u._content || undefined,
+          mediaUrls:      [],
+          createdAt:      new Date().toISOString(),
+          isRead:         false,
+          status:         "sending",
+          uploadProgress: u.progress,
+          tempId:         u._tempId,
+          ...(u._isPPV && u._ppvPrice ? {
+            ppv: { price: u._ppvPrice, isUnlocked: true, unlockedCount: 0 },
+          } : {}),
+        } as Message);
+      }
+      return updated;
+    });
+  }, [uploads, conversation.id, currentUserId]);
+
+  // FIX 1: Properly sync server messages without skipping updates on existing messages
+  useEffect(() => {
+    setMessages((prev) => {
+      const pending = prev.filter((m) => m.status === "sending" || m.status === "failed");
+      const stillPending = pending.filter(
+        (p) => !initialMessages.some((c) => c.tempId === p.tempId || c.id === p.id)
+      );
+      return [...initialMessages, ...stillPending];
+    });
+  }, [initialMessages]);
 
   const { setTypingConversationId } = useMessagesContext();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ✅ Send typing via hook, receive from global
   const { sendTyping } = useTypingIndicator({ conversationId: conversation.id, currentUserId });
   const typingConversations = useTypingConversations();
   const isTyping = typingConversations.has(conversation.id);
 
-  // Sync typing state to context for desktop header indicator
   useEffect(() => {
     if (isTyping) setTypingConversationId(conversation.id);
     else setTypingConversationId(null);
   }, [isTyping, conversation.id, setTypingConversationId]);
 
-  // ✅ Mark as read on mount + clear sidebar unread immediately
   useEffect(() => {
     updateConversations((prev) =>
       prev.map((c) => c.id === conversation.id ? { ...c, unreadCount: 0 } : c)
@@ -57,7 +113,6 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
     fetch(`/api/conversations/${conversation.id}/read`, { method: "PATCH" }).catch(() => {});
   }, [conversation.id]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -68,42 +123,143 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleTyping = useCallback(() => {
-    sendTyping();
-  }, [sendTyping]);
+  const handleTyping = useCallback(() => sendTyping(), [sendTyping]);
 
-  const handleSend = async (text: string, mediaFiles?: File[], ppvPrice?: number) => {
-    if (sending) return;
-    setSending(true);
-    setReplyTo(null);
-    try {
-      if (mediaFiles && mediaFiles.length > 0) {
-        const formData = new FormData();
-        formData.append("file", mediaFiles[0]);
-        if (text.trim()) formData.append("content", text.trim());
-        const endpoint = ppvPrice
-          ? `/api/conversations/${conversation.id}/messages/ppv`
-          : `/api/conversations/${conversation.id}/messages/media`;
-        if (ppvPrice) formData.append("price", String(ppvPrice));
-        const res  = await fetch(endpoint, { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.message) wrappedOnNewMessage(data.message);
-      } else if (text.trim()) {
+  const handleSend = useCallback(async (text: string, mediaFiles?: File[], ppvPrice?: number) => {
+    if (sending) return; // only blocks if previous send hasn't even started yet
+
+    if (mediaFiles && mediaFiles.length > 0) {
+      const tempId = `temp_${Date.now()}_${Math.random()}`;
+
+      const blobItems = mediaFiles.map((file) => ({
+        url:  URL.createObjectURL(file),
+        type: file.type.startsWith("video/") ? "video" as const : "image" as const,
+      }));
+
+      const optimisticMessage: Message = {
+        id:             Date.now(),
+        conversationId: conversation.id,
+        senderId:       currentUserId,
+        type:           ppvPrice ? "ppv" : "media",
+        text:           text.trim() || undefined,
+        mediaUrls:      blobItems.map((b) => b.type === "video" ? `${b.url}#video` : b.url),
+        createdAt:      new Date().toISOString(),
+        isRead:         false,
+        status:         "sending",
+        uploadProgress: 0,
+        tempId,
+        ...(ppvPrice ? {
+          ppv: {
+            price:         ppvPrice * 100,
+            isUnlocked:    true,
+            unlockedCount: 0,
+          },
+        } : {}),
+      };
+
+      setMessages((prev) => [...prev, optimisticMessage]);
+
+      startMessageUpload({
+        files:          mediaFiles,
+        conversationId: conversation.id,
+        content:        text.trim() || undefined,
+        isPPV:          !!ppvPrice,
+        ppvPrice:       ppvPrice ? ppvPrice * 100 : undefined,
+        tempId,
+        onProgress: (progress) => {
+          setMessages((prev) =>
+            prev.map((m) => m.tempId === tempId ? { ...m, uploadProgress: progress } : m)
+          );
+        },
+        onSent: (serverMessage) => {
+          blobItems.forEach((b) => URL.revokeObjectURL(b.url));
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.tempId === tempId
+                ? { ...serverMessage, status: "sent" as const }
+                : m
+            )
+          );
+          onNewMessage(serverMessage);
+          updateConversations((prev) =>
+            prev.map((c) =>
+              c.id === conversation.id
+                ? { ...c, lastMessage: text || "📷 Media", lastMessageAt: new Date().toISOString() }
+                : c
+            )
+          );
+        },
+        onError: () => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.tempId === tempId ? { ...m, status: "failed" as const } : m
+            )
+          );
+        },
+      });
+
+    } else if (text.trim()) {
+      const tempId = `temp_text_${Date.now()}_${Math.random()}`;
+      const savedReplyToId = replyTo?.id ?? null;
+      setReplyTo(null);
+
+      const optimisticMessage: Message = {
+        id:             Date.now(),
+        conversationId: conversation.id,
+        senderId:       currentUserId,
+        type:           "text",
+        text:           text.trim(),
+        createdAt:      new Date().toISOString(),
+        isRead:         false,
+        status:         "sending",
+        tempId,
+        replyToId:      savedReplyToId,
+      };
+
+      setMessages((prev) => [...prev, optimisticMessage]);
+
+      updateConversations((prev) =>
+        prev.map((c) =>
+          c.id === conversation.id
+            ? { ...c, lastMessage: text.trim(), lastMessageAt: new Date().toISOString() }
+            : c
+        )
+      );
+
+      try {
         const res  = await fetch(`/api/conversations/${conversation.id}/messages`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({
-            content:     text.trim(),
-            reply_to_id: replyTo?.id ?? null,
-          }),
+          body:    JSON.stringify({ content: text.trim(), reply_to_id: savedReplyToId }),
         });
         const data = await res.json();
-        if (data.message) wrappedOnNewMessage(data.message);
+        if (data.message) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.tempId === tempId
+                ? { ...data.message, status: "sent" as const, tempId, isDelivered: m.isDelivered ?? false }
+                : m
+            )
+          );
+          onNewMessage(data.message);
+        } else {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.tempId === tempId ? { ...m, status: "failed" as const } : m
+            )
+          );
+        }
+      } catch {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.tempId === tempId ? { ...m, status: "failed" as const } : m
+          )
+        );
+      } finally {
+        setSending(false);
       }
-    } finally {
-      setSending(false);
     }
-  };
+  }, [sending, conversation.id, currentUserId, replyTo, startMessageUpload, onNewMessage]);
 
   const wrappedOnNewMessage = useCallback((message: Message) => {
     onNewMessage(message);
@@ -115,46 +271,36 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
     }
   }, [onNewMessage, currentUserId, conversation.id]);
 
+  const handleMessagesUpdate = useCallback((updater: (msgs: Message[]) => Message[]) => {
+    setMessages((prev) => updater(prev));
+  }, []);
+
   const menuItems = [
-    { icon: Star,   label: "Favourite",     action: () => setDropdownOpen(false) },
-    { icon: Bell,   label: "Notifications",  action: () => setDropdownOpen(false) },
-    { icon: Pin,    label: "Pin chat",       action: () => setDropdownOpen(false) },
-    { icon: Images, label: "Gallery",        action: () => setDropdownOpen(false) },
-    { icon: Search, label: "Find in chat",   action: () => setDropdownOpen(false) },
-    { icon: Flag,   label: "Report",         action: () => { setDropdownOpen(false); setReportOpen(true); }, danger: true },
+    { icon: Star,   label: "Favourite",    action: () => setDropdownOpen(false) },
+    { icon: Bell,   label: "Notifications", action: () => setDropdownOpen(false) },
+    { icon: Pin,    label: "Pin chat",      action: () => setDropdownOpen(false) },
+    { icon: Images, label: "Gallery",       action: () => setDropdownOpen(false) },
+    { icon: Search, label: "Find in chat",  action: () => setDropdownOpen(false) },
+    { icon: Flag,   label: "Report",        action: () => { setDropdownOpen(false); setReportOpen(true); }, danger: true },
   ];
 
   return (
     <>
       <style>{`
-        @keyframes dropdownIn {
-          from { opacity: 0; transform: translateY(-6px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes dropdownIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
         .chat-panel-dropdown { animation: dropdownIn 0.15s ease forwards; }
         .chat-desktop-header { display: flex; }
         @media (max-width: 767px) { .chat-desktop-header { display: none !important; } }
-
         .chat-panel-root {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          max-height: 100%;
-          background-color: #0A0A0F;
-          font-family: 'Inter', sans-serif;
-          position: relative;
-          overflow: hidden;
+          display: flex; flex-direction: column; height: 100%; max-height: 100%;
+          background-color: #0A0A0F; font-family: 'Inter', sans-serif;
+          position: relative; overflow: hidden;
         }
         @media (max-width: 767px) {
           .chat-panel-root {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
-            height: 100% !important;
-            max-height: 100% !important;
-            z-index: 100;
+            position: fixed !important; top: 0 !important; left: 0 !important;
+            right: 0 !important; bottom: 0 !important; height: 100% !important;
+            max-height: 100% !important; z-index: 100;
             padding-top: env(safe-area-inset-top, 0px);
             padding-bottom: env(safe-area-inset-bottom, 0px);
             box-sizing: border-box;
@@ -172,7 +318,11 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
       )}
 
       <div className="chat-panel-root">
-        <ChatHeader conversation={conversation} onBack={onBack} />
+        <ChatHeader
+          conversation={conversation}
+          onBack={onBack}
+          onMessagesCleared={() => { clearCachedMessages(conversation.id); onClearMessages?.(); setMessages([]); }}
+        />
 
         {/* Desktop inline header */}
         <div
@@ -257,11 +407,12 @@ export function ChatPanel({ conversation, messages, onBack, onNewMessage, curren
           onLoadMore={onLoadMore}
           hasMore={hasMore}
           loadingMore={loadingMore}
+          onMessagesUpdate={handleMessagesUpdate}
         />
         <MessageInput
           onSend={handleSend}
           onTyping={handleTyping}
-          disabled={sending}
+          disabled={false}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
         />

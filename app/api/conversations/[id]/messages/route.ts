@@ -21,7 +21,7 @@ export async function GET(
 
   const { data: convo } = await supabase
     .from("conversations")
-    .select("id, creator_id, fan_id")
+    .select("id, creator_id, fan_id, deleted_before_creator, deleted_before_fan, deleted_for_creator, deleted_for_fan")
     .eq("id", conversationId)
     .or(`creator_id.eq.${user.id},fan_id.eq.${user.id}`)
     .single();
@@ -32,19 +32,16 @@ export async function GET(
 
   const { searchParams } = new URL(request.url);
   const cursor = searchParams.get("cursor");
-  const limit = 40;
+  const limit  = 40;
 
   let query = supabase
     .from("messages")
-    // ✅ Added reply_to_id to select
-    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, media_type, media_url, thumbnail_url, is_read, created_at, reply_to_id")
+    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, media_type, media_url, thumbnail_url, is_read, created_at, reply_to_id, deleted_for_creator, deleted_for_fan")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (cursor) {
-    query = query.lt("created_at", cursor);
-  }
+  if (cursor) query = query.lt("created_at", cursor);
 
   const { data, error } = await query;
 
@@ -52,38 +49,91 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const messages = (data ?? []).reverse().map((row) => {
+  const rows = data ?? [];
+
+  // Fetch message_media for multi-file support
+  let mediaByMessageId = new Map<number, { url: string; thumbnail_url: string | null; media_type: string }[]>();
+  if (rows.length > 0) {
+    const messageIds = rows.map((r) => r.id);
+    const { data: allMedia } = await supabase
+      .from("message_media")
+      .select("message_id, url, thumbnail_url, media_type, display_order")
+      .in("message_id", messageIds)
+      .order("display_order", { ascending: true });
+
+    for (const m of allMedia ?? []) {
+      if (!mediaByMessageId.has(m.message_id)) mediaByMessageId.set(m.message_id, []);
+      mediaByMessageId.get(m.message_id)!.push(m);
+    }
+  }
+
+  // Fetch ppv_unlocks for current user
+  let unlockedByCurrentUser = new Set<number>();
+  let unlockCountByMessageId = new Map<number, number>();
+  const ppvMessageIds = rows.filter((r) => r.is_ppv).map((r) => r.id);
+  if (ppvMessageIds.length > 0) {
+    const { data: unlocks } = await supabase
+      .from("ppv_unlocks")
+      .select("message_id, fan_id")
+      .in("message_id", ppvMessageIds);
+
+    for (const u of unlocks ?? []) {
+      if (u.fan_id === user.id) unlockedByCurrentUser.add(u.message_id);
+      unlockCountByMessageId.set(u.message_id, (unlockCountByMessageId.get(u.message_id) ?? 0) + 1);
+    }
+  }
+
+  const isCreator    = convo.creator_id === user.id;
+  const deletedBefore = isCreator
+    ? (convo as any).deleted_before_creator
+    : (convo as any).deleted_before_fan;
+
+  const visibleRows = rows.filter((row) => {
+    if (deletedBefore && new Date(row.created_at) <= new Date(deletedBefore)) return false;
+    return true;
+  });
+
+  const messages = visibleRows.reverse().map((row) => {
     const base = {
       id:             row.id,
       conversationId: row.conversation_id,
       senderId:       row.sender_id,
       createdAt:      row.created_at,
       isRead:         row.is_read ?? false,
-      replyToId:      row.reply_to_id ?? null, // ✅ mapped
+      replyToId:      row.reply_to_id ?? null,
     };
 
+    const mediaRows = mediaByMessageId.get(row.id) ?? [];
+    const mediaUrls = mediaRows.length > 0
+      ? mediaRows.map((m) => m.url)
+      : row.media_url ? [row.media_url] : [];
+    const thumbUrl  = mediaRows[0]?.thumbnail_url ?? row.thumbnail_url ?? null;
+
     if (row.is_ppv) {
+      const isCreator     = row.sender_id === user.id;
+      const isUnlocked    = isCreator || unlockedByCurrentUser.has(row.id);
+      const unlockedCount = unlockCountByMessageId.get(row.id) ?? 0;
       return {
         ...base,
         type: "ppv" as const,
         text: row.content ?? undefined,
-        mediaUrls: row.media_url ? [row.media_url] : [],
-        thumbnailUrl: row.thumbnail_url ?? null,
+        mediaUrls: isUnlocked ? mediaUrls : mediaUrls.map(() => ""),
+        thumbnailUrl: thumbUrl,
         ppv: {
           price: row.ppv_price ?? 0,
-          isUnlocked: row.is_unlocked ?? false,
-          unlockedCount: 0,
+          isUnlocked,
+          unlockedCount,
         },
       };
     }
 
-    if (row.media_type) {
+    if (row.media_type || mediaUrls.length > 0) {
       return {
         ...base,
         type: "media" as const,
         text: row.content ?? undefined,
-        mediaUrls: row.media_url ? [row.media_url] : [],
-        thumbnailUrl: row.thumbnail_url ?? null,
+        mediaUrls,
+        thumbnailUrl: thumbUrl,
       };
     }
 
@@ -94,8 +144,9 @@ export async function GET(
     };
   });
 
-  const nextCursor =
-    data && data.length === limit ? data[0].created_at : null;
+  // FIX: rows are ORDER BY created_at DESC, so rows[rows.length-1] is the oldest
+  // Using rows[0] (newest) caused load-more to fetch the same page repeatedly
+  const nextCursor = rows.length === limit ? rows[rows.length - 1].created_at : null;
 
   return NextResponse.json({ messages, nextCursor });
 }
@@ -134,14 +185,13 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { content, reply_to_id } = body; // ✅ extract reply_to_id
+  const { content, reply_to_id } = body;
 
   if (!content?.trim()) {
     return NextResponse.json({ error: "Content is required" }, { status: 400 });
   }
 
-  const receiverId =
-    convo.creator_id === user.id ? convo.fan_id : convo.creator_id;
+  const receiverId = convo.creator_id === user.id ? convo.fan_id : convo.creator_id;
 
   const { data: message, error: insertError } = await supabase
     .from("messages")
@@ -152,9 +202,8 @@ export async function POST(
       content:         content.trim(),
       is_ppv:          false,
       is_unlocked:     true,
-      reply_to_id:     reply_to_id ?? null, // ✅ save reply_to_id
+      reply_to_id:     reply_to_id ?? null,
     })
-    // ✅ Added reply_to_id to select
     .select("id, conversation_id, sender_id, content, created_at, reply_to_id")
     .single();
 
@@ -163,7 +212,21 @@ export async function POST(
   }
 
   const isCreatorSending = convo.creator_id === user.id;
-  const unreadField = isCreatorSending ? "unread_count_fan" : "unread_count_creator";
+  const unreadField      = isCreatorSending ? "unread_count_fan" : "unread_count_creator";
+
+  const restoreField = isCreatorSending ? "deleted_for_fan" : "deleted_for_creator";
+  const { error: restoreError } = await supabase
+    .from("conversations")
+    .update({ [restoreField]: false, updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
+  console.log("[messages POST] restore field:", restoreField, "error:", restoreError);
+
+  const { data: convoState } = await supabase
+    .from("conversations")
+    .select("id, deleted_for_creator, deleted_for_fan, deleted_before_creator, deleted_before_fan")
+    .eq("id", conversationId)
+    .single();
+  console.log("[messages POST] convo state after restore:", convoState);
 
   await supabase.rpc("increment_unread_count", {
     p_conversation_id: conversationId,
@@ -187,7 +250,7 @@ export async function POST(
       type:           "text",
       text:           message.content,
       createdAt:      message.created_at,
-      replyToId:      message.reply_to_id ?? null, // ✅ return to client
+      replyToId:      message.reply_to_id ?? null,
     },
   }, { status: 201 });
 }

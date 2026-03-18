@@ -43,7 +43,10 @@ export default function UploadProgressBar() {
 
   React.useEffect(() => { setMounted(true); }, []);
 
-  if (!mounted || uploads.length === 0) return null;
+  // Filter out message uploads — they have inline progress in the chat bubble
+  const visible = uploads.filter((u) => !u._isMessage);
+
+  if (!mounted || visible.length === 0) return null;
 
   return (
     <div style={{
@@ -58,7 +61,7 @@ export default function UploadProgressBar() {
       width:         "100%",
       fontFamily:    "'Inter', sans-serif",
     }}>
-      {uploads.map((u) => (
+      {visible.map((u) => (
         <div
           key={u.id}
           style={{
