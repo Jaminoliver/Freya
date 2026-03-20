@@ -34,10 +34,14 @@ export async function GET(
   const cursor = searchParams.get("cursor");
   const limit  = 40;
 
+  const isCreator   = convo.creator_id === user.id;
+  const deleteField = isCreator ? "deleted_for_creator" : "deleted_for_fan";
+
   let query = supabase
     .from("messages")
-    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, media_type, media_url, thumbnail_url, is_read, created_at, reply_to_id, deleted_for_creator, deleted_for_fan")
+    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, media_type, media_url, thumbnail_url, is_read, created_at, reply_to_id, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone")
     .eq("conversation_id", conversationId)
+    .eq(deleteField, false)
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -68,7 +72,7 @@ export async function GET(
   }
 
   // Fetch ppv_unlocks for current user
-  let unlockedByCurrentUser = new Set<number>();
+  let unlockedByCurrentUser  = new Set<number>();
   let unlockCountByMessageId = new Map<number, number>();
   const ppvMessageIds = rows.filter((r) => r.is_ppv).map((r) => r.id);
   if (ppvMessageIds.length > 0) {
@@ -83,7 +87,6 @@ export async function GET(
     }
   }
 
-  const isCreator    = convo.creator_id === user.id;
   const deletedBefore = isCreator
     ? (convo as any).deleted_before_creator
     : (convo as any).deleted_before_fan;
@@ -94,6 +97,20 @@ export async function GET(
   });
 
   const messages = visibleRows.reverse().map((row) => {
+    if (row.is_deleted_for_everyone) {
+      return {
+        id:             row.id,
+        conversationId: row.conversation_id,
+        senderId:       row.sender_id,
+        createdAt:      row.created_at,
+        isRead:         row.is_read ?? false,
+        replyToId:      null,
+        type:           "text" as const,
+        text:           "This message was deleted",
+        isDeleted:      true,
+      };
+    }
+
     const base = {
       id:             row.id,
       conversationId: row.conversation_id,
@@ -107,20 +124,24 @@ export async function GET(
     const mediaUrls = mediaRows.length > 0
       ? mediaRows.map((m) => m.url)
       : row.media_url ? [row.media_url] : [];
-    const thumbUrl  = mediaRows[0]?.thumbnail_url ?? row.thumbnail_url ?? null;
 
     if (row.is_ppv) {
-      const isCreator     = row.sender_id === user.id;
-      const isUnlocked    = isCreator || unlockedByCurrentUser.has(row.id);
+      const isSender      = row.sender_id === user.id;
+      const isUnlocked    = isSender || unlockedByCurrentUser.has(row.id);
       const unlockedCount = unlockCountByMessageId.get(row.id) ?? 0;
+
+      // Thumbnail: prefer stored thumbnail_url, fallback to first media URL
+      // For receiver this is blurred heavily — the actual media URL is safe to use as blur src
+      const thumbUrl = row.thumbnail_url ?? (mediaUrls.length > 0 ? mediaUrls[0] : null);
+
       return {
         ...base,
-        type: "ppv" as const,
-        text: row.content ?? undefined,
-        mediaUrls: isUnlocked ? mediaUrls : mediaUrls.map(() => ""),
+        type:         "ppv" as const,
+        text:         row.content ?? undefined,
+        mediaUrls:    isUnlocked ? mediaUrls : [],
         thumbnailUrl: thumbUrl,
         ppv: {
-          price: row.ppv_price ?? 0,
+          price:      row.ppv_price ?? 0,
           isUnlocked,
           unlockedCount,
         },
@@ -128,10 +149,11 @@ export async function GET(
     }
 
     if (row.media_type || mediaUrls.length > 0) {
+      const thumbUrl = mediaRows[0]?.thumbnail_url ?? row.thumbnail_url ?? null;
       return {
         ...base,
-        type: "media" as const,
-        text: row.content ?? undefined,
+        type:         "media" as const,
+        text:         row.content ?? undefined,
         mediaUrls,
         thumbnailUrl: thumbUrl,
       };
@@ -144,8 +166,6 @@ export async function GET(
     };
   });
 
-  // FIX: rows are ORDER BY created_at DESC, so rows[rows.length-1] is the oldest
-  // Using rows[0] (newest) caused load-more to fetch the same page repeatedly
   const nextCursor = rows.length === limit ? rows[rows.length - 1].created_at : null;
 
   return NextResponse.json({ messages, nextCursor });
@@ -215,18 +235,10 @@ export async function POST(
   const unreadField      = isCreatorSending ? "unread_count_fan" : "unread_count_creator";
 
   const restoreField = isCreatorSending ? "deleted_for_fan" : "deleted_for_creator";
-  const { error: restoreError } = await supabase
+  await supabase
     .from("conversations")
     .update({ [restoreField]: false, updated_at: new Date().toISOString() })
     .eq("id", conversationId);
-  console.log("[messages POST] restore field:", restoreField, "error:", restoreError);
-
-  const { data: convoState } = await supabase
-    .from("conversations")
-    .select("id, deleted_for_creator, deleted_for_fan, deleted_before_creator, deleted_before_fan")
-    .eq("id", conversationId)
-    .single();
-  console.log("[messages POST] convo state after restore:", convoState);
 
   await supabase.rpc("increment_unread_count", {
     p_conversation_id: conversationId,

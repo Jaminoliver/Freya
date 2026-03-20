@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { BadgeCheck } from "lucide-react";
-import { useRouter } from "next/navigation";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import Lightbox from "@/components/profile/Lightbox";
@@ -16,6 +15,7 @@ import { postSyncStore } from "@/lib/store/postSyncStore";
 import { PollDisplay } from "@/components/feed/PollDisplay";
 import type { PollData } from "@/components/feed/PollDisplay";
 import type { User } from "@/lib/types/profile";
+import { useNav } from "@/lib/hooks/useNav";
 
 interface MediaItem {
   type:              "image" | "video";
@@ -123,7 +123,7 @@ export function PostCard({
   initialSlide?:  number;
   onSlideChange?: (postId: string, index: number) => void;
 }) {
-  const router = useRouter();
+  const { navigate } = useNav();
   const viewer = useViewer();
 
   const [commentOpen,      setCommentOpen]      = useState(false);
@@ -294,7 +294,10 @@ export function PostCard({
       />
 
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => router.push(`/${post.creator.username}`)} onMouseEnter={() => router.prefetch(`/${post.creator.username}`)}>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
+          onClick={() => navigate(`/${post.creator.username}`)}
+        >
           <img src={post.creator.avatar_url || ""} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -340,7 +343,7 @@ export function PostCard({
       {post.taggedCreators && post.taggedCreators.length > 0 && (
         <div style={{ padding: "0 16px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "10px" }}>
           {post.taggedCreators.map((tc) => (
-            <TaggedCreatorCard key={tc.username} creator={tc} onClick={() => router.push(`/${tc.username}`)} />
+            <TaggedCreatorCard key={tc.username} creator={tc} onClick={() => navigate(`/${tc.username}`)} />
           ))}
         </div>
       )}

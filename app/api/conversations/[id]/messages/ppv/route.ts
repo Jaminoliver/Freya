@@ -30,6 +30,17 @@ export async function POST(
   const conversationId = parseInt(id, 10);
   if (isNaN(conversationId)) return NextResponse.json({ error: "Invalid conversation id" }, { status: 400 });
 
+  // Check sender is a creator via profile role
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "creator") {
+    return NextResponse.json({ error: "Only creators can send PPV messages" }, { status: 403 });
+  }
+
   const { data: convo } = await supabase
     .from("conversations")
     .select("id, creator_id, fan_id, is_blocked")
@@ -39,11 +50,6 @@ export async function POST(
 
   if (!convo)           return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (convo.is_blocked) return NextResponse.json({ error: "Conversation is blocked" }, { status: 403 });
-
-  // Only creators can send PPV messages
-  if (convo.creator_id !== user.id) {
-    return NextResponse.json({ error: "Only creators can send PPV messages" }, { status: 403 });
-  }
 
   const formData = await request.formData();
   const files    = formData.getAll("files") as File[];
@@ -59,7 +65,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid price" }, { status: 400 });
   }
 
-  const receiverId     = convo.fan_id;
+  const receiverId     = convo.fan_id === user.id ? convo.creator_id : convo.fan_id;
   const firstMediaType = files[0].type.startsWith("video/") ? "video" : "photo";
 
   const { data: message, error: insertError } = await supabase
@@ -100,6 +106,13 @@ export async function POST(
         display_order: i,
       });
     }
+
+    // Store thumbnail so receiver can blur it behind the lock UI
+    await supabase
+      .from("messages")
+      .update({ thumbnail_url: mediaUrls[0] })
+      .eq("id", message.id);
+
   } catch {
     await supabase.from("messages").delete().eq("id", message.id);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });

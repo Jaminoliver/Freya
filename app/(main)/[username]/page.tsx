@@ -99,24 +99,18 @@ function ProfilePageInner() {
   };
 
   // ── Message handler ──────────────────────────────────────────────────────────
-  const handleMessage = React.useCallback(async () => {
+  // FIX: navigate to /messages/new with profile data — no API call on click
+  const handleMessage = React.useCallback(() => {
     if (!profile) return;
-    try {
-      const res  = await fetch("/api/conversations", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ targetUserId: profile.id }),
-      });
-      const data = await res.json();
-      if (data.conversationId) {
-        window.history.replaceState(null, '', '/messages');
-        router.push(`/messages/${data.conversationId}`);
-      }
-    } catch (err) {
-      console.error("[ProfilePage] handleMessage error:", err);
-    }
+    const params = new URLSearchParams({
+      targetUserId: profile.id,
+      name:         profile.display_name ?? profile.username,
+      username:     profile.username,
+      avatar:       profile.avatar_url ?? "",
+      verified:     profile.is_verified ? "1" : "0",
+    });
+    router.push(`/messages/new?${params.toString()}`);
   }, [profile, router]);
-
   const fetchSubscriptionStatus = React.useCallback(async (creatorId: string) => {
     try {
       const res  = await fetch(`/api/subscriptions/status?creatorId=${creatorId}`);

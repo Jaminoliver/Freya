@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import ProfileBanner from "@/components/profile/ProfileBanner";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import ProfileInfo from "@/components/profile/ProfileInfo";
 import ProfileActions from "@/components/profile/ProfileActions";
 import type { User, Subscription } from "@/lib/types/profile";
+import { useNav } from "@/lib/hooks/useNav";
+import { useAppStore } from "@/lib/store/appStore";
 
 interface Props {
   profile:         User;
@@ -21,7 +22,13 @@ const padded: React.CSSProperties = { padding: "0 16px" };
 export default function CreatorViewingFan({
   profile, totalLikes, fromFanList, fanSubscription, onMessage,
 }: Props) {
-  const router = useRouter();
+  const { navigate } = useNav();
+  const setSettingsPanel = useAppStore((s) => s.setSettingsPanel);
+
+  const handleBackToFans = () => {
+    setSettingsPanel("fans");
+    navigate("/settings");
+  };
 
   const bannerStats = {
     posts:       profile.post_count ?? 0,
@@ -47,7 +54,7 @@ export default function CreatorViewingFan({
     <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
       {fromFanList && (
         <button
-          onClick={() => router.push("/settings?panel=fans")}
+          onClick={handleBackToFans}
           style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", cursor: "pointer", padding: "12px 16px 4px", color: "#8B5CF6", fontSize: "13px", fontWeight: 600, fontFamily: "'Inter', sans-serif" }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7" /></svg>

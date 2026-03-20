@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Home, Search, MessageCircle, Bell, Wallet,
   User, Plus, X, BadgeCheck, ArrowLeft, CreditCard, MoreHorizontal,
@@ -11,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useAppStore } from "@/lib/store/appStore";
+import { useNav } from "@/lib/hooks/useNav";
 
 const navItems = [
   { label: "Home",          href: "/dashboard",     icon: Home          },
@@ -40,25 +40,13 @@ const FALLBACK_COVER = "https://images.unsplash.com/photo-1506905925346-21bda4d3
 
 export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
   const pathname = usePathname();
-  const router   = useRouter();
+  const { navigate } = useNav();
 
   const viewer   = useAppStore((s) => s.viewer);
   const username = viewer?.username ?? null;
 
-  const [pendingPath, setPendingPath] = useState<string | null>(null);
-  const pendingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    if (pendingPath && pathname === pendingPath) {
-      setPendingPath(null);
-      if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
-    }
-  }, [pathname, pendingPath]);
-
-  const activePath = pendingPath ?? pathname;
-
   const isActive = (href: string) =>
-    activePath === href || (href === "/subscriptions" && activePath.startsWith("/subscriptions"));
+    pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
 
   const [searchOpen,     setSearchOpen]     = useState(false);
   const [moreOpen,       setMoreOpen]       = useState(false);
@@ -113,30 +101,23 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  const pendingClose = useRef(false);
+  // Close search on route change
   useEffect(() => {
-    if (pendingClose.current) {
-      pendingClose.current = false;
-      setSearchOpen(false);
-      setQuery("");
-      setResults([]);
-    }
+    setSearchOpen(false);
+    setQuery("");
+    setResults([]);
   }, [pathname]);
 
   const closeSearch = () => { setSearchOpen(false); setQuery(""); setResults([]); };
 
-  const handleNavClick = (href: string) => {
-    if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
-    setPendingPath(href);
-    pendingClose.current = true;
-    pendingTimeoutRef.current = setTimeout(() => {
-      setPendingPath(null);
-    }, 3000);
+  const handleNav = (href: string) => {
+    closeSearch();
+    navigate(href);
   };
 
   const navigateToCreator = (u: string) => {
-    pendingClose.current = true;
-    router.push(`/${u}`);
+    closeSearch();
+    navigate(`/${u}`);
   };
 
   return (
@@ -152,38 +133,23 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
         <div
           className="md:hidden"
           style={{
-            position:        "fixed",
-            top:             0,
-            left:            0,
-            right:           0,
-            zIndex:          100,
-            backgroundColor: "#13131F",
-            borderBottom:    "1px solid #1F1F2A",
-            height:          "56px",
-            fontFamily:      "'Inter', sans-serif",
-            transform:       headerVisible ? "translateY(0)" : "translateY(-100%)",
-            transition:      "transform 0.25s ease",
+            position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+            backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A",
+            height: "56px", fontFamily: "'Inter', sans-serif",
+            transform: headerVisible ? "translateY(0)" : "translateY(-100%)",
+            transition: "transform 0.25s ease",
           }}
         >
-          {/* Default state — logo + icons */}
+          {/* Default state */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
             <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
-
-            {/* Right icons — Search + Bell */}
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <button
-                onClick={() => setSearchOpen(true)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
-              >
+              <button onClick={() => setSearchOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
                 <Search size={22} strokeWidth={1.8} />
               </button>
-              <Link
-                href="/notifications"
-                onClick={() => handleNavClick("/notifications")}
-                style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2" }}
-              >
+              <button onClick={() => handleNav("/notifications")} style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2", background: "none", border: "none", cursor: "pointer" }}>
                 <Bell size={22} strokeWidth={1.8} />
-              </Link>
+              </button>
             </div>
           </div>
 
@@ -262,23 +228,23 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
       <div className="hidden md:flex" style={{ width: "280px", flexShrink: 0, height: "100vh", backgroundColor: "#13131F", borderRight: "1px solid #1F1F2A", flexDirection: "column", padding: "24px 16px", position: "sticky", top: 0, overflowY: "hidden", fontFamily: "'Inter', sans-serif" }}>
         <div style={{ padding: "0 12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: "26px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
-          <Link href="/become-a-creator" style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 10px", borderRadius: "20px", textDecoration: "none", background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(109,40,217,0.15))", border: "1px solid rgba(139,92,246,0.35)", fontSize: "11px", fontWeight: 600, color: "#A78BFA", whiteSpace: "nowrap" }}>
+          <button onClick={() => handleNav("/become-a-creator")} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 10px", borderRadius: "20px", cursor: "pointer", background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(109,40,217,0.15))", border: "1px solid rgba(139,92,246,0.35)", fontSize: "11px", fontWeight: 600, color: "#A78BFA", whiteSpace: "nowrap", fontFamily: "'Inter', sans-serif" }}>
             ✦ Creator
-          </Link>
+          </button>
         </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
           {navItems.map(({ label, href, icon: Icon }) => {
             const active = isActive(href);
             return (
-              <Link key={href} href={href} onClick={() => handleNavClick(href)}
-                style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", textDecoration: "none", backgroundColor: active ? "#1E1E2E" : "transparent", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease" }}
+              <button key={href} onClick={() => handleNav(href)}
+                style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", background: active ? "#1E1E2E" : "none", border: "none", cursor: "pointer", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease", width: "100%", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
                 onMouseEnter={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "#1A1A2E"; e.currentTarget.style.color = "#F1F5F9"; }}}
                 onMouseLeave={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; }}}
               >
                 <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
                 {label}
-              </Link>
+              </button>
             );
           })}
 
@@ -291,14 +257,14 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
             const href   = `/${username}`;
             const active = isActive(href);
             return (
-              <Link href={href} onClick={() => handleNavClick(href)}
-                style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", textDecoration: "none", backgroundColor: active ? "#1E1E2E" : "transparent", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease" }}
+              <button onClick={() => handleNav(href)}
+                style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", background: active ? "#1E1E2E" : "none", border: "none", cursor: "pointer", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease", width: "100%", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
                 onMouseEnter={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "#1A1A2E"; e.currentTarget.style.color = "#F1F5F9"; }}}
                 onMouseLeave={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; }}}
               >
                 <User size={22} strokeWidth={active ? 2.2 : 1.8} />
                 My Profile
-              </Link>
+              </button>
             );
           })()}
 
@@ -311,14 +277,14 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
             More
           </button>
 
-          <Link href="/create" onClick={() => handleNavClick("/create")}
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "13px 16px", borderRadius: "30px", textDecoration: "none", background: "linear-gradient(to right, #8B5CF6, #EC4899)", color: "#fff", fontSize: "15px", fontWeight: 700, marginTop: "16px", transition: "opacity 0.15s ease" }}
+          <button onClick={() => handleNav("/create")}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "13px 16px", borderRadius: "30px", border: "none", cursor: "pointer", background: "linear-gradient(to right, #8B5CF6, #EC4899)", color: "#fff", fontSize: "15px", fontWeight: 700, marginTop: "16px", transition: "opacity 0.15s ease", fontFamily: "'Inter', sans-serif" }}
             onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
             <Plus size={20} strokeWidth={2.5} />
             New Post
-          </Link>
+          </button>
         </nav>
       </div>
 

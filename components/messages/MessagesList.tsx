@@ -13,6 +13,7 @@ interface Props {
   currentUserId?: string;
   isTyping?:      boolean;
   onReply?:       (message: Message) => void;
+  onDelete?:      (message: Message, deleteFor: "me" | "everyone") => void;
   onLoadMore?:    () => void;
   hasMore?:       boolean;
   loadingMore?:   boolean;
@@ -42,11 +43,6 @@ function formatMessageTime(raw: string): string {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-// 3-state tick:
-// sending   → clock icon (grey)
-// sent      → single grey tick
-// delivered → double grey tick
-// read      → double purple tick
 function ReadTick({ status, isDelivered, isRead }: { status?: string; isDelivered?: boolean; isRead: boolean }) {
   if (status === "sending") {
     return (
@@ -87,8 +83,16 @@ function ReadTick({ status, isDelivered, isRead }: { status?: string; isDelivere
   );
 }
 
-function getMediaItems(msg: Message): { url: string; type: "image" | "video" }[] {
-  return (msg.mediaUrls ?? []).filter(Boolean).map((url) => ({
+function getMediaItems(msg: Message, isOwn: boolean): { url: string; type: "image" | "video" }[] {
+  const urls = msg.mediaUrls ?? [];
+
+  // Locked PPV for receiver — return placeholders so locked UI renders
+  if (msg.type === "ppv" && !isOwn && !msg.ppv?.isUnlocked) {
+    const count = urls.length > 0 ? urls.length : 1;
+    return Array.from({ length: count }, () => ({ url: "", type: "image" as const }));
+  }
+
+  return urls.filter(Boolean).map((url) => ({
     url,
     type: url.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || url.includes('#video') ? "video" : "image",
   }));
@@ -135,16 +139,146 @@ function MediaSwipeWrapper({ isOwn, onReply, children }: { isOwn: boolean; onRep
       onTouchEnd={onTouchEnd}
       onTouchCancel={onTouchEnd}
       style={{
-        transform:   `translateX(${swipeX}px)`,
-        transition:  swiping ? "none" : "transform 0.25s ease",
-        touchAction: "pan-y",
-        display:     "flex",
-        width:       "100%",
+        transform:      `translateX(${swipeX}px)`,
+        transition:     swiping ? "none" : "transform 0.25s ease",
+        touchAction:    "pan-y",
+        display:        "flex",
+        width:          "100%",
         justifyContent: isOwn ? "flex-end" : "flex-start",
       }}
     >
       {children}
     </div>
+  );
+}
+
+function MediaBubble({
+  msg, isOwn, isSameGroup, conversation, mediaItems, unlocking,
+  onReply, onDelete, onUnlock, onOpenLightbox, currentUserId,
+}: {
+  msg: Message; isOwn: boolean; isSameGroup: boolean;
+  conversation: Conversation;
+  mediaItems: { url: string; type: "image" | "video" }[];
+  unlocking: Set<number>;
+  onReply?: (msg: Message) => void;
+  onDelete?: (msg: Message, deleteFor: "me" | "everyone") => void;
+  onUnlock: (msg: Message) => void;
+  onOpenLightbox: (msg: Message, i: number) => void;
+  currentUserId: string;
+}) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didMove        = useRef(false);
+
+  const startPress = () => {
+    didMove.current = false;
+    longPressTimer.current = setTimeout(() => {
+      if (!didMove.current) setSheetOpen(true);
+    }, 500);
+  };
+  const cancelPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  };
+  const onMove = () => { didMove.current = true; cancelPress(); };
+
+  const sheetItems = [
+    { label: "Reply", action: () => { onReply?.(msg); setSheetOpen(false); }, danger: false },
+    { label: "Delete for me", action: () => { onDelete?.(msg, "me"); setSheetOpen(false); }, danger: true },
+    ...(isOwn ? [{ label: "Delete for everyone", action: () => { onDelete?.(msg, "everyone"); setSheetOpen(false); }, danger: true }] : []),
+    { label: "Cancel", action: () => setSheetOpen(false), danger: true },
+  ];
+
+  return (
+    <>
+      <style>{`@keyframes sheetUp2 { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
+      {sheetOpen && (
+        <>
+          <div onClick={() => setSheetOpen(false)} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", zIndex: 300 }} />
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, backgroundColor: "#1C1C2E", borderRadius: "20px 20px 0 0", padding: "12px 0 32px", zIndex: 301, fontFamily: "'Inter',sans-serif", animation: "sheetUp2 0.22s ease" }}>
+            <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", margin: "0 auto 16px" }} />
+            <div style={{ padding: "0 20px 12px", borderBottom: "1px solid #2A2A3D", marginBottom: "8px" }}>
+              <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2" }}>{msg.type === "ppv" ? "🔒 PPV Media" : "📷 Media"}</p>
+            </div>
+            {sheetItems.map(({ label, action, danger }) => (
+              <button key={label} onClick={action}
+                style={{ display: "flex", alignItems: "center", width: "100%", padding: "14px 20px", background: "none", border: "none", cursor: "pointer", color: danger ? "#EF4444" : "#FFFFFF", fontSize: "15px", fontFamily: "'Inter',sans-serif", textAlign: "left" }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+              >{label}</button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div
+        onTouchStart={startPress}
+        onTouchMove={onMove}
+        onTouchEnd={cancelPress}
+        onTouchCancel={cancelPress}
+        onContextMenu={(e) => { e.preventDefault(); setSheetOpen(true); }}
+        style={{
+          display: "flex", flexDirection: isOwn ? "row-reverse" : "row",
+          alignItems: "flex-end", gap: "8px", maxWidth: "75%",
+          userSelect: "none", WebkitUserSelect: "none",
+        }}
+      >
+        {!isOwn && !isSameGroup && <InlineAvatar src={conversation.participant.avatarUrl} name={conversation.participant.name} />}
+        {!isOwn && isSameGroup  && <div style={{ width: "36px", flexShrink: 0 }} />}
+
+        <div style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
+          <MediaGrid
+            mediaItems={mediaItems}
+            isPPV={msg.type === "ppv"}
+            price={msg.ppv?.price}
+            isUnlocked={isOwn || msg.ppv?.isUnlocked}
+            thumbnailUrl={msg.thumbnailUrl}
+            onClickItem={(i) => onOpenLightbox(msg, i)}
+            isSending={msg.status === "sending"}
+            uploadProgress={msg.uploadProgress}
+            isFailed={msg.status === "failed"}
+          />
+
+          {msg.text && (
+            <div style={{ padding: "8px 12px 4px" }}>
+              <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2", lineHeight: 1.4 }}>{msg.text}</p>
+            </div>
+          )}
+
+          {msg.type === "ppv" && msg.ppv && !msg.ppv.isUnlocked && !isOwn && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderTop: "1px solid #2A2A3D" }}>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#F5A623" }}>₦{(msg.ppv.price / 100).toLocaleString()} to unlock</span>
+              <button onClick={() => onUnlock(msg)} disabled={unlocking.has(msg.id)}
+                style={{ padding: "6px 14px", borderRadius: "20px", border: "none", cursor: unlocking.has(msg.id) ? "default" : "pointer", backgroundColor: unlocking.has(msg.id) ? "#4A4A6A" : "#8B5CF6", color: "#FFFFFF", fontSize: "13px", fontWeight: 600, fontFamily: "'Inter',sans-serif", transition: "background-color 0.15s" }}>
+                {unlocking.has(msg.id) ? "Unlocking..." : "Unlock"}
+              </button>
+            </div>
+          )}
+
+          {msg.type === "ppv" && msg.ppv && isOwn && (
+            <div style={{ padding: "4px 12px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "11px", color: "#4A4A6A" }}>₦{(msg.ppv.price / 100).toLocaleString()} · {msg.ppv.unlockedCount} unlocked</span>
+              <ReadTick status={msg.status} isDelivered={msg.isDelivered} isRead={msg.isRead ?? false} />
+            </div>
+          )}
+
+          {msg.type === "ppv" && msg.ppv?.isUnlocked && !isOwn && (
+            <div style={{ padding: "6px 12px 8px", display: "flex", alignItems: "center", gap: "6px" }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 7L5.5 10.5L12 3" stroke="#10B981" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{ fontSize: "12px", color: "#10B981", fontWeight: 600 }}>Unlocked</span>
+              <span style={{ fontSize: "12px", color: "#4A4A6A" }}>· ₦{(msg.ppv.price / 100).toLocaleString()} paid</span>
+            </div>
+          )}
+
+          {isOwn && msg.type !== "ppv" && (
+            <div style={{ padding: "2px 8px 6px", display: "flex", justifyContent: "flex-end" }}>
+              <ReadTick status={msg.status} isDelivered={msg.isDelivered} isRead={msg.isRead ?? false} />
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -154,6 +288,7 @@ export function MessagesList({
   currentUserId = "me",
   isTyping = false,
   onReply,
+  onDelete,
   onLoadMore,
   hasMore = false,
   loadingMore = false,
@@ -161,9 +296,40 @@ export function MessagesList({
 }: Props) {
   const scrollRef         = useRef<HTMLDivElement>(null);
   const prevMessageIdsRef = useRef<Set<number>>(new Set(messages.map((m) => m.id)));
-  const [animatingIds,  setAnimatingIds]  = useState<Set<number>>(new Set());
-  const [lightbox,      setLightbox]      = useState<LightboxState | null>(null);
-  const [unlocking,     setUnlocking]     = useState<Set<number>>(new Set());
+  const prevCountRef      = useRef(messages.length);
+  const isNearBottomRef   = useRef(true);
+  const [animatingIds, setAnimatingIds] = useState<Set<number>>(new Set());
+  const [lightbox,     setLightbox]     = useState<LightboxState | null>(null);
+  const [unlocking,    setUnlocking]    = useState<Set<number>>(new Set());
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+  }, []);
+
+  const updateNearBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    isNearBottomRef.current = Math.abs(el.scrollTop) < 150;
+  }, []);
+
+  useEffect(() => {
+    const prevCount = prevCountRef.current;
+    prevCountRef.current = messages.length;
+    if (messages.length <= prevCount) return;
+    const lastMsg      = messages[messages.length - 1];
+    const isOwnMessage = lastMsg && lastMsg.senderId === currentUserId;
+    if (isOwnMessage || isNearBottomRef.current) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  }, [messages.length, messages, currentUserId, scrollToBottom]);
+
+  useEffect(() => {
+    if (isTyping && isNearBottomRef.current) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  }, [isTyping, scrollToBottom]);
 
   useEffect(() => {
     const prevIds = prevMessageIdsRef.current;
@@ -183,10 +349,12 @@ export function MessagesList({
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
-    if (!el || !onLoadMore || !hasMore || loadingMore) return;
+    if (!el) return;
+    updateNearBottom();
+    if (!onLoadMore || !hasMore || loadingMore) return;
     const distanceFromTop = el.scrollHeight + el.scrollTop - el.clientHeight;
     if (distanceFromTop < 200) onLoadMore();
-  }, [onLoadMore, hasMore, loadingMore]);
+  }, [onLoadMore, hasMore, loadingMore, updateNearBottom]);
 
   const handleUnlock = useCallback(async (msg: Message) => {
     if (unlocking.has(msg.id)) return;
@@ -216,9 +384,11 @@ export function MessagesList({
     const allMedia = messages.flatMap((m) => {
       if (!m.mediaUrls?.length) return [];
       if (m.type === "ppv" && !m.ppv?.isUnlocked && m.senderId !== currentUserId) return [];
-      return getMediaItems(m).map((item) => ({ ...item, messageId: m.id }));
+      const isOwn = m.senderId === currentUserId;
+      return getMediaItems(m, isOwn).map((item) => ({ ...item, messageId: m.id }));
     });
-    const clickedUrl  = getMediaItems(msg)[clickedIndex]?.url;
+    const isOwn      = msg.senderId === currentUserId;
+    const clickedUrl = getMediaItems(msg, isOwn)[clickedIndex]?.url;
     const globalIndex = allMedia.findIndex((item) => item.url === clickedUrl && item.messageId === msg.id);
     setLightbox({ items: allMedia, initialIndex: Math.max(0, globalIndex) });
   }, [messages, currentUserId]);
@@ -269,7 +439,8 @@ export function MessagesList({
           let i = 0;
           while (i < messages.length) {
             const msg        = messages[i];
-            const mediaItems = getMediaItems(msg);
+            const isOwn      = msg.senderId === currentUserId;
+            const mediaItems = getMediaItems(msg, isOwn);
             const isMedia    = (msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0;
             const canGroup   = isMedia && msg.type !== "ppv" && !msg.text && msg.status !== "sending" && msg.status !== "failed";
 
@@ -277,8 +448,9 @@ export function MessagesList({
               const run: { msg: Message; idx: number }[] = [{ msg, idx: i }];
               let j = i + 1;
               while (j < messages.length) {
-                const next            = messages[j];
-                const nextMedia       = getMediaItems(next);
+                const next      = messages[j];
+                const nextIsOwn = next.senderId === currentUserId;
+                const nextMedia = getMediaItems(next, nextIsOwn);
                 const nextIsGroupable = (next.type === "media" || next.type === "ppv") && nextMedia.length > 0
                   && next.type !== "ppv" && !next.text && next.status !== "sending" && next.status !== "failed"
                   && next.senderId === msg.senderId;
@@ -308,7 +480,7 @@ export function MessagesList({
               const showTime      = !prevMsg || (
                 new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime() > 5 * 60 * 1000
               );
-              const mediaItems = getMediaItems(msg);
+              const mediaItems = getMediaItems(msg, isOwn);
 
               return (
                 <div key={`${ri}-${msg.tempId ?? msg.id}`} className={animatingIds.has(msg.id) ? "msg-fade-in" : ""} style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}>
@@ -327,68 +499,26 @@ export function MessagesList({
                       isDelivered={msg.isDelivered ?? false}
                       time={formatMessageTime(msg.createdAt)}
                       onReply={onReply}
+                      onDelete={onDelete}
                       replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
                     />
                   )}
 
                   {(msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0 && (
                     <MediaSwipeWrapper isOwn={isOwn} onReply={() => onReply?.(msg)}>
-                    <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "8px", maxWidth: "75%" }}>
-                      {!isOwn && !isSameGroup && <InlineAvatar src={conversation.participant.avatarUrl} name={conversation.participant.name} />}
-                      {!isOwn && isSameGroup  && <div style={{ width: "36px", flexShrink: 0 }} />}
-
-                      <div style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
-                        <MediaGrid
-                          mediaItems={mediaItems}
-                          isPPV={msg.type === "ppv"}
-                          price={msg.ppv?.price}
-                          isUnlocked={isOwn || msg.ppv?.isUnlocked}
-                          onClickItem={(i) => openLightbox(msg, i)}
-                          isSending={msg.status === "sending"}
-                          uploadProgress={msg.uploadProgress}
-                          isFailed={msg.status === "failed"}
-                        />
-
-                        {msg.text && (
-                          <div style={{ padding: "8px 12px 4px" }}>
-                            <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2", lineHeight: 1.4 }}>{msg.text}</p>
-                          </div>
-                        )}
-
-                        {msg.type === "ppv" && msg.ppv && !msg.ppv.isUnlocked && !isOwn && (
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderTop: "1px solid #2A2A3D" }}>
-                            <span style={{ fontSize: "13px", fontWeight: 600, color: "#F5A623" }}>₦{(msg.ppv.price / 100).toLocaleString()} to unlock</span>
-                            <button onClick={() => handleUnlock(msg)} disabled={unlocking.has(msg.id)}
-                              style={{ padding: "6px 14px", borderRadius: "20px", border: "none", cursor: unlocking.has(msg.id) ? "default" : "pointer", backgroundColor: unlocking.has(msg.id) ? "#4A4A6A" : "#8B5CF6", color: "#FFFFFF", fontSize: "13px", fontWeight: 600, fontFamily: "'Inter',sans-serif", transition: "background-color 0.15s" }}>
-                              {unlocking.has(msg.id) ? "Unlocking..." : "Unlock"}
-                            </button>
-                          </div>
-                        )}
-
-                        {msg.type === "ppv" && msg.ppv && isOwn && (
-                          <div style={{ padding: "4px 12px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <span style={{ fontSize: "11px", color: "#4A4A6A" }}>₦{(msg.ppv.price / 100).toLocaleString()} · {msg.ppv.unlockedCount} unlocked</span>
-                            <ReadTick status={msg.status} isDelivered={msg.isDelivered} isRead={msg.isRead ?? false} />
-                          </div>
-                        )}
-
-                        {msg.type === "ppv" && msg.ppv?.isUnlocked && !isOwn && (
-                          <div style={{ padding: "6px 12px 8px", display: "flex", alignItems: "center", gap: "6px" }}>
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                              <path d="M2 7L5.5 10.5L12 3" stroke="#10B981" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                            <span style={{ fontSize: "12px", color: "#10B981", fontWeight: 600 }}>Unlocked</span>
-                            <span style={{ fontSize: "12px", color: "#4A4A6A" }}>· ₦{(msg.ppv.price / 100).toLocaleString()} paid</span>
-                          </div>
-                        )}
-
-                        {isOwn && msg.type !== "ppv" && (
-                          <div style={{ padding: "2px 8px 6px", display: "flex", justifyContent: "flex-end" }}>
-                            <ReadTick status={msg.status} isDelivered={msg.isDelivered} isRead={msg.isRead ?? false} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                      <MediaBubble
+                        msg={msg}
+                        isOwn={isOwn}
+                        isSameGroup={!!isSameGroup}
+                        conversation={conversation}
+                        mediaItems={mediaItems}
+                        unlocking={unlocking}
+                        onReply={onReply}
+                        onDelete={onDelete}
+                        onUnlock={handleUnlock}
+                        onOpenLightbox={openLightbox}
+                        currentUserId={currentUserId}
+                      />
                     </MediaSwipeWrapper>
                   )}
                 </div>
@@ -406,7 +536,7 @@ export function MessagesList({
               new Date(firstMsg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime() > 5 * 60 * 1000
             );
             const allGroupMedia = groupMsgs.flatMap((m) =>
-              getMediaItems(m).map((mi) => ({ ...mi, messageId: m.id }))
+              getMediaItems(m, isOwn).map((mi) => ({ ...mi, messageId: m.id }))
             );
             const gridItems = allGroupMedia.map((mi) => ({ url: mi.url, type: mi.type }));
             const groupKey  = groupMsgs.map((m) => m.tempId ?? m.id).join("-");
@@ -415,7 +545,8 @@ export function MessagesList({
               const allConvoMedia = messages.flatMap((m) => {
                 if (!m.mediaUrls?.length) return [];
                 if (m.type === "ppv" && !m.ppv?.isUnlocked && m.senderId !== currentUserId) return [];
-                return getMediaItems(m).map((mi) => ({ ...mi, messageId: m.id }));
+                const mIsOwn = m.senderId === currentUserId;
+                return getMediaItems(m, mIsOwn).map((mi) => ({ ...mi, messageId: m.id }));
               });
               const clickedUrl   = allGroupMedia[clickedIndex]?.url;
               const clickedMsgId = allGroupMedia[clickedIndex]?.messageId;

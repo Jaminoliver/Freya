@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { BadgeCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { EmptyState } from "@/components/messages/EmptyState";
 import { getBrowserClient } from "@/lib/supabase/browserClient";
 import { getAuthenticatedBrowserClient } from "@/lib/supabase/browserClient";
@@ -20,6 +22,7 @@ let   typingConvIds    = new Set<number>();
 const typingChannels   = new Map<number, any>();
 
 const messageCache = new Map<number, { messages: Message[]; timestamp: number }>();
+let sortDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function getCachedMessages(conversationId: number): Message[] | null {
   const entry = messageCache.get(conversationId);
@@ -46,6 +49,14 @@ export function appendCachedMessage(conversationId: number, message: Message) {
   messageCache.set(conversationId, { messages: [...entry.messages, message], timestamp: Date.now() });
 }
 
+function sortConversations(convs: Conversation[]): Conversation[] {
+  return [...convs].sort((a, b) => {
+    if (!a.lastMessage && b.lastMessage) return 1;
+    if (a.lastMessage && !b.lastMessage) return -1;
+    return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
+  });
+}
+
 export function setActiveConversation(id: number | null) {
   if (activeConversationId !== null && id === null) {
     updateConversations((prev) =>
@@ -63,8 +74,12 @@ export function updateConversations(updater: Conversation[] | ((prev: Conversati
   const next = typeof updater === "function"
     ? updater(cachedConversations ?? [])
     : updater;
-  cachedConversations = next;
-  listeners.forEach((fn) => fn(next));
+  cachedConversations = sortConversations(next);
+  if (sortDebounceTimer) clearTimeout(sortDebounceTimer);
+  sortDebounceTimer = setTimeout(() => {
+    sortDebounceTimer = null;
+    listeners.forEach((fn) => fn(cachedConversations!));
+  }, 80);
 }
 
 function setTyping(conversationId: number, isTyping: boolean) {
@@ -103,7 +118,6 @@ export function sendTypingEvent(conversationId: number, userId: string) {
 }
 
 function startGlobalRealtime() {
-  // FIX: removed realtimeStarted flag — now checks channel status instead
   if (realtimeChannel) return;
 
   getAuthenticatedBrowserClient().then((supabase) => {
@@ -131,6 +145,8 @@ function startGlobalRealtime() {
           isOwn,
           hasDispatcher:  !!messageDispatcher,
           activeConvId:   activeConversationId,
+          isPPV:          row.is_ppv,
+          mediaType:      row.media_type,
         });
 
         setTyping(row.conversation_id, false);
@@ -147,10 +163,10 @@ function startGlobalRealtime() {
           }).catch((e) => console.error("[deliver] failed:", e));
         }
 
-        // For media/ppv messages: skip on INSERT — media still uploading
-        if (row.media_type) {
-          updateConversations((prev) => {
-            const updated = prev.map((c) => {
+        // Normal media (non-PPV) — update sidebar only, UPDATE event will dispatch to chat
+        if (row.media_type && !row.is_ppv) {
+          updateConversations((prev) =>
+            prev.map((c) => {
               if (c.id !== row.conversation_id) return c;
               return {
                 ...c,
@@ -159,16 +175,29 @@ function startGlobalRealtime() {
                 unreadCount:   c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
                 hasMedia:      true,
               };
-            });
-            return [...updated].sort((a, b) => {
-              if (!a.lastMessage && b.lastMessage) return 1;
-              if (a.lastMessage && !b.lastMessage) return -1;
-              return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
-            });
-          });
+            })
+          );
           return;
         }
 
+        // PPV — update sidebar only, wait for UPDATE with thumbnail_url to dispatch to chat
+        if (row.is_ppv) {
+          updateConversations((prev) =>
+            prev.map((c) => {
+              if (c.id !== row.conversation_id) return c;
+              return {
+                ...c,
+                lastMessage:   "🔒 PPV message",
+                lastMessageAt: row.created_at,
+                unreadCount:   c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
+                hasMedia:      true,
+              };
+            })
+          );
+          return;
+        }
+
+        // Text message
         const newMessage: Message = {
           id:             row.id,
           conversationId: row.conversation_id,
@@ -176,7 +205,7 @@ function startGlobalRealtime() {
           type:           "text",
           text:           row.content ?? "",
           isRead:         row.is_read ?? false,
-          isDelivered:    true, // receiver just got it
+          isDelivered:    true,
           createdAt:      row.created_at,
           replyToId:      row.reply_to_id ?? null,
         };
@@ -184,8 +213,8 @@ function startGlobalRealtime() {
         appendCachedMessage(row.conversation_id, newMessage);
         if (messageDispatcher) messageDispatcher(newMessage);
 
-        updateConversations((prev) => {
-          const updated = prev.map((c) => {
+        updateConversations((prev) =>
+          prev.map((c) => {
             if (c.id !== row.conversation_id) return c;
             return {
               ...c,
@@ -194,13 +223,8 @@ function startGlobalRealtime() {
               unreadCount:   c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
               hasMedia:      false,
             };
-          });
-          return [...updated].sort((a, b) => {
-            if (!a.lastMessage && b.lastMessage) return 1;
-            if (a.lastMessage && !b.lastMessage) return -1;
-            return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
-          });
-        });
+          })
+        );
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (payload: any) => {
         const row = payload.new as any;
@@ -219,7 +243,74 @@ function startGlobalRealtime() {
           hadMediaUrl:  !!old.media_url,
         });
 
-        // Update delivery/read status on sender's side
+        if (row.is_deleted_for_everyone) {
+          console.log("[Realtime UPDATE] skipping — deleted for everyone");
+          if (messageDispatcher && row.conversation_id === activeConversationId) {
+            messageDispatcher({
+              id:              row.id,
+              conversationId:  row.conversation_id,
+              senderId:        row.sender_id,
+              type:            "text",
+              text:            "This message was deleted",
+              isRead:          row.is_read ?? false,
+              isDelivered:     false,
+              createdAt:       row.created_at,
+              isDeleted:       true,
+              _isStatusUpdate: true,
+            } as any);
+          }
+          return;
+        }
+
+        const isCreatorUser = row.sender_id === currentUserId || row.receiver_id === currentUserId;
+        if (isCreatorUser) {
+          if (row.deleted_for_creator || row.deleted_for_fan) {
+            console.log("[Realtime UPDATE] skipping — soft-deleted for a user");
+            return;
+          }
+        }
+
+        // PPV thumbnail available — dispatch as new message
+        // Don't rely on old.thumbnail_url (DEFAULT replica identity may not include it)
+        // Instead check cache: only dispatch if this message isn't already cached with a thumbnail
+        if (row.is_ppv && row.thumbnail_url) {
+          const isReceiver = row.receiver_id === currentUserId;
+          const isSender   = row.sender_id === currentUserId;
+
+          if (isSender || isReceiver) {
+            // Skip if already cached with thumbnail (avoid duplicate on read receipt updates)
+            const cached = messageCache.get(row.conversation_id);
+            const alreadyHasThumbnail = cached?.messages.some(
+              (m) => m.id === row.id && m.thumbnailUrl
+            );
+            if (alreadyHasThumbnail) return;
+
+            const ppvMessage: Message = {
+              id:             row.id,
+              conversationId: row.conversation_id,
+              senderId:       row.sender_id,
+              type:           "ppv",
+              text:           row.content ?? undefined,
+              mediaUrls:      isSender ? (row.media_url ? [row.media_url] : []) : [],
+              thumbnailUrl:   row.thumbnail_url,
+              isRead:         row.is_read ?? false,
+              isDelivered:    true,
+              createdAt:      row.created_at,
+              replyToId:      row.reply_to_id ?? null,
+              ppv: {
+                price:         row.ppv_price ?? 0,
+                isUnlocked:    isSender,
+                unlockedCount: 0,
+              },
+            };
+            appendCachedMessage(row.conversation_id, ppvMessage);
+            if (messageDispatcher && row.conversation_id === activeConversationId) {
+              messageDispatcher(ppvMessage);
+            }
+          }
+          return;
+        }
+
         if (row.sender_id === currentUserId) {
           const entry = messageCache.get(row.conversation_id);
           if (entry) {
@@ -251,9 +342,7 @@ function startGlobalRealtime() {
         if (!row.media_type || !row.media_url) return;
         if (old.media_url) return;
 
-        const mediaMessage: Message = row.is_ppv
-          ? { id: row.id, conversationId: row.conversation_id, senderId: row.sender_id, type: "ppv", text: row.content ?? undefined, mediaUrls: row.media_url ? [row.media_url] : [], thumbnailUrl: row.thumbnail_url ?? null, ppv: { price: row.ppv_price ?? 0, isUnlocked: row.is_unlocked ?? false, unlockedCount: 0 }, isRead: row.is_read ?? false, isDelivered: true, createdAt: row.created_at, replyToId: row.reply_to_id ?? null }
-          : { id: row.id, conversationId: row.conversation_id, senderId: row.sender_id, type: "media", text: row.content ?? undefined, mediaUrls: row.media_url ? [row.media_url] : [], thumbnailUrl: row.thumbnail_url ?? null, isRead: row.is_read ?? false, isDelivered: true, createdAt: row.created_at, replyToId: row.reply_to_id ?? null };
+        const mediaMessage: Message = { id: row.id, conversationId: row.conversation_id, senderId: row.sender_id, type: "media", text: row.content ?? undefined, mediaUrls: row.media_url ? [row.media_url] : [], thumbnailUrl: row.thumbnail_url ?? null, isRead: row.is_read ?? false, isDelivered: true, createdAt: row.created_at, replyToId: row.reply_to_id ?? null };
 
         appendCachedMessage(row.conversation_id, mediaMessage);
         if (messageDispatcher) messageDispatcher(mediaMessage);
@@ -273,10 +362,7 @@ function startGlobalRealtime() {
                 if (data.conversation) {
                   updateConversations((p) => {
                     if (p.some((c) => c.id === row.id)) return p;
-                    const next = [data.conversation, ...p];
-                    return next.sort((a, b) =>
-                      new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()
-                    );
+                    return [data.conversation, ...p];
                   });
                   getAuthenticatedBrowserClient().then((sb) => subscribeTyping(sb, row.id));
                 }
@@ -314,7 +400,6 @@ function startGlobalRealtime() {
           if (deadChannel) {
             supabase.removeChannel(deadChannel).catch(() => {});
           }
-          // Only reconnect on CHANNEL_ERROR to avoid double-reconnect
           if (status === "CHANNEL_ERROR") {
             setTimeout(() => startGlobalRealtime(), 2000);
           }
@@ -352,8 +437,8 @@ export function useConversations() {
       })
       .then((data) => {
         const convs = data.conversations ?? [];
-        cachedConversations = convs;
-        listeners.forEach((fn) => fn(convs));
+        cachedConversations = sortConversations(convs);
+        listeners.forEach((fn) => fn(cachedConversations!));
         getAuthenticatedBrowserClient().then((supabase) => {
           convs.forEach((c: Conversation) => subscribeTyping(supabase, c.id));
         });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useNav } from "@/lib/hooks/useNav";
 
 interface Fan {
   id: string;
@@ -24,15 +24,16 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function FansSettings({ onBack }: { onBack?: () => void }) {
-  const router = useRouter();
+  const { navigate } = useNav();
 
   const handleBack = () => {
     if (window.history.length > 1) {
-      router.back();
+      window.history.back();
     } else if (onBack) {
       onBack();
     }
   };
+
   const [fans, setFans] = useState<Fan[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "active" | "expired" | "cancelled">("all");
@@ -110,10 +111,7 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
       {loading ? (
         <p style={{ fontSize: "12px", color: "#6B6B8A" }}>Loading...</p>
       ) : fans.length === 0 ? (
-        <div style={{
-          backgroundColor: "#1C1C2E", border: "1.5px dashed #2A2A3D",
-          borderRadius: "10px", padding: "32px 16px", textAlign: "center",
-        }}>
+        <div style={{ backgroundColor: "#1C1C2E", border: "1.5px dashed #2A2A3D", borderRadius: "10px", padding: "32px 16px", textAlign: "center" }}>
           <p style={{ fontSize: "13px", color: "#6B6B8A", margin: 0 }}>No fans yet</p>
         </div>
       ) : (
@@ -129,13 +127,13 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
             >
               {/* Avatar — clickable */}
               <button
-                onClick={() => router.push(`/${fan.username}?from=fans`)}
+                onClick={() => navigate(`/${fan.username}`)}
                 style={{
                   width: "40px", height: "40px", borderRadius: "50%",
                   flexShrink: 0, overflow: "hidden", border: "none",
                   cursor: "pointer", padding: 0, background: "none",
                 }}
-                title={`View ${fan.username}'s profile`}
+                title={`View @${fan.username}'s profile`}
               >
                 {fan.avatar_url ? (
                   <img
@@ -157,11 +155,8 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <button
-                  onClick={() => router.push(`/${fan.username}?from=fans`)}
-                  style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    padding: 0, textAlign: "left",
-                  }}
+                  onClick={() => navigate(`/${fan.username}`)}
+                  style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
                 >
                   <p style={{
                     fontSize: "13px", fontWeight: 600, color: "#F1F5F9",
@@ -172,7 +167,13 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
                   </p>
                 </button>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: "11px", color: "#6B6B8A" }}>@{fan.username}</span>
+                  {/* @username in app purple */}
+                  <button
+                    onClick={() => navigate(`/${fan.username}`)}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  >
+                    <span style={{ fontSize: "11px", color: "#8B5CF6", fontWeight: 500 }}>@{fan.username}</span>
+                  </button>
                   <span style={{
                     fontSize: "10px", fontWeight: 600,
                     color: STATUS_COLOR[fan.status],

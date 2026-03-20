@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { User, Bookmark, Settings, Wallet, HelpCircle, LogOut, X, Sparkles, Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAppStore } from "@/lib/store/appStore";
+import { useNav } from "@/lib/hooks/useNav";
 
 interface MoreDrawerProps {
   isOpen: boolean;
@@ -13,7 +13,7 @@ interface MoreDrawerProps {
 }
 
 export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
-  const router  = useRouter();
+  const { navigate } = useNav();
   const viewer  = useAppStore((s) => s.viewer);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -30,10 +30,10 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
     onClose();
   };
 
-  const navigate = (href: string) => {
+  const handleNav = (href: string) => {
     if (href === "#") return;
-    router.push(href);
     onClose();
+    navigate(href);
   };
 
   const navItems = [
@@ -48,56 +48,25 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
 
   return (
     <>
-      {/* Backdrop */}
       <div
         onClick={onClose}
-        style={{
-          position: "fixed", inset: 0, zIndex: 200,
-          backgroundColor: "rgba(0,0,0,0.6)",
-          backdropFilter: "blur(2px)",
-          animation: "fadeIn 0.2s ease",
-        }}
+        style={{ position: "fixed", inset: 0, zIndex: 200, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", animation: "fadeIn 0.2s ease" }}
       />
 
-      {/* Drawer */}
       <div
-        style={{
-          position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 201,
-          backgroundColor: "#13131F",
-          borderTop: "1px solid #2A2A3D",
-          borderRadius: "20px 20px 0 0",
-          padding: "12px 0 32px",
-          animation: "slideUp 0.25s ease",
-          fontFamily: "'Inter', sans-serif",
-          maxWidth: "480px",
-          margin: "0 auto",
-        }}
+        style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 201, backgroundColor: "#13131F", borderTop: "1px solid #2A2A3D", borderRadius: "20px 20px 0 0", padding: "12px 0 32px", animation: "slideUp 0.25s ease", fontFamily: "'Inter', sans-serif", maxWidth: "480px", margin: "0 auto" }}
       >
-        {/* Handle */}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D" }} />
         </div>
 
-        {/* Close */}
-        <button
-          onClick={onClose}
-          style={{ position: "absolute", top: "16px", right: "16px", background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex" }}
-        >
+        <button onClick={onClose} style={{ position: "absolute", top: "16px", right: "16px", background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex" }}>
           <X size={20} />
         </button>
 
-        {/* User info */}
         {viewer ? (
-          <div
-            onClick={() => navigate(`/${viewer.username}`)}
-            style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 20px 16px", cursor: "pointer", borderBottom: "1px solid #1F1F2A", marginBottom: "8px" }}
-          >
-            <Avatar
-              src={viewer.avatar_url ? viewer.avatar_url : undefined}
-              alt={viewer.display_name || viewer.username}
-              size="md"
-              showRing
-            />
+          <div onClick={() => handleNav(`/${viewer.username}`)} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 20px 16px", cursor: "pointer", borderBottom: "1px solid #1F1F2A", marginBottom: "8px" }}>
+            <Avatar src={viewer.avatar_url ? viewer.avatar_url : undefined} alt={viewer.display_name || viewer.username} size="md" showRing />
             <div>
               <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#F1F5F9" }}>{viewer.display_name || viewer.username}</p>
               <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A" }}>@{viewer.username}</p>
@@ -113,12 +82,8 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
           </div>
         )}
 
-        {/* Nav items */}
         {navItems.map(({ label, icon: Icon, href }) => (
-          <button
-            key={label}
-            onClick={() => navigate(href)}
-            disabled={href === "#"}
+          <button key={label} onClick={() => handleNav(href)} disabled={href === "#"}
             style={{ width: "100%", display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px", background: "none", border: "none", cursor: href === "#" ? "default" : "pointer", fontFamily: "'Inter', sans-serif", transition: "background 0.15s", opacity: href === "#" ? 0.4 : 1 }}
             onMouseEnter={(e) => { if (href !== "#") e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
@@ -128,9 +93,7 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
           </button>
         ))}
 
-        {/* Become a Creator */}
-        <button
-          onClick={() => navigate("/become-a-creator")}
+        <button onClick={() => handleNav("/become-a-creator")}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "background 0.15s" }}
           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
@@ -141,9 +104,7 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
 
         <div style={{ height: "1px", backgroundColor: "#1F1F2A", margin: "8px 0" }} />
 
-        {/* Help */}
-        <button
-          onClick={() => navigate("/help")}
+        <button onClick={() => handleNav("/help")}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "background 0.15s" }}
           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
@@ -152,10 +113,7 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
           <span style={{ fontSize: "15px", color: "#F1F5F9", fontWeight: 500 }}>Help & Support</span>
         </button>
 
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
+        <button onClick={handleLogout} disabled={loggingOut}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px", background: "none", border: "none", cursor: loggingOut ? "default" : "pointer", fontFamily: "'Inter', sans-serif", transition: "background 0.15s", opacity: loggingOut ? 0.5 : 1 }}
           onMouseEnter={(e) => { if (!loggingOut) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}

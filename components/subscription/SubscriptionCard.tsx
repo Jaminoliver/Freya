@@ -2,9 +2,8 @@
 
 import { useState, useMemo } from "react";
 import { MoreHorizontal, BadgeCheck, Star, MessageCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
+import { useNav } from "@/lib/hooks/useNav";
 
 type SubscriptionStatus = "active" | "expired" | "attention";
 
@@ -83,10 +82,9 @@ export function SubscriptionCard({
   subscription: Subscription;
   onCancelled?: () => void;
 }) {
-  const router = useRouter();
-  const [menuOpen,    setMenuOpen]    = useState(false);
-  const [cancelling,  setCancelling]  = useState(false);
-  const [messaging,   setMessaging]   = useState(false);
+  const { navigate } = useNav();
+  const [menuOpen,   setMenuOpen]   = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const handleCancel = async () => {
     if (!confirm("Cancel subscription? You'll keep access until the period ends.")) return;
@@ -104,33 +102,27 @@ export function SubscriptionCard({
     }
   };
 
-  const handleMessage = async (e: React.MouseEvent) => {
+  const handleMessage = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (messaging) return;
-    setMessaging(true);
-    try {
-      const res  = await fetch("/api/conversations", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ targetUserId: s.creatorId }),
-      });
-      const data = await res.json();
-      if (data.conversationId) {
-        window.history.replaceState(null, '', '/messages');
-        router.push(`/messages/${data.conversationId}`);
-      }
-    } catch (err) {
-      console.error("[SubscriptionCard] handleMessage error:", err);
-    } finally {
-      setMessaging(false);
-    }
+    const params = new URLSearchParams({
+      targetUserId: s.creatorId,
+      name:         s.creatorName,
+      username:     s.username,
+      avatar:       s.avatar_url ?? "",
+      verified:     s.isVerified ? "1" : "0",
+    });
+    navigate(`/messages/new?${params.toString()}`);
   };
 
   return (
     <div style={{ backgroundColor: "transparent", borderRadius: "12px", overflow: "hidden", fontFamily: "'Inter', sans-serif", position: "relative" }}>
 
-      <Link href={`/${s.username}`} prefetch style={{ display: "block", position: "relative", height: "160px", cursor: "pointer", textDecoration: "none" }}>
+      {/* Banner — click navigates to creator */}
+      <div
+        onClick={() => navigate(`/${s.username}`)}
+        style={{ display: "block", position: "relative", height: "160px", cursor: "pointer" }}
+      >
         {s.banner_url ? (
           <Image src={s.banner_url} alt={s.creatorName} fill sizes="(max-width: 768px) 100vw, 320px" style={{ objectFit: "cover" }} priority={false} />
         ) : (
@@ -203,16 +195,13 @@ export function SubscriptionCard({
             <Star size={15} strokeWidth={1.6} />
           </button>
           {s.status === "active" && (
-            <button
-              onClick={handleMessage}
-              disabled={messaging}
-              style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: messaging ? "rgba(139,92,246,0.5)" : "rgba(0,0,0,0.5)", border: "none", cursor: messaging ? "default" : "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", transition: "background-color 0.15s ease" }}
-            >
+            <button onClick={handleMessage}
+              style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", border: "none", cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", transition: "background-color 0.15s ease" }}>
               <MessageCircle size={15} strokeWidth={1.6} />
             </button>
           )}
         </div>
-      </Link>
+      </div>
 
       <div style={{ height: "1px", backgroundColor: "#1E1E2E", margin: "0 4px" }} />
 
@@ -228,10 +217,11 @@ export function SubscriptionCard({
             </>
           ) : (
             <>
-              <Link href={`/${s.username}`} prefetch
-                style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "none", backgroundColor: "#8B5CF6", color: "#fff", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <button
+                onClick={() => navigate(`/${s.username}`)}
+                style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "none", backgroundColor: "#8B5CF6", color: "#fff", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                 Resubscribe
-              </Link>
+              </button>
               <button style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#94A3B8", fontSize: "11px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>For free</button>
             </>
           )}

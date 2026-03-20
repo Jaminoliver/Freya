@@ -32,39 +32,44 @@ const allTabs: {
   description: string;
   creatorOnly?: boolean;
 }[] = [
-  { id: "profile",       label: "Profile",       icon: User,       description: "Name, bio, links"           },
-  { id: "account",       label: "Account",       icon: Shield,     description: "Email, password, phone"     },
-  { id: "pricing",       label: "Pricing",       icon: CreditCard, description: "Subscription & bundles",    creatorOnly: true },
-  { id: "earnings",      label: "Earnings",      icon: TrendingUp, description: "Revenue & breakdown",       creatorOnly: true },
+  { id: "profile",       label: "Profile",       icon: User,       description: "Name, bio, links"            },
+  { id: "account",       label: "Account",       icon: Shield,     description: "Email, password, phone"      },
+  { id: "pricing",       label: "Pricing",       icon: CreditCard, description: "Subscription & bundles",     creatorOnly: true },
+  { id: "earnings",      label: "Earnings",      icon: TrendingUp, description: "Revenue & breakdown",        creatorOnly: true },
   { id: "payouts",       label: "Payouts",       icon: Wallet,     description: "Bank account & withdrawals", creatorOnly: true },
-  { id: "fans",          label: "Fans",          icon: Users,      description: "Subscribers & activity",    creatorOnly: true },
-  { id: "privacy",       label: "Privacy",       icon: Lock,       description: "Visibility & blocking"      },
-  { id: "notifications", label: "Notifications", icon: Bell,       description: "Alerts & preferences"       },
+  { id: "fans",          label: "Fans",          icon: Users,      description: "Subscribers & activity",     creatorOnly: true },
+  { id: "privacy",       label: "Privacy",       icon: Lock,       description: "Visibility & blocking"       },
+  { id: "notifications", label: "Notifications", icon: Bell,       description: "Alerts & preferences"        },
 ];
+
+function panelToTab(p: string | null): SettingsTab {
+  if (p === "fans")          return "fans";
+  if (p === "pricing")       return "pricing";
+  if (p === "subscriptions") return "account";
+  return "profile";
+}
 
 function SettingsLayoutInner() {
   const searchParams = useSearchParams();
   const router       = useRouter();
+  const { viewer, settingsPanel, setSettingsPanel } = useAppStore();
 
-  const { viewer } = useAppStore();
-
-  const initialPanel = searchParams.get("panel");
-  const [activeTab,  setActiveTab]  = useState<SettingsTab>(
-    initialPanel === "fans" ? "fans" :
-    initialPanel === "pricing" ? "pricing" :
-    initialPanel === "subscriptions" ? "account" : "profile"
-  );
-  const [mobileView, setMobileView] = useState<"menu" | "content">(
-    initialPanel === "fans" || initialPanel === "pricing" || initialPanel === "subscriptions"
-      ? "content"
-      : "menu"
-  );
+  const [activeTab,  setActiveTab]  = useState<SettingsTab>("profile");
+  const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
   const [username,   setUsername]   = useState<string>(viewer?.username ?? "");
   const [loading,    setLoading]    = useState(!viewer?.username);
   const [revealed,   setRevealed]   = useState(!!viewer?.username);
 
   const isCreator = viewer?.role === "creator";
   const tabs = allTabs.filter((t) => !t.creatorOnly || isCreator);
+
+  // React immediately to settingsPanel from Zustand (works even when layout never unmounts)
+  useEffect(() => {
+    if (!settingsPanel) return;
+    setActiveTab(panelToTab(settingsPanel));
+    setMobileView("content");
+    setSettingsPanel(null);
+  }, [settingsPanel, setSettingsPanel]);
 
   useEffect(() => {
     if (viewer?.username) {
@@ -73,7 +78,6 @@ function SettingsLayoutInner() {
       setRevealed(true);
       return;
     }
-
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }: { data: { user: { id: string } | null } }) => {
       if (user) {
@@ -87,6 +91,7 @@ function SettingsLayoutInner() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Handle URL params for direct links
   useEffect(() => {
     const panel = searchParams.get("panel");
     if (panel === "menu") {
@@ -100,12 +105,8 @@ function SettingsLayoutInner() {
       setActiveTab("account");
       setMobileView("content");
       router.replace("/settings");
-    } else if (panel === "fans") {
-      setActiveTab("fans");
-      setMobileView("content");
-      // Keep ?panel=fans in URL so browser back from fan profile returns here
     }
-  }, [searchParams, router]);
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTabSelect = (id: SettingsTab) => {
     setActiveTab(id);

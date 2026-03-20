@@ -35,12 +35,13 @@ export interface UploadItem {
 }
 
 interface PersistedUpload {
-  id:       string;
-  fileName: string;
-  progress: number;
-  phase:    UploadItem["phase"];
-  mediaId?: number;
-  error?:   string;
+  id:          string;
+  fileName:    string;
+  progress:    number;
+  phase:       UploadItem["phase"];
+  mediaId?:    number;
+  error?:      string;
+  _isMessage?: boolean;
 }
 
 const SESSION_KEY = "freya_uploads";
@@ -56,9 +57,11 @@ function loadPersistedUploads(): PersistedUpload[] {
 
 function savePersistedUploads(uploads: UploadItem[]) {
   try {
-    const serialisable: PersistedUpload[] = uploads.map(({ id, fileName, progress, phase, mediaId, error }) => ({
-      id, fileName, progress, phase, mediaId, error,
-    }));
+    const serialisable: PersistedUpload[] = uploads.map(
+      ({ id, fileName, progress, phase, mediaId, error, _isMessage }) => ({
+        id, fileName, progress, phase, mediaId, error, _isMessage,
+      })
+    );
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(serialisable));
   } catch {}
 }
@@ -97,7 +100,7 @@ interface UploadContextValue {
     conversationId: number;
     content?:       string;
     isPPV?:         boolean;
-    ppvPrice?:      number; // in kobo
+    ppvPrice?:      number;
     tempId:         string;
     onProgress:     (progress: number) => void;
     onSent:         (message: any) => void;
@@ -198,7 +201,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     }, 3000);
   }, [updateUpload, checkWatermark]);
 
-  // ── Message upload (real progress via XMLHttpRequest) ─────────────────────
+  // ── Message upload ────────────────────────────────────────────────────────
   const runMessageUpload = useCallback(async (
     uploadId:       string,
     files:          File[],
@@ -222,13 +225,11 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
         ? `/api/conversations/${conversationId}/messages/ppv`
         : `/api/conversations/${conversationId}/messages/media`;
 
-      // Use XMLHttpRequest for real upload progress
       const data = await new Promise<any>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
 
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
-            // Map upload progress to 0–90% (remaining 10% for server processing)
             const pct = Math.round((e.loaded / e.total) * 90);
             updateUpload(uploadId, { progress: pct });
             onProgress?.(pct);
@@ -248,9 +249,9 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           }
         };
 
-        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.onerror   = () => reject(new Error("Network error"));
         xhr.ontimeout = () => reject(new Error("Upload timed out"));
-        xhr.timeout = 120000; // 2 min timeout
+        xhr.timeout   = 120000;
 
         xhr.open("POST", endpoint);
         xhr.send(formData);

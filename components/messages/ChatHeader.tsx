@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { ArrowLeft, Star, Bell, Pin, Images, Search, MoreVertical, Eraser } from "lucide-react";
+import { ArrowLeft, Star, Bell, Pin, Images, Search, MoreVertical, Eraser, Flag } from "lucide-react";
 import { Sparkles } from "lucide-react";
 import { ConversationActionModal } from "@/components/messages/ConversationActionModal";
+import { ReportModal } from "@/components/messages/ReportModal";
 import type { Conversation } from "@/lib/types/messages";
 
 interface Props {
@@ -16,6 +17,7 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared }: Props) {
   const { participant } = conversation;
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [modalOpen,    setModalOpen]    = useState(false);
+  const [reportOpen,   setReportOpen]   = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,12 +31,13 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared }: Props) {
   }, []);
 
   const menuItems = [
-    { icon: Star,   label: "Favourite",    action: () => setDropdownOpen(false),                                 danger: false },
-    { icon: Bell,   label: "Notifications", action: () => setDropdownOpen(false),                                danger: false },
-    { icon: Pin,    label: "Pin chat",      action: () => setDropdownOpen(false),                                danger: false },
-    { icon: Images, label: "Gallery",       action: () => setDropdownOpen(false),                                danger: false },
-    { icon: Search, label: "Find in chat",  action: () => setDropdownOpen(false),                                danger: false },
-    { icon: Eraser, label: "Clear chat",    action: () => { setDropdownOpen(false); setModalOpen(true); },       danger: true  },
+    { icon: Star,   label: "Favourite",     action: () => setDropdownOpen(false),                                       danger: false },
+    { icon: Bell,   label: "Notifications", action: () => setDropdownOpen(false),                                       danger: false },
+    { icon: Pin,    label: "Pin chat",      action: () => setDropdownOpen(false),                                       danger: false },
+    { icon: Images, label: "Gallery",       action: () => setDropdownOpen(false),                                       danger: false },
+    { icon: Search, label: "Find in chat",  action: () => setDropdownOpen(false),                                       danger: false },
+    { icon: Eraser, label: "Clear chat",    action: () => { setDropdownOpen(false); setModalOpen(true); },              danger: false },
+    { icon: Flag,   label: "Report",        action: () => { setDropdownOpen(false); setReportOpen(true); },             danger: true  },
   ];
 
   return (
@@ -51,6 +54,15 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared }: Props) {
           participantName={participant.name}
           onClose={() => setModalOpen(false)}
           onCleared={() => { onMessagesCleared?.(); }}
+        />
+      )}
+
+      {reportOpen && (
+        <ReportModal
+          context="message"
+          username={participant.username}
+          reportedUserId={participant.id}
+          onClose={() => setReportOpen(false)}
         />
       )}
 

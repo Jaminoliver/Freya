@@ -29,7 +29,11 @@ export function MessageInput({ onSend, onTyping, disabled = false, replyTo, onCa
     if (!canSend) return;
     onSend(text, mediaFiles.length > 0 ? mediaFiles : undefined, ppvEnabled ? ppvPrice : undefined);
     setText(""); setMediaFiles([]); setPpvEnabled(false); setPpvPrice(0);
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      // Refocus so keyboard stays up after send (WhatsApp behavior)
+      textareaRef.current.focus();
+    }
   };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

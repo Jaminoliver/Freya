@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Star, Bell, Pin, Images, Search, MoreVertical, Flag } from "lucide-react";
+import { ArrowLeft, Star, Bell, Pin, Images, Search, MoreVertical, Flag, Eraser } from "lucide-react";
 import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
@@ -16,15 +16,15 @@ import { ReportModal } from "@/components/messages/ReportModal";
 import type { Conversation, Message } from "@/lib/types/messages";
 
 interface Props {
-  conversation:     Conversation;
-  messages:         Message[];
-  onBack:           () => void;
-  onNewMessage:     (message: Message) => void;
-  onClearMessages?: () => void;
-  currentUserId?:   string;
-  onLoadMore?:      () => void;
-  hasMore?:         boolean;
-  loadingMore?:     boolean;
+  conversation:      Conversation;
+  messages:          Message[];
+  onBack:            () => void;
+  onNewMessage:      (message: Message) => void;
+  onClearMessages?:  () => void;
+  currentUserId?:    string;
+  onLoadMore?:       () => void;
+  hasMore?:          boolean;
+  loadingMore?:      boolean;
 }
 
 export function ChatPanel({
@@ -83,7 +83,6 @@ export function ChatPanel({
     });
   }, [uploads, conversation.id, currentUserId]);
 
-  // FIX 1: Properly sync server messages without skipping updates on existing messages
   useEffect(() => {
     setMessages((prev) => {
       const pending = prev.filter((m) => m.status === "sending" || m.status === "failed");
@@ -107,6 +106,8 @@ export function ChatPanel({
   }, [isTyping, conversation.id, setTypingConversationId]);
 
   useEffect(() => {
+    // Skip read marking for shell conversations (id === 0)
+    if (conversation.id === 0) return;
     updateConversations((prev) =>
       prev.map((c) => c.id === conversation.id ? { ...c, unreadCount: 0 } : c)
     );
@@ -125,8 +126,133 @@ export function ChatPanel({
 
   const handleTyping = useCallback(() => sendTyping(), [sendTyping]);
 
+  const handleDelete = useCallback(async (message: Message, deleteFor: "me" | "everyone") => {
+    const convId = conversation.id;
+    if (convId === 0) return;
+
+    if (deleteFor === "me") {
+      // Optimistic: remove from local state immediately
+      setMessages((prev) => prev.filter((m) => m.id !== message.id));
+    } else {
+      // Optimistic: replace with "deleted" placeholder
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === message.id
+            ? { ...m, text: "This message was deleted", type: "text" as const, mediaUrls: [], isDeleted: true }
+            : m
+        )
+      );
+    }
+
+    try {
+      console.log("[handleDelete] calling DELETE /api/conversations/" + convId + "/messages/" + message.id, { deleteFor });
+      const res = await fetch(`/api/conversations/${convId}/messages/${message.id}`, {
+        method:  "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ deleteFor }),
+      });
+      const resBody = await res.json();
+      console.log("[handleDelete] response:", res.status, resBody);
+      if (!res.ok) {
+        // Revert on failure — re-add original message
+        setMessages((prev) => {
+          if (deleteFor === "me") {
+            // Re-insert at correct position by timestamp
+            const updated = [...prev, message].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+            return updated;
+          } else {
+            return prev.map((m) => m.id === message.id ? message : m);
+          }
+        });
+      }
+    } catch {
+      // Revert on error
+      setMessages((prev) => {
+        if (deleteFor === "me") {
+          const updated = [...prev, message].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          return updated;
+        } else {
+          return prev.map((m) => m.id === message.id ? message : m);
+        }
+      });
+    }
+  }, [conversation.id]);
+
   const handleSend = useCallback(async (text: string, mediaFiles?: File[], ppvPrice?: number) => {
-    if (sending) return; // only blocks if previous send hasn't even started yet
+    if (sending) return;
+
+    // New chat shell (id === 0) — same optimistic pattern as existing chat
+    if (conversation.id === 0 && text.trim()) {
+      const tempId = `temp_text_${Date.now()}_${Math.random()}`;
+      const optimisticMessage: Message = {
+        id:             Date.now(),
+        conversationId: 0,
+        senderId:       currentUserId,
+        type:           "text",
+        text:           text.trim(),
+        createdAt:      new Date().toISOString(),
+        isRead:         false,
+        status:         "sending",
+        tempId,
+        replyToId:      null,
+      };
+      setMessages((prev) => [...prev, optimisticMessage]);
+
+      try {
+        // Step 1: create conversation
+        const convoRes  = await fetch("/api/conversations", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ targetUserId: (conversation.participant as any).id }),
+        });
+        const convoData = await convoRes.json();
+        if (!convoData.conversationId) {
+          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
+          return;
+        }
+        const newId: number = convoData.conversationId;
+
+        // Step 2: send message
+        const msgRes  = await fetch(`/api/conversations/${newId}/messages`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ content: text.trim() }),
+        });
+        const msgData = await msgRes.json();
+        if (!msgData.message) {
+          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
+          return;
+        }
+
+        // Step 3: confirm — exactly like existing chat
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.tempId === tempId
+              ? { ...msgData.message, status: "sent" as const, tempId, isDelivered: false }
+              : m
+          )
+        );
+        onNewMessage(msgData.message);
+
+        // Step 4: update sidebar + URL silently
+        const freshRes  = await fetch(`/api/conversations/${newId}`);
+        const freshData = await freshRes.json();
+        if (freshData.conversation) {
+          updateConversations((prev) => {
+            if (prev.some((c) => c.id === newId)) return prev;
+            return [freshData.conversation, ...prev];
+          });
+        }
+        window.history.replaceState(null, "", `/messages/${newId}`);
+      } catch {
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
+      }
+      return;
+    }
 
     if (mediaFiles && mediaFiles.length > 0) {
       const tempId = `temp_${Date.now()}_${Math.random()}`;
@@ -218,14 +344,6 @@ export function ChatPanel({
 
       setMessages((prev) => [...prev, optimisticMessage]);
 
-      updateConversations((prev) =>
-        prev.map((c) =>
-          c.id === conversation.id
-            ? { ...c, lastMessage: text.trim(), lastMessageAt: new Date().toISOString() }
-            : c
-        )
-      );
-
       try {
         const res  = await fetch(`/api/conversations/${conversation.id}/messages`, {
           method:  "POST",
@@ -276,11 +394,12 @@ export function ChatPanel({
   }, []);
 
   const menuItems = [
-    { icon: Star,   label: "Favourite",    action: () => setDropdownOpen(false) },
+    { icon: Star,   label: "Favourite",     action: () => setDropdownOpen(false) },
     { icon: Bell,   label: "Notifications", action: () => setDropdownOpen(false) },
     { icon: Pin,    label: "Pin chat",      action: () => setDropdownOpen(false) },
     { icon: Images, label: "Gallery",       action: () => setDropdownOpen(false) },
     { icon: Search, label: "Find in chat",  action: () => setDropdownOpen(false) },
+    { icon: Eraser, label: "Clear chat",    action: () => { setDropdownOpen(false); clearCachedMessages(conversation.id); onClearMessages?.(); }, danger: false },
     { icon: Flag,   label: "Report",        action: () => { setDropdownOpen(false); setReportOpen(true); }, danger: true },
   ];
 
@@ -404,6 +523,7 @@ export function ChatPanel({
           currentUserId={currentUserId}
           isTyping={isTyping}
           onReply={(msg) => setReplyTo(msg)}
+          onDelete={handleDelete}
           onLoadMore={onLoadMore}
           hasMore={hasMore}
           loadingMore={loadingMore}

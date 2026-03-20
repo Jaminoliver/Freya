@@ -65,9 +65,6 @@ export interface ProfileEntry {
 }
 export interface ContentFeedEntry { posts: ApiPost[]; media: any[]; fetchedAt: number; }
 
-// "processing" = TUS upload done, Bunny is still transcoding.
-// Flipped to "done" by the Realtime UPDATE listener in StoryBar when
-// the Bunny webhook fires and sets is_processing = false in the DB.
 export type StoryUploadPhase =
   | "idle"
   | "compressing"
@@ -103,6 +100,10 @@ interface AppStore {
   storyUpload: StoryUploadState;
   setStoryUpload: (patch: Partial<StoryUploadState>) => void;
   resetStoryUpload: () => void;
+  isNavigating: boolean;
+  setNavigating: (val: boolean) => void;
+  settingsPanel: string | null;
+  setSettingsPanel: (panel: string | null) => void;
 }
 
 const DEFAULT_STORY_UPLOAD: StoryUploadState = { phase: "idle", uploadPct: 0, compressPct: 0, error: null, storyId: null };
@@ -135,4 +136,9 @@ export const useAppStore = create<AppStore>((set) => ({
   storyUpload: DEFAULT_STORY_UPLOAD,
   setStoryUpload: (patch) => set((s) => ({ storyUpload: { ...s.storyUpload, ...patch } })),
   resetStoryUpload: () => set({ storyUpload: DEFAULT_STORY_UPLOAD }),
+
+  isNavigating: false,
+  setNavigating: (val) => set({ isNavigating: val }),
+  settingsPanel: null,
+  setSettingsPanel: (panel) => set({ settingsPanel: panel }),
 }));

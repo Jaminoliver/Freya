@@ -30,22 +30,13 @@ export default function ProfileActions({
     onEditProfile?.();
   };
 
-  const handleMessage = async () => {
+  // FIX: no longer calls POST /api/conversations on click.
+  // Navigates to /messages/new?targetUserId= — conversation is only
+  // created when the first message is actually sent.
+  const handleMessage = () => {
     onMessage?.();
     if (!targetUserId) return;
-    try {
-      const res = await fetch("/api/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUserId }),
-      });
-      const data = await res.json();
-      if (data.conversationId) {
-        router.push(`/messages/${data.conversationId}`);
-      }
-    } catch (err) {
-      console.error("Failed to open conversation", err);
-    }
+    router.push(`/messages/new?targetUserId=${targetUserId}`);
   };
 
   if (viewContext === "ownFan") {
