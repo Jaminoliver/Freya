@@ -43,11 +43,11 @@ export default function ProfileBanner({
   onBannerUpdated,
 }: ProfileBannerProps) {
   const router = useRouter();
-  const [bannerUrl,     setBannerUrl]     = useState(initialBannerUrl);
-  const [cropSrc,       setCropSrc]       = useState<string | null>(null);
-  const [uploading,     setUploading]     = useState(false);
-  const [menuOpen,      setMenuOpen]      = useState(false);
-  const [reportOpen,    setReportOpen]    = useState(false);
+  const [bannerUrl,  setBannerUrl]  = useState(initialBannerUrl);
+  const [cropSrc,    setCropSrc]    = useState<string | null>(null);
+  const [uploading,  setUploading]  = useState(false);
+  const [menuOpen,   setMenuOpen]   = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef      = useRef<HTMLDivElement>(null);
 
@@ -94,9 +94,9 @@ export default function ProfileBanner({
 
   const statItems = stats
     ? [
-        { icon: <FileText size={16} strokeWidth={2} />, value: formatCount(stats.posts),       label: "Posts",  onClick: undefined },
-        { icon: <Image    size={16} strokeWidth={2} />, value: formatCount(stats.media),       label: "Media",  onClick: undefined },
-        { icon: <Heart    size={16} strokeWidth={2} />, value: formatCount(stats.likes),       label: "Likes",  onClick: undefined },
+        { icon: <FileText size={16} strokeWidth={2} />, value: formatCount(stats.posts),       label: "Posts", onClick: undefined },
+        { icon: <Image    size={16} strokeWidth={2} />, value: formatCount(stats.media),       label: "Media", onClick: undefined },
+        { icon: <Heart    size={16} strokeWidth={2} />, value: formatCount(stats.likes),       label: "Likes", onClick: undefined },
         {
           icon:    <Users size={16} strokeWidth={2} />,
           value:   formatCount(stats.subscribers),
@@ -148,13 +148,24 @@ export default function ProfileBanner({
       >
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, transparent 40%, transparent 50%, rgba(0,0,0,0.55) 100%)", pointerEvents: "none" }} />
 
-        {displayName && (
-          <div style={{ position: "absolute", top: "14px", left: "16px", zIndex: 2 }}>
+        {/* Top-left: back button (non-editable only) + display name */}
+        <div style={{ position: "absolute", top: "12px", left: "12px", zIndex: 2, display: "flex", alignItems: "center", gap: "8px" }}>
+          {!isEditable && (
+            <button
+              onClick={(e) => { e.stopPropagation(); router.back(); }}
+              style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(20,20,32,0.75)", backdropFilter: "blur(8px)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M11 4L6 9L11 14" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+          {displayName && (
             <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", fontFamily: "'Inter', sans-serif", textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>
               {displayName}
             </span>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* 3-dot menu — non-editable profiles only */}
         {!isEditable && userId && (
@@ -173,8 +184,8 @@ export default function ProfileBanner({
             {menuOpen && (
               <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "12px", padding: "6px", minWidth: "160px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
                 {[
-                  { icon: <Flag size={15} strokeWidth={1.8} />, label: "Report",       color: "#FFFFFF", action: () => { setMenuOpen(false); setReportOpen(true); } },
-                  { icon: <Ban  size={15} strokeWidth={1.8} />, label: "Block user",   color: "#EF4444", action: () => { setMenuOpen(false); handleBlock(); } },
+                  { icon: <Flag size={15} strokeWidth={1.8} />, label: "Report",     color: "#FFFFFF", action: () => { setMenuOpen(false); setReportOpen(true); } },
+                  { icon: <Ban  size={15} strokeWidth={1.8} />, label: "Block user", color: "#EF4444", action: () => { setMenuOpen(false); handleBlock(); } },
                 ].map(({ icon, label, color, action }) => (
                   <button
                     key={label}
@@ -235,7 +246,7 @@ export default function ProfileBanner({
           </button>
         )}
 
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <style>{"@keyframes spin { to { transform: rotate(360deg); } }"}</style>
       </div>
     </>
   );

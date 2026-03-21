@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { Sparkles, X, ImageIcon } from "lucide-react";
+import { Sparkles, ImageIcon } from "lucide-react";
 import { ConversationActionModal } from "@/components/messages/ConversationActionModal";
 import { updateConversations } from "@/app/(main)/messages/page";
 import type { Conversation } from "@/lib/types/messages";
@@ -16,11 +16,9 @@ interface Props {
 export function ConversationRow({ conversation, isActive, isTyping = false, onSelect }: Props) {
   const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia } = conversation;
 
-  // No `touching` state — that was causing re-renders which triggered framer-motion
-  // layout shifts, making the wrong row appear highlighted on long press.
-  // Press highlight is now handled purely by CSS :active below.
   const [hovered,   setHovered]   = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [menuPos,   setMenuPos]   = useState({ x: 0, y: 0 });
 
   const rowRef         = useRef<HTMLDivElement>(null);
   const touchStartY    = useRef<number>(0);
@@ -30,43 +28,32 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasTouched     = useRef<boolean>(false);
 
+  const openMenu = (x: number, y: number) => {
+    setMenuPos({ x, y });
+    setModalOpen(true);
+  };
+
   useEffect(() => {
     const el = rowRef.current;
     if (!el) return;
 
     const onTouchStart = (e: TouchEvent) => {
-      console.log("[ConversationRow] touchstart");
       touchStartY.current    = e.touches[0].clientY;
       touchStartX.current    = e.touches[0].clientX;
       didScroll.current      = false;
       longPressFired.current = false;
       wasTouched.current     = true;
-      // No setTouching(true) — prevents re-render + framer-motion layout shift
 
       longPressTimer.current = setTimeout(() => {
-        if (didScroll.current) {
-          console.log("[ConversationRow] long press cancelled — scrolled");
-          return;
-        }
-        console.log("[ConversationRow] long press fired → setModalOpen(true)");
+        if (didScroll.current) return;
         longPressFired.current = true;
 
-        const eatClick = (ev: MouseEvent) => {
-          console.log("[ConversationRow] eating ghost click after long press");
-          ev.stopPropagation();
-          ev.preventDefault();
-          document.removeEventListener("click", eatClick, true);
-        };
+        const eatClick = (ev: MouseEvent) => { ev.stopPropagation(); ev.preventDefault(); document.removeEventListener("click", eatClick, true); };
         document.addEventListener("click", eatClick, true);
-
-        const eatTouchEnd = (ev: TouchEvent) => {
-          console.log("[ConversationRow] eating touchend after long press");
-          ev.stopPropagation();
-          document.removeEventListener("touchend", eatTouchEnd, true);
-        };
+        const eatTouchEnd = (ev: TouchEvent) => { ev.stopPropagation(); document.removeEventListener("touchend", eatTouchEnd, true); };
         document.addEventListener("touchend", eatTouchEnd, true);
 
-        setModalOpen(true);
+        openMenu(touchStartX.current, touchStartY.current);
       }, 500);
     };
 
@@ -74,24 +61,15 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
       const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
       const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
       if (dy > 6 || dx > 6) {
-        console.log("[ConversationRow] touchmove — scroll detected, cancelling long press");
         didScroll.current = true;
         if (longPressTimer.current) clearTimeout(longPressTimer.current);
       }
     };
 
     const onTouchEnd = () => {
-      console.log("[ConversationRow] touchend — longPressFired:", longPressFired.current, "didScroll:", didScroll.current);
       if (longPressTimer.current) clearTimeout(longPressTimer.current);
-      if (longPressFired.current) {
-        console.log("[ConversationRow] touchend skipped — long press already handled");
-        longPressFired.current = false;
-        return;
-      }
-      if (!didScroll.current) {
-        console.log("[ConversationRow] touchend → calling onSelect");
-        onSelect();
-      }
+      if (longPressFired.current) { longPressFired.current = false; return; }
+      if (!didScroll.current) onSelect();
       setTimeout(() => { wasTouched.current = false; }, 50);
     };
 
@@ -107,11 +85,7 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
   }, [onSelect]);
 
   const handleClick = () => {
-    console.log("[ConversationRow] onClick — wasTouched:", wasTouched.current);
-    if (wasTouched.current) {
-      console.log("[ConversationRow] onClick skipped — came from touch");
-      return;
-    }
+    if (wasTouched.current) return;
     onSelect();
   };
 
@@ -147,29 +121,22 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
     <>
       <style>{`
         .conv-row, .conv-row * {
-          -webkit-user-select:    none !important;
-          -moz-user-select:       none !important;
-          user-select:            none !important;
-          -webkit-touch-callout:  none !important;
+          -webkit-user-select:   none !important;
+          -moz-user-select:      none !important;
+          user-select:           none !important;
+          -webkit-touch-callout: none !important;
         }
-        .conv-row {
-          touch-action: pan-y;
-          -webkit-tap-highlight-color: transparent;
-        }
-        /* CSS-only press highlight — no React state, no re-render, no layout shift */
-        .conv-row:not(.conv-row--active):active {
-          background-color: #14141F !important;
-        }
+        .conv-row { touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+        .conv-row:not(.conv-row--active):active { background-color: #14141F !important; }
       `}</style>
 
       {modalOpen && (
         <ConversationActionModal
           conversationId={conversation.id}
           participant={participant}
-          onClose={() => {
-            console.log("[ConversationRow] modal onClose called");
-            setModalOpen(false);
-          }}
+          x={menuPos.x}
+          y={menuPos.y}
+          onClose={() => setModalOpen(false)}
           onCleared={handleCleared}
         />
       )}
@@ -181,9 +148,8 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onContextMenu={(e) => {
-          console.log("[ConversationRow] onContextMenu → setModalOpen(true)");
           e.preventDefault();
-          setModalOpen(true);
+          openMenu(e.clientX, e.clientY);
         }}
         style={{
           display:                 "flex",
@@ -245,16 +211,16 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
 
         {hovered && (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              console.log("[ConversationRow] hover X clicked → setModalOpen(true)");
-              setModalOpen(true);
-            }}
+            onClick={(e) => { e.stopPropagation(); openMenu(e.clientX, e.clientY); }}
             style={{ position: "absolute", top: "10px", right: "12px", background: "none", border: "none", cursor: "pointer", color: "#4A4A6A", display: "flex", alignItems: "center", padding: "2px", transition: "color 0.15s ease" }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "#A3A3C2")}
             onMouseLeave={(e) => (e.currentTarget.style.color = "#4A4A6A")}
           >
-            <X size={14} strokeWidth={1.8} />
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="7" cy="2" r="1.2" fill="currentColor"/>
+              <circle cx="7" cy="7" r="1.2" fill="currentColor"/>
+              <circle cx="7" cy="12" r="1.2" fill="currentColor"/>
+            </svg>
           </button>
         )}
       </div>

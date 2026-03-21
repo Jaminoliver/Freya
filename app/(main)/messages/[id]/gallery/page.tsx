@@ -17,7 +17,7 @@ interface MediaItem {
   createdAt:    string;
 }
 
-type Filter = "all" | "photos" | "videos" | "unlocked";
+type Filter = "all" | "images" | "videos" | "unlocked";
 
 function groupByMonth(items: MediaItem[]): { label: string; items: MediaItem[] }[] {
   const map = new Map<string, MediaItem[]>();
@@ -30,11 +30,127 @@ function groupByMonth(items: MediaItem[]): { label: string; items: MediaItem[] }
   return Array.from(map.entries()).map(([label, items]) => ({ label, items }));
 }
 
+// Renders a thumbnail for a single media item.
+// For videos without a thumbnailUrl, we use a hidden <video> element
+// and draw its first frame onto a <canvas> — works on all desktop browsers.
+function VideoThumb({
+  src,
+  blurred,
+  style,
+}: {
+  src: string;
+  blurred: boolean;
+  style?: React.CSSProperties;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef  = useRef<HTMLVideoElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    const handleSeeked = () => {
+      try {
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        canvas.width  = video.videoWidth  || 320;
+        canvas.height = video.videoHeight || 320;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setReady(true);
+      } catch {
+        // cross-origin or decode error – canvas stays hidden, video stays visible
+      }
+    };
+
+    video.addEventListener("seeked", handleSeeked);
+    video.currentTime = 0.001; // trigger seeked
+
+    return () => video.removeEventListener("seeked", handleSeeked);
+  }, [src]);
+
+  const sharedStyle: React.CSSProperties = {
+    position:   "absolute",
+    inset:      0,
+    width:      "100%",
+    height:     "100%",
+    objectFit:  "cover",
+    filter:     blurred ? "blur(8px) brightness(0.6)" : "none",
+    ...style,
+  };
+
+  return (
+    <>
+      {/* Hidden video used only to extract the first frame */}
+      <video
+        ref={videoRef}
+        src={src}
+        muted
+        playsInline
+        preload="metadata"
+        crossOrigin="anonymous"
+        style={{ display: "none" }}
+      />
+
+      {/* Canvas shows the extracted frame (desktop) */}
+      <canvas
+        ref={canvasRef}
+        style={{ ...sharedStyle, display: ready ? "block" : "none" }}
+      />
+
+      {/* Fallback: visible video poster (works on iOS Safari natively) */}
+      {!ready && (
+        <video
+          src={`${src}#t=0.001`}
+          muted
+          playsInline
+          preload="metadata"
+          style={sharedStyle}
+        />
+      )}
+    </>
+  );
+}
+
+function MediaThumb({ item }: { item: MediaItem }) {
+  const blurred = !item.isUnlocked;
+
+  // Image — or video with an explicit thumbnailUrl
+  if (item.mediaType === "image" || (item.mediaType === "video" && item.thumbnailUrl)) {
+    const src = item.thumbnailUrl ?? item.url;
+    if (!src) return <div style={{ width: "100%", height: "100%", backgroundColor: "#1E1E2E" }} />;
+    return (
+      <img
+        src={src}
+        alt=""
+        style={{
+          width: "100%", height: "100%", objectFit: "cover",
+          filter: blurred ? "blur(8px) brightness(0.6)" : "none",
+        }}
+      />
+    );
+  }
+
+  // Video without thumbnailUrl — extract first frame via canvas
+  if (item.mediaType === "video" && item.url) {
+    return (
+      <VideoThumb
+        src={item.url}
+        blurred={blurred}
+      />
+    );
+  }
+
+  return <div style={{ width: "100%", height: "100%", backgroundColor: "#1E1E2E" }} />;
+}
+
 export default function GalleryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id }   = use(params);
   const router   = useRouter();
 
   const [filter,      setFilter]      = useState<Filter>("all");
+
   const [items,       setItems]       = useState<MediaItem[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -102,7 +218,7 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
   const filters: { key: Filter; label: string }[] = [
     { key: "all",      label: "All"      },
     { key: "unlocked", label: "Unlocked" },
-    { key: "photos",   label: "Photos"   },
+    { key: "images",   label: "Images"   },
     { key: "videos",   label: "Videos"   },
   ];
 
@@ -133,12 +249,12 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
           cursor: pointer;
           background-color: #1E1E2E;
         }
-        .gallery-thumb img {
-          width: 100%; height: 100%; object-fit: cover;
+        .gallery-thumb:hover .thumb-inner { transform: scale(1.04); }
+        .gallery-thumb:active .thumb-inner { transform: scale(0.97); }
+        .thumb-inner {
+          position: absolute; inset: 0;
           transition: transform 0.2s ease;
         }
-        .gallery-thumb:hover img { transform: scale(1.04); }
-        .gallery-thumb:active img { transform: scale(0.97); }
         @keyframes shimmer {
           0%   { background-position: -200% 0; }
           100% { background-position:  200% 0; }
@@ -204,7 +320,6 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
         {/* Content */}
         <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
           {loading ? (
-            // Skeleton grid
             <div className="gallery-grid" style={{ padding: "2px" }}>
               {Array.from({ length: 12 }).map((_, i) => (
                 <div key={i} className="skeleton" />
@@ -238,22 +353,12 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
                       <div
                         key={item.id}
                         className="gallery-thumb"
-                        onClick={() => item.isUnlocked ? openLightbox(item) : null}
+                        onClick={() => item.isUnlocked ? openLightbox(item) : undefined}
                         style={{ cursor: item.isUnlocked ? "pointer" : "default" }}
                       >
-                        {/* Thumbnail image */}
-                        {(item.thumbnailUrl || item.url) ? (
-                          <img
-                            src={item.thumbnailUrl ?? item.url!}
-                            alt=""
-                            style={{
-                              width: "100%", height: "100%", objectFit: "cover",
-                              filter: (!item.isUnlocked) ? "blur(8px) brightness(0.6)" : "none",
-                            }}
-                          />
-                        ) : (
-                          <div style={{ width: "100%", height: "100%", backgroundColor: "#1E1E2E" }} />
-                        )}
+                        <div className="thumb-inner">
+                          <MediaThumb item={item} />
+                        </div>
 
                         {/* Video play icon */}
                         {item.mediaType === "video" && item.isUnlocked && (

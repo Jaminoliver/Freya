@@ -106,6 +106,11 @@ function setTyping(conversationId: number, isTyping: boolean) {
   typingListeners.forEach((fn) => fn(updated));
 }
 
+export async function subscribeTypingForConversation(conversationId: number) {
+  const supabase = await getAuthenticatedBrowserClient();
+  subscribeTyping(supabase, conversationId);
+}
+
 function subscribeTyping(supabase: any, conversationId: number) {
   if (typingChannels.has(conversationId)) return;
   const channel = supabase.channel(`typing:${conversationId}`);
@@ -133,7 +138,7 @@ export function sendTypingEvent(conversationId: number, userId: string) {
   channel.send({ type: "broadcast", event: "typing", payload: { userId } });
 }
 
-// ─── Fetch conversations (shared, safe to call multiple times) ────────────────
+// ─── Fetch conversations ──────────────────────────────────────────────────────
 function ensureConversationsFetched() {
   if (cachedConversations !== null) return;
   if (isFetching) return;
@@ -160,16 +165,68 @@ function ensureConversationsFetched() {
 function startGlobalRealtime() {
   if (realtimeChannel) return;
 
-  getAuthenticatedBrowserClient().then((supabase) => {
-    supabase.auth.getSession().then(({ data: { session } }: any) => {
-      if (session?.user) {
-        currentUserId = session.user.id;
-        cachedConversations?.forEach((c) => subscribeTyping(supabase, c.id));
-      }
-    });
+  getAuthenticatedBrowserClient().then(async (supabase) => {
+    // Resolve user BEFORE subscribing so currentUserId is set when first events arrive
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
+
+    currentUserId = session.user.id;
+    console.log("[Realtime] currentUserId set:", currentUserId);
+    cachedConversations?.forEach((c) => subscribeTyping(supabase, c.id));
 
     realtimeChannel = supabase
       .channel("global-messages-changes")
+
+      // ── conversations INSERT ───────────────────────────────────────────────
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "conversations" },
+        (payload: any) => {
+          const row = payload.new as any;
+          console.log("[CONV INSERT] fired — row:", JSON.stringify(row));
+          console.log("[CONV INSERT] currentUserId:", currentUserId);
+          console.log("[CONV INSERT] creator_id:", row.creator_id, "fan_id:", row.fan_id);
+
+          const isCreator = row.creator_id === currentUserId;
+          const isFan     = row.fan_id     === currentUserId;
+          console.log("[CONV INSERT] isCreator:", isCreator, "isFan:", isFan);
+
+          if (!isCreator && !isFan) {
+            console.log("[CONV INSERT] not involved — skipping");
+            return;
+          }
+
+          const alreadyExists = cachedConversations?.some((c) => c.id === row.id) ?? false;
+          console.log("[CONV INSERT] alreadyExists in cache:", alreadyExists);
+          if (alreadyExists) return;
+
+          console.log("[CONV INSERT] fetching /api/conversations/" + row.id);
+          fetch(`/api/conversations/${row.id}`)
+            .then((r) => {
+              console.log("[CONV INSERT] fetch status:", r.status);
+              return r.json();
+            })
+            .then((data) => {
+              console.log("[CONV INSERT] fetch response:", JSON.stringify(data));
+              if (data.conversation) {
+                updateConversations((prev) => {
+                  if (prev.some((c) => c.id === row.id)) {
+                    console.log("[CONV INSERT] duplicate guard hit — not adding");
+                    return prev;
+                  }
+                  console.log("[CONV INSERT] adding to list:", row.id);
+                  return [data.conversation, ...prev];
+                });
+                getAuthenticatedBrowserClient().then((sb) =>
+                  subscribeTyping(sb, row.id)
+                );
+              } else {
+                console.warn("[CONV INSERT] no conversation in response — check /api/conversations/:id");
+              }
+            })
+            .catch((err) => console.error("[CONV INSERT] fetch error:", err));
+        }
+      )
 
       // ── messages INSERT ────────────────────────────────────────────────────
       .on(
@@ -180,20 +237,18 @@ function startGlobalRealtime() {
           const isOwn = row.sender_id === currentUserId;
 
           setTyping(row.conversation_id, false);
-          console.log("[INSERT] receiver_id:", row.receiver_id, "currentUserId:", currentUserId, "isOnMessagesPage:", isOnMessagesPage);
+          console.log("[MSG INSERT] receiver_id:", row.receiver_id, "currentUserId:", currentUserId, "isOnMessagesPage:", isOnMessagesPage);
 
           if (isOwn) return;
 
-          // Mark delivered if receiver is on any messages/conversation page
           if (row.receiver_id === currentUserId && isOnMessagesPage) {
-            console.log("[INSERT] firing deliver PATCH for msg:", row.id);
+            console.log("[MSG INSERT] firing deliver PATCH for msg:", row.id);
             fetch(
               `/api/conversations/${row.conversation_id}/messages/${row.id}/deliver`,
               { method: "PATCH" }
             ).catch(() => {});
           }
 
-          // Non-PPV media
           if (row.media_type && !row.is_ppv) {
             updateConversations((prev) =>
               prev.map((c) =>
@@ -209,7 +264,6 @@ function startGlobalRealtime() {
             return;
           }
 
-          // PPV
           if (row.is_ppv) {
             updateConversations((prev) =>
               prev.map((c) =>
@@ -225,7 +279,6 @@ function startGlobalRealtime() {
             return;
           }
 
-          // Text message
           const newMessage: Message = {
             id:             row.id,
             conversationId: row.conversation_id,
@@ -268,9 +321,8 @@ function startGlobalRealtime() {
           const row = payload.new as any;
           const old = payload.old as any;
 
-          console.log("[UPDATE] patching msg:", row.id, "is_delivered:", row.is_delivered, "is_read:", row.is_read);
+          console.log("[MSG UPDATE] patching msg:", row.id, "is_delivered:", row.is_delivered, "is_read:", row.is_read);
 
-          // Deleted for everyone
           if (row.is_deleted_for_everyone) {
             useMessageStore.getState().patchMessage(row.id, {
               text:      "This message was deleted",
@@ -284,7 +336,6 @@ function startGlobalRealtime() {
           const isInvolved = row.sender_id === currentUserId || row.receiver_id === currentUserId;
           if (isInvolved && (row.deleted_for_creator || row.deleted_for_fan)) return;
 
-          // PPV thumbnail ready
           if (row.is_ppv && row.thumbnail_url) {
             const isReceiver = row.receiver_id === currentUserId;
             const isSender   = row.sender_id   === currentUserId;
@@ -323,7 +374,6 @@ function startGlobalRealtime() {
             return;
           }
 
-          // ── Deliver / read status update for sender's own messages ─────────
           if (row.sender_id === currentUserId) {
             useMessageStore.getState().patchMessage(row.id, {
               isDelivered: row.is_delivered ?? false,
@@ -350,7 +400,6 @@ function startGlobalRealtime() {
             return;
           }
 
-          // Media message URL now available (receiver side)
           if (row.receiver_id !== currentUserId) return;
           if (!row.media_type || !row.media_url) return;
           if (old.media_url) return;
@@ -517,8 +566,6 @@ export function useUnreadConversationCount() {
   );
 
   useEffect(() => {
-    // Ensure realtime and conversations are always running,
-    // even when the user is on a non-messages page (home, profile, etc.)
     startGlobalRealtime();
     ensureConversationsFetched();
 

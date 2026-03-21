@@ -30,13 +30,10 @@ export default function ProfileActions({
     onEditProfile?.();
   };
 
-  // FIX: no longer calls POST /api/conversations on click.
-  // Navigates to /messages/new?targetUserId= — conversation is only
-  // created when the first message is actually sent.
+  // Just call onMessage — the profile page already handles full navigation
+  // with name, username, avatar, verified params.
   const handleMessage = () => {
     onMessage?.();
-    if (!targetUserId) return;
-    router.push(`/messages/new?targetUserId=${targetUserId}`);
   };
 
   if (viewContext === "ownFan") {

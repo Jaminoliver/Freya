@@ -18,8 +18,6 @@ function preloadImages(urls: string[]): void {
   }
 }
 
-// ── Blocked / Restricted user row ─────────────────────────────────────────────
-
 function UserRow({
   user,
   actionLabel,
@@ -68,8 +66,6 @@ function UserRow({
   );
 }
 
-// ── Blocked list ──────────────────────────────────────────────────────────────
-
 function BlockedList() {
   const [users,   setUsers]   = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,8 +110,6 @@ function BlockedList() {
     </div>
   );
 }
-
-// ── Restricted list ───────────────────────────────────────────────────────────
 
 function RestrictedList() {
   const [users,   setUsers]   = useState<any[]>([]);
@@ -162,21 +156,16 @@ function RestrictedList() {
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
-
 export default function SubscriptionsPage() {
   const [contentTab, setContentTab] = useState<ContentTab>("creators");
 
-  const { contentFeeds, setContentFeed } = useAppStore();
-  const cached = contentFeeds[CACHE_KEY];
-  const fresh  = cached && !isStale(cached.fetchedAt);
+  const { contentFeeds, setContentFeed, clearContentFeed } = useAppStore();
 
-  const [subscriptions, setSubscriptions] = useState<any[]>(fresh ? cached.posts : []);
-  const [loading,       setLoading]       = useState(!fresh);
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [loading,       setLoading]       = useState(true);
   const [revealed,      setRevealed]      = useState(false);
 
   const fetchSubscriptions = async (force = false) => {
-    if (!force && fresh) return;
     setLoading(true);
     try {
       const res  = await fetch("/api/subscriptions/mine");
@@ -200,21 +189,21 @@ export default function SubscriptionsPage() {
     }
   };
 
+  // Always refetch on mount — 30s cache was causing stale counts
   useEffect(() => {
-    if (fresh) { setRevealed(true); return; }
-    fetchSubscriptions();
+    clearContentFeed(CACHE_KEY);
+    fetchSubscriptions(true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabs: { key: ContentTab; label: string; icon?: React.ReactNode }[] = [
-    { key: "creators",  label: "Creators"   },
-    { key: "blocked",    label: "Blocked",    icon: <UserX    size={13} strokeWidth={1.8} /> },
+    { key: "creators",   label: "Creators"   },
+    { key: "blocked",    label: "Blocked",    icon: <UserX     size={13} strokeWidth={1.8} /> },
     { key: "restricted", label: "Restricted", icon: <UserMinus size={13} strokeWidth={1.8} /> },
   ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif" }}>
 
-      {/* Header */}
       <div style={{ padding: "28px 28px 0", borderBottom: "1px solid #1F1F2A" }}>
         <h1 style={{ fontSize: "20px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 3px" }}>
           Subscriptions
@@ -229,23 +218,23 @@ export default function SubscriptionsPage() {
               key={tab.key}
               onClick={() => setContentTab(tab.key)}
               style={{
-                flex:         1,
-                display:      "flex",
-                alignItems:   "center",
+                flex:           1,
+                display:        "flex",
+                alignItems:     "center",
                 justifyContent: "center",
-                gap:          "5px",
-                padding:      "14px 8px",
-                background:   "none",
-                border:       "none",
-                cursor:       "pointer",
-                fontFamily:   "'Inter', sans-serif",
-                fontSize:     "13px",
-                fontWeight:   contentTab === tab.key ? 600 : 400,
-                color:        contentTab === tab.key ? "#8B5CF6" : "#64748B",
-                borderBottom: contentTab === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
-                marginBottom: "-1px",
-                transition:   "all 0.15s",
-                whiteSpace:   "nowrap",
+                gap:            "5px",
+                padding:        "14px 8px",
+                background:     "none",
+                border:         "none",
+                cursor:         "pointer",
+                fontFamily:     "'Inter', sans-serif",
+                fontSize:       "13px",
+                fontWeight:     contentTab === tab.key ? 600 : 400,
+                color:          contentTab === tab.key ? "#8B5CF6" : "#64748B",
+                borderBottom:   contentTab === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
+                marginBottom:   "-1px",
+                transition:     "all 0.15s",
+                whiteSpace:     "nowrap",
               }}
             >
               {tab.icon}
@@ -255,7 +244,6 @@ export default function SubscriptionsPage() {
         </div>
       </div>
 
-      {/* Icons row — only for following/posts */}
       {contentTab === "creators" && (
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "6px", padding: "14px 28px" }}>
           {[Search, SlidersHorizontal, ArrowUpDown].map((Icon, i) => (
@@ -271,8 +259,7 @@ export default function SubscriptionsPage() {
         </div>
       )}
 
-      {/* Content */}
-      <div style={{ padding: contentTab === "blocked" || contentTab === "restricted" ? "0 28px 28px" : "0 28px 28px" }}>
+      <div style={{ padding: "0 28px 28px" }}>
         {contentTab === "creators" && (
           loading
             ? <SubscriptionsSkeleton count={6} />

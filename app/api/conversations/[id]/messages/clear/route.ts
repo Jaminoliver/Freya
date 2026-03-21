@@ -26,10 +26,13 @@ export async function DELETE(
   const now         = new Date().toISOString();
   const beforeField = isCreator ? "deleted_before_creator" : "deleted_before_fan";
 
-  // Just record the cutoff timestamp — messages before this won't show for current user
   await supabase
     .from("conversations")
-    .update({ [beforeField]: now, updated_at: now })
+    .update({
+      [beforeField]:        now,
+      last_message_preview: null,
+      updated_at:           now,
+    })
     .eq("id", conversationId);
 
   return NextResponse.json({ success: true });

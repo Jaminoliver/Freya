@@ -67,10 +67,9 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const [nextCursor,  setNextCursor]  = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore,     setHasMore]     = useState(true);
-  const [loaded,      setLoaded]      = useState(isNew);
+  const [loaded,      setLoaded]      = useState(false);
 
-  // Keep isOnMessagesPage = true while in any conversation —
-  // so messages from OTHER conversations still get delivered
+  // Keep isOnMessagesPage = true while in any conversation
   useEffect(() => {
     setOnMessagesPage(true);
     return () => setOnMessagesPage(false);
@@ -97,6 +96,13 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     });
   }, []);
 
+  // For "new" conversations: don't create until first message is sent
+  useEffect(() => {
+    if (!isNew) return;
+    setLoaded(true);
+  }, [isNew]);
+
+  // For existing conversations: load convo + messages
   useEffect(() => {
     if (isNew) return;
 
@@ -157,6 +163,19 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     clearMessages();
   }, [clearMessages]);
 
+  const handleConversationCreated = useCallback((realId: number) => {
+    // Update conversation state with real ID
+    setConversation((prev) => prev ? { ...prev, id: realId } : prev);
+
+    // Activate in store + global so everything works immediately
+    setActiveConversationId(realId);
+    setActiveConversation(realId);
+    setStoreConversationId(realId);
+
+    // Silently update URL without remounting the page
+    window.history.replaceState(null, "", `/messages/${realId}`);
+  }, [setActiveConversationId]);
+
   if (notFound) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#4A4A6A", fontFamily: "'Inter',sans-serif" }}>
@@ -179,6 +198,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       hasMore={hasMore}
       loadingMore={loadingMore}
       realConversationIdRef={realConversationIdRef}
+      onConversationCreated={handleConversationCreated}
     />
   );
 }
