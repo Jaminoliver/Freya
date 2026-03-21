@@ -54,8 +54,15 @@ function SettingsLayoutInner() {
   const router       = useRouter();
   const { viewer, settingsPanel, setSettingsPanel } = useAppStore();
 
-  const [activeTab,  setActiveTab]  = useState<SettingsTab>("profile");
-  const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
+  // Read synchronously on first render — avoids flash to menu
+  const [activeTab,  setActiveTab]  = useState<SettingsTab>(() => {
+    const p = useAppStore.getState().settingsPanel;
+    return panelToTab(p);
+  });
+  const [mobileView, setMobileView] = useState<"menu" | "content">(() => {
+    const p = useAppStore.getState().settingsPanel;
+    return p ? "content" : "menu";
+  });
   const [username,   setUsername]   = useState<string>(viewer?.username ?? "");
   const [loading,    setLoading]    = useState(!viewer?.username);
   const [revealed,   setRevealed]   = useState(!!viewer?.username);

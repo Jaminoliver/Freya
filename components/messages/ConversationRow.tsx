@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Sparkles, X, ImageIcon } from "lucide-react";
 import { ConversationActionModal } from "@/components/messages/ConversationActionModal";
 import { updateConversations } from "@/app/(main)/messages/page";
@@ -16,43 +16,103 @@ interface Props {
 export function ConversationRow({ conversation, isActive, isTyping = false, onSelect }: Props) {
   const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia } = conversation;
 
+  // No `touching` state — that was causing re-renders which triggered framer-motion
+  // layout shifts, making the wrong row appear highlighted on long press.
+  // Press highlight is now handled purely by CSS :active below.
   const [hovered,   setHovered]   = useState(false);
-  const [touching,  setTouching]  = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
+  const rowRef         = useRef<HTMLDivElement>(null);
   const touchStartY    = useRef<number>(0);
   const touchStartX    = useRef<number>(0);
   const didScroll      = useRef<boolean>(false);
+  const longPressFired = useRef<boolean>(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasTouched     = useRef<boolean>(false);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-    touchStartX.current = e.touches[0].clientX;
-    didScroll.current   = false;
-    setTouching(true);
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
 
-    longPressTimer.current = setTimeout(() => {
-      if (!didScroll.current) {
-        setTouching(false);
+    const onTouchStart = (e: TouchEvent) => {
+      console.log("[ConversationRow] touchstart");
+      touchStartY.current    = e.touches[0].clientY;
+      touchStartX.current    = e.touches[0].clientX;
+      didScroll.current      = false;
+      longPressFired.current = false;
+      wasTouched.current     = true;
+      // No setTouching(true) — prevents re-render + framer-motion layout shift
+
+      longPressTimer.current = setTimeout(() => {
+        if (didScroll.current) {
+          console.log("[ConversationRow] long press cancelled — scrolled");
+          return;
+        }
+        console.log("[ConversationRow] long press fired → setModalOpen(true)");
+        longPressFired.current = true;
+
+        const eatClick = (ev: MouseEvent) => {
+          console.log("[ConversationRow] eating ghost click after long press");
+          ev.stopPropagation();
+          ev.preventDefault();
+          document.removeEventListener("click", eatClick, true);
+        };
+        document.addEventListener("click", eatClick, true);
+
+        const eatTouchEnd = (ev: TouchEvent) => {
+          console.log("[ConversationRow] eating touchend after long press");
+          ev.stopPropagation();
+          document.removeEventListener("touchend", eatTouchEnd, true);
+        };
+        document.addEventListener("touchend", eatTouchEnd, true);
+
         setModalOpen(true);
+      }, 500);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+      const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
+      if (dy > 6 || dx > 6) {
+        console.log("[ConversationRow] touchmove — scroll detected, cancelling long press");
+        didScroll.current = true;
+        if (longPressTimer.current) clearTimeout(longPressTimer.current);
       }
-    }, 500);
-  };
+    };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
-    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
-    if (dy > 6 || dx > 6) {
-      didScroll.current = true;
-      setTouching(false);
+    const onTouchEnd = () => {
+      console.log("[ConversationRow] touchend — longPressFired:", longPressFired.current, "didScroll:", didScroll.current);
       if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    }
-  };
+      if (longPressFired.current) {
+        console.log("[ConversationRow] touchend skipped — long press already handled");
+        longPressFired.current = false;
+        return;
+      }
+      if (!didScroll.current) {
+        console.log("[ConversationRow] touchend → calling onSelect");
+        onSelect();
+      }
+      setTimeout(() => { wasTouched.current = false; }, 50);
+    };
 
-  const handleTouchEnd = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    setTouching(false);
-    if (!didScroll.current) onSelect();
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove",  onTouchMove,  { passive: true });
+    el.addEventListener("touchend",   onTouchEnd);
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove",  onTouchMove);
+      el.removeEventListener("touchend",   onTouchEnd);
+    };
+  }, [onSelect]);
+
+  const handleClick = () => {
+    console.log("[ConversationRow] onClick — wasTouched:", wasTouched.current);
+    if (wasTouched.current) {
+      console.log("[ConversationRow] onClick skipped — came from touch");
+      return;
+    }
+    onSelect();
   };
 
   const handleCleared = () => {
@@ -81,31 +141,50 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   })();
 
-  const bg = isActive
-    ? "#1C1C2E"
-    : touching || hovered
-    ? "#14141F"
-    : "transparent";
+  const bg = isActive ? "#1C1C2E" : hovered ? "#14141F" : "transparent";
 
   return (
     <>
+      <style>{`
+        .conv-row, .conv-row * {
+          -webkit-user-select:    none !important;
+          -moz-user-select:       none !important;
+          user-select:            none !important;
+          -webkit-touch-callout:  none !important;
+        }
+        .conv-row {
+          touch-action: pan-y;
+          -webkit-tap-highlight-color: transparent;
+        }
+        /* CSS-only press highlight — no React state, no re-render, no layout shift */
+        .conv-row:not(.conv-row--active):active {
+          background-color: #14141F !important;
+        }
+      `}</style>
+
       {modalOpen && (
         <ConversationActionModal
           conversationId={conversation.id}
-          participantName={participant.name}
-          onClose={() => setModalOpen(false)}
+          participant={participant}
+          onClose={() => {
+            console.log("[ConversationRow] modal onClose called");
+            setModalOpen(false);
+          }}
           onCleared={handleCleared}
         />
       )}
 
       <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={onSelect}
+        ref={rowRef}
+        className={`conv-row${isActive ? " conv-row--active" : ""}`}
+        onClick={handleClick}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onContextMenu={(e) => { e.preventDefault(); setModalOpen(true); }}
+        onContextMenu={(e) => {
+          console.log("[ConversationRow] onContextMenu → setModalOpen(true)");
+          e.preventDefault();
+          setModalOpen(true);
+        }}
         style={{
           display:                 "flex",
           alignItems:              "center",
@@ -118,7 +197,6 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
           position:                "relative",
           fontFamily:              "'Inter', sans-serif",
           WebkitTapHighlightColor: "transparent",
-          userSelect:              "none",
         }}
       >
         <div style={{ position: "relative", flexShrink: 0 }}>
@@ -146,7 +224,6 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
               @{participant.username}
             </span>
           </div>
-
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             {!isTyping && hasMedia && <ImageIcon size={12} color="#A3A3C2" strokeWidth={1.8} />}
             <span style={{ fontSize: "13px", color: isTyping ? "#8B5CF6" : "#A3A3C2", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "180px", fontStyle: isTyping ? "italic" : "normal", fontWeight: unreadCount > 0 ? 600 : 400 }}>
@@ -156,7 +233,7 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px", flexShrink: 0 }}>
-          <span style={{ fontSize: "12px", color: unreadCount > 0 ? "#8B5CF6" : "#4A4A6A", fontWeight: unreadCount > 0 ? 500 : 400 }}>
+          <span style={{ fontSize: "12px", color: unreadCount > 0 ? "#8B5CF6" : "#9090A8", fontWeight: unreadCount > 0 ? 500 : 400 }}>
             {formattedTime}
           </span>
           {unreadCount > 0 && (
@@ -168,7 +245,11 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
 
         {hovered && (
           <button
-            onClick={(e) => { e.stopPropagation(); setModalOpen(true); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log("[ConversationRow] hover X clicked → setModalOpen(true)");
+              setModalOpen(true);
+            }}
             style={{ position: "absolute", top: "10px", right: "12px", background: "none", border: "none", cursor: "pointer", color: "#4A4A6A", display: "flex", alignItems: "center", padding: "2px", transition: "color 0.15s ease" }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "#A3A3C2")}
             onMouseLeave={(e) => (e.currentTarget.style.color = "#4A4A6A")}

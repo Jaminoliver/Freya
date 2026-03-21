@@ -11,6 +11,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useAppStore } from "@/lib/store/appStore";
 import { useNav } from "@/lib/hooks/useNav";
+import { useUnreadConversationCount } from "@/app/(main)/messages/page";
 
 const navItems = [
   { label: "Home",          href: "/dashboard",     icon: Home          },
@@ -36,6 +37,21 @@ function formatCount(n: number): string {
   return String(n);
 }
 
+function UnreadBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span style={{
+      minWidth: "18px", height: "18px", borderRadius: "9px",
+      backgroundColor: "#8B5CF6", color: "#FFFFFF",
+      fontSize: "11px", fontWeight: 700, lineHeight: 1,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      padding: "0 5px", marginLeft: "auto", flexShrink: 0,
+    }}>
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
 const FALLBACK_COVER = "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80";
 
 export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
@@ -44,6 +60,8 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
 
   const viewer   = useAppStore((s) => s.viewer);
   const username = viewer?.username ?? null;
+
+  const unreadCount = useUnreadConversationCount();
 
   const isActive = (href: string) =>
     pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
@@ -101,7 +119,6 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  // Close search on route change
   useEffect(() => {
     setSearchOpen(false);
     setQuery("");
@@ -140,7 +157,6 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
             transition: "transform 0.25s ease",
           }}
         >
-          {/* Default state */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
             <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -153,7 +169,6 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
             </div>
           </div>
 
-          {/* Search state */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 12px", height: "100%", opacity: searchOpen ? 1 : 0, transform: searchOpen ? "translateY(0)" : "translateY(-10px)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "auto" : "none", position: "absolute", inset: 0 }}>
             <button onClick={closeSearch} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", flexShrink: 0 }}>
               <ArrowLeft size={22} strokeWidth={1.8} />
@@ -235,7 +250,8 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
 
         <nav style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
           {navItems.map(({ label, href, icon: Icon }) => {
-            const active = isActive(href);
+            const active   = isActive(href);
+            const isMsg    = href === "/messages";
             return (
               <button key={href} onClick={() => handleNav(href)}
                 style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", background: active ? "#1E1E2E" : "none", border: "none", cursor: "pointer", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease", width: "100%", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
@@ -244,6 +260,7 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
               >
                 <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
                 {label}
+                {isMsg && <UnreadBadge count={unreadCount} />}
               </button>
             );
           })}

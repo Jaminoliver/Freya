@@ -5,6 +5,7 @@ import { MessageBubble } from "@/components/messages/MessageBubble";
 import { MediaGrid } from "@/components/messages/MediaGrid";
 import { MediaLightbox } from "@/components/messages/MediaLightbox";
 import { TypingBubble } from "@/components/messages/TypingBubble";
+import { ReadTick } from "@/components/messages/ReadTick";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
@@ -43,55 +44,12 @@ function formatMessageTime(raw: string): string {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-function ReadTick({ status, isDelivered, isRead }: { status?: string; isDelivered?: boolean; isRead: boolean }) {
-  if (status === "sending") {
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <circle cx="6" cy="6" r="5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.4"/>
-          <path d="M6 3.5V6L7.5 7.5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.4" strokeLinecap="round"/>
-        </svg>
-      </span>
-    );
-  }
-  if (isRead) {
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-        <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-          <path d="M1 5L4.5 8.5L10 2" stroke="#A78BFA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M6 5L9.5 8.5L15 2" stroke="#A78BFA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </span>
-    );
-  }
-  if (isDelivered) {
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-        <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-          <path d="M1 5L4.5 8.5L10 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M6 5L9.5 8.5L15 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </span>
-    );
-  }
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-        <path d="M1 5L4 8L9 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    </span>
-  );
-}
-
 function getMediaItems(msg: Message, isOwn: boolean): { url: string; type: "image" | "video" }[] {
   const urls = msg.mediaUrls ?? [];
-
-  // Locked PPV for receiver — return placeholders so locked UI renders
   if (msg.type === "ppv" && !isOwn && !msg.ppv?.isUnlocked) {
     const count = urls.length > 0 ? urls.length : 1;
     return Array.from({ length: count }, () => ({ url: "", type: "image" as const }));
   }
-
   return urls.filter(Boolean).map((url) => ({
     url,
     type: url.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || url.includes('#video') ? "video" : "image",
@@ -176,9 +134,7 @@ function MediaBubble({
       if (!didMove.current) setSheetOpen(true);
     }, 500);
   };
-  const cancelPress = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  };
+  const cancelPress = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
   const onMove = () => { didMove.current = true; cancelPress(); };
 
   const sheetItems = [
@@ -295,12 +251,17 @@ export function MessagesList({
   onMessagesUpdate,
 }: Props) {
   const scrollRef         = useRef<HTMLDivElement>(null);
-  const prevMessageIdsRef = useRef<Set<number>>(new Set(messages.map((m) => m.id)));
+  const prevMessageIdsRef = useRef<Set<string>>(new Set(messages.map((m) => String(m.tempId ?? m.id))));
   const prevCountRef      = useRef(messages.length);
   const isNearBottomRef   = useRef(true);
-  const [animatingIds, setAnimatingIds] = useState<Set<number>>(new Set());
-  const [lightbox,     setLightbox]     = useState<LightboxState | null>(null);
-  const [unlocking,    setUnlocking]    = useState<Set<number>>(new Set());
+
+  // "older" = messages prepended by loadMore, animate sliding down from top
+  // "newer" = messages appended in real-time, animate sliding up from bottom
+  const [olderAnimIds, setOlderAnimIds] = useState<Set<string>>(new Set());
+  const [newerAnimIds, setNewerAnimIds] = useState<Set<string>>(new Set());
+
+  const [lightbox,  setLightbox]  = useState<LightboxState | null>(null);
+  const [unlocking, setUnlocking] = useState<Set<number>>(new Set());
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -314,6 +275,7 @@ export function MessagesList({
     isNearBottomRef.current = Math.abs(el.scrollTop) < 150;
   }, []);
 
+  // Scroll to bottom when new messages arrive at the end
   useEffect(() => {
     const prevCount = prevCountRef.current;
     prevCountRef.current = messages.length;
@@ -331,19 +293,34 @@ export function MessagesList({
     }
   }, [isTyping, scrollToBottom]);
 
+  // Detect added messages and classify as older (prepended) or newer (appended)
   useEffect(() => {
     const prevIds = prevMessageIdsRef.current;
-    const newIds  = new Set(messages.map((m) => m.id));
-    const added   = new Set<number>();
+    const newIds  = new Set(messages.map((m) => String(m.tempId ?? m.id)));
+    const added   = new Set<string>();
     for (const id of newIds) { if (!prevIds.has(id)) added.add(id); }
     prevMessageIdsRef.current = newIds;
-    if (added.size > 0) {
-      const lastAddedIdx = messages.length - 1 - [...messages].reverse().findIndex((m) => added.has(m.id));
-      const allAtStart   = lastAddedIdx < messages.length - 1;
-      if (allAtStart && added.size > 1) {
-        setAnimatingIds(added);
-        setTimeout(() => setAnimatingIds(new Set()), 450);
-      }
+
+    if (added.size === 0) return;
+
+    // Find the lowest original index of an added message
+    const firstAddedIdx = messages.findIndex((m) => added.has(String(m.tempId ?? m.id)));
+    // Find the highest original index of an added message
+    const lastAddedIdx  = messages.length - 1 - [...messages].reverse().findIndex((m) => added.has(String(m.tempId ?? m.id)));
+
+    const totalExisting = messages.length - added.size;
+
+    // Older messages: prepended at the start (index 0..N), only when there were already messages
+    const addedAtStart = firstAddedIdx === 0 && lastAddedIdx < messages.length - 1 && totalExisting > 0;
+    // Newer messages: appended at the end (could be 1 new real-time msg)
+    const addedAtEnd   = lastAddedIdx === messages.length - 1 && firstAddedIdx > 0;
+
+    if (addedAtStart && added.size >= 1) {
+      setOlderAnimIds(added);
+      setTimeout(() => setOlderAnimIds(new Set()), 500);
+    } else if (addedAtEnd && added.size >= 1) {
+      setNewerAnimIds(added);
+      setTimeout(() => setNewerAnimIds(new Set()), 400);
     }
   }, [messages]);
 
@@ -423,8 +400,19 @@ export function MessagesList({
         }}
       >
         <style>{`
-          @keyframes msgFadeIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
-          .msg-fade-in { animation: msgFadeIn 0.4s ease-out both; }
+          /* Older msgs loaded at top — in column-reverse DOM, top = high index visually,
+             so they slide in from above: translateY(-10px) → 0 */
+          @keyframes msgSlideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          /* Newer real-time msgs at bottom — slide up from below */
+          @keyframes msgSlideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          .msg-older { animation: msgSlideDown 0.35s ease-out both; }
+          .msg-newer { animation: msgSlideUp  0.25s ease-out both; }
           @keyframes spinLoader { to { transform: rotate(360deg); } }
         `}</style>
 
@@ -481,9 +469,15 @@ export function MessagesList({
                 new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime() > 5 * 60 * 1000
               );
               const mediaItems = getMediaItems(msg, isOwn);
+              const msgKey     = String(msg.tempId ?? msg.id);
+              const animClass  = olderAnimIds.has(msgKey) ? "msg-older" : newerAnimIds.has(msgKey) ? "msg-newer" : "";
 
               return (
-                <div key={`${ri}-${msg.tempId ?? msg.id}`} className={animatingIds.has(msg.id) ? "msg-fade-in" : ""} style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}>
+                <div
+                  key={`${ri}-${msgKey}`}
+                  className={animClass}
+                  style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}
+                >
                   {showTime && (
                     <div style={{ textAlign: "center", margin: "6px 0" }}>
                       <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{formatMessageTime(msg.createdAt)}</span>
@@ -538,8 +532,10 @@ export function MessagesList({
             const allGroupMedia = groupMsgs.flatMap((m) =>
               getMediaItems(m, isOwn).map((mi) => ({ ...mi, messageId: m.id }))
             );
-            const gridItems = allGroupMedia.map((mi) => ({ url: mi.url, type: mi.type }));
-            const groupKey  = groupMsgs.map((m) => m.tempId ?? m.id).join("-");
+            const gridItems  = allGroupMedia.map((mi) => ({ url: mi.url, type: mi.type }));
+            const groupKey   = groupMsgs.map((m) => m.tempId ?? m.id).join("-");
+            const firstKey   = String(groupMsgs[0].tempId ?? groupMsgs[0].id);
+            const groupAnim  = olderAnimIds.has(firstKey) ? "msg-older" : newerAnimIds.has(firstKey) ? "msg-newer" : "";
 
             const handleGroupClick = (clickedIndex: number) => {
               const allConvoMedia = messages.flatMap((m) => {
@@ -555,7 +551,7 @@ export function MessagesList({
             };
 
             return (
-              <div key={groupKey} style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}>
+              <div key={groupKey} className={groupAnim} style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}>
                 {showTime && (
                   <div style={{ textAlign: "center", margin: "6px 0" }}>
                     <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{formatMessageTime(firstMsg.createdAt)}</span>

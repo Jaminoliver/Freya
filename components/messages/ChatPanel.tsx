@@ -6,8 +6,8 @@ import { ArrowLeft, Star, Bell, Pin, Images, Search, MoreVertical, Flag, Eraser 
 import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
-import { useTypingConversations } from "@/app/(main)/messages/page";
-import { updateConversations, clearCachedMessages } from "@/app/(main)/messages/page";
+import { useTypingConversations, updateConversations, clearCachedMessages } from "@/app/(main)/messages/page";
+import { useMessageStore } from "@/lib/store/messageStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { ChatHeader } from "@/components/messages/ChatHeader";
 import { MessagesList } from "@/components/messages/MessagesList";
@@ -16,52 +16,53 @@ import { ReportModal } from "@/components/messages/ReportModal";
 import type { Conversation, Message } from "@/lib/types/messages";
 
 interface Props {
-  conversation:      Conversation;
-  messages:          Message[];
-  onBack:            () => void;
-  onNewMessage:      (message: Message) => void;
-  onClearMessages?:  () => void;
-  currentUserId?:    string;
-  onLoadMore?:       () => void;
-  hasMore?:          boolean;
-  loadingMore?:      boolean;
+  conversation:         Conversation;
+  currentUserId:        string;
+  onBack:               () => void;
+  onClearMessages?:     () => void;
+  onLoadMore?:          () => void;
+  hasMore?:             boolean;
+  loadingMore?:         boolean;
+  realConversationIdRef: React.MutableRefObject<number | null>;
 }
+
+const DOTS_PATTERN = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='2' cy='2' r='1.2' fill='rgba(255,255,255,0.12)'/%3E%3C/svg%3E")`;
 
 export function ChatPanel({
   conversation,
-  messages: initialMessages,
+  currentUserId,
   onBack,
-  onNewMessage,
   onClearMessages,
-  currentUserId = "me",
   onLoadMore,
   hasMore,
   loadingMore,
+  realConversationIdRef,
 }: Props) {
   const { participant } = conversation;
   const router          = useRouter();
   const handleBack      = () => router.push("/messages");
 
+  const { messages, setMessages, appendMessage } = useMessageStore();
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [reportOpen,   setReportOpen]   = useState(false);
   const [sending,      setSending]      = useState(false);
   const [replyTo,      setReplyTo]      = useState<Message | null>(null);
-  const [messages,     setMessages]     = useState<Message[]>(initialMessages);
 
   const { startMessageUpload, uploads } = useUpload();
 
-  // Restore in-progress uploads as optimistic messages when returning to this chat
+  // Sync in-progress uploads into store
   useEffect(() => {
     const inProgress = uploads.filter(
-      (u) => u._isMessage && u._conversationId === conversation.id && (u.phase === "uploading" || u.phase === "processing")
+      (u) => u._isMessage && u._conversationId === conversation.id &&
+        (u.phase === "uploading" || u.phase === "processing")
     );
     if (inProgress.length === 0) return;
 
     setMessages((prev) => {
       let updated = [...prev];
       for (const u of inProgress) {
-        const alreadyExists = updated.some((m) => m.tempId === u._tempId);
-        if (alreadyExists) continue;
+        if (updated.some((m) => m.tempId === u._tempId)) continue;
         updated.push({
           id:             Date.now() + Math.random(),
           conversationId: conversation.id,
@@ -83,16 +84,6 @@ export function ChatPanel({
     });
   }, [uploads, conversation.id, currentUserId]);
 
-  useEffect(() => {
-    setMessages((prev) => {
-      const pending = prev.filter((m) => m.status === "sending" || m.status === "failed");
-      const stillPending = pending.filter(
-        (p) => !initialMessages.some((c) => c.tempId === p.tempId || c.id === p.id)
-      );
-      return [...initialMessages, ...stillPending];
-    });
-  }, [initialMessages]);
-
   const { setTypingConversationId } = useMessagesContext();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -105,8 +96,8 @@ export function ChatPanel({
     else setTypingConversationId(null);
   }, [isTyping, conversation.id, setTypingConversationId]);
 
+  // Mark conversation as read on mount
   useEffect(() => {
-    // Skip read marking for shell conversations (id === 0)
     if (conversation.id === 0) return;
     updateConversations((prev) =>
       prev.map((c) => c.id === conversation.id ? { ...c, unreadCount: 0 } : c)
@@ -116,9 +107,8 @@ export function ChatPanel({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node))
         setDropdownOpen(false);
-      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -131,10 +121,8 @@ export function ChatPanel({
     if (convId === 0) return;
 
     if (deleteFor === "me") {
-      // Optimistic: remove from local state immediately
       setMessages((prev) => prev.filter((m) => m.id !== message.id));
     } else {
-      // Optimistic: replace with "deleted" placeholder
       setMessages((prev) =>
         prev.map((m) =>
           m.id === message.id
@@ -145,124 +133,44 @@ export function ChatPanel({
     }
 
     try {
-      console.log("[handleDelete] calling DELETE /api/conversations/" + convId + "/messages/" + message.id, { deleteFor });
       const res = await fetch(`/api/conversations/${convId}/messages/${message.id}`, {
         method:  "DELETE",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ deleteFor }),
       });
-      const resBody = await res.json();
-      console.log("[handleDelete] response:", res.status, resBody);
       if (!res.ok) {
-        // Revert on failure — re-add original message
         setMessages((prev) => {
           if (deleteFor === "me") {
-            // Re-insert at correct position by timestamp
-            const updated = [...prev, message].sort(
+            return [...prev, message].sort(
               (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
             );
-            return updated;
-          } else {
-            return prev.map((m) => m.id === message.id ? message : m);
           }
+          return prev.map((m) => m.id === message.id ? message : m);
         });
       }
     } catch {
-      // Revert on error
       setMessages((prev) => {
         if (deleteFor === "me") {
-          const updated = [...prev, message].sort(
+          return [...prev, message].sort(
             (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           );
-          return updated;
-        } else {
-          return prev.map((m) => m.id === message.id ? message : m);
         }
+        return prev.map((m) => m.id === message.id ? message : m);
       });
     }
-  }, [conversation.id]);
+  }, [conversation.id, setMessages]);
 
   const handleSend = useCallback(async (text: string, mediaFiles?: File[], ppvPrice?: number) => {
     if (sending) return;
 
-    // New chat shell (id === 0) — same optimistic pattern as existing chat
-    if (conversation.id === 0 && text.trim()) {
-      const tempId = `temp_text_${Date.now()}_${Math.random()}`;
-      const optimisticMessage: Message = {
-        id:             Date.now(),
-        conversationId: 0,
-        senderId:       currentUserId,
-        type:           "text",
-        text:           text.trim(),
-        createdAt:      new Date().toISOString(),
-        isRead:         false,
-        status:         "sending",
-        tempId,
-        replyToId:      null,
-      };
-      setMessages((prev) => [...prev, optimisticMessage]);
-
-      try {
-        // Step 1: create conversation
-        const convoRes  = await fetch("/api/conversations", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ targetUserId: (conversation.participant as any).id }),
-        });
-        const convoData = await convoRes.json();
-        if (!convoData.conversationId) {
-          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
-          return;
-        }
-        const newId: number = convoData.conversationId;
-
-        // Step 2: send message
-        const msgRes  = await fetch(`/api/conversations/${newId}/messages`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ content: text.trim() }),
-        });
-        const msgData = await msgRes.json();
-        if (!msgData.message) {
-          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
-          return;
-        }
-
-        // Step 3: confirm — exactly like existing chat
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.tempId === tempId
-              ? { ...msgData.message, status: "sent" as const, tempId, isDelivered: false }
-              : m
-          )
-        );
-        onNewMessage(msgData.message);
-
-        // Step 4: update sidebar + URL silently
-        const freshRes  = await fetch(`/api/conversations/${newId}`);
-        const freshData = await freshRes.json();
-        if (freshData.conversation) {
-          updateConversations((prev) => {
-            if (prev.some((c) => c.id === newId)) return prev;
-            return [freshData.conversation, ...prev];
-          });
-        }
-        window.history.replaceState(null, "", `/messages/${newId}`);
-      } catch {
-        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
-      }
-      return;
-    }
-
     if (mediaFiles && mediaFiles.length > 0) {
-      const tempId = `temp_${Date.now()}_${Math.random()}`;
-
+      const tempId    = `temp_${Date.now()}_${Math.random()}`;
       const blobItems = mediaFiles.map((file) => ({
         url:  URL.createObjectURL(file),
         type: file.type.startsWith("video/") ? "video" as const : "image" as const,
       }));
 
-      const optimisticMessage: Message = {
+      const optimistic: Message = {
         id:             Date.now(),
         conversationId: conversation.id,
         senderId:       currentUserId,
@@ -274,62 +182,34 @@ export function ChatPanel({
         status:         "sending",
         uploadProgress: 0,
         tempId,
-        ...(ppvPrice ? {
-          ppv: {
-            price:         ppvPrice * 100,
-            isUnlocked:    true,
-            unlockedCount: 0,
-          },
-        } : {}),
+        ...(ppvPrice ? { ppv: { price: ppvPrice * 100, isUnlocked: true, unlockedCount: 0 } } : {}),
       };
-
-      setMessages((prev) => [...prev, optimisticMessage]);
+      appendMessage(optimistic);
 
       startMessageUpload({
-        files:          mediaFiles,
-        conversationId: conversation.id,
-        content:        text.trim() || undefined,
-        isPPV:          !!ppvPrice,
-        ppvPrice:       ppvPrice ? ppvPrice * 100 : undefined,
-        tempId,
+        files: mediaFiles, conversationId: conversation.id, content: text.trim() || undefined,
+        isPPV: !!ppvPrice, ppvPrice: ppvPrice ? ppvPrice * 100 : undefined, tempId,
         onProgress: (progress) => {
-          setMessages((prev) =>
-            prev.map((m) => m.tempId === tempId ? { ...m, uploadProgress: progress } : m)
-          );
+          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, uploadProgress: progress } : m));
         },
         onSent: (serverMessage) => {
           blobItems.forEach((b) => URL.revokeObjectURL(b.url));
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.tempId === tempId
-                ? { ...serverMessage, status: "sent" as const }
-                : m
-            )
-          );
-          onNewMessage(serverMessage);
-          updateConversations((prev) =>
-            prev.map((c) =>
-              c.id === conversation.id
-                ? { ...c, lastMessage: text || "📷 Media", lastMessageAt: new Date().toISOString() }
-                : c
-            )
-          );
+          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...serverMessage, status: "sent" as const } : m));
+          updateConversations((prev) => prev.map((c) =>
+            c.id === conversation.id ? { ...c, lastMessage: text || "📷 Media", lastMessageAt: new Date().toISOString() } : c
+          ));
         },
         onError: () => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.tempId === tempId ? { ...m, status: "failed" as const } : m
-            )
-          );
+          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
         },
       });
 
     } else if (text.trim()) {
-      const tempId = `temp_text_${Date.now()}_${Math.random()}`;
+      const tempId         = `temp_text_${Date.now()}_${Math.random()}`;
       const savedReplyToId = replyTo?.id ?? null;
       setReplyTo(null);
 
-      const optimisticMessage: Message = {
+      const optimistic: Message = {
         id:             Date.now(),
         conversationId: conversation.id,
         senderId:       currentUserId,
@@ -341,63 +221,43 @@ export function ChatPanel({
         tempId,
         replyToId:      savedReplyToId,
       };
-
-      setMessages((prev) => [...prev, optimisticMessage]);
+      appendMessage(optimistic);
 
       try {
-        const res  = await fetch(`/api/conversations/${conversation.id}/messages`, {
+        const convId = realConversationIdRef.current ?? conversation.id;
+        const res    = await fetch(`/api/conversations/${convId}/messages`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ content: text.trim(), reply_to_id: savedReplyToId }),
         });
         const data = await res.json();
         if (data.message) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.tempId === tempId
-                ? { ...data.message, status: "sent" as const, tempId, isDelivered: m.isDelivered ?? false }
-                : m
-            )
-          );
-          onNewMessage(data.message);
+          // ⚠️ Do NOT hardcode isDelivered: false here — a realtime patch may
+          // have already queued isDelivered/isRead for this real ID.
+          // setMessages will apply any pending patches automatically.
+          setMessages((prev) => prev.map((m) =>
+            m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m
+          ));
         } else {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.tempId === tempId ? { ...m, status: "failed" as const } : m
-            )
-          );
+          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
         }
       } catch {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.tempId === tempId ? { ...m, status: "failed" as const } : m
-          )
-        );
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
       } finally {
         setSending(false);
       }
     }
-  }, [sending, conversation.id, currentUserId, replyTo, startMessageUpload, onNewMessage]);
-
-  const wrappedOnNewMessage = useCallback((message: Message) => {
-    onNewMessage(message);
-    if (message.senderId !== currentUserId) {
-      updateConversations((prev) =>
-        prev.map((c) => c.id === conversation.id ? { ...c, unreadCount: 0 } : c)
-      );
-      fetch(`/api/conversations/${conversation.id}/read`, { method: "PATCH" }).catch(() => {});
-    }
-  }, [onNewMessage, currentUserId, conversation.id]);
+  }, [sending, conversation.id, currentUserId, replyTo, startMessageUpload, appendMessage, setMessages, realConversationIdRef]);
 
   const handleMessagesUpdate = useCallback((updater: (msgs: Message[]) => Message[]) => {
     setMessages((prev) => updater(prev));
-  }, []);
+  }, [setMessages]);
 
   const menuItems = [
     { icon: Star,   label: "Favourite",     action: () => setDropdownOpen(false) },
     { icon: Bell,   label: "Notifications", action: () => setDropdownOpen(false) },
     { icon: Pin,    label: "Pin chat",      action: () => setDropdownOpen(false) },
-    { icon: Images, label: "Gallery",       action: () => setDropdownOpen(false) },
+    { icon: Images, label: "Gallery",       action: () => { setDropdownOpen(false); router.push(`/messages/${conversation.id}/gallery`); } },
     { icon: Search, label: "Find in chat",  action: () => setDropdownOpen(false) },
     { icon: Eraser, label: "Clear chat",    action: () => { setDropdownOpen(false); clearCachedMessages(conversation.id); onClearMessages?.(); }, danger: false },
     { icon: Flag,   label: "Report",        action: () => { setDropdownOpen(false); setReportOpen(true); }, danger: true },
@@ -424,6 +284,11 @@ export function ChatPanel({
             padding-bottom: env(safe-area-inset-bottom, 0px);
             box-sizing: border-box;
           }
+        }
+        .chat-messages-wall {
+          flex: 1; min-height: 0; display: flex; flex-direction: column;
+          overflow: hidden; background-color: #0D0D18;
+          background-image: ${DOTS_PATTERN}; background-size: 20px 20px;
         }
       `}</style>
 
@@ -517,18 +382,21 @@ export function ChatPanel({
           </div>
         </div>
 
-        <MessagesList
-          messages={messages}
-          conversation={conversation}
-          currentUserId={currentUserId}
-          isTyping={isTyping}
-          onReply={(msg) => setReplyTo(msg)}
-          onDelete={handleDelete}
-          onLoadMore={onLoadMore}
-          hasMore={hasMore}
-          loadingMore={loadingMore}
-          onMessagesUpdate={handleMessagesUpdate}
-        />
+        <div className="chat-messages-wall">
+          <MessagesList
+            messages={messages}
+            conversation={conversation}
+            currentUserId={currentUserId}
+            isTyping={isTyping}
+            onReply={(msg) => setReplyTo(msg)}
+            onDelete={handleDelete}
+            onLoadMore={onLoadMore}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            onMessagesUpdate={handleMessagesUpdate}
+          />
+        </div>
+
         <MessageInput
           onSend={handleSend}
           onTyping={handleTyping}

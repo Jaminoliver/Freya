@@ -5,11 +5,13 @@ import { Home, MessageCircle, CreditCard, MoreHorizontal, Plus } from "lucide-re
 import { useState } from "react";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useNav } from "@/lib/hooks/useNav";
+import { useUnreadConversationCount } from "@/app/(main)/messages/page";
 
 export function MobileBottomNav() {
-  const pathname = usePathname();
+  const pathname    = usePathname();
   const { navigate } = useNav();
   const [moreOpen, setMoreOpen] = useState(false);
+  const unreadCount = useUnreadConversationCount();
 
   const inChat = pathname.startsWith("/messages/");
   if (inChat) return null;
@@ -50,9 +52,23 @@ export function MobileBottomNav() {
         </button>
 
         <button onClick={() => navigate("/messages")}
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", height: "64px", minWidth: "48px", color: pathname === "/messages" ? "#8B5CF6" : "#6B6B8A", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: 0 }}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", height: "64px", minWidth: "48px", color: pathname === "/messages" ? "#8B5CF6" : "#6B6B8A", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: 0, position: "relative" }}
         >
-          <MessageCircle size={22} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
+          <div style={{ position: "relative", display: "inline-flex" }}>
+            <MessageCircle size={22} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
+            {unreadCount > 0 && (
+              <span style={{
+                position: "absolute", top: "-5px", right: "-8px",
+                minWidth: "16px", height: "16px", borderRadius: "8px",
+                backgroundColor: "#8B5CF6", color: "#FFFFFF",
+                fontSize: "10px", fontWeight: 700, lineHeight: 1,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                padding: "0 4px", border: "2px solid #13131F",
+              }}>
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </div>
           <span style={{ fontSize: "10px", lineHeight: 1 }}>Messages</span>
         </button>
 

@@ -5,10 +5,11 @@ import { getBrowserClient } from "@/lib/supabase/browserClient";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatPanel } from "@/components/messages/ChatPanel";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
+import { useMessageStore } from "@/lib/store/messageStore";
 import {
   useConversations,
   setActiveConversation,
-  setMessageDispatcher,
+  setOnMessagesPage,
   setCachedMessages,
   appendCachedMessage,
   updateConversations,
@@ -16,10 +17,10 @@ import {
 import type { Conversation, Message } from "@/lib/types/messages";
 
 export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id }      = use(params);
-  const router      = useRouter();
+  const { id }       = use(params);
+  const router       = useRouter();
   const searchParams = useSearchParams();
-  const isNew       = id === "new";
+  const isNew        = id === "new";
 
   const targetUserId   = searchParams.get("targetUserId");
   const targetName     = searchParams.get("name") ?? "Unknown";
@@ -30,7 +31,16 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const conversationId = isNew ? 0 : parseInt(id, 10);
 
   const { conversations } = useConversations();
-  const { setActiveConversationId, registerMessageHandler, unregisterMessageHandler } = useMessagesContext();
+  const { setActiveConversationId } = useMessagesContext();
+
+  const {
+    messages,
+    setMessages,
+    appendMessage,
+    patchMessage,
+    clearMessages,
+    setConversationId: setStoreConversationId,
+  } = useMessageStore();
 
   const cached = isNew ? null : (conversations.find((c) => c.id === conversationId) ?? null);
 
@@ -46,26 +56,37 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
         }
       : cached
   );
+
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const currentUserIdRef = useRef(currentUserId);
-  currentUserIdRef.current = currentUserId;
+  const currentUserIdRef                  = useRef(currentUserId);
+  currentUserIdRef.current                = currentUserId;
 
   const realConversationIdRef = useRef<number | null>(null);
 
-  const [messages,    setMessages]    = useState<Message[]>([]);
   const [notFound,    setNotFound]    = useState(false);
   const [nextCursor,  setNextCursor]  = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore,     setHasMore]     = useState(true);
   const [loaded,      setLoaded]      = useState(isNew);
 
+  // Keep isOnMessagesPage = true while in any conversation —
+  // so messages from OTHER conversations still get delivered
+  useEffect(() => {
+    setOnMessagesPage(true);
+    return () => setOnMessagesPage(false);
+  }, []);
+
+  // Tell the store which conversation is active
   useEffect(() => {
     if (isNew) return;
     setActiveConversationId(conversationId);
     setActiveConversation(conversationId);
+    setStoreConversationId(conversationId);
     return () => {
       setActiveConversationId(null);
       setActiveConversation(null);
+      setStoreConversationId(null);
+      clearMessages();
     };
   }, [conversationId, setActiveConversationId, isNew]);
 
@@ -117,9 +138,9 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     setLoadingMore(true);
     try {
       const convId = realConversationIdRef.current ?? conversationId;
-      const res = await fetch(`/api/conversations/${convId}/messages?cursor=${encodeURIComponent(nextCursor)}`);
+      const res    = await fetch(`/api/conversations/${convId}/messages?cursor=${encodeURIComponent(nextCursor)}`);
       if (!res.ok) return;
-      const data = await res.json();
+      const data   = await res.json();
       const older: Message[] = data.messages ?? [];
       if (older.length === 0) { setHasMore(false); return; }
       setMessages((prev) => [...older, ...prev]);
@@ -132,105 +153,9 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     }
   }, [conversationId, loadingMore, hasMore, nextCursor]);
 
-  const handleNewMessage = useCallback((message: Message) => {
-    setMessages((prev) => {
-      if ((message as any)._isStatusUpdate) {
-        return prev.map((m) => {
-          if (m.id !== message.id) return m;
-
-          // Deleted
-          if ((message as any).isDeleted) {
-            return { ...m, text: "This message was deleted", type: "text" as const, mediaUrls: [], isDeleted: true };
-          }
-
-          // PPV thumbnail/media patch — update thumbnailUrl and mediaUrls if provided
-          if (message.type === "ppv") {
-            return {
-              ...m,
-              thumbnailUrl: message.thumbnailUrl ?? m.thumbnailUrl,
-              mediaUrls:    message.mediaUrls?.length ? message.mediaUrls : m.mediaUrls,
-              isDelivered:  message.isDelivered ?? m.isDelivered,
-              isRead:       message.isRead ?? m.isRead,
-              ppv:          message.ppv ?? m.ppv,
-            };
-          }
-
-          // Default: patch delivery/read status
-          return { ...m, isDelivered: message.isDelivered, isRead: message.isRead };
-        });
-      }
-
-      if (prev.some((m) => m.id === message.id)) return prev;
-      return [...prev, message];
-    });
-
-    if (!(message as any)._isStatusUpdate) {
-      const convId = realConversationIdRef.current ?? conversationId;
-      appendCachedMessage(convId, message);
-    }
-  }, [conversationId]);
-
   const handleClearMessages = useCallback(() => {
-    setMessages([]);
-  }, []);
-
-  useEffect(() => {
-    registerMessageHandler(handleNewMessage);
-    setMessageDispatcher(handleNewMessage);
-    return () => {
-      unregisterMessageHandler();
-      setMessageDispatcher(null);
-    };
-  }, [handleNewMessage, registerMessageHandler, unregisterMessageHandler]);
-
-  const handleFirstMessage = useCallback(async (content: string): Promise<number | null> => {
-    if (!targetUserId) return null;
-    try {
-      const convoRes  = await fetch("/api/conversations", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ targetUserId }),
-      });
-      const convoData = await convoRes.json();
-      if (!convoData.conversationId) return null;
-      const newId: number = convoData.conversationId;
-      realConversationIdRef.current = newId;
-
-      const msgRes  = await fetch(`/api/conversations/${newId}/messages`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ content }),
-      });
-      const msgData = await msgRes.json();
-      if (!msgData.message) return null;
-
-      const freshRes  = await fetch(`/api/conversations/${newId}`);
-      const freshData = await freshRes.json();
-      if (freshData.conversation) {
-        updateConversations((prev) => {
-          if (prev.some((c) => c.id === newId)) return prev;
-          return [freshData.conversation, ...prev];
-        });
-        setConversation(freshData.conversation);
-      }
-
-      setActiveConversationId(newId);
-      setActiveConversation(newId);
-      window.history.replaceState(null, "", `/messages/${newId}`);
-
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.status === "sending"
-            ? { ...msgData.message, status: "sent" as const }
-            : m
-        )
-      );
-
-      return newId;
-    } catch {
-      return null;
-    }
-  }, [targetUserId, setActiveConversationId]);
+    clearMessages();
+  }, [clearMessages]);
 
   if (notFound) {
     return (
@@ -247,14 +172,13 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   return (
     <ChatPanel
       conversation={conversation}
-      messages={messages}
-      onBack={() => router.push("/messages")}
-      onNewMessage={handleNewMessage}
-      onClearMessages={handleClearMessages}
       currentUserId={currentUserId}
+      onBack={() => router.push("/messages")}
+      onClearMessages={handleClearMessages}
       onLoadMore={loadMore}
       hasMore={hasMore}
       loadingMore={loadingMore}
+      realConversationIdRef={realConversationIdRef}
     />
   );
 }

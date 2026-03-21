@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Copy, CornerUpLeft, X, MoreVertical, Trash2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { MoreVertical } from "lucide-react";
+import { ReadTick } from "@/components/messages/ReadTick";
+import { MessageActionModal } from "@/components/messages/MessageActionModal";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
@@ -14,46 +16,6 @@ interface Props {
   onReply?:       (message: Message) => void;
   onDelete?:      (message: Message, deleteFor: "me" | "everyone") => void;
   replyToMessage?: Message | null;
-}
-
-function ReadTick({ status, isDelivered, isRead }: { status?: string; isDelivered?: boolean; isRead: boolean }) {
-  if (status === "sending") {
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <circle cx="6" cy="6" r="5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.4"/>
-          <path d="M6 3.5V6L7.5 7.5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.4" strokeLinecap="round"/>
-        </svg>
-      </span>
-    );
-  }
-  if (isRead) {
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-        <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-          <path d="M1 5L4.5 8.5L10 2" stroke="#A78BFA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M6 5L9.5 8.5L15 2" stroke="#A78BFA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </span>
-    );
-  }
-  if (isDelivered) {
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-        <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-          <path d="M1 5L4.5 8.5L10 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M6 5L9.5 8.5L15 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </span>
-    );
-  }
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-        <path d="M1 5L4 8L9 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    </span>
-  );
 }
 
 function copyToClipboard(text: string) {
@@ -124,20 +86,6 @@ export function MessageBubble({ message, conversation, isOwn, isRead, isDelivere
 
   const endLongPress    = () => { cancelLongPress(); setSwiping(false); setSwipeX(0); };
   const cancelLongPress = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
-  const handleCopy      = () => { if (message.text) copyToClipboard(message.text); setSheetOpen(false); };
-  const handleReply     = () => { onReply?.(message); setSheetOpen(false); };
-  const handleDeleteForMe       = () => { onDelete?.(message, "me"); setSheetOpen(false); };
-  const handleDeleteForEveryone = () => { onDelete?.(message, "everyone"); setSheetOpen(false); };
-
-  const sheetItems: { label: string; icon: React.ReactNode; action: () => void; danger: boolean }[] = [
-    { label: "Copy",               icon: <Copy size={18} color="#A3A3C2" strokeWidth={1.8} />,        action: handleCopy,  danger: false },
-    { label: "Reply",              icon: <CornerUpLeft size={18} color="#A3A3C2" strokeWidth={1.8} />, action: handleReply, danger: false },
-    { label: "Delete for me",      icon: <Trash2 size={18} color="#EF4444" strokeWidth={1.8} />,      action: handleDeleteForMe,       danger: true },
-    ...(isOwn ? [
-      { label: "Delete for everyone", icon: <Trash2 size={18} color="#EF4444" strokeWidth={1.8} />,   action: handleDeleteForEveryone, danger: true },
-    ] : []),
-    { label: "Cancel",             icon: <X size={18} color="#EF4444" strokeWidth={1.8} />,           action: () => setSheetOpen(false), danger: true },
-  ];
 
   const replyPreview = replyToMessage ? (
     <div style={{ borderLeft: `3px solid ${isOwn ? "rgba(255,255,255,0.5)" : "#8B5CF6"}`, backgroundColor: isOwn ? "rgba(0,0,0,0.15)" : "rgba(139,92,246,0.1)", borderRadius: "8px", padding: "5px 8px", marginBottom: "6px" }}>
@@ -150,14 +98,10 @@ export function MessageBubble({ message, conversation, isOwn, isRead, isDelivere
     </div>
   ) : null;
 
-  // Deleted-for-everyone: WhatsApp-style italic placeholder — no actions
+  // Deleted-for-everyone placeholder
   if ((message as any).isDeleted) {
     return (
-      <div style={{
-        display: "flex", flexDirection: isOwn ? "row-reverse" : "row",
-        alignItems: "flex-end", gap: "8px",
-        alignSelf: isOwn ? "flex-end" : "flex-start", maxWidth: "80%",
-      }}>
+      <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "8px", alignSelf: isOwn ? "flex-end" : "flex-start", maxWidth: "80%" }}>
         {!isOwn && (
           <div style={{ width: "36px", height: "36px", borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "#2A2A3D" }}>
             {participant.avatarUrl
@@ -166,21 +110,13 @@ export function MessageBubble({ message, conversation, isOwn, isRead, isDelivere
             }
           </div>
         )}
-        <div style={{
-          backgroundColor: isOwn ? "rgba(139,92,246,0.15)" : "rgba(30,30,46,0.5)",
-          borderRadius: isOwn ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-          padding: "8px 12px 6px", maxWidth: "100%",
-          border: "1px solid rgba(74,74,106,0.25)",
-        }}>
+        <div style={{ backgroundColor: isOwn ? "rgba(139,92,246,0.15)" : "rgba(30,30,46,0.5)", borderRadius: isOwn ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "8px 12px 6px", maxWidth: "100%", border: "1px solid rgba(74,74,106,0.25)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
               <circle cx="7" cy="7" r="6" stroke="#4A4A6A" strokeWidth="1.2"/>
               <path d="M4.5 9.5L9.5 4.5" stroke="#4A4A6A" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
-            <p style={{
-              margin: 0, fontSize: "13px", color: "#4A4A6A",
-              fontStyle: "italic", lineHeight: 1.5,
-            }}>
+            <p style={{ margin: 0, fontSize: "13px", color: "#4A4A6A", fontStyle: "italic", lineHeight: 1.5 }}>
               {isOwn ? "You deleted this message" : "This message was deleted"}
             </p>
           </div>
@@ -195,47 +131,23 @@ export function MessageBubble({ message, conversation, isOwn, isRead, isDelivere
   return (
     <>
       <style>{`
-        @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @media (max-width: 767px) { .msg-dot-btn { display: none !important; } }
-        .msg-sheet-overlay {
-          position: absolute; inset: 0; background-color: rgba(0,0,0,0.5); z-index: 300;
-        }
-        .msg-sheet-panel {
-          position: absolute; bottom: 0; left: 0; right: 0;
-          background-color: #1C1C2E; border-radius: 20px 20px 0 0;
-          padding: 12px 0 32px; z-index: 301;
-          font-family: 'Inter', sans-serif; animation: sheetUp 0.22s ease;
-        }
-        @media (max-width: 767px) {
-          .msg-sheet-overlay { position: fixed; }
-          .msg-sheet-panel { position: fixed; }
-        }
       `}</style>
 
       {sheetOpen && (
-        <>
-          <div className="msg-sheet-overlay" onClick={() => setSheetOpen(false)} />
-          <div className="msg-sheet-panel">
-            <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", margin: "0 auto 16px" }} />
-            <div style={{ padding: "0 20px 12px", borderBottom: "1px solid #2A2A3D", marginBottom: "8px" }}>
-              <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{message.text ?? "Media"}</p>
-            </div>
-            {sheetItems.map(({ label, icon, action, danger }) => (
-              <button key={label} onClick={action}
-                style={{ display: "flex", alignItems: "center", gap: "16px", width: "100%", padding: "14px 20px", background: "none", border: "none", cursor: "pointer", color: danger ? "#EF4444" : "#FFFFFF", fontSize: "15px", fontFamily: "'Inter', sans-serif" }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-              >{icon}{label}</button>
-            ))}
-          </div>
-        </>
+        <MessageActionModal
+          message={message}
+          isOwn={isOwn}
+          onCopy={() => { if (message.text) copyToClipboard(message.text); }}
+          onReply={() => onReply?.(message)}
+          onDeleteForMe={() => onDelete?.(message, "me")}
+          onDeleteForEveryone={() => onDelete?.(message, "everyone")}
+          onClose={() => setSheetOpen(false)}
+        />
       )}
 
-      <div
-        onMouseEnter={() => {}}
-        onMouseLeave={() => {}}
-        style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "6px", alignSelf: isOwn ? "flex-end" : "flex-start", maxWidth: "80%" }}
-      >
+      <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "6px", alignSelf: isOwn ? "flex-end" : "flex-start", maxWidth: "80%" }}>
+        {/* Desktop ⋮ button */}
         <div style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center" }}>
           <button
             onClick={() => setSheetOpen(true)}

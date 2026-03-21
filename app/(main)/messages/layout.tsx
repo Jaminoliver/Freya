@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { MessagesSidebar } from "@/components/messages/MessagesSidebar";
 import { MessagesProvider, useMessagesContext } from "@/lib/context/MessagesContext";
-import { useConversations, useTypingConversations } from "@/app/(main)/messages/page";
+import { useConversations, useTypingConversations, setOnMessagesPage } from "@/app/(main)/messages/page";
 import type { Conversation } from "@/lib/types/messages";
 
 function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
@@ -14,7 +14,16 @@ function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
   const { typingConversationId } = useMessagesContext();
   const typingConversations = useTypingConversations();
 
-  // ✅ Realtime fully removed — handled globally in messages/page.tsx
+  useEffect(() => {
+    setOnMessagesPage(true);
+    return () => setOnMessagesPage(false);
+  }, []);
+
+  useEffect(() => {
+    if (!inChat) {
+      fetch("/api/conversations/deliver-all", { method: "PATCH" }).catch(() => {});
+    }
+  }, [inChat]);
 
   const handleNewConversation = useCallback((conv: Conversation) => {
     setConversations((prev) => [conv, ...prev.filter((c) => c.id !== conv.id)]);

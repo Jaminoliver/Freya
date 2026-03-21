@@ -32,14 +32,16 @@ export async function GET(
 
   const { searchParams } = new URL(request.url);
   const cursor = searchParams.get("cursor");
-  const limit  = 40;
+
+  // 25 on initial load (no cursor), 40 on subsequent load-more (has cursor)
+  const limit = cursor ? 40 : 25;
 
   const isCreator   = convo.creator_id === user.id;
   const deleteField = isCreator ? "deleted_for_creator" : "deleted_for_fan";
 
   let query = supabase
     .from("messages")
-    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, media_type, media_url, thumbnail_url, is_read, created_at, reply_to_id, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone")
+    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, media_type, media_url, thumbnail_url, is_read, is_delivered, created_at, reply_to_id, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone")
     .eq("conversation_id", conversationId)
     .eq(deleteField, false)
     .order("created_at", { ascending: false })
@@ -104,6 +106,7 @@ export async function GET(
         senderId:       row.sender_id,
         createdAt:      row.created_at,
         isRead:         row.is_read ?? false,
+        isDelivered:    row.is_delivered ?? false,
         replyToId:      null,
         type:           "text" as const,
         text:           "This message was deleted",
@@ -116,8 +119,9 @@ export async function GET(
       conversationId: row.conversation_id,
       senderId:       row.sender_id,
       createdAt:      row.created_at,
-      isRead:         row.is_read ?? false,
-      replyToId:      row.reply_to_id ?? null,
+      isRead:         row.is_read      ?? false,
+      isDelivered:    row.is_delivered ?? false,
+      replyToId:      row.reply_to_id  ?? null,
     };
 
     const mediaRows = mediaByMessageId.get(row.id) ?? [];
@@ -129,10 +133,7 @@ export async function GET(
       const isSender      = row.sender_id === user.id;
       const isUnlocked    = isSender || unlockedByCurrentUser.has(row.id);
       const unlockedCount = unlockCountByMessageId.get(row.id) ?? 0;
-
-      // Thumbnail: prefer stored thumbnail_url, fallback to first media URL
-      // For receiver this is blurred heavily — the actual media URL is safe to use as blur src
-      const thumbUrl = row.thumbnail_url ?? (mediaUrls.length > 0 ? mediaUrls[0] : null);
+      const thumbUrl      = row.thumbnail_url ?? (mediaUrls.length > 0 ? mediaUrls[0] : null);
 
       return {
         ...base,
