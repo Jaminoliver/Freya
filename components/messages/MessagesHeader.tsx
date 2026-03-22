@@ -39,10 +39,9 @@ export function MessagesHeader() {
       {welcomeModalOpen && (
         <WelcomeMessageModal
           onClose={() => setWelcomeModalOpen(false)}
-          onSave={(data) => {
-            console.log("Welcome message saved:", data);
-            setWelcomeModalOpen(false);
-          }}
+          onSave={() => {
+  console.log("Welcome message saved");
+}}
         />
       )}
 
