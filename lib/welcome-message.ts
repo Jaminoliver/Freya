@@ -76,9 +76,20 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
     console.log("[Welcome Message] Existing conversation lookup:", { existingConvo, convoLookupError });
 
     if (existingConvo) {
-      conversationId = existingConvo.id;
-      console.log("[Welcome Message] Using existing conversation:", conversationId);
-    } else {
+  conversationId = existingConvo.id;
+  console.log("[Welcome Message] Using existing conversation:", conversationId);
+
+  // Reset soft-delete flags so both parties can see the conversation
+  await supabase
+    .from("conversations")
+    .update({
+      deleted_for_creator: false,
+      deleted_for_fan: false,
+      deleted_before_creator: null,
+      deleted_before_fan: null,
+    })
+    .eq("id", conversationId);
+} else {
       console.log("[Welcome Message] No existing conversation — creating new one");
       const { data: newConvo, error: convoError } = await supabase
         .from("conversations")

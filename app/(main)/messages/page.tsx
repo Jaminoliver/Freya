@@ -241,6 +241,26 @@ function startGlobalRealtime() {
 
           if (isOwn) return;
 
+          // If conversation not in cache, fetch and add it (handles welcome messages on new convos)
+const convoExists = cachedConversations?.some((c) => c.id === row.conversation_id) ?? false;
+if (!convoExists) {
+  fetch(`/api/conversations/${row.conversation_id}`)
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.conversation) {
+        updateConversations((prev) => {
+          if (prev.some((c) => c.id === row.conversation_id)) return prev;
+          return [data.conversation, ...prev];
+        });
+        getAuthenticatedBrowserClient().then((sb) =>
+          subscribeTyping(sb, row.conversation_id)
+        );
+      }
+    })
+    .catch(() => {});
+  return;
+}
+
           if (row.receiver_id === currentUserId && isOnMessagesPage) {
             console.log("[MSG INSERT] firing deliver PATCH for msg:", row.id);
             fetch(

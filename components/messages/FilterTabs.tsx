@@ -18,7 +18,6 @@ export function FilterTabs({ active, onChange, priorityCount, unreadCount }: Pro
         borderBottom:    "1px solid #1E1E2E",
         backgroundColor: "#0D0D1A",
         flexShrink:      0,
-        marginTop:       "56px",
       }}
     >
       {/* Sort label */}
