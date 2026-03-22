@@ -184,7 +184,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  if (!loaded || !conversation || !currentUserId) {
+  if (!conversation || !currentUserId) {
     return <div style={{ height: "100%", backgroundColor: "#0A0A0F" }} />;
   }
 
@@ -197,6 +197,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       onLoadMore={loadMore}
       hasMore={hasMore}
       loadingMore={loadingMore}
+      loadingMessages={!loaded}
       realConversationIdRef={realConversationIdRef}
       onConversationCreated={handleConversationCreated}
     />

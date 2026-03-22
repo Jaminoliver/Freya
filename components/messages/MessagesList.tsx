@@ -9,15 +9,16 @@ import { ReadTick } from "@/components/messages/ReadTick";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
-  messages:       Message[];
-  conversation:   Conversation;
-  currentUserId?: string;
-  isTyping?:      boolean;
-  onReply?:       (message: Message) => void;
-  onDelete?:      (message: Message, deleteFor: "me" | "everyone") => void;
-  onLoadMore?:    () => void;
-  hasMore?:       boolean;
-  loadingMore?:   boolean;
+  messages:          Message[];
+  conversation:      Conversation;
+  currentUserId?:    string;
+  isTyping?:         boolean;
+  onReply?:          (message: Message) => void;
+  onDelete?:         (message: Message, deleteFor: "me" | "everyone") => void;
+  onLoadMore?:       () => void;
+  hasMore?:          boolean;
+  loadingMore?:      boolean;
+  loadingMessages?:  boolean;
   onMessagesUpdate?: (updater: (msgs: Message[]) => Message[]) => void;
 }
 
@@ -248,6 +249,7 @@ export function MessagesList({
   onLoadMore,
   hasMore = false,
   loadingMore = false,
+  loadingMessages = false,
   onMessagesUpdate,
 }: Props) {
   const scrollRef         = useRef<HTMLDivElement>(null);
@@ -255,13 +257,10 @@ export function MessagesList({
   const prevCountRef      = useRef(messages.length);
   const isNearBottomRef   = useRef(true);
 
-  // "older" = messages prepended by loadMore, animate sliding down from top
-  // "newer" = messages appended in real-time, animate sliding up from bottom
   const [olderAnimIds, setOlderAnimIds] = useState<Set<string>>(new Set());
   const [newerAnimIds, setNewerAnimIds] = useState<Set<string>>(new Set());
-
-  const [lightbox,  setLightbox]  = useState<LightboxState | null>(null);
-  const [unlocking, setUnlocking] = useState<Set<number>>(new Set());
+  const [lightbox,     setLightbox]     = useState<LightboxState | null>(null);
+  const [unlocking,    setUnlocking]    = useState<Set<number>>(new Set());
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -275,7 +274,6 @@ export function MessagesList({
     isNearBottomRef.current = Math.abs(el.scrollTop) < 150;
   }, []);
 
-  // Scroll to bottom when new messages arrive at the end
   useEffect(() => {
     const prevCount = prevCountRef.current;
     prevCountRef.current = messages.length;
@@ -293,27 +291,19 @@ export function MessagesList({
     }
   }, [isTyping, scrollToBottom]);
 
-  // Detect added messages and classify as older (prepended) or newer (appended)
   useEffect(() => {
     const prevIds = prevMessageIdsRef.current;
     const newIds  = new Set(messages.map((m) => String(m.tempId ?? m.id)));
     const added   = new Set<string>();
     for (const id of newIds) { if (!prevIds.has(id)) added.add(id); }
     prevMessageIdsRef.current = newIds;
-
     if (added.size === 0) return;
 
-    // Find the lowest original index of an added message
-    const firstAddedIdx = messages.findIndex((m) => added.has(String(m.tempId ?? m.id)));
-    // Find the highest original index of an added message
-    const lastAddedIdx  = messages.length - 1 - [...messages].reverse().findIndex((m) => added.has(String(m.tempId ?? m.id)));
-
-    const totalExisting = messages.length - added.size;
-
-    // Older messages: prepended at the start (index 0..N), only when there were already messages
-    const addedAtStart = firstAddedIdx === 0 && lastAddedIdx < messages.length - 1 && totalExisting > 0;
-    // Newer messages: appended at the end (could be 1 new real-time msg)
-    const addedAtEnd   = lastAddedIdx === messages.length - 1 && firstAddedIdx > 0;
+    const firstAddedIdx  = messages.findIndex((m) => added.has(String(m.tempId ?? m.id)));
+    const lastAddedIdx   = messages.length - 1 - [...messages].reverse().findIndex((m) => added.has(String(m.tempId ?? m.id)));
+    const totalExisting  = messages.length - added.size;
+    const addedAtStart   = firstAddedIdx === 0 && lastAddedIdx < messages.length - 1 && totalExisting > 0;
+    const addedAtEnd     = lastAddedIdx === messages.length - 1 && firstAddedIdx > 0;
 
     if (addedAtStart && added.size >= 1) {
       setOlderAnimIds(added);
@@ -364,8 +354,8 @@ export function MessagesList({
       const isOwn = m.senderId === currentUserId;
       return getMediaItems(m, isOwn).map((item) => ({ ...item, messageId: m.id }));
     });
-    const isOwn      = msg.senderId === currentUserId;
-    const clickedUrl = getMediaItems(msg, isOwn)[clickedIndex]?.url;
+    const isOwn       = msg.senderId === currentUserId;
+    const clickedUrl  = getMediaItems(msg, isOwn)[clickedIndex]?.url;
     const globalIndex = allMedia.findIndex((item) => item.url === clickedUrl && item.messageId === msg.id);
     setLightbox({ items: allMedia, initialIndex: Math.max(0, globalIndex) });
   }, [messages, currentUserId]);
@@ -400,23 +390,29 @@ export function MessagesList({
         }}
       >
         <style>{`
-          /* Older msgs loaded at top — in column-reverse DOM, top = high index visually,
-             so they slide in from above: translateY(-10px) → 0 */
-          @keyframes msgSlideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to   { opacity: 1; transform: translateY(0); }
-          }
-          /* Newer real-time msgs at bottom — slide up from below */
-          @keyframes msgSlideUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to   { opacity: 1; transform: translateY(0); }
-          }
+          @keyframes msgSlideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+          @keyframes msgSlideUp   { from { opacity: 0; transform: translateY(10px);  } to { opacity: 1; transform: translateY(0); } }
           .msg-older { animation: msgSlideDown 0.35s ease-out both; }
-          .msg-newer { animation: msgSlideUp  0.25s ease-out both; }
-          @keyframes spinLoader { to { transform: rotate(360deg); } }
+          .msg-newer { animation: msgSlideUp   0.25s ease-out both; }
+          @keyframes spinLoader    { to { transform: rotate(360deg); } }
+          @keyframes skeletonPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         `}</style>
 
         {isTyping && <TypingBubble />}
+
+        {/* Message skeletons while loading */}
+        {loadingMessages && messages.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px", padding: "8px 0" }}>
+            {[180, 120, 220, 90, 160].map((width, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: i % 2 === 0 ? "flex-end" : "flex-start", alignItems: "flex-end", gap: "8px" }}>
+                {i % 2 !== 0 && (
+                  <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "#1E1E2E", flexShrink: 0, animation: "skeletonPulse 1.4s ease-in-out infinite", animationDelay: `${i * 0.1}s` }} />
+                )}
+                <div style={{ width: `${width}px`, height: "38px", borderRadius: i % 2 === 0 ? "18px 18px 4px 18px" : "18px 18px 18px 4px", backgroundColor: "#1E1E2E", animation: "skeletonPulse 1.4s ease-in-out infinite", animationDelay: `${i * 0.12}s` }} />
+              </div>
+            ))}
+          </div>
+        )}
 
         {(() => {
           type RenderItem =

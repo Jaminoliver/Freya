@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { debitWallet, creditWallet, hasSufficientBalance } from "@/lib/utils/wallet";
+import { sendWelcomeMessage } from "@/lib/welcome-message";
 
 // ─── POST /api/checkout ───────────────────────────────────────────────────────
 // Handles wallet payments for: subscription, tips, ppv
@@ -158,6 +159,11 @@ export async function POST(req: NextRequest) {
           useServiceRole: true,
         });
       }
+
+      // Send welcome message (fire-and-forget — don't block checkout)
+      sendWelcomeMessage(creatorId, user.id).catch((err) =>
+        console.error("[Checkout] Welcome message failed:", err)
+      );
 
       console.log("[Checkout] subscription success — subId:", subId);
       return NextResponse.json({ message: "Subscription activated", subscriptionId: subId });

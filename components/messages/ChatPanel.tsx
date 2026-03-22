@@ -24,6 +24,7 @@ interface Props {
   onLoadMore?:            () => void;
   hasMore?:               boolean;
   loadingMore?:           boolean;
+  loadingMessages?:       boolean;
   realConversationIdRef:  React.MutableRefObject<number | null>;
   onConversationCreated?: (realId: number) => void;
 }
@@ -38,6 +39,7 @@ export function ChatPanel({
   onLoadMore,
   hasMore,
   loadingMore,
+  loadingMessages = false,
   realConversationIdRef,
   onConversationCreated,
 }: Props) {
@@ -540,6 +542,7 @@ export function ChatPanel({
             onLoadMore={onLoadMore}
             hasMore={hasMore}
             loadingMore={loadingMore}
+            loadingMessages={loadingMessages}
             onMessagesUpdate={handleMessagesUpdate}
           />
         </div>
