@@ -12,32 +12,40 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
   const supabase = createServiceSupabaseClient();
 
   try {
+    console.log("[Welcome Message] Starting — creatorId:", creatorId, "fanId:", fanId);
+
     // Step 1: Check if creator has an active welcome message sequence
-    const { data: sequence } = await supabase
+    const { data: sequence, error: seqError } = await supabase
       .from("welcome_message_sequences")
       .select("id, is_active")
       .eq("creator_id", creatorId)
       .eq("is_active", true)
       .maybeSingle();
 
+    console.log("[Welcome Message] Sequence lookup:", { sequence, seqError });
+
     if (!sequence) return;
 
     // Step 2: Get welcome message (step 1 only for MVP)
-    const { data: welcomeMsg } = await supabase
+    const { data: welcomeMsg, error: wmError } = await supabase
       .from("welcome_messages")
       .select("id, message_content, is_ppv, ppv_price, media_type, media_url")
       .eq("sequence_id", sequence.id)
       .eq("step_number", 1)
       .maybeSingle();
 
+    console.log("[Welcome Message] Message lookup:", { welcomeMsg, wmError });
+
     if (!welcomeMsg) return;
 
     // Step 3: Get media files for this welcome message
-    const { data: mediaFiles } = await supabase
+    const { data: mediaFiles, error: mediaError } = await supabase
       .from("welcome_message_media")
       .select("id, media_type, media_url, display_order")
       .eq("welcome_message_id", welcomeMsg.id)
       .order("display_order", { ascending: true });
+
+    console.log("[Welcome Message] Media lookup:", { mediaFiles, mediaError });
 
     // Step 4: Get fan's display name for {{fan_name}} replacement
     const { data: fanProfile } = await supabase
@@ -47,6 +55,7 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
       .single();
 
     const fanName = fanProfile?.display_name || fanProfile?.username || "there";
+    console.log("[Welcome Message] Fan name:", fanName);
 
     // Step 5: Replace {{fan_name}} placeholder in message content
     const messageContent = welcomeMsg.message_content.replace(
@@ -57,16 +66,20 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
     // Step 6: Find or create conversation between creator and fan
     let conversationId: number;
 
-    const { data: existingConvo } = await supabase
+    const { data: existingConvo, error: convoLookupError } = await supabase
       .from("conversations")
       .select("id")
       .eq("creator_id", creatorId)
       .eq("fan_id", fanId)
       .maybeSingle();
 
+    console.log("[Welcome Message] Existing conversation lookup:", { existingConvo, convoLookupError });
+
     if (existingConvo) {
       conversationId = existingConvo.id;
+      console.log("[Welcome Message] Using existing conversation:", conversationId);
     } else {
+      console.log("[Welcome Message] No existing conversation — creating new one");
       const { data: newConvo, error: convoError } = await supabase
         .from("conversations")
         .insert({
@@ -82,6 +95,7 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
       }
 
       conversationId = newConvo.id;
+      console.log("[Welcome Message] New conversation created:", conversationId);
     }
 
     // Step 7: Determine media type and URL from the first media file (if any)
@@ -110,6 +124,8 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
       return;
     }
 
+    console.log("[Welcome Message] Message inserted:", sentMessage.id, "in conversation:", conversationId);
+
     // Step 9: Insert additional media into message_media table (if more than 1 file)
     if (hasMedia && mediaFiles.length > 0) {
       const mediaInserts = mediaFiles.map((m, i) => ({
@@ -119,12 +135,14 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
         display_order: i,
       }));
 
-      const { error: mediaError } = await supabase
+      const { error: mediaMsgError } = await supabase
         .from("message_media")
         .insert(mediaInserts);
 
-      if (mediaError) {
-        console.error("[Welcome Message] Failed to insert message_media:", mediaError);
+      if (mediaMsgError) {
+        console.error("[Welcome Message] Failed to insert message_media:", mediaMsgError);
+      } else {
+        console.log("[Welcome Message] Inserted", mediaInserts.length, "message_media rows");
       }
     }
 
@@ -135,7 +153,7 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
         ? "Sent media"
         : "";
 
-    await supabase
+    const { error: convoUpdateError } = await supabase
       .from("conversations")
       .update({
         last_message_at: sentMessage.created_at,
@@ -145,17 +163,22 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
       })
       .eq("id", conversationId);
 
+    if (convoUpdateError) {
+      console.error("[Welcome Message] Failed to update conversation:", convoUpdateError);
+    } else {
+      console.log("[Welcome Message] Conversation updated with preview");
+    }
+
     // Step 11: Log to welcome_message_sends
-    await supabase.from("welcome_message_sends").insert({
+    const { error: sendLogError } = await supabase.from("welcome_message_sends").insert({
       welcome_message_id: welcomeMsg.id,
       creator_id: creatorId,
       fan_id: fanId,
     });
 
-    // Step 12: Check if already sent to this fan (prevent duplicates)
-    // This is done as a final check — in production, you may want to move this
-    // to the start for efficiency, but the unique constraint on the sends table
-    // would also catch duplicates.
+    if (sendLogError) {
+      console.error("[Welcome Message] Failed to log send:", sendLogError);
+    }
 
     console.log(`[Welcome Message] Sent to fan ${fanId} from creator ${creatorId}`);
   } catch (error) {
