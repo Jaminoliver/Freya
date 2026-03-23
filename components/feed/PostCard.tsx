@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { BadgeCheck } from "lucide-react";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
@@ -8,6 +9,9 @@ import Lightbox from "@/components/profile/Lightbox";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
 import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
+import { ReportModal } from "@/components/messages/ReportModal";
+import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
+import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
 import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
@@ -124,22 +128,34 @@ export function PostCard({
   onSlideChange?: (postId: string, index: number) => void;
 }) {
   const { navigate } = useNav();
-  const viewer = useViewer();
+  const router  = useRouter();
+  const viewer  = useViewer();
 
-  const [commentOpen,      setCommentOpen]      = useState(false);
-  const [sheetOpen,        setSheetOpen]        = useState(false);
-  const [tipOpen,          setTipOpen]          = useState(false);
-  const [liked,            setLiked]            = useState(post.liked);
-  const [likeCount,        setLikeCount]        = useState(post.likes);
-  const [commentCount,     setCommentCount]     = useState(post.comments);
-  const [comments,         setComments]         = useState<any[]>([]);
-  const [commentsLoading,  setCommentsLoading]  = useState(true);
-  const [lightboxOpen,     setLightboxOpen]     = useState(false);
-  const [lightboxMediaIdx, setLightboxMediaIdx] = useState(0);
-  const [pollData,         setPollData]         = useState<PollData | null>(post.poll ?? null);
-  const [savedPost,        setSavedPost]        = useState(false);
-  const [savedCreator,     setSavedCreator]     = useState(false);
-  const [timestamp,        setTimestamp]        = useState("");
+  const [commentOpen,       setCommentOpen]       = useState(false);
+  const [sheetOpen,         setSheetOpen]         = useState(false);
+  const [tipOpen,           setTipOpen]           = useState(false);
+  const [liked,             setLiked]             = useState(post.liked);
+  const [likeCount,         setLikeCount]         = useState(post.likes);
+  const [commentCount,      setCommentCount]      = useState(post.comments);
+  const [comments,          setComments]          = useState<any[]>([]);
+  const [commentsLoading,   setCommentsLoading]   = useState(true);
+  const [lightboxOpen,      setLightboxOpen]      = useState(false);
+  const [lightboxMediaIdx,  setLightboxMediaIdx]  = useState(0);
+  const [pollData,          setPollData]          = useState<PollData | null>(post.poll ?? null);
+  const [savedPost,         setSavedPost]         = useState(false);
+  const [savedCreator,      setSavedCreator]      = useState(false);
+  const [timestamp,         setTimestamp]         = useState("");
+  const [reportOpen,        setReportOpen]        = useState(false);
+  const [blockConfirm,      setBlockConfirm]      = useState(false);
+  const [unblockConfirm,    setUnblockConfirm]    = useState(false);
+  const [restrictConfirm,   setRestrictConfirm]   = useState(false);
+  const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
+
+  const {
+    isBlocked, isRestricted,
+    block, unblock, restrict, unrestrict,
+    fetchStatus,
+  } = useBlockRestrict({ userId: post.creator.id });
 
   useEffect(() => {
     function getRelativeTime(dateStr: string): string {
@@ -184,16 +200,14 @@ export function PostCard({
     setSheetOpen(true);
     if (savedFetched.current) return;
     savedFetched.current = true;
-    try {
-      const [postRes, creatorRes] = await Promise.all([
-        fetch(`/api/saved/posts?post_id=${post.id}`),
-        fetch(`/api/saved/creators?creator_id=${post.creator.id}`),
-      ]);
-      const [postData, creatorData] = await Promise.all([postRes.json(), creatorRes.json()]);
-      if (postRes.ok)    setSavedPost(postData.saved ?? false);
-      if (creatorRes.ok) setSavedCreator(creatorData.saved ?? false);
-    } catch {}
-  }, [post.id, post.creator.id]);
+    await Promise.all([
+      fetchStatus(),
+      fetch(`/api/saved/posts?post_id=${post.id}`)
+        .then((r) => r.json()).then((d) => setSavedPost(d.saved ?? false)).catch(() => {}),
+      fetch(`/api/saved/creators?creator_id=${post.creator.id}`)
+        .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {}),
+    ]);
+  }, [post.id, post.creator.id, fetchStatus]);
 
   const handleLike = async () => {
     if (isLiking.current) return;
@@ -277,6 +291,8 @@ export function PostCard({
   const isTextPost   = post.content_type === "text";
   const isPollPost   = post.content_type === "poll";
 
+  if (isBlocked) return null;
+
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
 
@@ -286,18 +302,40 @@ export function PostCard({
         <Lightbox post={lightboxPost} allPosts={[lightboxPost]} initialMediaIndex={lightboxMediaIdx} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
       )}
 
+      {reportOpen && (
+        <ReportModal
+          context="user"
+          username={post.creator.username}
+          reportedUserId={post.creator.id}
+          onClose={() => setReportOpen(false)}
+          onBlockUser={block}
+        />
+      )}
+
+      <BlockConfirmModal isOpen={blockConfirm}      onClose={() => setBlockConfirm(false)}      onConfirm={block}      type="block"    username={post.creator.username} />
+      <BlockConfirmModal isOpen={unblockConfirm}    onClose={() => setUnblockConfirm(false)}    onConfirm={unblock}    type="block"    username={post.creator.username} />
+      <BlockConfirmModal isOpen={restrictConfirm}   onClose={() => setRestrictConfirm(false)}   onConfirm={restrict}   type="restrict" username={post.creator.username} />
+      <BlockConfirmModal isOpen={unrestrictConfirm} onClose={() => setUnrestrictConfirm(false)} onConfirm={unrestrict} type="restrict" username={post.creator.username} />
+
       <PostOptionsSheet
-        isOpen={sheetOpen} onClose={() => setSheetOpen(false)}
-        onSavePost={handleSavePost} onSaveCreator={handleSaveCreator}
-        onNotInterested={() => {}} onReport={() => {}} onBlockCreator={() => {}}
-        savedPost={savedPost} savedCreator={savedCreator}
+        isOpen={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onSavePost={handleSavePost}
+        onSaveCreator={handleSaveCreator}
+        onNotInterested={() => {}}
+        onReport={() => { setSheetOpen(false); setReportOpen(true); }}
+        onBlockCreator={() => { setSheetOpen(false); setBlockConfirm(true); }}
+        onUnblockCreator={() => { setSheetOpen(false); setUnblockConfirm(true); }}
+        onRestrictCreator={() => { setSheetOpen(false); setRestrictConfirm(true); }}
+        onUnrestrictCreator={() => { setSheetOpen(false); setUnrestrictConfirm(true); }}
+        savedPost={savedPost}
+        savedCreator={savedCreator}
+        isBlocked={isBlocked}
+        isRestricted={isRestricted}
       />
 
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div
-          style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
-          onClick={() => navigate(`/${post.creator.username}`)}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => navigate(`/${post.creator.username}`)}>
           <img src={post.creator.avatar_url || ""} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -329,9 +367,7 @@ export function PostCard({
 
       {!isTextPost && !isPollPost && (
         <PostMediaViewer
-          media={normalizedMedia}
-          isLocked={post.isLocked}
-          price={post.price}
+          media={normalizedMedia} isLocked={post.isLocked} price={post.price}
           onDoubleTap={handleDoubleTapLike}
           onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
           onUnlock={() => onUnlock?.(post.id)}

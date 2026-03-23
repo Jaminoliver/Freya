@@ -27,6 +27,7 @@ const typingChannels  = new Map<number, any>();
 const messageCache    = new Map<number, { messages: Message[]; timestamp: number }>();
 
 let typingConvIds = new Set<number>();
+const blockedConversationIds = new Set<number>();
 
 // ─── Message cache helpers ────────────────────────────────────────────────────
 export function getCachedMessages(conversationId: number): Message[] | null {
@@ -166,7 +167,6 @@ function startGlobalRealtime() {
   if (realtimeChannel) return;
 
   getAuthenticatedBrowserClient().then(async (supabase) => {
-    // Resolve user BEFORE subscribing so currentUserId is set when first events arrive
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
@@ -199,6 +199,9 @@ function startGlobalRealtime() {
           const alreadyExists = cachedConversations?.some((c) => c.id === row.id) ?? false;
           console.log("[CONV INSERT] alreadyExists in cache:", alreadyExists);
           if (alreadyExists) return;
+
+          // Never re-add a blocked conversation
+          if (blockedConversationIds.has(row.id)) return;
 
           console.log("[CONV INSERT] fetching /api/conversations/" + row.id);
           fetch(`/api/conversations/${row.id}`)
@@ -241,25 +244,26 @@ function startGlobalRealtime() {
 
           if (isOwn) return;
 
-          // If conversation not in cache, fetch and add it (handles welcome messages on new convos)
-const convoExists = cachedConversations?.some((c) => c.id === row.conversation_id) ?? false;
-if (!convoExists) {
-  fetch(`/api/conversations/${row.conversation_id}`)
-    .then((r) => r.json())
-    .then((data) => {
-      if (data.conversation) {
-        updateConversations((prev) => {
-          if (prev.some((c) => c.id === row.conversation_id)) return prev;
-          return [data.conversation, ...prev];
-        });
-        getAuthenticatedBrowserClient().then((sb) =>
-          subscribeTyping(sb, row.conversation_id)
-        );
-      }
-    })
-    .catch(() => {});
-  return;
-}
+          const convoExists = cachedConversations?.some((c) => c.id === row.conversation_id) ?? false;
+          if (!convoExists) {
+            // Never re-add a blocked conversation
+            if (blockedConversationIds.has(row.conversation_id)) return;
+            fetch(`/api/conversations/${row.conversation_id}`)
+              .then((r) => r.json())
+              .then((data) => {
+                if (data.conversation) {
+                  updateConversations((prev) => {
+                    if (prev.some((c) => c.id === row.conversation_id)) return prev;
+                    return [data.conversation, ...prev];
+                  });
+                  getAuthenticatedBrowserClient().then((sb) =>
+                    subscribeTyping(sb, row.conversation_id)
+                  );
+                }
+              })
+              .catch(() => {});
+            return;
+          }
 
           if (row.receiver_id === currentUserId && isOnMessagesPage) {
             console.log("[MSG INSERT] firing deliver PATCH for msg:", row.id);
@@ -451,14 +455,26 @@ if (!convoExists) {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "conversations" },
         (payload: any) => {
-          const row          = payload.new as any;
-          const isCreator    = row.creator_id === currentUserId;
+          const row       = payload.new as any;
+          const isCreator = row.creator_id === currentUserId;
+          const isFan     = row.fan_id     === currentUserId;
+
+          if (!isCreator && !isFan) return;
+
           const deletedForMe = isCreator ? row.deleted_for_creator : row.deleted_for_fan;
+
+          // ── Blocked, restricted, or deleted — remove immediately, never re-add ──
+          if (row.is_blocked || row.is_restricted || deletedForMe) {
+            blockedConversationIds.add(row.id);
+            updateConversations((prev) => prev.filter((c) => c.id !== row.id));
+            return;
+          }
 
           updateConversations((prev) => {
             const exists = prev.some((c) => c.id === row.id);
 
-            if (!exists && !deletedForMe) {
+            if (!exists) {
+              if (blockedConversationIds.has(row.id)) return prev;
               fetch(`/api/conversations/${row.id}`)
                 .then((r) => r.json())
                 .then((data) => {
@@ -474,10 +490,6 @@ if (!convoExists) {
                 })
                 .catch(() => {});
               return prev;
-            }
-
-            if (exists && deletedForMe) {
-              return prev.filter((c) => c.id !== row.id);
             }
 
             return prev.map((c) => {

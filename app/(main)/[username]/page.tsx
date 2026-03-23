@@ -99,18 +99,24 @@ function ProfilePageInner() {
   };
 
   // ── Message handler ──────────────────────────────────────────────────────────
-  // FIX: navigate to /messages/new with profile data — no API call on click
-  const handleMessage = React.useCallback(() => {
+  // POST /api/conversations to find-or-create, then navigate to the real convo
+  const handleMessage = React.useCallback(async () => {
     if (!profile) return;
-    const params = new URLSearchParams({
-      targetUserId: profile.id,
-      name:         profile.display_name ?? profile.username,
-      username:     profile.username,
-      avatar:       profile.avatar_url ?? "",
-      verified:     profile.is_verified ? "1" : "0",
-    });
-    router.push(`/messages/new?${params.toString()}`);
+    try {
+      const res  = await fetch("/api/conversations", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ targetUserId: profile.id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.conversationId) {
+        router.push(`/messages/${data.conversationId}`);
+      }
+    } catch (err) {
+      console.error("[handleMessage] failed:", err);
+    }
   }, [profile, router]);
+
   const fetchSubscriptionStatus = React.useCallback(async (creatorId: string) => {
     try {
       const res  = await fetch(`/api/subscriptions/status?creatorId=${creatorId}`);

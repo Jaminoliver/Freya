@@ -2,9 +2,11 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Image, Heart, Users, FileText, MoreVertical, Flag, Ban } from "lucide-react";
+import { Camera, Image, Heart, Users, FileText, MoreVertical, Flag, Ban, ShieldOff } from "lucide-react";
 import { ImageCropModal } from "@/components/ui/ImageCropModal";
 import { ReportModal } from "@/components/messages/ReportModal";
+import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
+import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
 import { uploadImage } from "@/lib/utils/uploadImage";
 import { createClient } from "@/lib/supabase/client";
 
@@ -43,13 +45,23 @@ export default function ProfileBanner({
   onBannerUpdated,
 }: ProfileBannerProps) {
   const router = useRouter();
-  const [bannerUrl,  setBannerUrl]  = useState(initialBannerUrl);
-  const [cropSrc,    setCropSrc]    = useState<string | null>(null);
-  const [uploading,  setUploading]  = useState(false);
-  const [menuOpen,   setMenuOpen]   = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
+  const [bannerUrl,   setBannerUrl]   = useState(initialBannerUrl);
+  const [cropSrc,     setCropSrc]     = useState<string | null>(null);
+  const [uploading,   setUploading]   = useState(false);
+  const [menuOpen,    setMenuOpen]    = useState(false);
+  const [reportOpen,  setReportOpen]  = useState(false);
+  const [blockConfirm,     setBlockConfirm]     = useState(false);
+  const [unblockConfirm,   setUnblockConfirm]   = useState(false);
+  const [restrictConfirm,  setRestrictConfirm]  = useState(false);
+  const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef      = useRef<HTMLDivElement>(null);
+
+  const {
+    isBlocked, isRestricted,
+    block, unblock, restrict, unrestrict,
+    fetchStatus,
+  } = useBlockRestrict({ userId: userId ?? "", fetchOnMount: !isEditable && !!userId });
 
   const handleClick = () => {
     if (!isEditable) return;
@@ -83,20 +95,16 @@ export default function ProfileBanner({
     }
   };
 
-  const handleBlock = async () => {
-    if (!userId) return;
-    await fetch("/api/users/block", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ userId }),
-    });
+  const handleBlockConfirm = async () => {
+    await block();
+    router.back();
   };
 
   const statItems = stats
     ? [
-        { icon: <FileText size={16} strokeWidth={2} />, value: formatCount(stats.posts),       label: "Posts", onClick: undefined },
-        { icon: <Image    size={16} strokeWidth={2} />, value: formatCount(stats.media),       label: "Media", onClick: undefined },
-        { icon: <Heart    size={16} strokeWidth={2} />, value: formatCount(stats.likes),       label: "Likes", onClick: undefined },
+        { icon: <FileText size={16} strokeWidth={2} />, value: formatCount(stats.posts),       label: "Posts",   onClick: undefined },
+        { icon: <Image    size={16} strokeWidth={2} />, value: formatCount(stats.media),       label: "Media",   onClick: undefined },
+        { icon: <Heart    size={16} strokeWidth={2} />, value: formatCount(stats.likes),       label: "Likes",   onClick: undefined },
         {
           icon:    <Users size={16} strokeWidth={2} />,
           value:   formatCount(stats.subscribers),
@@ -108,15 +116,38 @@ export default function ProfileBanner({
       ]
     : [];
 
+  const restrictDormant = isBlocked;
+
+  const menuItems = [
+    {
+      icon:    <Flag     size={15} strokeWidth={1.8} />,
+      label:   "Report",
+      color:   "#FFFFFF",
+      dormant: false,
+      action:  () => { setMenuOpen(false); setReportOpen(true); },
+    },
+    {
+      icon:    <ShieldOff size={15} strokeWidth={1.8} />,
+      label:   isRestricted ? "Unrestrict user" : "Restrict user",
+      color:   restrictDormant ? "#3A3A4D" : isRestricted ? "#10B981" : "#F59E0B",
+      dormant: restrictDormant,
+      action:  restrictDormant
+        ? undefined
+        : () => { setMenuOpen(false); isRestricted ? setUnrestrictConfirm(true) : setRestrictConfirm(true); },
+    },
+    {
+      icon:    <Ban size={15} strokeWidth={1.8} />,
+      label:   isBlocked ? "Unblock user" : "Block user",
+      color:   isBlocked ? "#10B981" : "#EF4444",
+      dormant: false,
+      action:  () => { setMenuOpen(false); isBlocked ? setUnblockConfirm(true) : setBlockConfirm(true); },
+    },
+  ];
+
   return (
     <>
       {cropSrc && (
-        <ImageCropModal
-          imageSrc={cropSrc}
-          type="banner"
-          onSave={handleCropSave}
-          onCancel={() => setCropSrc(null)}
-        />
+        <ImageCropModal imageSrc={cropSrc} type="banner" onSave={handleCropSave} onCancel={() => setCropSrc(null)} />
       )}
 
       {reportOpen && (
@@ -125,9 +156,14 @@ export default function ProfileBanner({
           username={username}
           reportedUserId={userId}
           onClose={() => setReportOpen(false)}
-          onBlockUser={handleBlock}
+          onBlockUser={handleBlockConfirm}
         />
       )}
+
+      <BlockConfirmModal isOpen={blockConfirm}      onClose={() => setBlockConfirm(false)}      onConfirm={handleBlockConfirm} type="block"    username={username ?? ""} />
+      <BlockConfirmModal isOpen={unblockConfirm}    onClose={() => setUnblockConfirm(false)}    onConfirm={unblock}            type="block"    username={username ?? ""} />
+      <BlockConfirmModal isOpen={restrictConfirm}   onClose={() => setRestrictConfirm(false)}   onConfirm={restrict}           type="restrict" username={username ?? ""} />
+      <BlockConfirmModal isOpen={unrestrictConfirm} onClose={() => setUnrestrictConfirm(false)} onConfirm={unrestrict}         type="restrict" username={username ?? ""} />
 
       <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
 
@@ -148,7 +184,7 @@ export default function ProfileBanner({
       >
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, transparent 40%, transparent 50%, rgba(0,0,0,0.55) 100%)", pointerEvents: "none" }} />
 
-        {/* Top-left: back button (non-editable only) + display name */}
+        {/* Top-left: back button + display name */}
         <div style={{ position: "absolute", top: "12px", left: "12px", zIndex: 2, display: "flex", alignItems: "center", gap: "8px" }}>
           {!isEditable && (
             <button
@@ -175,24 +211,22 @@ export default function ProfileBanner({
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              onClick={() => setMenuOpen((o) => !o)}
+              onClick={() => { setMenuOpen((o) => !o); if (!menuOpen) fetchStatus(); }}
               style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(20,20,32,0.75)", backdropFilter: "blur(8px)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
             >
               <MoreVertical size={18} color="#FFFFFF" strokeWidth={1.8} />
             </button>
 
             {menuOpen && (
-              <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "12px", padding: "6px", minWidth: "160px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
-                {[
-                  { icon: <Flag size={15} strokeWidth={1.8} />, label: "Report",     color: "#FFFFFF", action: () => { setMenuOpen(false); setReportOpen(true); } },
-                  { icon: <Ban  size={15} strokeWidth={1.8} />, label: "Block user", color: "#EF4444", action: () => { setMenuOpen(false); handleBlock(); } },
-                ].map(({ icon, label, color, action }) => (
+              <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "12px", padding: "6px", minWidth: "180px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 20 }}>
+                {menuItems.map(({ icon, label, color, dormant, action }) => (
                   <button
                     key={label}
-                    onClick={action}
-                    style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "10px 12px", borderRadius: "8px", border: "none", cursor: "pointer", backgroundColor: "transparent", color, fontSize: "14px", fontFamily: "'Inter', sans-serif", textAlign: "left", transition: "background-color 0.15s ease" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                    onClick={() => { if (!dormant && action) action(); }}
+                    disabled={dormant}
+                    style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "10px 12px", borderRadius: "8px", border: "none", cursor: dormant ? "default" : "pointer", backgroundColor: "transparent", color, fontSize: "14px", fontFamily: "'Inter', sans-serif", textAlign: "left", opacity: dormant ? 0.35 : 1, transition: "background-color 0.15s ease" }}
+                    onMouseEnter={(e) => { if (!dormant) e.currentTarget.style.backgroundColor = "#2A2A3D"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
                   >
                     {icon}
                     {label}

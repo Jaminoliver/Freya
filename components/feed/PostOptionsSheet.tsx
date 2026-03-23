@@ -1,69 +1,25 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Bookmark, UserPlus, ThumbsDown, Flag, Ban } from "lucide-react";
+import { Bookmark, UserPlus, ThumbsDown, Flag, Ban, ShieldOff } from "lucide-react";
 import { createPortal } from "react-dom";
 
 interface PostOptionsSheetProps {
-  isOpen:          boolean;
-  onClose:         () => void;
-  onSavePost:      () => void;
-  onSaveCreator:   () => void;
-  onNotInterested: () => void;
-  onReport:        () => void;
-  onBlockCreator:  () => void;
-  savedPost?:      boolean;
-  savedCreator?:   boolean;
+  isOpen:             boolean;
+  onClose:            () => void;
+  onSavePost:         () => void;
+  onSaveCreator:      () => void;
+  onNotInterested:    () => void;
+  onReport:           () => void;
+  onBlockCreator:     () => void;
+  onUnblockCreator?:  () => void;
+  onRestrictCreator?: () => void;
+  onUnrestrictCreator?: () => void;
+  savedPost?:         boolean;
+  savedCreator?:      boolean;
+  isBlocked?:         boolean;
+  isRestricted?:      boolean;
 }
-
-const options = (
-  savedPost: boolean,
-  savedCreator: boolean,
-  handlers: {
-    onSavePost:     () => void;
-    onSaveCreator:  () => void;
-    onNotInterested: () => void;
-    onReport:       () => void;
-    onBlockCreator: () => void;
-  }
-) => [
-  {
-    icon:   <Bookmark size={18} />,
-    label:  savedPost ? "Unsave post" : "Save post",
-    action: handlers.onSavePost,
-    danger: false,
-    filled: savedPost,
-  },
-  {
-    icon:   <UserPlus size={18} />,
-    label:  savedCreator ? "Unsave creator" : "Save creator",
-    action: handlers.onSaveCreator,
-    danger: false,
-    filled: savedCreator,
-  },
-
-  {
-    icon:   <ThumbsDown size={18} />,
-    label:  "Not interested",
-    action: handlers.onNotInterested,
-    danger: false,
-    filled: false,
-  },
-  {
-    icon:   <Flag size={18} />,
-    label:  "Report",
-    action: handlers.onReport,
-    danger: false,
-    filled: false,
-  },
-  {
-    icon:   <Ban size={18} />,
-    label:  "Block creator",
-    action: handlers.onBlockCreator,
-    danger: true,
-    filled: false,
-  },
-];
 
 export default function PostOptionsSheet({
   isOpen,
@@ -73,8 +29,13 @@ export default function PostOptionsSheet({
   onNotInterested,
   onReport,
   onBlockCreator,
-  savedPost    = false,
-  savedCreator = false,
+  onUnblockCreator,
+  onRestrictCreator,
+  onUnrestrictCreator,
+  savedPost       = false,
+  savedCreator    = false,
+  isBlocked       = false,
+  isRestricted    = false,
 }: PostOptionsSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
 
@@ -97,13 +58,69 @@ export default function PostOptionsSheet({
 
   if (typeof window === "undefined" || !isOpen) return null;
 
-  const items = options(savedPost, savedCreator, {
-    onSavePost,
-    onSaveCreator,
-    onNotInterested,
-    onReport,
-    onBlockCreator,
-  });
+  // Restrict is dormant (faded, non-clickable) when user is blocked
+  const restrictDormant = isBlocked;
+
+  const items = [
+    {
+      icon:    <Bookmark size={18} />,
+      label:   savedPost ? "Unsave post" : "Save post",
+      action:  onSavePost,
+      danger:  false,
+      warn:    false,
+      filled:  savedPost,
+      dormant: false,
+    },
+    {
+      icon:    <UserPlus size={18} />,
+      label:   savedCreator ? "Unsave creator" : "Save creator",
+      action:  onSaveCreator,
+      danger:  false,
+      warn:    false,
+      filled:  savedCreator,
+      dormant: false,
+    },
+    {
+      icon:    <ThumbsDown size={18} />,
+      label:   "Not interested",
+      action:  onNotInterested,
+      danger:  false,
+      warn:    false,
+      filled:  false,
+      dormant: false,
+    },
+    {
+      icon:    <Flag size={18} />,
+      label:   "Report",
+      action:  onReport,
+      danger:  false,
+      warn:    false,
+      filled:  false,
+      dormant: false,
+    },
+    {
+      icon:    <ShieldOff size={18} />,
+      label:   isRestricted ? "Unrestrict creator" : "Restrict creator",
+      action:  restrictDormant
+        ? undefined
+        : isRestricted
+          ? onUnrestrictCreator
+          : onRestrictCreator,
+      danger:  false,
+      warn:    !restrictDormant,
+      filled:  false,
+      dormant: restrictDormant,
+    },
+    {
+      icon:    <Ban size={18} />,
+      label:   isBlocked ? "Unblock creator" : "Block creator",
+      action:  isBlocked ? onUnblockCreator : onBlockCreator,
+      danger:  true,
+      warn:    false,
+      filled:  false,
+      dormant: false,
+    },
+  ];
 
   return createPortal(
     <>
@@ -146,7 +163,12 @@ export default function PostOptionsSheet({
           {items.map((item, i) => (
             <button
               key={i}
-              onClick={() => { item.action(); onClose(); }}
+              onClick={() => {
+                if (item.dormant || !item.action) return;
+                item.action();
+                onClose();
+              }}
+              disabled={item.dormant}
               style={{
                 width:           "100%",
                 display:         "flex",
@@ -155,18 +177,31 @@ export default function PostOptionsSheet({
                 padding:         "14px 20px",
                 border:          "none",
                 backgroundColor: "transparent",
-                color:           item.danger ? "#EF4444" : item.filled ? "#8B5CF6" : "#C4C4D4",
+                color:           item.dormant
+                  ? "#3A3A4D"
+                  : item.danger
+                    ? isBlocked && item.label.startsWith("Unblock") ? "#10B981" : "#EF4444"
+                    : item.warn
+                      ? isRestricted && item.label.startsWith("Unrestrict") ? "#10B981" : "#F59E0B"
+                      : item.filled
+                        ? "#8B5CF6"
+                        : "#C4C4D4",
                 fontSize:        "15px",
                 fontFamily:      "'Inter', sans-serif",
                 fontWeight:      item.filled ? 600 : 400,
                 textAlign:       "left",
-                cursor:          "pointer",
+                cursor:          item.dormant ? "default" : "pointer",
+                opacity:         item.dormant ? 0.35 : 1,
                 transition:      "background-color 0.15s ease",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+              onMouseEnter={(e) => {
+                if (!item.dormant) e.currentTarget.style.backgroundColor = "#1C1C2E";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+              }}
             >
-              <span style={{ opacity: item.danger ? 1 : item.filled ? 1 : 0.7 }}>
+              <span style={{ opacity: item.dormant ? 0.35 : item.danger || item.warn ? 1 : item.filled ? 1 : 0.7 }}>
                 {item.icon}
               </span>
               {item.label}

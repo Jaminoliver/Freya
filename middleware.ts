@@ -6,6 +6,11 @@ const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/reset-password
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Allow PWA files through without any auth checks
+  if (pathname === '/sw.js' || pathname === '/manifest.webmanifest') {
+    return NextResponse.next({ request })
+  }
+
   // Let API routes handle their own auth
   if (pathname.startsWith('/api/')) {
     return NextResponse.next({ request })

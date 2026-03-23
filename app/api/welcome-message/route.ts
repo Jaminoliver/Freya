@@ -6,8 +6,6 @@ import { uploadPhotoToBunny } from "@/lib/utils/bunny";
 export const runtime = "nodejs";
 
 // ─── GET /api/welcome-message ────────────────────────────────────────────────
-// Fetch the authenticated creator's welcome message config + media
-
 export async function GET() {
   try {
     const supabase = await createServerSupabaseClient();
@@ -16,7 +14,6 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get creator's sequence
     const { data: sequence } = await supabase
       .from("welcome_message_sequences")
       .select("id, sequence_name, is_active")
@@ -27,15 +24,13 @@ export async function GET() {
       return NextResponse.json({ sequence: null, message: null, media: [] });
     }
 
-    // Get the welcome message (step 1 only for MVP)
     const { data: message } = await supabase
       .from("welcome_messages")
-      .select("id, step_number, delay_hours, message_content, is_ppv, ppv_price, media_type, media_url")
+      .select("id, step_number, delay_hours, message_content, is_ppv, ppv_price, media_type, media_url, version")
       .eq("sequence_id", sequence.id)
       .eq("step_number", 1)
       .maybeSingle();
 
-    // Get media files if message exists
     let media: any[] = [];
     if (message) {
       const { data: mediaRows } = await supabase
@@ -55,8 +50,6 @@ export async function GET() {
 }
 
 // ─── POST /api/welcome-message ───────────────────────────────────────────────
-// Create or update the creator's welcome message (upsert)
-
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -94,7 +87,6 @@ export async function POST(req: NextRequest) {
 
     if (existingSequence) {
       sequenceId = existingSequence.id;
-
       await supabase
         .from("welcome_message_sequences")
         .update({ is_active: enabled, updated_at: new Date().toISOString() })
@@ -118,12 +110,12 @@ export async function POST(req: NextRequest) {
       sequenceId = newSequence.id;
     }
 
-    // Step 2: Upsert welcome_messages (step 1 only)
+    // Step 2: Upsert welcome_messages with version tracking
     let messageId: number;
 
     const { data: existingMessage } = await supabase
       .from("welcome_messages")
-      .select("id")
+      .select("id, version")
       .eq("sequence_id", sequenceId)
       .eq("step_number", 1)
       .maybeSingle();
@@ -132,6 +124,10 @@ export async function POST(req: NextRequest) {
 
     if (existingMessage) {
       messageId = existingMessage.id;
+      const oldVersion = existingMessage.version ?? 1;
+      const newVersion = oldVersion + 1;
+
+      console.log(`[Welcome Message] EDIT DETECTED — creatorId: ${user.id} | messageId: ${messageId} | version: ${oldVersion} → ${newVersion}`);
 
       await supabase
         .from("welcome_messages")
@@ -139,11 +135,16 @@ export async function POST(req: NextRequest) {
           message_content: messageContent,
           is_ppv: isPpv,
           ppv_price: isPpv ? ppvPrice : null,
-          media_type: contentType === "media" ? null : null,
+          media_type: null,
           media_url: null,
+          version: newVersion,
         })
         .eq("id", messageId);
+
+      console.log(`[Welcome Message] Version saved — messageId: ${messageId} | new version: ${newVersion}`);
     } else {
+      console.log(`[Welcome Message] NEW MESSAGE — creatorId: ${user.id} | version: 1`);
+
       const { data: newMessage, error: msgError } = await supabase
         .from("welcome_messages")
         .insert({
@@ -155,6 +156,7 @@ export async function POST(req: NextRequest) {
           ppv_price: isPpv ? ppvPrice : null,
           media_type: null,
           media_url: null,
+          version: 1,
         })
         .select("id")
         .single();
@@ -165,10 +167,10 @@ export async function POST(req: NextRequest) {
       }
 
       messageId = newMessage.id;
+      console.log(`[Welcome Message] New message created — messageId: ${messageId} | version: 1`);
     }
 
-    // Step 3: Handle media — delete removed, keep existing, upload new
-    // Delete media that are no longer in existingMediaIds
+    // Step 3: Handle media
     if (existingMessage) {
       if (existingMediaIds.length > 0) {
         await supabase
@@ -177,13 +179,11 @@ export async function POST(req: NextRequest) {
           .eq("welcome_message_id", messageId)
           .not("id", "in", `(${existingMediaIds.join(",")})`);
       } else if (files.length === 0) {
-        // No existing media to keep and no new files — clear all media
         await supabase
           .from("welcome_message_media")
           .delete()
           .eq("welcome_message_id", messageId);
       } else {
-        // New files coming in, clear old media
         await supabase
           .from("welcome_message_media")
           .delete()
@@ -191,7 +191,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Upload new files to Bunny CDN
     const currentMediaCount = existingMediaIds.length;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -221,8 +220,6 @@ export async function POST(req: NextRequest) {
 }
 
 // ─── DELETE /api/welcome-message ─────────────────────────────────────────────
-// Delete the creator's welcome message (keeps sequence, removes message + media)
-
 export async function DELETE() {
   try {
     const supabase = await createServerSupabaseClient();
@@ -241,7 +238,6 @@ export async function DELETE() {
       return NextResponse.json({ error: "No welcome message found" }, { status: 404 });
     }
 
-    // Cascade delete handles welcome_message_media via FK
     await supabase
       .from("welcome_messages")
       .delete()

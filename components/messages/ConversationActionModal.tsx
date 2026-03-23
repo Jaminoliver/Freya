@@ -28,19 +28,24 @@ export function ConversationActionModal({
   const [pos, setPos] = useState({ top: -9999, left: -9999 });
   const ref = useRef<HTMLDivElement>(null);
 
-  // Clamp to viewport
+  // Clamp to viewport, flip upward if not enough space below
   useEffect(() => {
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
     const pad  = 10;
-    // Default: open to the left of the click point
     let left = x - rect.width;
     let top  = y;
+
+    // Flip upward if not enough space below
+    if (top + rect.height + pad > window.innerHeight) {
+      top = y - rect.height;
+    }
+
     // Clamp
     if (left < pad) left = pad;
-    if (left + rect.width  + pad > window.innerWidth)  left = window.innerWidth  - rect.width  - pad;
-    if (top  + rect.height + pad > window.innerHeight) top  = window.innerHeight - rect.height - pad;
-    if (top  < pad) top  = pad;
+    if (left + rect.width + pad > window.innerWidth) left = window.innerWidth - rect.width - pad;
+    if (top < pad) top = pad;
+
     setPos({ top, left });
   }, [x, y]);
 

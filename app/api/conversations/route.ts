@@ -32,6 +32,7 @@ export async function GET() {
     `)
     .or(`creator_id.eq.${user.id},fan_id.eq.${user.id}`)
     .eq("is_blocked", false)
+    .eq("is_restricted", false)
     .order("last_message_at", { ascending: false });
 
   if (error) {
@@ -130,7 +131,6 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (existing) {
-    // If conversation was soft-deleted for this user, restore it
     const isCreator = creatorId === user.id;
     const field     = isCreator ? "deleted_for_creator" : "deleted_for_fan";
     await supabase

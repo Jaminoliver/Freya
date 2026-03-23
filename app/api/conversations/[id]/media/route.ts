@@ -1,5 +1,20 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, getUser } from "@/lib/supabase/server";
+import { signBunnyUrl } from "@/lib/utils/bunny";
+
+// ─── Extract path from a BunnyCDN URL and re-sign it ─────────────────────────
+function refreshBunnyUrl(storedUrl: string | null): string | null {
+  if (!storedUrl) return null;
+  try {
+    const cdnBase = process.env.BUNNY_CDN_URL!.replace(/\/$/, "");
+    const url     = new URL(storedUrl);
+    // Strip query params (expired token/expires) and re-sign
+    const path = url.pathname;
+    return signBunnyUrl(path);
+  } catch {
+    return storedUrl; // return as-is if parsing fails
+  }
+}
 
 export async function GET(
   request: Request,
@@ -41,15 +56,6 @@ export async function GET(
     ? (convo as any).deleted_before_creator
     : (convo as any).deleted_before_fan;
 
-  // DIAGNOSTIC: log raw media_type values to see exact format
-  const { data: diagRows } = await supabase
-    .from("messages")
-    .select("id, media_type")
-    .eq("conversation_id", conversationId)
-    .not("media_type", "is", null)
-    .limit(10);
-  console.log("[gallery] DIAG raw media_types:", JSON.stringify(diagRows?.map((r: any) => ({ id: r.id, media_type: r.media_type }))));
-
   // Step 1: fetch messages that have media
   let msgsQuery = supabase
     .from("messages")
@@ -68,22 +74,18 @@ export async function GET(
 
   const { data: msgRows, error: msgsError } = await msgsQuery;
 
-  console.log("[gallery] filter:", filter, "| msgsError:", msgsError?.message ?? null, "| msgRows count:", msgRows?.length ?? 0);
-  console.log("[gallery] msgRows sample:", JSON.stringify(msgRows?.slice(0, 3)));
-
   if (msgsError) {
     return NextResponse.json({ error: msgsError.message }, { status: 500 });
   }
 
   const msgRows_ = msgRows ?? [];
   if (msgRows_.length === 0) {
-    console.log("[gallery] No messages found — returning empty");
     return NextResponse.json({ mediaItems: [], nextCursor: null });
   }
 
   const messageIds = msgRows_.map((r: any) => r.id);
 
-  // Step 2: get media rows, filtered by type
+  // Step 2: get media rows
   let mediaQuery = supabase
     .from("message_media")
     .select("id, message_id, url, thumbnail_url, media_type, display_order")
@@ -94,9 +96,6 @@ export async function GET(
   if (filter === "videos") mediaQuery = mediaQuery.ilike("media_type", "video%");
 
   const { data: mediaRows, error: mediaError } = await mediaQuery;
-
-  console.log("[gallery] mediaRows count:", mediaRows?.length ?? 0, "| mediaError:", mediaError?.message ?? null);
-  console.log("[gallery] mediaRows sample:", JSON.stringify(mediaRows?.slice(0, 3)));
 
   if (mediaError) {
     return NextResponse.json({ error: mediaError.message }, { status: 500 });
@@ -119,21 +118,16 @@ export async function GET(
   // Fallback: if message_media is empty, use messages.media_url directly
   let finalMedia = mediaRows ?? [];
   if (finalMedia.length === 0) {
-    console.log("[gallery] message_media empty — trying fallback from messages.media_url");
     let fallbackQuery = supabase
       .from("messages")
       .select("id, media_url, thumbnail_url, media_type")
       .in("id", messageIds)
       .not("media_url", "is", null);
 
-    // Apply type filter to fallback too
     if (filter === "images") fallbackQuery = fallbackQuery.eq("media_type", "photo");
     if (filter === "videos") fallbackQuery = fallbackQuery.ilike("media_type", "video%");
 
     const { data: fallbackRows } = await fallbackQuery;
-
-    console.log("[gallery] fallbackRows count:", fallbackRows?.length ?? 0);
-    console.log("[gallery] fallbackRows sample:", JSON.stringify(fallbackRows?.slice(0, 3)));
 
     finalMedia = (fallbackRows ?? []).map((r: any) => ({
       id:            r.id,
@@ -144,8 +138,6 @@ export async function GET(
       display_order: 0,
     }));
   }
-
-  console.log("[gallery] finalMedia count before map:", finalMedia.length);
 
   const mediaItems = finalMedia
     .map((r: any) => {
@@ -159,8 +151,8 @@ export async function GET(
       return {
         id:           r.id,
         messageId:    r.message_id,
-        url:          isUnlocked ? r.url : null,
-        thumbnailUrl: r.thumbnail_url ?? null,
+        url:          isUnlocked ? refreshBunnyUrl(r.url) : null,
+        thumbnailUrl: refreshBunnyUrl(r.thumbnail_url),
         mediaType:    isVideo ? "video" : "image",
         isPPV,
         isUnlocked,
@@ -179,17 +171,59 @@ export async function GET(
   const lastMsg    = msgRows_[msgRows_.length - 1] as any;
   const nextCursor = msgRows_.length === limit ? lastMsg?.created_at ?? null : null;
 
-  return NextResponse.json({
-    mediaItems,
-    nextCursor,
-    _debug: {
-      filter,
-      msgRowsCount:    msgRows_.length,
-      msgRowsSample:   msgRows_.slice(0, 3).map((r: any) => ({ id: r.id })),
-      mediaRowsCount:  (mediaRows ?? []).length,
-      mediaRowsSample: (mediaRows ?? []).slice(0, 3).map((r: any) => ({ id: r.id, media_type: r.media_type })),
-      finalMediaCount: finalMedia.length,
-      mediaItemsCount: mediaItems.length,
-    },
-  });
+  return NextResponse.json({ mediaItems, nextCursor });
+}
+
+// ─── DELETE /api/conversations/[id]/media ─────────────────────────────────────
+// Bulk soft-delete messages for the current user
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createServerSupabaseClient();
+  const { user, error: authError } = await getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const conversationId = parseInt(id, 10);
+
+  if (isNaN(conversationId)) {
+    return NextResponse.json({ error: "Invalid conversation id" }, { status: 400 });
+  }
+
+  const { data: convo } = await supabase
+    .from("conversations")
+    .select("id, creator_id, fan_id")
+    .eq("id", conversationId)
+    .or(`creator_id.eq.${user.id},fan_id.eq.${user.id}`)
+    .single();
+
+  if (!convo) {
+    return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const messageIds: number[] = body.messageIds ?? [];
+
+  if (!messageIds.length) {
+    return NextResponse.json({ error: "messageIds is required" }, { status: 400 });
+  }
+
+  const isCreator  = convo.creator_id === user.id;
+  const deleteField = isCreator ? "deleted_for_creator" : "deleted_for_fan";
+
+  const { error } = await supabase
+    .from("messages")
+    .update({ [deleteField]: true })
+    .eq("conversation_id", conversationId)
+    .in("id", messageIds);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, deleted: messageIds.length });
 }

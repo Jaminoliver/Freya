@@ -13,12 +13,14 @@ export interface ConversationParticipant {
 }
 
 export interface Conversation {
-  id:              number;
-  participant:     ConversationParticipant;
-  lastMessage:     string;
-  lastMessageAt:   string;
-  unreadCount:     number;
-  hasMedia:        boolean;
+  id:            number;
+  participant:   ConversationParticipant;
+  lastMessage:   string;
+  lastMessageAt: string;
+  unreadCount:   number;
+  hasMedia:      boolean;
+  isBlocked?:    boolean;
+  isRestricted?: boolean;
 }
 
 export interface Message {
@@ -43,4 +45,5 @@ export interface Message {
   uploadProgress?: number; // 0–100
   // Temp ID for pending messages before server assigns real ID
   tempId?:         string;
+  isDeleted?:      boolean;
 }

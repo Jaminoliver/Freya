@@ -2,18 +2,19 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Star, Bell, Pin, Images, Search, MoreVertical, Flag, Eraser, X } from "lucide-react";
+import { ArrowLeft, Star, Bell, Pin, Images, Search, MoreVertical, Flag, Eraser, X, Ban, ShieldOff } from "lucide-react";
 import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
+import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
 import { updateConversations, clearCachedMessages, subscribeTypingForConversation } from "@/app/(main)/messages/page";
 import { useMessageStore } from "@/lib/store/messageStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { ChatHeader } from "@/components/messages/ChatHeader";
-import { ConversationActionModal } from "@/components/messages/ConversationActionModal";
 import { MessagesList } from "@/components/messages/MessagesList";
 import { MessageInput } from "@/components/messages/MessageInput";
 import { ReportModal } from "@/components/messages/ReportModal";
+import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
 import type { Conversation, Message } from "@/lib/types/messages";
 
 interface Props {
@@ -49,12 +50,22 @@ export function ChatPanel({
 
   const { messages, setMessages, appendMessage } = useMessageStore();
 
-  const [dropdownOpen,  setDropdownOpen]  = useState(false);
-  const [reportOpen,    setReportOpen]    = useState(false);
-  const [confirmClear,  setConfirmClear]  = useState(false);
-  const [sending,       setSending]       = useState(false);
-  const [replyTo,       setReplyTo]       = useState<Message | null>(null);
-  const [avatarOpen,    setAvatarOpen]    = useState(false);
+  const [dropdownOpen,      setDropdownOpen]      = useState(false);
+  const [reportOpen,        setReportOpen]        = useState(false);
+  const [confirmClear,      setConfirmClear]      = useState(false);
+  const [blockConfirm,      setBlockConfirm]      = useState(false);
+  const [unblockConfirm,    setUnblockConfirm]    = useState(false);
+  const [restrictConfirm,   setRestrictConfirm]   = useState(false);
+  const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
+  const [sending,           setSending]           = useState(false);
+  const [replyTo,           setReplyTo]           = useState<Message | null>(null);
+  const [avatarOpen,        setAvatarOpen]        = useState(false);
+
+  const {
+    isBlocked, isRestricted,
+    block, unblock, restrict, unrestrict,
+    fetchStatus,
+  } = useBlockRestrict({ userId: participant.id });
 
   const { startMessageUpload, uploads } = useUpload();
 
@@ -105,7 +116,6 @@ export function ChatPanel({
     else setTypingConversationId(null);
   }, [isTyping, conversation.id, setTypingConversationId]);
 
-  // Close avatar lightbox on Escape
   useEffect(() => {
     if (!avatarOpen) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setAvatarOpen(false); };
@@ -113,7 +123,6 @@ export function ChatPanel({
     return () => document.removeEventListener("keydown", handler);
   }, [avatarOpen]);
 
-  // Mark conversation as read on mount
   useEffect(() => {
     if (conversation.id === 0) return;
     updateConversations((prev) =>
@@ -158,9 +167,7 @@ export function ChatPanel({
       if (!res.ok) {
         setMessages((prev) => {
           if (deleteFor === "me") {
-            return [...prev, message].sort(
-              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            );
+            return [...prev, message].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
           }
           return prev.map((m) => m.id === message.id ? message : m);
         });
@@ -168,9 +175,7 @@ export function ChatPanel({
     } catch {
       setMessages((prev) => {
         if (deleteFor === "me") {
-          return [...prev, message].sort(
-            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          );
+          return [...prev, message].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         }
         return prev.map((m) => m.id === message.id ? message : m);
       });
@@ -243,7 +248,6 @@ export function ChatPanel({
       try {
         let convId = realConversationIdRef.current ?? conversation.id;
 
-        // Lazily create conversation on first message send
         if (convId === 0) {
           const createRes  = await fetch("/api/conversations", {
             method:  "POST",
@@ -253,17 +257,9 @@ export function ChatPanel({
           const createData = await createRes.json();
           convId                        = createData.conversationId;
           realConversationIdRef.current = convId;
-
-          // Sync store so realtime MSG INSERT handler routes messages correctly
           useMessageStore.getState().setConversationId(convId);
-
-          // Subscribe typing channel for new conversation so indicators work immediately
           subscribeTypingForConversation(convId);
-
-          // Notify parent so it updates conversation state + URL
           onConversationCreated?.(convId);
-
-          // Prepend to conversation list — triggers AnimatePresence slide-in
           updateConversations((prev) => {
             if (prev.some((c) => c.id === convId)) return prev;
             return [{
@@ -286,7 +282,6 @@ export function ChatPanel({
           setMessages((prev) => prev.map((m) =>
             m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m
           ));
-          // Update last message preview in conversation list
           updateConversations((prev) => prev.map((c) =>
             c.id === convId ? { ...c, lastMessage: text.trim(), lastMessageAt: new Date().toISOString() } : c
           ));
@@ -305,17 +300,44 @@ export function ChatPanel({
     setMessages((prev) => updater(prev));
   }, [setMessages]);
 
-  const menuItems = [
-    { icon: Star,   label: "Favourite",     action: () => setDropdownOpen(false) },
-    { icon: Bell,   label: "Notifications", action: () => setDropdownOpen(false) },
-    { icon: Pin,    label: "Pin chat",      action: () => setDropdownOpen(false) },
-    { icon: Images, label: "Gallery",       action: () => { setDropdownOpen(false); router.push(`/messages/${conversation.id}/gallery`); } },
-    { icon: Search, label: "Find in chat",  action: () => setDropdownOpen(false) },
-    { icon: Eraser, label: "Clear chat",    action: () => { setDropdownOpen(false); setConfirmClear(true); }, danger: false },
-    { icon: Flag,   label: "Report",        action: () => { setDropdownOpen(false); setReportOpen(true); }, danger: true },
-  ];
+  const handleBlockConfirm = useCallback(async () => {
+    await block();
+    handleBack();
+  }, [block]);
 
-  const showStatus = isTyping || participant.isOnline;
+  const handleRestrictConfirm = useCallback(async () => {
+    await restrict();
+    handleBack();
+  }, [restrict]);
+
+  const restrictDormant = isBlocked;
+  const showStatus      = isTyping || participant.isOnline;
+
+  const menuItems = [
+    { icon: Star,   label: "Favourite",     action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
+    { icon: Bell,   label: "Notifications", action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
+    { icon: Pin,    label: "Pin chat",      action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
+    { icon: Images, label: "Gallery",       action: () => { setDropdownOpen(false); router.push(`/messages/${conversation.id}/gallery`); }, danger: false, warn: false, dormant: false },
+    { icon: Search, label: "Find in chat",  action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
+    { icon: Eraser, label: "Clear chat",    action: () => { setDropdownOpen(false); setConfirmClear(true); },                               danger: false, warn: false, dormant: false },
+    {
+      icon:    ShieldOff,
+      label:   isRestricted ? "Unrestrict" : "Restrict",
+      action:  restrictDormant ? undefined : () => { setDropdownOpen(false); isRestricted ? setUnrestrictConfirm(true) : setRestrictConfirm(true); },
+      danger:  false,
+      warn:    !restrictDormant,
+      dormant: restrictDormant,
+    },
+    {
+      icon:    Ban,
+      label:   isBlocked ? "Unblock" : "Block",
+      action:  () => { setDropdownOpen(false); isBlocked ? setUnblockConfirm(true) : setBlockConfirm(true); },
+      danger:  true,
+      warn:    false,
+      dormant: false,
+    },
+    { icon: Flag, label: "Report", action: () => { setDropdownOpen(false); setReportOpen(true); }, danger: true, warn: false, dormant: false },
+  ];
 
   return (
     <>
@@ -332,8 +354,8 @@ export function ChatPanel({
         @media (max-width: 767px) {
           .chat-panel-root {
             position: fixed !important; top: 0 !important; left: 0 !important;
-            right: 0 !important; bottom: 0 !important; height: 100% !important;
-            max-height: 100% !important; z-index: 100;
+            right: 0 !important; height: 100dvh !important;
+            max-height: 100dvh !important; z-index: 100;
             padding-top: env(safe-area-inset-top, 0px);
             padding-bottom: env(safe-area-inset-bottom, 0px);
             box-sizing: border-box;
@@ -350,41 +372,27 @@ export function ChatPanel({
           0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
           40%            { transform: translateY(-4px); opacity: 1; }
         }
-        .typing-dot {
-          width: 4px; height: 4px; border-radius: 50%;
-          background-color: #8B5CF6; display: inline-block;
-          animation: typing-bounce 1.2s infinite ease-in-out;
-        }
+        .typing-dot { width: 4px; height: 4px; border-radius: 50%; background-color: #8B5CF6; display: inline-block; animation: typing-bounce 1.2s infinite ease-in-out; }
         .typing-dot:nth-child(2) { animation-delay: 0.15s; }
         .typing-dot:nth-child(3) { animation-delay: 0.3s; }
         @keyframes avatarFadeIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
         .avatar-lightbox-inner { animation: avatarFadeIn 0.2s ease forwards; }
       `}</style>
 
-      {/* Clear chat confirmation */}
+      {/* Modals */}
       {confirmClear && (
-        <div
-          onClick={() => setConfirmClear(false)}
-          style={{ position: "fixed", inset: 0, zIndex: 998, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
+        <div onClick={() => setConfirmClear(false)} style={{ position: "fixed", inset: 0, zIndex: 998, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "16px", padding: "24px", width: "300px", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", fontFamily: "'Inter', sans-serif" }}>
             <p style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>Clear chat?</p>
             <p style={{ margin: "0 0 20px", fontSize: "13px", color: "#A3A3C2" }}>This will clear all messages for you. This can't be undone.</p>
             <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                onClick={() => setConfirmClear(false)}
-                style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#A3A3C2", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
-              >
-                Cancel
-              </button>
+              <button onClick={() => setConfirmClear(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#A3A3C2", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Cancel</button>
               <button
                 onClick={async () => {
                   setConfirmClear(false);
                   try {
                     await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
-                    updateConversations((prev) =>
-                      prev.filter((c) => c.id !== conversation.id)
-                    );
+                    updateConversations((prev) => prev.filter((c) => c.id !== conversation.id));
                     clearCachedMessages(conversation.id);
                     setMessages([]);
                     onClearMessages?.();
@@ -392,20 +400,14 @@ export function ChatPanel({
                   } catch (err) { console.error("[ChatPanel] clear error:", err); }
                 }}
                 style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
-              >
-                Clear
-              </button>
+              >Clear</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Avatar lightbox */}
       {avatarOpen && (
-        <div
-          onClick={() => setAvatarOpen(false)}
-          style={{ position: "fixed", inset: 0, zIndex: 999, backgroundColor: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
+        <div onClick={() => setAvatarOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 999, backgroundColor: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div className="avatar-lightbox-inner" onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
             {participant.avatarUrl ? (
               <img src={participant.avatarUrl} alt={participant.name} style={{ width: "280px", height: "280px", borderRadius: "50%", objectFit: "cover", border: "3px solid #2A2A3D" }} />
@@ -414,10 +416,7 @@ export function ChatPanel({
                 {participant.name[0].toUpperCase()}
               </div>
             )}
-            <button
-              onClick={() => setAvatarOpen(false)}
-              style={{ position: "absolute", top: "-12px", right: "-12px", width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-            >
+            <button onClick={() => setAvatarOpen(false)} style={{ position: "absolute", top: "-12px", right: "-12px", width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
               <X size={16} color="#A3A3C2" strokeWidth={1.8} />
             </button>
           </div>
@@ -425,16 +424,17 @@ export function ChatPanel({
       )}
 
       {reportOpen && (
-        <ReportModal
-          context="message"
-          username={participant.username}
-          reportedUserId={participant.id}
-          onClose={() => setReportOpen(false)}
-        />
+        <ReportModal context="message" username={participant.username} reportedUserId={participant.id} onClose={() => setReportOpen(false)} />
       )}
 
+      <BlockConfirmModal isOpen={blockConfirm}      onClose={() => setBlockConfirm(false)}      onConfirm={handleBlockConfirm}    type="block"    username={participant.username} />
+      <BlockConfirmModal isOpen={unblockConfirm}    onClose={() => setUnblockConfirm(false)}    onConfirm={unblock}               type="block"    username={participant.username} />
+      <BlockConfirmModal isOpen={restrictConfirm}   onClose={() => setRestrictConfirm(false)}   onConfirm={handleRestrictConfirm} type="restrict" username={participant.username} />
+      <BlockConfirmModal isOpen={unrestrictConfirm} onClose={() => setUnrestrictConfirm(false)} onConfirm={unrestrict}            type="restrict" username={participant.username} />
+
       <div className="chat-panel-root">
-        {/* Mobile header */}
+
+        {/* Mobile header — handled entirely by ChatHeader */}
         <ChatHeader
           conversation={conversation}
           onBack={onBack}
@@ -442,7 +442,7 @@ export function ChatPanel({
           onMessagesCleared={() => { clearCachedMessages(conversation.id); onClearMessages?.(); setMessages([]); }}
         />
 
-        {/* Desktop inline header */}
+        {/* Desktop header — hidden on mobile via CSS */}
         <div
           className="chat-desktop-header"
           style={{ alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "56px", flexShrink: 0, backgroundColor: "#0D0D1A", borderBottom: "1px solid #1E1E2E", fontFamily: "'Inter', sans-serif", touchAction: "none", userSelect: "none" }}
@@ -450,18 +450,11 @@ export function ChatPanel({
           onTouchMove={(e) => e.stopPropagation()}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1 }}>
-            <button onClick={handleBack}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "6px", transition: "color 0.15s ease", flexShrink: 0 }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}
-            >
+            <button onClick={handleBack} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "6px", transition: "color 0.15s ease", flexShrink: 0 }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
               <ArrowLeft size={20} strokeWidth={1.8} />
             </button>
 
-            <div
-              style={{ position: "relative", flexShrink: 0, cursor: "pointer" }}
-              onClick={() => setAvatarOpen(true)}
-            >
+            <div style={{ position: "relative", flexShrink: 0, cursor: "pointer" }} onClick={() => setAvatarOpen(true)}>
               <div style={{ width: "40px", height: "40px", borderRadius: "50%", overflow: "hidden", backgroundColor: "#2A2A3D" }}>
                 {participant.avatarUrl ? (
                   <img src={participant.avatarUrl} alt={participant.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -477,21 +470,14 @@ export function ChatPanel({
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1px", minWidth: 0 }}>
-              <div
-                className={`desktop-header-name${showStatus ? " desktop-header-name--up" : ""}`}
-                style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }}
-                onClick={() => router.push(`/${participant.username}`)}
-              >
+              <div className={`desktop-header-name${showStatus ? " desktop-header-name--up" : ""}`} style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }} onClick={() => router.push(`/${participant.username}`)}>
                 <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap" }}>{participant.name}</span>
                 {participant.isVerified && <Sparkles size={14} color="#8B5CF6" strokeWidth={1.8} />}
               </div>
-
               {isTyping ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <div style={{ display: "flex", gap: "3px", alignItems: "center" }}>
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
+                    <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
                   </div>
                   <span style={{ fontSize: "12px", color: "#8B5CF6", whiteSpace: "nowrap" }}>typing...</span>
                 </div>
@@ -504,9 +490,10 @@ export function ChatPanel({
             </div>
           </div>
 
+          {/* Desktop 3-dot — position:fixed to escape overflow clipping */}
           <div ref={dropdownRef} style={{ position: "relative", flexShrink: 0 }}>
             <button
-              onClick={() => setDropdownOpen((o) => !o)}
+              onClick={() => { setDropdownOpen((o) => !o); if (!dropdownOpen) fetchStatus(); }}
               style={{ background: "none", border: "none", cursor: "pointer", color: dropdownOpen ? "#8B5CF6" : "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease", backgroundColor: dropdownOpen ? "rgba(139,92,246,0.1)" : "transparent" }}
               onMouseEnter={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1C1C2E"; }}}
               onMouseLeave={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "transparent"; }}}
@@ -515,14 +502,44 @@ export function ChatPanel({
             </button>
 
             {dropdownOpen && (
-              <div className="chat-panel-dropdown" style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "12px", padding: "6px", minWidth: "180px", zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
-                {menuItems.map(({ icon: Icon, label, action, danger }: any) => (
-                  <button key={label} onClick={action}
-                    style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "10px 12px", borderRadius: "8px", border: "none", cursor: "pointer", backgroundColor: "transparent", color: danger ? "#EF4444" : "#FFFFFF", fontSize: "14px", fontFamily: "'Inter', sans-serif", textAlign: "left", transition: "background-color 0.15s ease" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+              <div
+                className="chat-panel-dropdown"
+                style={{ position: "fixed", top: "64px", right: "16px", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "12px", padding: "6px", minWidth: "190px", zIndex: 200, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: "calc(100vh - 80px)", overflowY: "auto" }}
+              >
+                {menuItems.map(({ icon: Icon, label, action, danger, warn, dormant }) => (
+                  <button
+                    key={label}
+                    onClick={() => { if (!dormant && action) action(); }}
+                    disabled={dormant}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "10px", width: "100%",
+                      padding: "10px 12px", borderRadius: "8px", border: "none",
+                      cursor: dormant ? "default" : "pointer",
+                      backgroundColor: "transparent",
+                      color: dormant
+                        ? "#3A3A4D"
+                        : danger
+                          ? (label === "Unblock" ? "#10B981" : "#EF4444")
+                          : warn
+                            ? (label === "Unrestrict" ? "#10B981" : "#F59E0B")
+                            : "#FFFFFF",
+                      fontSize: "14px", fontFamily: "'Inter', sans-serif", textAlign: "left",
+                      opacity: dormant ? 0.35 : 1,
+                      transition: "background-color 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => { if (!dormant) e.currentTarget.style.backgroundColor = "#2A2A3D"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
                   >
-                    <Icon size={15} color={danger ? "#EF4444" : "#A3A3C2"} strokeWidth={1.8} />
+                    <Icon
+                      size={15}
+                      color={
+                        dormant ? "#3A3A4D"
+                        : danger  ? (label === "Unblock"    ? "#10B981" : "#EF4444")
+                        : warn    ? (label === "Unrestrict" ? "#10B981" : "#F59E0B")
+                        : "#A3A3C2"
+                      }
+                      strokeWidth={1.8}
+                    />
                     {label}
                   </button>
                 ))}
