@@ -77,21 +77,6 @@ export async function GET(
   const participant = isCreator ? (row.fan as any) : (row.creator as any);
   const unreadCount = isCreator ? row.unread_count_creator : row.unread_count_fan;
 
-  // Mark messages as read
-  await supabase
-    .from("messages")
-    .update({ is_read: true, read_at: new Date().toISOString() })
-    .eq("conversation_id", conversationId)
-    .eq("receiver_id", user.id)
-    .eq("is_read", false);
-
-  // Reset unread count for current user
-  const unreadField = isCreator ? "unread_count_creator" : "unread_count_fan";
-  await supabase
-    .from("conversations")
-    .update({ [unreadField]: 0 })
-    .eq("id", conversationId);
-
   return NextResponse.json({
     conversation: {
       id: row.id,

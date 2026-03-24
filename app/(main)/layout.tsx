@@ -26,6 +26,11 @@ function NavigationWatcher() {
 function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
+  // Mark all messages as delivered when user enters the site
+  useEffect(() => {
+    fetch("/api/conversations/deliver-all", { method: "PATCH" }).catch(() => {});
+  }, []);
+
   const isSettings      = pathname.startsWith("/settings");
   const isSubscriptions = pathname.startsWith("/subscriptions");
   const isMessages      = pathname.startsWith("/messages");

@@ -6,15 +6,13 @@ import type { FilterTab } from "@/lib/types/messages";
 interface Props {
   active:          FilterTab;
   onChange:        (tab: FilterTab) => void;
-  priorityCount:  number;
   unreadCount:    number;
   favouriteCount: number;
 }
 
-export function FilterTabs({ active, onChange, priorityCount, unreadCount, favouriteCount }: Props) {
+export function FilterTabs({ active, onChange, unreadCount, favouriteCount }: Props) {
   const pills: { key: FilterTab; label: string; count?: number; icon?: React.ReactNode }[] = [
     { key: "all",        label: "All" },
-    { key: "priority",   label: "Priority",   count: priorityCount },
     { key: "unread",     label: "Unread",      count: unreadCount },
     { key: "favourites", label: "Favourites",  count: favouriteCount, icon: <Star size={12} strokeWidth={2} style={{ marginRight: "-2px" }} /> },
   ];

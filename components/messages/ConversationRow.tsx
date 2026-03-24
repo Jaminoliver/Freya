@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Sparkles, ImageIcon, Star } from "lucide-react";
 import { ConversationActionModal } from "@/components/messages/ConversationActionModal";
 import { updateConversations } from "@/app/(main)/messages/page";
@@ -16,6 +17,7 @@ interface Props {
 
 export function ConversationRow({ conversation, isActive, isTyping = false, isFavourited = false, onSelect }: Props) {
   const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia } = conversation;
+  const router = useRouter();
 
   const [hovered,   setHovered]   = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -91,13 +93,9 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
   };
 
   const handleCleared = () => {
-    updateConversations((prev) =>
-      prev.map((c) =>
-        c.id === conversation.id
-          ? { ...c, lastMessage: "", lastMessageAt: c.lastMessageAt }
-          : c
-      )
-    );
+    if (isActive) {
+      router.push("/messages");
+    }
   };
 
   const formattedTime = (() => {
@@ -187,10 +185,10 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
               {participant.name}
             </span>
             {participant.isVerified && <Sparkles size={13} color="#8B5CF6" strokeWidth={1.8} />}
-            {isFavourited && <Star size={12} color="#F59E0B" fill="#F59E0B" strokeWidth={0} style={{ flexShrink: 0 }} />}
             <span style={{ fontSize: "12px", color: "#8B5CF6", whiteSpace: "nowrap" }}>
               @{participant.username}
             </span>
+            {isFavourited && <Star size={12} color="#F59E0B" fill="#F59E0B" strokeWidth={0} style={{ flexShrink: 0 }} />}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             {!isTyping && hasMedia && <ImageIcon size={12} color="#A3A3C2" strokeWidth={1.8} />}

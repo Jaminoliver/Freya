@@ -8,7 +8,7 @@ import { ChatActionModal } from "@/components/messages/ChatActionModal";
 import { ReportModal } from "@/components/messages/ReportModal";
 import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
-import { clearCachedMessages, updateConversations } from "@/app/(main)/messages/page";
+import { clearCachedMessages, updateConversations, blockConversation } from "@/app/(main)/messages/page";
 import { useMessageStore } from "@/lib/store/messageStore";
 import type { Conversation } from "@/lib/types/messages";
 
@@ -51,28 +51,36 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
   };
 
   const handleClearChat = useCallback(async () => {
+    // Update client state immediately
+    updateConversations((prev) =>
+      prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "" } : c)
+    );
+    clearCachedMessages(conversation.id);
+    setMessages([]);
+    onMessagesCleared?.();
+
     try {
-      await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
-      updateConversations((prev) =>
-        prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "", lastMessageAt: c.lastMessageAt } : c)
-      );
-      clearCachedMessages(conversation.id);
-      setMessages([]);
-      onMessagesCleared?.();
+      await fetch(`/api/conversations/${conversation.id}/clear`, { method: "PATCH" });
     } catch (err) {
       console.error("[ChatHeader] clear chat error:", err);
     }
   }, [conversation.id, onMessagesCleared, setMessages]);
 
   const handleDeleteChat = useCallback(async () => {
+    blockConversation(conversation.id);
+    updateConversations((prev) =>
+      prev.filter((c) => c.id !== conversation.id)
+    );
+    clearCachedMessages(conversation.id);
+    setMessages([]);
+    onBack();
+
     try {
-      await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
-      updateConversations((prev) =>
-        prev.filter((c) => c.id !== conversation.id)
-      );
-      clearCachedMessages(conversation.id);
-      setMessages([]);
-      onBack();
+      await Promise.all([
+        fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" }),
+        fetch(`/api/favourites/chatlists/by-conversation/${conversation.id}`, { method: "DELETE" }),
+      ]);
+      window.dispatchEvent(new Event("favourites-updated"));
     } catch (err) {
       console.error("[ChatHeader] delete chat error:", err);
     }

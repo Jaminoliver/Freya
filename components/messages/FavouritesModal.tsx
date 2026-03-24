@@ -104,6 +104,7 @@ export function FavouritesModal({ conversationId, participantAvatarUrl, onClose 
           return { ...l, isMember: true, memberCount: l.memberCount + 1, avatars: newAvatars };
         }));
       }
+      window.dispatchEvent(new Event("favourites-updated"));
     } catch {
       setError("Failed to update list");
     } finally {

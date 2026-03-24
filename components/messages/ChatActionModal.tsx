@@ -10,6 +10,7 @@ interface Participant {
   name:       string;
   username:   string;
   avatarUrl?: string | null;
+  role?:      string;
 }
 
 interface Props {
@@ -92,7 +93,18 @@ export function ChatActionModal({
 
   const handleCopyLink = () => {
     const url = `${window.location.origin}/${participant.username}`;
-    navigator.clipboard.writeText(url).catch(() => {});
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).catch(() => {});
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
     onClose();
   };
 

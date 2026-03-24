@@ -24,10 +24,10 @@ export async function GET() {
       deleted_before_creator,
       deleted_before_fan,
       creator:profiles!conversations_creator_id_fkey (
-        id, username, display_name, avatar_url, is_verified
+        id, username, display_name, avatar_url, is_verified, role
       ),
       fan:profiles!conversations_fan_id_fkey (
-        id, username, display_name, avatar_url, is_verified
+        id, username, display_name, avatar_url, is_verified, role
       )
     `)
     .or(`creator_id.eq.${user.id},fan_id.eq.${user.id}`)
@@ -60,6 +60,7 @@ export async function GET() {
           avatarUrl:  participant.avatar_url ?? null,
           isVerified: participant.is_verified ?? false,
           isOnline:   false,
+          role:       participant.role ?? "fan",
         },
         lastMessage:   row.last_message_preview ?? "",
         lastMessageAt: row.last_message_at ?? "",

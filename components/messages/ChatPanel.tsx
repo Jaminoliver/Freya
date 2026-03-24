@@ -7,7 +7,7 @@ import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
-import { updateConversations, clearCachedMessages, subscribeTypingForConversation } from "@/app/(main)/messages/page";
+import { updateConversations, clearCachedMessages, subscribeTypingForConversation, blockConversation } from "@/app/(main)/messages/page";
 import { useMessageStore } from "@/lib/store/messageStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { ChatHeader } from "@/components/messages/ChatHeader";
@@ -144,29 +144,37 @@ export function ChatPanel({
   const handleTyping = useCallback(() => sendTyping(), [sendTyping]);
 
   const handleClearChat = useCallback(async () => {
+    // Update client state immediately
+    updateConversations((prev) =>
+      prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "" } : c)
+    );
+    clearCachedMessages(conversation.id);
+    setMessages([]);
+    onClearMessages?.();
+
     try {
-      await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
-      updateConversations((prev) =>
-        prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "", lastMessageAt: c.lastMessageAt } : c)
-      );
-      clearCachedMessages(conversation.id);
-      setMessages([]);
-      onClearMessages?.();
+      await fetch(`/api/conversations/${conversation.id}/clear`, { method: "PATCH" });
     } catch (err) {
       console.error("[ChatPanel] clear chat error:", err);
     }
   }, [conversation.id, onClearMessages, setMessages]);
 
   const handleDeleteChat = useCallback(async () => {
+    blockConversation(conversation.id);
+    updateConversations((prev) =>
+      prev.filter((c) => c.id !== conversation.id)
+    );
+    clearCachedMessages(conversation.id);
+    setMessages([]);
+    onClearMessages?.();
+    onBack();
+
     try {
-      await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
-      updateConversations((prev) =>
-        prev.filter((c) => c.id !== conversation.id)
-      );
-      clearCachedMessages(conversation.id);
-      setMessages([]);
-      onClearMessages?.();
-      onBack();
+      await Promise.all([
+        fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" }),
+        fetch(`/api/favourites/chatlists/by-conversation/${conversation.id}`, { method: "DELETE" }),
+      ]);
+      window.dispatchEvent(new Event("favourites-updated"));
     } catch (err) {
       console.error("[ChatPanel] delete chat error:", err);
     }

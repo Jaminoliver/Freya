@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Archive, User, Pin, MailOpen, Star, Trash2 } from "lucide-react";
-import { clearCachedMessages, updateConversations } from "@/app/(main)/messages/page";
+import { clearCachedMessages, updateConversations, blockConversation } from "@/app/(main)/messages/page";
 import { FavouritesModal } from "@/components/messages/FavouritesModal";
+import { useNav } from "@/lib/hooks/useNav";
 
 interface Participant {
   name:       string;
@@ -29,6 +30,22 @@ export function ConversationActionModal({
   const [showFavourites, setShowFavourites] = useState(false);
   const [pos, setPos] = useState({ top: -9999, left: -9999 });
   const ref = useRef<HTMLDivElement>(null);
+  const { navigate } = useNav();
+
+  const handleViewProfile = () => {
+    onClose();
+    navigate(`/${participant.username}`);
+  };
+
+  const handleMarkUnread = async () => {
+    updateConversations((prev) =>
+      prev.map((c) => c.id === conversationId ? { ...c, unreadCount: Math.max(1, c.unreadCount) } : c)
+    );
+    onClose();
+    try {
+      await fetch(`/api/conversations/${conversationId}/unread`, { method: "PATCH" });
+    } catch {}
+  };
 
   // Clamp to viewport, flip upward if not enough space below
   useEffect(() => {
@@ -62,25 +79,30 @@ export function ConversationActionModal({
 
   const executeDelete = async () => {
     setLoading(true);
+    blockConversation(conversationId);
+    updateConversations((prev) =>
+      prev.filter((c) => c.id !== conversationId)
+    );
+    clearCachedMessages(conversationId);
+    onCleared();
+    onClose();
+
     try {
-      await fetch(`/api/conversations/${conversationId}`, { method: "DELETE" });
-      updateConversations((prev) =>
-        prev.filter((c) => c.id !== conversationId)
-      );
-      clearCachedMessages(conversationId);
-      onCleared();
-      onClose();
+      await Promise.all([
+        fetch(`/api/conversations/${conversationId}`, { method: "DELETE" }),
+        fetch(`/api/favourites/chatlists/by-conversation/${conversationId}`, { method: "DELETE" }),
+      ]);
+      window.dispatchEvent(new Event("favourites-updated"));
     } catch {
-      setLoading(false);
-      setConfirm(false);
+      // already removed from UI
     }
   };
 
   const menuItems = [
     { icon: <Archive  size={15} strokeWidth={1.6} />, label: "Archive chat",     danger: false, action: onClose },
-    { icon: <User     size={15} strokeWidth={1.6} />, label: "View profile",     danger: false, action: onClose },
+    { icon: <User     size={15} strokeWidth={1.6} />, label: "View profile",     danger: false, action: handleViewProfile },
     { icon: <Pin      size={15} strokeWidth={1.6} />, label: "Pin chat",         danger: false, action: onClose },
-    { icon: <MailOpen size={15} strokeWidth={1.6} />, label: "Mark as unread",   danger: false, action: onClose },
+    { icon: <MailOpen size={15} strokeWidth={1.6} />, label: "Mark as unread",   danger: false, action: handleMarkUnread },
     { icon: <Star     size={15} strokeWidth={1.6} />, label: "Favourites",       danger: false, action: () => setShowFavourites(true) },
     { icon: <Trash2   size={15} strokeWidth={1.6} />, label: "Delete chat",      danger: true,  action: () => setConfirm(true) },
   ];

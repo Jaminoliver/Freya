@@ -98,6 +98,9 @@ export function setActiveConversation(id: number | null) {
   activeConversationId = id;
 }
 
+export function blockConversation(id: number) {
+  blockedConversationIds.add(id);
+}
 // ─── Typing ───────────────────────────────────────────────────────────────────
 function setTyping(conversationId: number, isTyping: boolean) {
   const updated = new Set(typingConvIds);

@@ -34,7 +34,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
   const [favouritedIds,    setFavouritedIds]    = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch favourited conversation IDs (single call)
+  // Fetch favourited conversation IDs (single call + refresh on changes)
   useEffect(() => {
     const fetchFavourites = async () => {
       try {
@@ -47,6 +47,10 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
     };
 
     fetchFavourites();
+
+    const handleUpdate = () => fetchFavourites();
+    window.addEventListener("favourites-updated", handleUpdate);
+    return () => window.removeEventListener("favourites-updated", handleUpdate);
   }, []);
 
   const openDesktopSearch = () => {
@@ -72,7 +76,6 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
     { icon: MessageCircle, label: "Welcome message", action: () => { setDropdownOpen(false); setWelcomeModalOpen(true); }, danger: false },
   ];
 
-  const priorityCount  = conversations.filter((c) => c.unreadCount > 0).length;
   const unreadCount    = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
   const favouriteCount = favouritedIds.size;
 
@@ -80,7 +83,6 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
 
   const filtered = conversations.filter((c) => {
     // Tab filter
-    if (filter === "priority" && c.unreadCount <= 0) return false;
     if (filter === "unread" && c.unreadCount <= 0) return false;
     if (filter === "favourites" && !favouritedIds.has(c.id)) return false;
 
@@ -309,7 +311,6 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
         <FilterTabs
           active={filter}
           onChange={setFilter}
-          priorityCount={priorityCount}
           unreadCount={unreadCount}
           favouriteCount={favouriteCount}
         />
