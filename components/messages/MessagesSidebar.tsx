@@ -31,7 +31,23 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
   const [showToast,        setShowToast]        = useState(false);
   const [searchOpen,       setSearchOpen]       = useState(false);
   const [searchQuery,      setSearchQuery]      = useState("");
+  const [favouritedIds,    setFavouritedIds]    = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch favourited conversation IDs (single call)
+  useEffect(() => {
+    const fetchFavourites = async () => {
+      try {
+        const res = await fetch("/api/favourites/chatlists/all-items");
+        const data = await res.json();
+        if (data.conversationIds) {
+          setFavouritedIds(new Set(data.conversationIds));
+        }
+      } catch {}
+    };
+
+    fetchFavourites();
+  }, []);
 
   const openDesktopSearch = () => {
     setSearchOpen(true);
@@ -56,8 +72,9 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
     { icon: MessageCircle, label: "Welcome message", action: () => { setDropdownOpen(false); setWelcomeModalOpen(true); }, danger: false },
   ];
 
-  const priorityCount = conversations.filter((c) => c.unreadCount > 0).length;
-  const unreadCount   = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+  const priorityCount  = conversations.filter((c) => c.unreadCount > 0).length;
+  const unreadCount    = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+  const favouriteCount = favouritedIds.size;
 
   const searchMatchIds = filterConversationsBySearch(conversations, searchQuery);
 
@@ -65,8 +82,9 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
     // Tab filter
     if (filter === "priority" && c.unreadCount <= 0) return false;
     if (filter === "unread" && c.unreadCount <= 0) return false;
+    if (filter === "favourites" && !favouritedIds.has(c.id)) return false;
 
-    // Search filter — startsWith on name or username
+    // Search filter
     if (searchMatchIds !== null && !searchMatchIds.has(c.id)) return false;
 
     return true;
@@ -293,6 +311,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           onChange={setFilter}
           priorityCount={priorityCount}
           unreadCount={unreadCount}
+          favouriteCount={favouriteCount}
         />
 
         <div style={{ flex: 1, overflowY: "auto" }}>
@@ -301,6 +320,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
             activeId={urlActiveId}
             onSelect={handleSelect}
             typingConversations={typingConversations}
+            favouritedIds={favouritedIds}
           />
         </div>
       </div>

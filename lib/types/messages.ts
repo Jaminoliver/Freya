@@ -1,7 +1,7 @@
 export type MessageType   = "text" | "media" | "ppv";
 export type MessageStatus = "sending" | "sent" | "failed";
 
-export type FilterTab = "all" | "priority" | "unread";
+export type FilterTab = "all" | "priority" | "unread" | "favourites";
 
 export interface ConversationParticipant {
   id:         string;

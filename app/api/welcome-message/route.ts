@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { getUser } from "@/lib/supabase/server";
-import { uploadPhotoToBunny } from "@/lib/utils/bunny";
+import { uploadPhotoToBunny, signBunnyUrl } from "@/lib/utils/bunny";
 
 export const runtime = "nodejs";
+
+// ─── Re-sign expired BunnyCDN URLs ───────────────────────────────────────────
+function refreshBunnyUrl(storedUrl: string | null): string | null {
+  if (!storedUrl) return null;
+  try {
+    const url  = new URL(storedUrl);
+    const path = url.pathname;
+    return signBunnyUrl(path);
+  } catch {
+    return storedUrl;
+  }
+}
 
 // ─── GET /api/welcome-message ────────────────────────────────────────────────
 export async function GET() {
@@ -39,7 +51,10 @@ export async function GET() {
         .eq("welcome_message_id", message.id)
         .order("display_order", { ascending: true });
 
-      media = mediaRows ?? [];
+      media = (mediaRows ?? []).map((row: any) => ({
+        ...row,
+        media_url: refreshBunnyUrl(row.media_url),
+      }));
     }
 
     return NextResponse.json({ sequence, message, media });

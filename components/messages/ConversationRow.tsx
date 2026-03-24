@@ -1,19 +1,20 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { Sparkles, ImageIcon } from "lucide-react";
+import { Sparkles, ImageIcon, Star } from "lucide-react";
 import { ConversationActionModal } from "@/components/messages/ConversationActionModal";
 import { updateConversations } from "@/app/(main)/messages/page";
 import type { Conversation } from "@/lib/types/messages";
 
 interface Props {
-  conversation: Conversation;
-  isActive:     boolean;
-  isTyping?:    boolean;
-  onSelect:     () => void;
+  conversation:  Conversation;
+  isActive:      boolean;
+  isTyping?:     boolean;
+  isFavourited?: boolean;
+  onSelect:      () => void;
 }
 
-export function ConversationRow({ conversation, isActive, isTyping = false, onSelect }: Props) {
+export function ConversationRow({ conversation, isActive, isTyping = false, isFavourited = false, onSelect }: Props) {
   const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia } = conversation;
 
   const [hovered,   setHovered]   = useState(false);
@@ -186,6 +187,7 @@ export function ConversationRow({ conversation, isActive, isTyping = false, onSe
               {participant.name}
             </span>
             {participant.isVerified && <Sparkles size={13} color="#8B5CF6" strokeWidth={1.8} />}
+            {isFavourited && <Star size={12} color="#F59E0B" fill="#F59E0B" strokeWidth={0} style={{ flexShrink: 0 }} />}
             <span style={{ fontSize: "12px", color: "#8B5CF6", whiteSpace: "nowrap" }}>
               @{participant.username}
             </span>

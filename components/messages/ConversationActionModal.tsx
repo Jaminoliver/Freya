@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { BellOff, User, Lock, Star, List, Ban, Eraser } from "lucide-react";
+import { Archive, User, Pin, MailOpen, Star, Trash2 } from "lucide-react";
 import { clearCachedMessages, updateConversations } from "@/app/(main)/messages/page";
+import { FavouritesModal } from "@/components/messages/FavouritesModal";
 
 interface Participant {
   name:       string;
@@ -25,6 +26,7 @@ export function ConversationActionModal({
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [showFavourites, setShowFavourites] = useState(false);
   const [pos, setPos] = useState({ top: -9999, left: -9999 });
   const ref = useRef<HTMLDivElement>(null);
 
@@ -36,12 +38,10 @@ export function ConversationActionModal({
     let left = x - rect.width;
     let top  = y;
 
-    // Flip upward if not enough space below
     if (top + rect.height + pad > window.innerHeight) {
       top = y - rect.height;
     }
 
-    // Clamp
     if (left < pad) left = pad;
     if (left + rect.width + pad > window.innerWidth) left = window.innerWidth - rect.width - pad;
     if (top < pad) top = pad;
@@ -49,20 +49,23 @@ export function ConversationActionModal({
     setPos({ top, left });
   }, [x, y]);
 
+  const showFavouritesRef = useRef(false);
+  showFavouritesRef.current = showFavourites;
+
   useEffect(() => {
-    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    const key  = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const down = (e: MouseEvent) => { if (showFavouritesRef.current) return; if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const key  = (e: KeyboardEvent) => { if (showFavouritesRef.current) return; if (e.key === "Escape") onClose(); };
     document.addEventListener("mousedown", down);
     document.addEventListener("keydown",   key);
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key); };
   }, [onClose]);
 
-  const executeClear = async () => {
+  const executeDelete = async () => {
     setLoading(true);
     try {
       await fetch(`/api/conversations/${conversationId}`, { method: "DELETE" });
       updateConversations((prev) =>
-        prev.map((c) => c.id === conversationId ? { ...c, lastMessage: "", lastMessageAt: c.lastMessageAt } : c)
+        prev.filter((c) => c.id !== conversationId)
       );
       clearCachedMessages(conversationId);
       onCleared();
@@ -74,13 +77,12 @@ export function ConversationActionModal({
   };
 
   const menuItems = [
-    { icon: <BellOff size={15} strokeWidth={1.6} />, label: "Mute notifications", danger: false, action: onClose      },
-    { icon: <User    size={15} strokeWidth={1.6} />, label: "View profile",        danger: false, action: onClose      },
-    { icon: <Lock    size={15} strokeWidth={1.6} />, label: "Lock chat",           danger: false, action: onClose      },
-    { icon: <Star    size={15} strokeWidth={1.6} />, label: "Add to favourites",   danger: false, action: onClose      },
-    { icon: <List    size={15} strokeWidth={1.6} />, label: "Add to list",         danger: false, action: onClose      },
-    { icon: <Eraser  size={15} strokeWidth={1.6} />, label: "Clear chat",          danger: false, action: () => setConfirm(true) },
-    { icon: <Ban     size={15} strokeWidth={1.6} />, label: "Block user",          danger: true,  action: onClose      },
+    { icon: <Archive  size={15} strokeWidth={1.6} />, label: "Archive chat",     danger: false, action: onClose },
+    { icon: <User     size={15} strokeWidth={1.6} />, label: "View profile",     danger: false, action: onClose },
+    { icon: <Pin      size={15} strokeWidth={1.6} />, label: "Pin chat",         danger: false, action: onClose },
+    { icon: <MailOpen size={15} strokeWidth={1.6} />, label: "Mark as unread",   danger: false, action: onClose },
+    { icon: <Star     size={15} strokeWidth={1.6} />, label: "Favourites",       danger: false, action: () => setShowFavourites(true) },
+    { icon: <Trash2   size={15} strokeWidth={1.6} />, label: "Delete chat",      danger: true,  action: () => setConfirm(true) },
   ];
 
   const dangerStart = menuItems.findIndex((m) => m.danger);
@@ -111,7 +113,7 @@ export function ConversationActionModal({
         .ctx-item:active { background-color: rgba(255,255,255,0.08) !important; }
       `}</style>
 
-      <div onMouseDown={onClose} style={{ position: "fixed", inset: 0, zIndex: 500 }} />
+      <div onMouseDown={() => { if (!showFavouritesRef.current) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 500 }} />
 
       <div
         ref={ref}
@@ -144,11 +146,11 @@ export function ConversationActionModal({
           </div>
         </div>
 
-        {/* Confirm clear */}
+        {/* Confirm delete */}
         {confirm ? (
           <div style={{ padding: "14px" }}>
-            <p style={{ margin: "0 0 4px", fontSize: "13px", fontWeight: 600, color: "#FFFFFF" }}>Clear chat?</p>
-            <p style={{ margin: "0 0 12px", fontSize: "12px", color: "rgba(255,255,255,0.45)", lineHeight: 1.4 }}>Messages will be cleared for you only.</p>
+            <p style={{ margin: "0 0 4px", fontSize: "13px", fontWeight: 600, color: "#FFFFFF" }}>Delete chat?</p>
+            <p style={{ margin: "0 0 12px", fontSize: "12px", color: "rgba(255,255,255,0.45)", lineHeight: 1.4 }}>This conversation will be permanently deleted.</p>
             <div style={{ display: "flex", gap: "8px" }}>
               <button
                 onClick={() => setConfirm(false)}
@@ -158,12 +160,12 @@ export function ConversationActionModal({
                 Cancel
               </button>
               <button
-                onClick={executeClear}
-                onTouchEnd={executeClear}
+                onClick={executeDelete}
+                onTouchEnd={executeDelete}
                 disabled={loading}
-                style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "none", backgroundColor: "#8B5CF6", color: "#FFFFFF", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", opacity: loading ? 0.7 : 1 }}
+                style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "none", backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", opacity: loading ? 0.7 : 1 }}
               >
-                {loading ? "Clearing..." : "Clear"}
+                {loading ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
@@ -186,6 +188,14 @@ export function ConversationActionModal({
           </div>
         )}
       </div>
+
+      {showFavourites && (
+        <FavouritesModal
+          conversationId={conversationId}
+          participantAvatarUrl={participant.avatarUrl}
+          onClose={() => { setShowFavourites(false); onClose(); }}
+        />
+      )}
     </>,
     document.body!
   );

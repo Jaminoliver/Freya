@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, X, MoreVertical, Star, Bell, Pin, Images, Search, Eraser, Flag, Ban, ShieldOff } from "lucide-react";
+import { ArrowLeft, X, MoreVertical, Images } from "lucide-react";
 import { Sparkles } from "lucide-react";
+import { ChatActionModal } from "@/components/messages/ChatActionModal";
 import { ReportModal } from "@/components/messages/ReportModal";
 import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
@@ -23,10 +24,10 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
   const router = useRouter();
   const { setMessages } = useMessageStore();
 
-  const [dropdownOpen,      setDropdownOpen]      = useState(false);
+  const [modalOpen,         setModalOpen]         = useState(false);
+  const [modalPos,          setModalPos]          = useState({ x: 0, y: 0 });
   const [reportOpen,        setReportOpen]        = useState(false);
   const [avatarOpen,        setAvatarOpen]        = useState(false);
-  const [confirmClear,      setConfirmClear]      = useState(false);
   const [blockConfirm,      setBlockConfirm]      = useState(false);
   const [unblockConfirm,    setUnblockConfirm]    = useState(false);
   const [restrictConfirm,   setRestrictConfirm]   = useState(false);
@@ -38,8 +39,18 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
     fetchStatus,
   } = useBlockRestrict({ userId: participant.id });
 
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+
+  const handleOpenModal = () => {
+    fetchStatus();
+    if (menuBtnRef.current) {
+      const rect = menuBtnRef.current.getBoundingClientRect();
+      setModalPos({ x: rect.right, y: rect.bottom + 6 });
+    }
+    setModalOpen(true);
+  };
+
   const handleClearChat = useCallback(async () => {
-    setConfirmClear(false);
     try {
       await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
       updateConversations((prev) =>
@@ -51,7 +62,21 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
     } catch (err) {
       console.error("[ChatHeader] clear chat error:", err);
     }
-  }, [conversation.id, onMessagesCleared]);
+  }, [conversation.id, onMessagesCleared, setMessages]);
+
+  const handleDeleteChat = useCallback(async () => {
+    try {
+      await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
+      updateConversations((prev) =>
+        prev.filter((c) => c.id !== conversation.id)
+      );
+      clearCachedMessages(conversation.id);
+      setMessages([]);
+      onBack();
+    } catch (err) {
+      console.error("[ChatHeader] delete chat error:", err);
+    }
+  }, [conversation.id, onBack, setMessages]);
 
   const handleBlock = useCallback(async () => {
     await block();
@@ -63,17 +88,6 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
     onBack();
   }, [restrict, onBack]);
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node))
-        setDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
   useEffect(() => {
     if (!avatarOpen) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setAvatarOpen(false); };
@@ -81,40 +95,11 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
     return () => document.removeEventListener("keydown", handler);
   }, [avatarOpen]);
 
-  const showStatus   = isTyping || participant.isOnline;
-  const restrictDormant = isBlocked;
-
-  const menuItems = [
-    { icon: Star,      label: "Favourite",     action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
-    { icon: Bell,      label: "Notifications", action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
-    { icon: Pin,       label: "Pin chat",      action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
-    { icon: Images,    label: "Gallery",       action: () => { setDropdownOpen(false); router.push(`/messages/${conversation.id}/gallery`); }, danger: false, warn: false, dormant: false },
-    { icon: Search,    label: "Find in chat",  action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
-    { icon: Eraser,    label: "Clear chat",    action: () => { setDropdownOpen(false); setConfirmClear(true); },                               danger: false, warn: false, dormant: false },
-    {
-      icon:    ShieldOff,
-      label:   isRestricted ? "Unrestrict" : "Restrict",
-      action:  restrictDormant ? undefined : () => { setDropdownOpen(false); isRestricted ? setUnrestrictConfirm(true) : setRestrictConfirm(true); },
-      danger:  false,
-      warn:    !restrictDormant,
-      dormant: restrictDormant,
-    },
-    {
-      icon:    Ban,
-      label:   isBlocked ? "Unblock" : "Block",
-      action:  () => { setDropdownOpen(false); isBlocked ? setUnblockConfirm(true) : setBlockConfirm(true); },
-      danger:  true,
-      warn:    false,
-      dormant: false,
-    },
-    { icon: Flag, label: "Report", action: () => { setDropdownOpen(false); setReportOpen(true); }, danger: true, warn: false, dormant: false },
-  ];
+  const showStatus = isTyping || participant.isOnline;
 
   return (
     <>
       <style>{`
-        @keyframes dropdownIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-        .chat-dropdown { animation: dropdownIn 0.15s ease forwards; }
         @media (min-width: 768px) { .chat-header-mobile { display: none !important; } }
         .chat-header-name { transition: transform 0.2s ease; }
         .chat-header-name--up { transform: translateY(-2px); }
@@ -127,6 +112,8 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
         .typing-dot { width: 4px; height: 4px; border-radius: 50%; background-color: #8B5CF6; display: inline-block; animation: typing-bounce 1.2s infinite ease-in-out; }
         .typing-dot:nth-child(2) { animation-delay: 0.15s; }
         .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+        .header-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 8px; border-radius: 8px; transition: all 0.15s ease; color: #A3A3C2; }
+        .header-icon-btn:hover { color: #FFFFFF; background-color: #1C1C2E; }
       `}</style>
 
       {/* Avatar lightbox */}
@@ -147,18 +134,24 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
         </div>
       )}
 
-      {/* Clear chat confirmation */}
-      {confirmClear && (
-        <div onClick={() => setConfirmClear(false)} style={{ position: "fixed", inset: 0, zIndex: 998, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "16px", padding: "24px", width: "300px", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", fontFamily: "'Inter', sans-serif" }}>
-            <p style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>Clear chat?</p>
-            <p style={{ margin: "0 0 20px", fontSize: "13px", color: "#A3A3C2" }}>This will clear all messages for you. This can't be undone.</p>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={() => setConfirmClear(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#A3A3C2", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Cancel</button>
-              <button onClick={handleClearChat} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Clear</button>
-            </div>
-          </div>
-        </div>
+      {/* Chat action modal */}
+      {modalOpen && (
+        <ChatActionModal
+          conversationId={conversation.id}
+          participant={participant}
+          isBlocked={isBlocked}
+          isRestricted={isRestricted}
+          onClose={() => setModalOpen(false)}
+          onClearChat={handleClearChat}
+          onDeleteChat={handleDeleteChat}
+          onBlock={() => setBlockConfirm(true)}
+          onUnblock={() => setUnblockConfirm(true)}
+          onRestrict={() => setRestrictConfirm(true)}
+          onUnrestrict={() => setUnrestrictConfirm(true)}
+          onReport={() => setReportOpen(true)}
+          x={modalPos.x}
+          y={modalPos.y}
+        />
       )}
 
       {reportOpen && (
@@ -170,7 +163,7 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
       <BlockConfirmModal isOpen={restrictConfirm}   onClose={() => setRestrictConfirm(false)}   onConfirm={handleRestrict} type="restrict" username={participant.username} />
       <BlockConfirmModal isOpen={unrestrictConfirm} onClose={() => setUnrestrictConfirm(false)} onConfirm={unrestrict}     type="restrict" username={participant.username} />
 
-      {/* MOBILE ONLY — fixed to viewport so keyboard can't push it */}
+      {/* MOBILE ONLY — fixed to viewport */}
       <div
         className="chat-header-mobile"
         style={{
@@ -184,7 +177,8 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
           touchAction: "none", userSelect: "none",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1 }}>
+        {/* Left: back + avatar + name */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1, overflow: "hidden" }}>
           <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "6px", transition: "color 0.15s ease", flexShrink: 0 }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
             <ArrowLeft size={20} strokeWidth={1.8} />
           </button>
@@ -204,10 +198,10 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
             )}
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "1px", minWidth: 0 }}>
-            <div className={`chat-header-name${showStatus ? " chat-header-name--up" : ""}`} style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }} onClick={() => router.push(`/${participant.username}`)}>
-              <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap" }}>{participant.name}</span>
-              {participant.isVerified && <Sparkles size={14} color="#8B5CF6" strokeWidth={1.8} />}
+          <div style={{ display: "flex", flexDirection: "column", gap: "1px", minWidth: 0, overflow: "hidden" }}>
+            <div className={`chat-header-name${showStatus ? " chat-header-name--up" : ""}`} style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", minWidth: 0 }} onClick={() => router.push(`/${participant.username}`)}>
+              <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "calc(100vw - 200px)" }}>{participant.name}</span>
+              {participant.isVerified && <Sparkles size={14} color="#8B5CF6" strokeWidth={1.8} style={{ flexShrink: 0 }} />}
             </div>
             {isTyping ? (
               <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
@@ -225,60 +219,26 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
           </div>
         </div>
 
-        <div ref={dropdownRef} style={{ position: "relative", flexShrink: 0 }}>
+        {/* Right: media icon + 3-dot menu */}
+        <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0 }}>
           <button
-            onClick={() => { setDropdownOpen((o) => !o); if (!dropdownOpen) fetchStatus(); }}
-            style={{ background: "none", border: "none", cursor: "pointer", color: dropdownOpen ? "#8B5CF6" : "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease", backgroundColor: dropdownOpen ? "rgba(139,92,246,0.1)" : "transparent" }}
-            onMouseEnter={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1C1C2E"; }}}
-            onMouseLeave={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "transparent"; }}}
+            className="header-icon-btn"
+            onClick={() => router.push(`/messages/${conversation.id}/gallery`)}
+          >
+            <Images size={20} strokeWidth={1.8} />
+          </button>
+
+          <button
+            ref={menuBtnRef}
+            className="header-icon-btn"
+            onClick={handleOpenModal}
+            style={{
+              color: modalOpen ? "#8B5CF6" : undefined,
+              backgroundColor: modalOpen ? "rgba(139,92,246,0.1)" : undefined,
+            }}
           >
             <MoreVertical size={20} strokeWidth={1.8} />
           </button>
-
-          {dropdownOpen && (
-            <div
-              className="chat-dropdown"
-              style={{ position: "fixed", top: "64px", right: "16px", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "12px", padding: "6px", minWidth: "190px", zIndex: 200, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: "calc(100vh - 80px)", overflowY: "auto" }}
-            >
-              {menuItems.map(({ icon: Icon, label, action, danger, warn, dormant }) => (
-                <button
-                  key={label}
-                  onClick={() => { if (!dormant && action) action(); }}
-                  disabled={dormant}
-                  style={{
-                    display: "flex", alignItems: "center", gap: "10px", width: "100%",
-                    padding: "10px 12px", borderRadius: "8px", border: "none",
-                    cursor: dormant ? "default" : "pointer",
-                    backgroundColor: "transparent",
-                    color: dormant
-                      ? "#3A3A4D"
-                      : danger
-                        ? (label === "Unblock" ? "#10B981" : "#EF4444")
-                        : warn
-                          ? (label === "Unrestrict" ? "#10B981" : "#F59E0B")
-                          : "#FFFFFF",
-                    fontSize: "14px", fontFamily: "'Inter', sans-serif", textAlign: "left",
-                    opacity: dormant ? 0.35 : 1,
-                    transition: "background-color 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => { if (!dormant) e.currentTarget.style.backgroundColor = "#2A2A3D"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
-                >
-                  <Icon
-                    size={15}
-                    color={
-                      dormant ? "#3A3A4D"
-                      : danger ? (label === "Unblock" ? "#10B981" : "#EF4444")
-                      : warn   ? (label === "Unrestrict" ? "#10B981" : "#F59E0B")
-                      : "#A3A3C2"
-                    }
-                    strokeWidth={1.8}
-                  />
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </>

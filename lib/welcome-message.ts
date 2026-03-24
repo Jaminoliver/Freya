@@ -1,4 +1,16 @@
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { signBunnyUrl } from "@/lib/utils/bunny";
+
+function refreshBunnyUrl(storedUrl: string | null): string | null {
+  if (!storedUrl) return null;
+  try {
+    const url  = new URL(storedUrl);
+    const path = url.pathname;
+    return signBunnyUrl(path);
+  } catch {
+    return storedUrl;
+  }
+}
 
 export async function sendWelcomeMessage(creatorId: string, fanId: string) {
   const supabase = createServiceSupabaseClient();
@@ -124,21 +136,21 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
     }
 
     // Step 8: Insert message
-    const firstMedia = mediaFiles && mediaFiles.length > 0 ? mediaFiles[0] : null;
-    const hasMedia = mediaFiles && mediaFiles.length > 0;
+    const firstMedia  = mediaFiles && mediaFiles.length > 0 ? mediaFiles[0] : null;
+    const hasMedia    = mediaFiles && mediaFiles.length > 0;
 
     const { data: sentMessage, error: msgError } = await supabase
       .from("messages")
       .insert({
         conversation_id: conversationId,
-        sender_id: creatorId,
-        receiver_id: fanId,
-        content: messageContent || null,
-        is_ppv: welcomeMsg.is_ppv ?? false,
-        ppv_price: welcomeMsg.is_ppv ? welcomeMsg.ppv_price : null,
-        is_unlocked: welcomeMsg.is_ppv ? false : true,
-        media_type: firstMedia?.media_type ?? null,
-        media_url: firstMedia?.media_url ?? null,
+        sender_id:       creatorId,
+        receiver_id:     fanId,
+        content:         messageContent || null,
+        is_ppv:          welcomeMsg.is_ppv ?? false,
+        ppv_price:       welcomeMsg.is_ppv ? welcomeMsg.ppv_price : null,
+        is_unlocked:     welcomeMsg.is_ppv ? false : true,
+        media_type:      firstMedia?.media_type ?? null,
+        media_url:       firstMedia ? refreshBunnyUrl(firstMedia.media_url) : null,
       })
       .select("id, created_at")
       .single();
@@ -150,12 +162,12 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
 
     console.log("[Welcome Message] Message inserted — messageId:", sentMessage.id, "| conversationId:", conversationId);
 
-    // Step 9: Insert additional media
+    // Step 9: Insert additional media — with fresh signed URLs
     if (hasMedia && mediaFiles.length > 0) {
       const mediaInserts = mediaFiles.map((m, i) => ({
-        message_id: sentMessage.id,
-        url: m.media_url,
-        media_type: m.media_type,
+        message_id:    sentMessage.id,
+        url:           refreshBunnyUrl(m.media_url),
+        media_type:    m.media_type,
         display_order: i,
       }));
 
@@ -178,10 +190,10 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
     const { error: convoUpdateError } = await supabase
       .from("conversations")
       .update({
-        last_message_at: sentMessage.created_at,
+        last_message_at:      sentMessage.created_at,
         last_message_preview: preview,
-        unread_count_fan: 1,
-        updated_at: new Date().toISOString(),
+        unread_count_fan:     1,
+        updated_at:           new Date().toISOString(),
       })
       .eq("id", conversationId);
 
@@ -196,9 +208,9 @@ export async function sendWelcomeMessage(creatorId: string, fanId: string) {
       .from("welcome_message_sends")
       .insert({
         welcome_message_id: welcomeMsg.id,
-        creator_id: creatorId,
-        fan_id: fanId,
-        version: currentVersion,
+        creator_id:         creatorId,
+        fan_id:             fanId,
+        version:            currentVersion,
       });
 
     if (sendLogError) {

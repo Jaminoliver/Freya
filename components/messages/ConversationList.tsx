@@ -9,6 +9,7 @@ interface Props {
   activeId:             string | null;
   onSelect:             (id: string) => void;
   typingConversations?: Set<number>;
+  favouritedIds?:       Set<number>;
 }
 
 export function ConversationList({
@@ -16,6 +17,7 @@ export function ConversationList({
   activeId,
   onSelect,
   typingConversations = new Set(),
+  favouritedIds = new Set(),
 }: Props) {
   if (conversations.length === 0) {
     return (
@@ -41,7 +43,6 @@ export function ConversationList({
       flex:                1,
       overflowY:           "auto",
       scrollbarWidth:      "none",
-      // Prevent text/highlight selection when touching between rows
       userSelect:          "none",
       WebkitUserSelect:    "none",
     }}>
@@ -69,6 +70,7 @@ export function ConversationList({
               conversation={conversation}
               isActive={String(conversation.id) === activeId}
               isTyping={typingConversations.has(conversation.id)}
+              isFavourited={favouritedIds.has(conversation.id)}
               onSelect={() => onSelect(String(conversation.id))}
             />
           </motion.div>

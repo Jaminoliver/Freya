@@ -1,5 +1,17 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, getUser } from "@/lib/supabase/server";
+import { signBunnyUrl } from "@/lib/utils/bunny";
+
+function refreshBunnyUrl(storedUrl: string | null): string | null {
+  if (!storedUrl) return null;
+  try {
+    const url  = new URL(storedUrl);
+    const path = url.pathname;
+    return signBunnyUrl(path);
+  } catch {
+    return storedUrl;
+  }
+}
 
 export async function GET(
   request: Request,
@@ -69,7 +81,11 @@ export async function GET(
 
     for (const m of allMedia ?? []) {
       if (!mediaByMessageId.has(m.message_id)) mediaByMessageId.set(m.message_id, []);
-      mediaByMessageId.get(m.message_id)!.push(m);
+      mediaByMessageId.get(m.message_id)!.push({
+        ...m,
+        url:           refreshBunnyUrl(m.url) ?? m.url,
+        thumbnail_url: refreshBunnyUrl(m.thumbnail_url),
+      });
     }
   }
 
@@ -127,13 +143,16 @@ export async function GET(
     const mediaRows = mediaByMessageId.get(row.id) ?? [];
     const mediaUrls = mediaRows.length > 0
       ? mediaRows.map((m) => m.url)
-      : row.media_url ? [row.media_url] : [];
+      : row.media_url ? [refreshBunnyUrl(row.media_url) ?? row.media_url] : [];
+
+    const thumbUrl = mediaRows[0]?.thumbnail_url
+      ?? refreshBunnyUrl(row.thumbnail_url)
+      ?? null;
 
     if (row.is_ppv) {
       const isSender      = row.sender_id === user.id;
       const isUnlocked    = isSender || unlockedByCurrentUser.has(row.id);
       const unlockedCount = unlockCountByMessageId.get(row.id) ?? 0;
-      const thumbUrl      = row.thumbnail_url ?? (mediaUrls.length > 0 ? mediaUrls[0] : null);
 
       return {
         ...base,
@@ -150,7 +169,6 @@ export async function GET(
     }
 
     if (row.media_type || mediaUrls.length > 0) {
-      const thumbUrl = mediaRows[0]?.thumbnail_url ?? row.thumbnail_url ?? null;
       return {
         ...base,
         type:         "media" as const,

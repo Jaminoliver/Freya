@@ -1,23 +1,31 @@
 "use client";
 
-import { PenLine } from "lucide-react";
+import { PenLine, Star } from "lucide-react";
 import type { FilterTab } from "@/lib/types/messages";
 
 interface Props {
-  active:        FilterTab;
-  onChange:      (tab: FilterTab) => void;
-  priorityCount: number;
-  unreadCount:   number;
+  active:          FilterTab;
+  onChange:        (tab: FilterTab) => void;
+  priorityCount:  number;
+  unreadCount:    number;
+  favouriteCount: number;
 }
 
-export function FilterTabs({ active, onChange, priorityCount, unreadCount }: Props) {
+export function FilterTabs({ active, onChange, priorityCount, unreadCount, favouriteCount }: Props) {
+  const pills: { key: FilterTab; label: string; count?: number; icon?: React.ReactNode }[] = [
+    { key: "all",        label: "All" },
+    { key: "priority",   label: "Priority",   count: priorityCount },
+    { key: "unread",     label: "Unread",      count: unreadCount },
+    { key: "favourites", label: "Favourites",  count: favouriteCount, icon: <Star size={12} strokeWidth={2} style={{ marginRight: "-2px" }} /> },
+  ];
+
   return (
     <div
       style={{
-        padding:         "12px 16px",
-        borderBottom:    "1px solid #1E1E2E",
-        backgroundColor: "#0D0D1A",
-        flexShrink:      0,
+        padding:          "12px 16px",
+        borderBottom:     "1px solid #1E1E2E",
+        backgroundColor:  "#0D0D1A",
+        flexShrink:       0,
       }}
     >
       {/* Sort label */}
@@ -44,98 +52,47 @@ export function FilterTabs({ active, onChange, priorityCount, unreadCount }: Pro
       </div>
 
       {/* Filter pills */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <button
-          onClick={() => onChange("all")}
-          style={{
-            padding:         "6px 14px",
-            borderRadius:    "20px",
-            border:          "none",
-            cursor:          "pointer",
-            fontSize:        "13px",
-            fontWeight:      active === "all" ? 600 : 400,
-            backgroundColor: active === "all" ? "#FFFFFF" : "#1C1C2E",
-            color:           active === "all" ? "#0A0A0F" : "#A3A3C2",
-            transition:      "all 0.15s ease",
-            fontFamily:      "'Inter', sans-serif",
-          }}
-        >
-          All
-        </button>
-
-        <button
-          onClick={() => onChange("priority")}
-          style={{
-            display:         "flex",
-            alignItems:      "center",
-            gap:             "6px",
-            padding:         "6px 14px",
-            borderRadius:    "20px",
-            border:          "none",
-            cursor:          "pointer",
-            fontSize:        "13px",
-            fontWeight:      active === "priority" ? 600 : 400,
-            backgroundColor: active === "priority" ? "#FFFFFF" : "#1C1C2E",
-            color:           active === "priority" ? "#0A0A0F" : "#A3A3C2",
-            transition:      "all 0.15s ease",
-            fontFamily:      "'Inter', sans-serif",
-          }}
-        >
-          Priority
-          {priorityCount > 0 && (
-            <span
-              style={{
-                backgroundColor: "#8B5CF6",
-                color:           "#FFFFFF",
-                fontSize:        "11px",
-                fontWeight:      700,
-                borderRadius:    "10px",
-                padding:         "1px 6px",
-                minWidth:        "18px",
-                textAlign:       "center",
-              }}
-            >
-              {priorityCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => onChange("unread")}
-          style={{
-            display:         "flex",
-            alignItems:      "center",
-            gap:             "6px",
-            padding:         "6px 14px",
-            borderRadius:    "20px",
-            border:          "none",
-            cursor:          "pointer",
-            fontSize:        "13px",
-            fontWeight:      active === "unread" ? 600 : 400,
-            backgroundColor: active === "unread" ? "#FFFFFF" : "#1C1C2E",
-            color:           active === "unread" ? "#0A0A0F" : "#A3A3C2",
-            transition:      "all 0.15s ease",
-            fontFamily:      "'Inter', sans-serif",
-          }}
-        >
-          Unread
-          {unreadCount > 0 && (
-            <span
-              style={{
-                backgroundColor: "#8B5CF6",
-                color:           "#FFFFFF",
-                fontSize:        "11px",
-                fontWeight:      700,
-                borderRadius:    "10px",
-                padding:         "1px 6px",
-                minWidth:        "18px",
-                textAlign:       "center",
-              }}
-            >
-              {unreadCount}
-            </span>
-          )}
-        </button>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+        {pills.map(({ key, label, count, icon }) => (
+          <button
+            key={key}
+            onClick={() => onChange(key)}
+            style={{
+              display:         "flex",
+              alignItems:      "center",
+              gap:             "6px",
+              padding:         "6px 14px",
+              borderRadius:    "20px",
+              border:          "none",
+              cursor:          "pointer",
+              fontSize:        "13px",
+              fontWeight:      active === key ? 600 : 400,
+              backgroundColor: active === key ? "#FFFFFF" : "#1C1C2E",
+              color:           active === key ? "#0A0A0F" : "#A3A3C2",
+              transition:      "all 0.15s ease",
+              fontFamily:      "'Inter', sans-serif",
+            }}
+          >
+            {icon}
+            {label}
+            {count !== undefined && count > 0 && (
+              <span
+                style={{
+                  backgroundColor: active === key ? "#8B5CF6" : "#8B5CF6",
+                  color:           "#FFFFFF",
+                  fontSize:        "11px",
+                  fontWeight:      700,
+                  borderRadius:    "10px",
+                  padding:         "1px 6px",
+                  minWidth:        "18px",
+                  textAlign:       "center",
+                }}
+              >
+                {count}
+              </span>
+            )}
+          </button>
+        ))}
 
         <button
           style={{

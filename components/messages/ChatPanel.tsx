@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Star, Bell, Pin, Images, Search, MoreVertical, Flag, Eraser, X, Ban, ShieldOff } from "lucide-react";
+import { ArrowLeft, X, MoreVertical, Images } from "lucide-react";
 import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
@@ -11,6 +11,7 @@ import { updateConversations, clearCachedMessages, subscribeTypingForConversatio
 import { useMessageStore } from "@/lib/store/messageStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { ChatHeader } from "@/components/messages/ChatHeader";
+import { ChatActionModal } from "@/components/messages/ChatActionModal";
 import { MessagesList } from "@/components/messages/MessagesList";
 import { MessageInput } from "@/components/messages/MessageInput";
 import { ReportModal } from "@/components/messages/ReportModal";
@@ -50,16 +51,16 @@ export function ChatPanel({
 
   const { messages, setMessages, appendMessage } = useMessageStore();
 
-  const [dropdownOpen,      setDropdownOpen]      = useState(false);
+  const [desktopModalOpen,  setDesktopModalOpen]  = useState(false);
+  const [desktopModalPos,   setDesktopModalPos]   = useState({ x: 0, y: 0 });
   const [reportOpen,        setReportOpen]        = useState(false);
-  const [confirmClear,      setConfirmClear]      = useState(false);
+  const [avatarOpen,        setAvatarOpen]        = useState(false);
   const [blockConfirm,      setBlockConfirm]      = useState(false);
   const [unblockConfirm,    setUnblockConfirm]    = useState(false);
   const [restrictConfirm,   setRestrictConfirm]   = useState(false);
   const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
   const [sending,           setSending]           = useState(false);
   const [replyTo,           setReplyTo]           = useState<Message | null>(null);
-  const [avatarOpen,        setAvatarOpen]        = useState(false);
 
   const {
     isBlocked, isRestricted,
@@ -68,6 +69,16 @@ export function ChatPanel({
   } = useBlockRestrict({ userId: participant.id });
 
   const { startMessageUpload, uploads } = useUpload();
+  const desktopMenuBtnRef = useRef<HTMLButtonElement>(null);
+
+  const handleOpenDesktopModal = () => {
+    fetchStatus();
+    if (desktopMenuBtnRef.current) {
+      const rect = desktopMenuBtnRef.current.getBoundingClientRect();
+      setDesktopModalPos({ x: rect.right, y: rect.bottom + 6 });
+    }
+    setDesktopModalOpen(true);
+  };
 
   // Sync in-progress uploads into store
   useEffect(() => {
@@ -103,7 +114,6 @@ export function ChatPanel({
   }, [uploads, conversation.id, currentUserId]);
 
   const { setTypingConversationId } = useMessagesContext();
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { sendTyping, isTyping } = useTypingIndicator({
     conversationId:       conversation.id,
@@ -131,16 +141,36 @@ export function ChatPanel({
     fetch(`/api/conversations/${conversation.id}/read`, { method: "PATCH" }).catch(() => {});
   }, [conversation.id]);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node))
-        setDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
   const handleTyping = useCallback(() => sendTyping(), [sendTyping]);
+
+  const handleClearChat = useCallback(async () => {
+    try {
+      await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
+      updateConversations((prev) =>
+        prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "", lastMessageAt: c.lastMessageAt } : c)
+      );
+      clearCachedMessages(conversation.id);
+      setMessages([]);
+      onClearMessages?.();
+    } catch (err) {
+      console.error("[ChatPanel] clear chat error:", err);
+    }
+  }, [conversation.id, onClearMessages, setMessages]);
+
+  const handleDeleteChat = useCallback(async () => {
+    try {
+      await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
+      updateConversations((prev) =>
+        prev.filter((c) => c.id !== conversation.id)
+      );
+      clearCachedMessages(conversation.id);
+      setMessages([]);
+      onClearMessages?.();
+      onBack();
+    } catch (err) {
+      console.error("[ChatPanel] delete chat error:", err);
+    }
+  }, [conversation.id, onBack, onClearMessages, setMessages]);
 
   const handleDelete = useCallback(async (message: Message, deleteFor: "me" | "everyone") => {
     const convId = conversation.id;
@@ -310,40 +340,11 @@ export function ChatPanel({
     handleBack();
   }, [restrict]);
 
-  const restrictDormant = isBlocked;
-  const showStatus      = isTyping || participant.isOnline;
-
-  const menuItems = [
-    { icon: Star,   label: "Favourite",     action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
-    { icon: Bell,   label: "Notifications", action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
-    { icon: Pin,    label: "Pin chat",      action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
-    { icon: Images, label: "Gallery",       action: () => { setDropdownOpen(false); router.push(`/messages/${conversation.id}/gallery`); }, danger: false, warn: false, dormant: false },
-    { icon: Search, label: "Find in chat",  action: () => setDropdownOpen(false),                                                           danger: false, warn: false, dormant: false },
-    { icon: Eraser, label: "Clear chat",    action: () => { setDropdownOpen(false); setConfirmClear(true); },                               danger: false, warn: false, dormant: false },
-    {
-      icon:    ShieldOff,
-      label:   isRestricted ? "Unrestrict" : "Restrict",
-      action:  restrictDormant ? undefined : () => { setDropdownOpen(false); isRestricted ? setUnrestrictConfirm(true) : setRestrictConfirm(true); },
-      danger:  false,
-      warn:    !restrictDormant,
-      dormant: restrictDormant,
-    },
-    {
-      icon:    Ban,
-      label:   isBlocked ? "Unblock" : "Block",
-      action:  () => { setDropdownOpen(false); isBlocked ? setUnblockConfirm(true) : setBlockConfirm(true); },
-      danger:  true,
-      warn:    false,
-      dormant: false,
-    },
-    { icon: Flag, label: "Report", action: () => { setDropdownOpen(false); setReportOpen(true); }, danger: true, warn: false, dormant: false },
-  ];
+  const showStatus = isTyping || participant.isOnline;
 
   return (
     <>
       <style>{`
-        @keyframes dropdownIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-        .chat-panel-dropdown { animation: dropdownIn 0.15s ease forwards; }
         .chat-desktop-header { display: flex; }
         @media (max-width: 767px) { .chat-desktop-header { display: none !important; } }
         .chat-panel-root {
@@ -377,35 +378,11 @@ export function ChatPanel({
         .typing-dot:nth-child(3) { animation-delay: 0.3s; }
         @keyframes avatarFadeIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
         .avatar-lightbox-inner { animation: avatarFadeIn 0.2s ease forwards; }
+        .desktop-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 8px; border-radius: 8px; transition: all 0.15s ease; color: #A3A3C2; }
+        .desktop-icon-btn:hover { color: #FFFFFF; background-color: #1C1C2E; }
       `}</style>
 
-      {/* Modals */}
-      {confirmClear && (
-        <div onClick={() => setConfirmClear(false)} style={{ position: "fixed", inset: 0, zIndex: 998, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "16px", padding: "24px", width: "300px", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", fontFamily: "'Inter', sans-serif" }}>
-            <p style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>Clear chat?</p>
-            <p style={{ margin: "0 0 20px", fontSize: "13px", color: "#A3A3C2" }}>This will clear all messages for you. This can't be undone.</p>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={() => setConfirmClear(false)} style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#A3A3C2", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Cancel</button>
-              <button
-                onClick={async () => {
-                  setConfirmClear(false);
-                  try {
-                    await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
-                    updateConversations((prev) => prev.filter((c) => c.id !== conversation.id));
-                    clearCachedMessages(conversation.id);
-                    setMessages([]);
-                    onClearMessages?.();
-                    onBack();
-                  } catch (err) { console.error("[ChatPanel] clear error:", err); }
-                }}
-                style={{ flex: 1, padding: "10px", borderRadius: "10px", border: "none", backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
-              >Clear</button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Avatar lightbox */}
       {avatarOpen && (
         <div onClick={() => setAvatarOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 999, backgroundColor: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div className="avatar-lightbox-inner" onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
@@ -423,6 +400,26 @@ export function ChatPanel({
         </div>
       )}
 
+      {/* Desktop ChatActionModal */}
+      {desktopModalOpen && (
+        <ChatActionModal
+          conversationId={conversation.id}
+          participant={participant}
+          isBlocked={isBlocked}
+          isRestricted={isRestricted}
+          onClose={() => setDesktopModalOpen(false)}
+          onClearChat={handleClearChat}
+          onDeleteChat={handleDeleteChat}
+          onBlock={() => setBlockConfirm(true)}
+          onUnblock={() => setUnblockConfirm(true)}
+          onRestrict={() => setRestrictConfirm(true)}
+          onUnrestrict={() => setUnrestrictConfirm(true)}
+          onReport={() => setReportOpen(true)}
+          x={desktopModalPos.x}
+          y={desktopModalPos.y}
+        />
+      )}
+
       {reportOpen && (
         <ReportModal context="message" username={participant.username} reportedUserId={participant.id} onClose={() => setReportOpen(false)} />
       )}
@@ -434,7 +431,7 @@ export function ChatPanel({
 
       <div className="chat-panel-root">
 
-        {/* Mobile header — handled entirely by ChatHeader */}
+        {/* Mobile header */}
         <ChatHeader
           conversation={conversation}
           onBack={onBack}
@@ -442,14 +439,14 @@ export function ChatPanel({
           onMessagesCleared={() => { clearCachedMessages(conversation.id); onClearMessages?.(); setMessages([]); }}
         />
 
-        {/* Desktop header — hidden on mobile via CSS */}
+        {/* Desktop header */}
         <div
           className="chat-desktop-header"
           style={{ alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "56px", flexShrink: 0, backgroundColor: "#0D0D1A", borderBottom: "1px solid #1E1E2E", fontFamily: "'Inter', sans-serif", touchAction: "none", userSelect: "none" }}
           onTouchStart={(e) => e.stopPropagation()}
           onTouchMove={(e) => e.stopPropagation()}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1, overflow: "hidden" }}>
             <button onClick={handleBack} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "6px", transition: "color 0.15s ease", flexShrink: 0 }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
               <ArrowLeft size={20} strokeWidth={1.8} />
             </button>
@@ -469,10 +466,10 @@ export function ChatPanel({
               )}
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "1px", minWidth: 0 }}>
-              <div className={`desktop-header-name${showStatus ? " desktop-header-name--up" : ""}`} style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }} onClick={() => router.push(`/${participant.username}`)}>
-                <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap" }}>{participant.name}</span>
-                {participant.isVerified && <Sparkles size={14} color="#8B5CF6" strokeWidth={1.8} />}
+            <div style={{ display: "flex", flexDirection: "column", gap: "1px", minWidth: 0, overflow: "hidden" }}>
+              <div className={`desktop-header-name${showStatus ? " desktop-header-name--up" : ""}`} style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", minWidth: 0 }} onClick={() => router.push(`/${participant.username}`)}>
+                <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{participant.name}</span>
+                {participant.isVerified && <Sparkles size={14} color="#8B5CF6" strokeWidth={1.8} style={{ flexShrink: 0 }} />}
               </div>
               {isTyping ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
@@ -490,61 +487,26 @@ export function ChatPanel({
             </div>
           </div>
 
-          {/* Desktop 3-dot — position:fixed to escape overflow clipping */}
-          <div ref={dropdownRef} style={{ position: "relative", flexShrink: 0 }}>
+          {/* Right: media icon + 3-dot menu */}
+          <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0 }}>
             <button
-              onClick={() => { setDropdownOpen((o) => !o); if (!dropdownOpen) fetchStatus(); }}
-              style={{ background: "none", border: "none", cursor: "pointer", color: dropdownOpen ? "#8B5CF6" : "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease", backgroundColor: dropdownOpen ? "rgba(139,92,246,0.1)" : "transparent" }}
-              onMouseEnter={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1C1C2E"; }}}
-              onMouseLeave={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "transparent"; }}}
+              className="desktop-icon-btn"
+              onClick={() => router.push(`/messages/${conversation.id}/gallery`)}
+            >
+              <Images size={20} strokeWidth={1.8} />
+            </button>
+
+            <button
+              ref={desktopMenuBtnRef}
+              className="desktop-icon-btn"
+              onClick={handleOpenDesktopModal}
+              style={{
+                color: desktopModalOpen ? "#8B5CF6" : undefined,
+                backgroundColor: desktopModalOpen ? "rgba(139,92,246,0.1)" : undefined,
+              }}
             >
               <MoreVertical size={20} strokeWidth={1.8} />
             </button>
-
-            {dropdownOpen && (
-              <div
-                className="chat-panel-dropdown"
-                style={{ position: "fixed", top: "64px", right: "16px", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "12px", padding: "6px", minWidth: "190px", zIndex: 200, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: "calc(100vh - 80px)", overflowY: "auto" }}
-              >
-                {menuItems.map(({ icon: Icon, label, action, danger, warn, dormant }) => (
-                  <button
-                    key={label}
-                    onClick={() => { if (!dormant && action) action(); }}
-                    disabled={dormant}
-                    style={{
-                      display: "flex", alignItems: "center", gap: "10px", width: "100%",
-                      padding: "10px 12px", borderRadius: "8px", border: "none",
-                      cursor: dormant ? "default" : "pointer",
-                      backgroundColor: "transparent",
-                      color: dormant
-                        ? "#3A3A4D"
-                        : danger
-                          ? (label === "Unblock" ? "#10B981" : "#EF4444")
-                          : warn
-                            ? (label === "Unrestrict" ? "#10B981" : "#F59E0B")
-                            : "#FFFFFF",
-                      fontSize: "14px", fontFamily: "'Inter', sans-serif", textAlign: "left",
-                      opacity: dormant ? 0.35 : 1,
-                      transition: "background-color 0.15s ease",
-                    }}
-                    onMouseEnter={(e) => { if (!dormant) e.currentTarget.style.backgroundColor = "#2A2A3D"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
-                  >
-                    <Icon
-                      size={15}
-                      color={
-                        dormant ? "#3A3A4D"
-                        : danger  ? (label === "Unblock"    ? "#10B981" : "#EF4444")
-                        : warn    ? (label === "Unrestrict" ? "#10B981" : "#F59E0B")
-                        : "#A3A3C2"
-                      }
-                      strokeWidth={1.8}
-                    />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 

@@ -147,16 +147,25 @@ export function MessagesList({
     isNearBottomRef.current = Math.abs(el.scrollTop) < 150;
   }, []);
 
-  useEffect(() => {
-    const prevCount = prevCountRef.current;
-    prevCountRef.current = messages.length;
-    if (messages.length <= prevCount) return;
-    const lastMsg      = messages[messages.length - 1];
-    const isOwnMessage = lastMsg && lastMsg.senderId === currentUserId;
-    if (isOwnMessage || isNearBottomRef.current) {
-      requestAnimationFrame(() => scrollToBottom());
-    }
-  }, [messages.length, messages, currentUserId, scrollToBottom]);
+  const prevFirstIdRef = useRef<string | null>(null);
+
+useEffect(() => {
+  const prevCount = prevCountRef.current;
+  prevCountRef.current = messages.length;
+  if (messages.length <= prevCount) return;
+
+  const firstId = String(messages[0]?.tempId ?? messages[0]?.id ?? "");
+  const wasPrepended = prevFirstIdRef.current !== null && prevFirstIdRef.current !== firstId;
+  prevFirstIdRef.current = firstId;
+
+  if (wasPrepended) return; // older messages loaded — don't snap to bottom
+
+  const lastMsg      = messages[messages.length - 1];
+  const isOwnMessage = lastMsg && lastMsg.senderId === currentUserId;
+  if (isOwnMessage || isNearBottomRef.current) {
+    requestAnimationFrame(() => scrollToBottom());
+  }
+}, [messages.length, messages, currentUserId, scrollToBottom]);
 
   useEffect(() => {
     if (isTyping && isNearBottomRef.current) {
@@ -326,7 +335,7 @@ export function MessagesList({
             }
           }
 
-          return [...items].reverse().map((item, ri) => {
+          return [...items].reverse().map((item) => {
             if (item.kind === "single") {
               const msg           = item.msg;
               const originalIndex = item.originalIndex;
@@ -337,12 +346,13 @@ export function MessagesList({
                 new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime() > 5 * 60 * 1000
               );
               const mediaItems = getMediaItems(msg, isOwn);
+              // Use stable key based on message identity only — NOT the reversed index
               const msgKey     = String(msg.tempId ?? msg.id);
               const animClass  = olderAnimIds.has(msgKey) ? "msg-older" : newerAnimIds.has(msgKey) ? "msg-newer" : "";
 
               return (
                 <div
-                  key={`${ri}-${msgKey}`}
+                  key={msgKey}
                   className={animClass}
                   style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}
                 >
@@ -401,6 +411,7 @@ export function MessagesList({
               getMediaItems(m, isOwn).map((mi) => ({ ...mi, messageId: m.id }))
             );
             const gridItems  = allGroupMedia.map((mi) => ({ url: mi.url, type: mi.type }));
+            // Use stable key based on message IDs only — NOT reversed index
             const groupKey   = groupMsgs.map((m) => m.tempId ?? m.id).join("-");
             const firstKey   = String(groupMsgs[0].tempId ?? groupMsgs[0].id);
             const groupAnim  = olderAnimIds.has(firstKey) ? "msg-older" : newerAnimIds.has(firstKey) ? "msg-newer" : "";
