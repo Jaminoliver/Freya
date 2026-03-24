@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Link2, BellOff, Star, Trash2, Eraser, ShieldOff, Ban, Flag } from "lucide-react";
+import { Link2, BellOff, Bell, Star, Trash2, Eraser, ShieldOff, Ban, Flag } from "lucide-react";
 import { FavouritesModal } from "@/components/messages/FavouritesModal";
+import { updateConversations } from "@/app/(main)/messages/page";
 
 interface Participant {
   id:         string;
@@ -18,6 +19,7 @@ interface Props {
   participant:     Participant;
   isBlocked:       boolean;
   isRestricted:    boolean;
+  isMuted?:        boolean;
   onClose:         () => void;
   onClearChat:     () => void;
   onDeleteChat:    () => void;
@@ -26,6 +28,7 @@ interface Props {
   onRestrict:      () => void;
   onUnrestrict:    () => void;
   onReport:        () => void;
+  onSelectMode?:   () => void;
   x?:              number;
   y?:              number;
 }
@@ -35,6 +38,7 @@ export function ChatActionModal({
   participant,
   isBlocked,
   isRestricted,
+  isMuted = false,
   onClose,
   onClearChat,
   onDeleteChat,
@@ -43,6 +47,7 @@ export function ChatActionModal({
   onRestrict,
   onUnrestrict,
   onReport,
+  onSelectMode,
   x = 0,
   y = 0,
 }: Props) {
@@ -108,6 +113,21 @@ export function ChatActionModal({
     onClose();
   };
 
+  const handleMute = async () => {
+    const newMuted = !isMuted;
+    updateConversations((prev) =>
+      prev.map((c) => c.id === conversationId ? { ...c, isMuted: newMuted } : c)
+    );
+    onClose();
+    try {
+      await fetch(`/api/conversations/${conversationId}/mute`, { method: "PATCH" });
+    } catch {
+      updateConversations((prev) =>
+        prev.map((c) => c.id === conversationId ? { ...c, isMuted: !newMuted } : c)
+      );
+    }
+  };
+
   const menuItems: {
     icon: React.ReactNode;
     label: string;
@@ -117,7 +137,7 @@ export function ChatActionModal({
     action: (() => void) | undefined;
   }[] = [
     { icon: <Link2    size={15} strokeWidth={1.6} />, label: "Copy link to profile", danger: false, warn: false, dormant: false, action: handleCopyLink },
-    { icon: <BellOff  size={15} strokeWidth={1.6} />, label: "Mute notifications",  danger: false, warn: false, dormant: false, action: onClose },
+    { icon: isMuted ? <Bell size={15} strokeWidth={1.6} /> : <BellOff size={15} strokeWidth={1.6} />, label: isMuted ? "Unmute notifications" : "Mute notifications", danger: false, warn: false, dormant: false, action: handleMute },
     { icon: <Star     size={15} strokeWidth={1.6} />, label: "Favourites",           danger: false, warn: false, dormant: false, action: () => setShowFavourites(true) },
     { icon: <Trash2   size={15} strokeWidth={1.6} />, label: "Delete chat",          danger: false, warn: false, dormant: false, action: () => setConfirmAction("delete") },
     { icon: <Eraser   size={15} strokeWidth={1.6} />, label: "Clear chat",           danger: false, warn: false, dormant: false, action: () => setConfirmAction("clear") },
@@ -275,18 +295,11 @@ export function ChatActionModal({
                     onTouchEnd={(e) => { e.preventDefault(); if (!item.dormant && item.action) item.action(); }}
                     disabled={item.dormant}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      width: "100%",
-                      padding: "9px 14px",
-                      background: "none",
-                      border: "none",
+                      display: "flex", alignItems: "center", gap: "10px", width: "100%",
+                      padding: "9px 14px", background: "none", border: "none",
                       cursor: item.dormant ? "default" : "pointer",
-                      color: getColor(item),
-                      fontSize: "13px",
-                      fontFamily: "'Inter', sans-serif",
-                      textAlign: "left",
+                      color: getColor(item), fontSize: "13px",
+                      fontFamily: "'Inter', sans-serif", textAlign: "left",
                       opacity: item.dormant ? 0.35 : 1,
                     }}
                   >

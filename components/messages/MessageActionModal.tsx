@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Copy, CornerUpLeft, Trash2, X } from "lucide-react";
+import { Copy, CornerUpLeft, Trash2, X, CheckSquare } from "lucide-react";
 import type { Message } from "@/lib/types/messages";
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
   onReply:             () => void;
   onDeleteForMe:       () => void;
   onDeleteForEveryone: () => void;
+  onSelect?:           (messageId: number) => void;
   onClose:             () => void;
 }
 
@@ -24,12 +25,11 @@ interface MenuItem {
 
 export function MessageActionModal({
   message, isOwn,
-  onCopy, onReply, onDeleteForMe, onDeleteForEveryone, onClose,
+  onCopy, onReply, onDeleteForMe, onDeleteForEveryone, onSelect, onClose,
 }: Props) {
   const [closing, setClosing] = useState(false);
   const [ready,   setReady]   = useState(false);
 
-  // setTimeout instead of onAnimationEnd — reliable on iOS Safari
   useEffect(() => {
     const t = setTimeout(() => setReady(true), 320);
     return () => clearTimeout(t);
@@ -53,6 +53,11 @@ export function MessageActionModal({
       icon:   <CornerUpLeft size={20} strokeWidth={1.6} />,
       label:  "Reply",
       action: () => { onReply(); triggerClose(); },
+    },
+    {
+      icon:   <CheckSquare size={20} strokeWidth={1.6} />,
+      label:  "Select",
+      action: () => { triggerClose(); setTimeout(() => onSelect?.(message.id), 300); },
     },
     {
       icon:   <Trash2 size={20} strokeWidth={1.6} />,
@@ -119,13 +124,10 @@ export function MessageActionModal({
           flexDirection:   "column",
         }}
       >
-        {/* Block touches during open animation */}
         {!ready && <div style={{ position: "absolute", inset: 0, zIndex: 999 }} />}
 
-        {/* Drag handle */}
         <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#3A3A52", margin: "12px auto 0" }} />
 
-        {/* Header — shows message preview */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "16px 20px 14px", borderBottom: "1px solid #252538" }}>
           <p style={{
             margin: 0, fontSize: "14px", color: "#A3A3C2",
@@ -143,7 +145,6 @@ export function MessageActionModal({
           </button>
         </div>
 
-        {/* Menu items */}
         <div style={{ padding: "8px 0", pointerEvents: ready ? "auto" : "none" }}>
           {menuItems.map((item, i) => (
             <div key={item.label}>

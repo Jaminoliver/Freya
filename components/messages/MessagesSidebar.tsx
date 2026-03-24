@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, Plus, Settings, MessageCircle, CheckCircle } from "lucide-react";
+import { Search, Plus, Settings, MessageCircle, CheckCircle, Archive } from "lucide-react";
 import { MessagesHeader } from "@/components/messages/MessagesHeader";
 import { FilterTabs } from "@/components/messages/FilterTabs";
 import { ConversationList } from "@/components/messages/ConversationList";
@@ -32,6 +32,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
   const [searchOpen,       setSearchOpen]       = useState(false);
   const [searchQuery,      setSearchQuery]      = useState("");
   const [favouritedIds,    setFavouritedIds]    = useState<Set<number>>(new Set());
+  const [archivedCount,    setArchivedCount]    = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch favourited conversation IDs (single call + refresh on changes)
@@ -51,6 +52,22 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
     const handleUpdate = () => fetchFavourites();
     window.addEventListener("favourites-updated", handleUpdate);
     return () => window.removeEventListener("favourites-updated", handleUpdate);
+  }, []);
+
+  // Fetch archived count
+  useEffect(() => {
+    const fetchArchivedCount = async () => {
+      try {
+        const res = await fetch("/api/conversations?archived=true");
+        const data = await res.json();
+        setArchivedCount(data.conversations?.length ?? 0);
+      } catch {}
+    };
+    fetchArchivedCount();
+
+    const handleUpdate = () => fetchArchivedCount();
+    window.addEventListener("conversations-updated", handleUpdate);
+    return () => window.removeEventListener("conversations-updated", handleUpdate);
   }, []);
 
   const openDesktopSearch = () => {
@@ -129,6 +146,8 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           padding: 0 16px;
         }
         .sb-normal.hidden { opacity: 0; transform: translateX(-20px); pointer-events: none; }
+        .archived-row:hover { background-color: #14141F !important; }
+        .archived-row:active { background-color: #1C1C2E !important; }
       `}</style>
 
       {/* Toast */}
@@ -314,6 +333,34 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           unreadCount={unreadCount}
           favouriteCount={favouriteCount}
         />
+
+        {/* Archived row */}
+        {archivedCount > 0 && filter === "all" && !searchQuery && (
+          <button
+            className="archived-row"
+            onClick={() => router.push("/messages/archived")}
+            style={{
+              display:         "flex",
+              alignItems:      "center",
+              gap:             "12px",
+              width:           "100%",
+              padding:         "14px 16px",
+              background:      "none",
+              border:          "none",
+              borderBottom:    "1px solid #1E1E2E",
+              cursor:          "pointer",
+              fontFamily:      "'Inter', sans-serif",
+              transition:      "background-color 0.15s ease",
+              flexShrink:      0,
+            }}
+          >
+            <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "#1C1C2E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Archive size={20} color="#8B5CF6" strokeWidth={1.6} />
+            </div>
+            <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF", flex: 1, textAlign: "left" }}>Archived</span>
+            <span style={{ fontSize: "13px", color: "#4A4A6A" }}>{archivedCount}</span>
+          </button>
+        )}
 
         <div style={{ flex: 1, overflowY: "auto" }}>
           <ConversationList

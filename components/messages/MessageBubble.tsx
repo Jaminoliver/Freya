@@ -15,6 +15,7 @@ interface Props {
   time:           string;
   onReply?:       (message: Message) => void;
   onDelete?:      (message: Message, deleteFor: "me" | "everyone") => void;
+  onSelect?:      (messageId: number) => void;
   replyToMessage?: Message | null;
 }
 
@@ -38,7 +39,7 @@ function fallbackCopy(text: string) {
   document.body.removeChild(el);
 }
 
-export function MessageBubble({ message, conversation, isOwn, isRead, isDelivered, time, onReply, onDelete, replyToMessage }: Props) {
+export function MessageBubble({ message, conversation, isOwn, isRead, isDelivered, time, onReply, onDelete, onSelect, replyToMessage }: Props) {
   const { participant } = conversation;
 
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -98,7 +99,6 @@ export function MessageBubble({ message, conversation, isOwn, isRead, isDelivere
     </div>
   ) : null;
 
-  // Deleted-for-everyone placeholder
   if ((message as any).isDeleted) {
     return (
       <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "8px", alignSelf: isOwn ? "flex-end" : "flex-start", maxWidth: "80%" }}>
@@ -142,12 +142,12 @@ export function MessageBubble({ message, conversation, isOwn, isRead, isDelivere
           onReply={() => onReply?.(message)}
           onDeleteForMe={() => onDelete?.(message, "me")}
           onDeleteForEveryone={() => onDelete?.(message, "everyone")}
+          onSelect={onSelect}
           onClose={() => setSheetOpen(false)}
         />
       )}
 
       <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "6px", alignSelf: isOwn ? "flex-end" : "flex-start", maxWidth: "80%" }}>
-        {/* Desktop ⋮ button */}
         <div style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center" }}>
           <button
             onClick={() => setSheetOpen(true)}

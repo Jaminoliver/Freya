@@ -21,6 +21,10 @@ interface Props {
   loadingMore?:      boolean;
   loadingMessages?:  boolean;
   onMessagesUpdate?: (updater: (msgs: Message[]) => Message[]) => void;
+  selectMode?:       boolean;
+  selectedIds?:      Set<number>;
+  onToggleSelect?:   (messageId: number) => void;
+  onSelectMessage?:  (messageId: number) => void;
 }
 
 interface LightboxState {
@@ -58,7 +62,36 @@ function getMediaItems(msg: Message, isOwn: boolean): { url: string; type: "imag
   }));
 }
 
-function MediaSwipeWrapper({ isOwn, onReply, children }: { isOwn: boolean; onReply: () => void; children: React.ReactNode }) {
+function SelectCheckbox({ checked, onClick }: { checked: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}
+      style={{
+        width:           "24px",
+        height:          "24px",
+        borderRadius:    "50%",
+        border:          checked ? "none" : "2px solid rgba(255,255,255,0.2)",
+        backgroundColor: checked ? "#8B5CF6" : "transparent",
+        display:         "flex",
+        alignItems:      "center",
+        justifyContent:  "center",
+        cursor:          "pointer",
+        flexShrink:      0,
+        padding:         0,
+        transition:      "all 0.15s ease",
+      }}
+    >
+      {checked && (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ animation: "selectCheckPop 0.2s ease-out" }}>
+          <path d="M2 6L5 9L10 3" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+function MediaSwipeWrapper({ isOwn, onReply, disabled, children }: { isOwn: boolean; onReply: () => void; disabled?: boolean; children: React.ReactNode }) {
   const [swipeX,        setSwipeX]        = useState(0);
   const [swiping,       setSwiping]       = useState(false);
   const touchStartX    = useRef(0);
@@ -66,12 +99,14 @@ function MediaSwipeWrapper({ isOwn, onReply, children }: { isOwn: boolean; onRep
   const swipeTriggered = useRef(false);
 
   const onTouchStart = (e: React.TouchEvent) => {
+    if (disabled) return;
     touchStartX.current    = e.touches[0].clientX;
     touchStartY.current    = e.touches[0].clientY;
     swipeTriggered.current = false;
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
+    if (disabled) return;
     const dx  = e.touches[0].clientX - touchStartX.current;
     const dy  = e.touches[0].clientY - touchStartY.current;
     const adx = Math.abs(dx);
@@ -124,6 +159,10 @@ export function MessagesList({
   loadingMore = false,
   loadingMessages = false,
   onMessagesUpdate,
+  selectMode = false,
+  selectedIds,
+  onToggleSelect,
+  onSelectMessage,
 }: Props) {
   const scrollRef         = useRef<HTMLDivElement>(null);
   const prevMessageIdsRef = useRef<Set<string>>(new Set(messages.map((m) => String(m.tempId ?? m.id))));
@@ -149,23 +188,23 @@ export function MessagesList({
 
   const prevFirstIdRef = useRef<string | null>(null);
 
-useEffect(() => {
-  const prevCount = prevCountRef.current;
-  prevCountRef.current = messages.length;
-  if (messages.length <= prevCount) return;
+  useEffect(() => {
+    const prevCount = prevCountRef.current;
+    prevCountRef.current = messages.length;
+    if (messages.length <= prevCount) return;
 
-  const firstId = String(messages[0]?.tempId ?? messages[0]?.id ?? "");
-  const wasPrepended = prevFirstIdRef.current !== null && prevFirstIdRef.current !== firstId;
-  prevFirstIdRef.current = firstId;
+    const firstId = String(messages[0]?.tempId ?? messages[0]?.id ?? "");
+    const wasPrepended = prevFirstIdRef.current !== null && prevFirstIdRef.current !== firstId;
+    prevFirstIdRef.current = firstId;
 
-  if (wasPrepended) return; // older messages loaded — don't snap to bottom
+    if (wasPrepended) return;
 
-  const lastMsg      = messages[messages.length - 1];
-  const isOwnMessage = lastMsg && lastMsg.senderId === currentUserId;
-  if (isOwnMessage || isNearBottomRef.current) {
-    requestAnimationFrame(() => scrollToBottom());
-  }
-}, [messages.length, messages, currentUserId, scrollToBottom]);
+    const lastMsg      = messages[messages.length - 1];
+    const isOwnMessage = lastMsg && lastMsg.senderId === currentUserId;
+    if (isOwnMessage || isNearBottomRef.current) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  }, [messages.length, messages, currentUserId, scrollToBottom]);
 
   useEffect(() => {
     if (isTyping && isNearBottomRef.current) {
@@ -230,6 +269,7 @@ useEffect(() => {
   }, [unlocking, onMessagesUpdate]);
 
   const openLightbox = useCallback((msg: Message, clickedIndex: number) => {
+    if (selectMode) return;
     const allMedia = messages.flatMap((m) => {
       if (!m.mediaUrls?.length) return [];
       if (m.type === "ppv" && !m.ppv?.isUnlocked && m.senderId !== currentUserId) return [];
@@ -240,10 +280,31 @@ useEffect(() => {
     const clickedUrl  = getMediaItems(msg, isOwn)[clickedIndex]?.url;
     const globalIndex = allMedia.findIndex((item) => item.url === clickedUrl && item.messageId === msg.id);
     setLightbox({ items: allMedia, initialIndex: Math.max(0, globalIndex) });
-  }, [messages, currentUserId]);
+  }, [messages, currentUserId, selectMode]);
+
+  const handleMessageClick = useCallback((msgId: number) => {
+    if (selectMode && onToggleSelect) {
+      onToggleSelect(msgId);
+    }
+  }, [selectMode, onToggleSelect]);
 
   return (
     <>
+      <style>{`
+        @keyframes selectCheckPop {
+          0%   { transform: scale(0); }
+          60%  { transform: scale(1.2); }
+          100% { transform: scale(1); }
+        }
+        @keyframes checkboxSlideIn {
+          from { opacity: 0; transform: translateX(-12px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        .select-checkbox-wrap {
+          animation: checkboxSlideIn 0.2s ease-out both;
+        }
+      `}</style>
+
       {lightbox && (
         <MediaLightbox
           items={lightbox.items}
@@ -346,15 +407,25 @@ useEffect(() => {
                 new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime() > 5 * 60 * 1000
               );
               const mediaItems = getMediaItems(msg, isOwn);
-              // Use stable key based on message identity only — NOT the reversed index
               const msgKey     = String(msg.tempId ?? msg.id);
               const animClass  = olderAnimIds.has(msgKey) ? "msg-older" : newerAnimIds.has(msgKey) ? "msg-newer" : "";
+              const isSelected = selectMode && selectedIds?.has(msg.id);
 
               return (
                 <div
                   key={msgKey}
                   className={animClass}
-                  style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}
+                  onClick={() => handleMessageClick(msg.id)}
+                  style={{
+                    display:         "flex",
+                    flexDirection:   "column",
+                    gap:             "2px",
+                    marginTop:       isSameGroup ? "2px" : "10px",
+                    cursor:          selectMode ? "pointer" : undefined,
+                    backgroundColor: isSelected ? "rgba(139,92,246,0.08)" : "transparent",
+                    borderRadius:    "8px",
+                    transition:      "background-color 0.15s ease",
+                  }}
                 >
                   {showTime && (
                     <div style={{ textAlign: "center", margin: "6px 0" }}>
@@ -362,36 +433,81 @@ useEffect(() => {
                     </div>
                   )}
 
-                  {msg.type === "text" && (
-                    <MessageBubble
-                      message={msg}
-                      conversation={conversation}
-                      isOwn={isOwn}
-                      isRead={msg.isRead ?? false}
-                      isDelivered={msg.isDelivered ?? false}
-                      time={formatMessageTime(msg.createdAt)}
-                      onReply={onReply}
-                      onDelete={onDelete}
-                      replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
-                    />
-                  )}
-
-                  {(msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0 && (
-                    <MediaSwipeWrapper isOwn={isOwn} onReply={() => onReply?.(msg)}>
-                      <MediaBubble
-                        msg={msg}
-                        isOwn={isOwn}
-                        isSameGroup={!!isSameGroup}
-                        conversation={conversation}
-                        mediaItems={mediaItems}
-                        unlocking={unlocking}
-                        onReply={onReply}
-                        onDelete={onDelete}
-                        onUnlock={handleUnlock}
-                        onOpenLightbox={openLightbox}
-                        currentUserId={currentUserId}
-                      />
-                    </MediaSwipeWrapper>
+                  {selectMode ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div className="select-checkbox-wrap" style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
+                        <SelectCheckbox checked={!!isSelected} onClick={() => onToggleSelect?.(msg.id)} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {msg.type === "text" && (
+                          <MessageBubble
+                            message={msg}
+                            conversation={conversation}
+                            isOwn={isOwn}
+                            isRead={msg.isRead ?? false}
+                            isDelivered={msg.isDelivered ?? false}
+                            time={formatMessageTime(msg.createdAt)}
+                            onReply={undefined}
+                            onDelete={undefined}
+                            onSelect={undefined}
+                            replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
+                          />
+                        )}
+                        {(msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0 && (
+                          <MediaSwipeWrapper isOwn={isOwn} onReply={() => onReply?.(msg)} disabled>
+                            <MediaBubble
+                              msg={msg}
+                              isOwn={isOwn}
+                              isSameGroup={!!isSameGroup}
+                              conversation={conversation}
+                              mediaItems={mediaItems}
+                              unlocking={unlocking}
+                              onReply={undefined}
+                              onDelete={undefined}
+                              onSelect={undefined}
+                              onUnlock={handleUnlock}
+                              onOpenLightbox={openLightbox}
+                              currentUserId={currentUserId}
+                            />
+                          </MediaSwipeWrapper>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {msg.type === "text" && (
+                        <MessageBubble
+                          message={msg}
+                          conversation={conversation}
+                          isOwn={isOwn}
+                          isRead={msg.isRead ?? false}
+                          isDelivered={msg.isDelivered ?? false}
+                          time={formatMessageTime(msg.createdAt)}
+                          onReply={onReply}
+                          onDelete={onDelete}
+                          onSelect={onSelectMessage}
+                          replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
+                        />
+                      )}
+                      {(msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0 && (
+                        <MediaSwipeWrapper isOwn={isOwn} onReply={() => onReply?.(msg)}>
+                          <MediaBubble
+                            msg={msg}
+                            isOwn={isOwn}
+                            isSameGroup={!!isSameGroup}
+                            conversation={conversation}
+                            mediaItems={mediaItems}
+                            unlocking={unlocking}
+                            onReply={onReply}
+                            onDelete={onDelete}
+                            onSelect={onSelectMessage}
+                            onUnlock={handleUnlock}
+                            onOpenLightbox={openLightbox}
+                            currentUserId={currentUserId}
+                          />
+                        </MediaSwipeWrapper>
+                      )}
+                    </>
                   )}
                 </div>
               );
@@ -411,12 +527,16 @@ useEffect(() => {
               getMediaItems(m, isOwn).map((mi) => ({ ...mi, messageId: m.id }))
             );
             const gridItems  = allGroupMedia.map((mi) => ({ url: mi.url, type: mi.type }));
-            // Use stable key based on message IDs only — NOT reversed index
             const groupKey   = groupMsgs.map((m) => m.tempId ?? m.id).join("-");
             const firstKey   = String(groupMsgs[0].tempId ?? groupMsgs[0].id);
             const groupAnim  = olderAnimIds.has(firstKey) ? "msg-older" : newerAnimIds.has(firstKey) ? "msg-newer" : "";
+            const isGroupSelected = selectMode && selectedIds?.has(firstMsg.id);
 
             const handleGroupClick = (clickedIndex: number) => {
+              if (selectMode) {
+                onToggleSelect?.(firstMsg.id);
+                return;
+              }
               const allConvoMedia = messages.flatMap((m) => {
                 if (!m.mediaUrls?.length) return [];
                 if (m.type === "ppv" && !m.ppv?.isUnlocked && m.senderId !== currentUserId) return [];
@@ -430,25 +550,62 @@ useEffect(() => {
             };
 
             return (
-              <div key={groupKey} className={groupAnim} style={{ display: "flex", flexDirection: "column", gap: "2px", marginTop: isSameGroup ? "2px" : "10px" }}>
+              <div
+                key={groupKey}
+                className={groupAnim}
+                onClick={() => { if (selectMode) onToggleSelect?.(firstMsg.id); }}
+                style={{
+                  display:         "flex",
+                  flexDirection:   "column",
+                  gap:             "2px",
+                  marginTop:       isSameGroup ? "2px" : "10px",
+                  cursor:          selectMode ? "pointer" : undefined,
+                  backgroundColor: isGroupSelected ? "rgba(139,92,246,0.08)" : "transparent",
+                  borderRadius:    "8px",
+                  transition:      "background-color 0.15s ease",
+                }}
+              >
                 {showTime && (
                   <div style={{ textAlign: "center", margin: "6px 0" }}>
                     <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{formatMessageTime(firstMsg.createdAt)}</span>
                   </div>
                 )}
-                <div style={{ display: "flex", width: "100%", justifyContent: isOwn ? "flex-end" : "flex-start" }}>
-                  <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "8px", maxWidth: "75%" }}>
-                    {!isOwn && !isSameGroup && <InlineAvatar src={conversation.participant.avatarUrl} name={conversation.participant.name} />}
-                    {!isOwn && isSameGroup  && <div style={{ width: "36px", flexShrink: 0 }} />}
-                    <div style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
-                      <MediaGrid mediaItems={gridItems} onClickItem={handleGroupClick} />
-                      <div style={{ padding: "2px 8px 6px", display: "flex", justifyContent: isOwn ? "flex-end" : "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{allGroupMedia.length} media</span>
-                        {isOwn && <ReadTick status={lastMsg.status} isDelivered={lastMsg.isDelivered} isRead={lastMsg.isRead ?? false} />}
+                {selectMode ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div className="select-checkbox-wrap" style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
+                      <SelectCheckbox checked={!!isGroupSelected} onClick={() => onToggleSelect?.(firstMsg.id)} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", width: "100%", justifyContent: isOwn ? "flex-end" : "flex-start" }}>
+                        <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "8px", maxWidth: "75%" }}>
+                          {!isOwn && !isSameGroup && <InlineAvatar src={conversation.participant.avatarUrl} name={conversation.participant.name} />}
+                          {!isOwn && isSameGroup  && <div style={{ width: "36px", flexShrink: 0 }} />}
+                          <div style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
+                            <MediaGrid mediaItems={gridItems} onClickItem={handleGroupClick} />
+                            <div style={{ padding: "2px 8px 6px", display: "flex", justifyContent: isOwn ? "flex-end" : "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{allGroupMedia.length} media</span>
+                              {isOwn && <ReadTick status={lastMsg.status} isDelivered={lastMsg.isDelivered} isRead={lastMsg.isRead ?? false} />}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div style={{ display: "flex", width: "100%", justifyContent: isOwn ? "flex-end" : "flex-start" }}>
+                    <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "8px", maxWidth: "75%" }}>
+                      {!isOwn && !isSameGroup && <InlineAvatar src={conversation.participant.avatarUrl} name={conversation.participant.name} />}
+                      {!isOwn && isSameGroup  && <div style={{ width: "36px", flexShrink: 0 }} />}
+                      <div style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
+                        <MediaGrid mediaItems={gridItems} onClickItem={handleGroupClick} />
+                        <div style={{ padding: "2px 8px 6px", display: "flex", justifyContent: isOwn ? "flex-end" : "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{allGroupMedia.length} media</span>
+                          {isOwn && <ReadTick status={lastMsg.status} isDelivered={lastMsg.isDelivered} isRead={lastMsg.isRead ?? false} />}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           });

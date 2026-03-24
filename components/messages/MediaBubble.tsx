@@ -34,6 +34,7 @@ interface Props {
   onDelete?:     (msg: Message, deleteFor: "me" | "everyone") => void;
   onUnlock:      (msg: Message) => void;
   onOpenLightbox:(msg: Message, i: number) => void;
+  onSelect?:     (messageId: number) => void;
 }
 
 export function MediaBubble({
@@ -48,6 +49,7 @@ export function MediaBubble({
   onDelete,
   onUnlock,
   onOpenLightbox,
+  onSelect,
 }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,6 +81,7 @@ export function MediaBubble({
           onReply={() => { onReply?.(msg); setSheetOpen(false); }}
           onDeleteForMe={() => { onDelete?.(msg, "me"); setSheetOpen(false); }}
           onDeleteForEveryone={() => { onDelete?.(msg, "everyone"); setSheetOpen(false); }}
+          onSelect={onSelect}
           onClose={() => setSheetOpen(false)}
         />
       )}

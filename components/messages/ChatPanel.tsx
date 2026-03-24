@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, X, MoreVertical, Images } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, X, MoreVertical, Images, Trash2 } from "lucide-react";
 import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
@@ -47,7 +47,9 @@ export function ChatPanel({
 }: Props) {
   const { participant } = conversation;
   const router          = useRouter();
-  const handleBack      = () => router.push("/messages");
+  const searchParams    = useSearchParams();
+  const fromArchived    = searchParams.get("from") === "archived";
+  const handleBack      = () => router.push(fromArchived ? "/messages/archived" : "/messages");
 
   const { messages, setMessages, appendMessage } = useMessageStore();
 
@@ -61,6 +63,10 @@ export function ChatPanel({
   const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
   const [sending,           setSending]           = useState(false);
   const [replyTo,           setReplyTo]           = useState<Message | null>(null);
+
+  // Select mode state
+  const [selectMode,   setSelectMode]   = useState(false);
+  const [selectedIds,  setSelectedIds]  = useState<Set<number>>(new Set());
 
   const {
     isBlocked, isRestricted,
@@ -79,6 +85,57 @@ export function ChatPanel({
     }
     setDesktopModalOpen(true);
   };
+
+  const handleEnterSelectMode = useCallback(() => {
+    setSelectMode(true);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleExitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleToggleSelect = useCallback((messageId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+  }, []);
+
+  // Called from MessageActionModal "Select" — enters select mode and pre-selects the message
+  const handleSelectMessage = useCallback((messageId: number) => {
+    setSelectMode(true);
+    setSelectedIds(new Set([messageId]));
+  }, []);
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    const convId = conversation.id;
+    if (convId === 0) return;
+
+    const idsToDelete = Array.from(selectedIds);
+
+    setMessages((prev) => prev.filter((m) => !selectedIds.has(m.id)));
+    setSelectMode(false);
+    setSelectedIds(new Set());
+
+    try {
+      await Promise.all(
+        idsToDelete.map((msgId) =>
+          fetch(`/api/conversations/${convId}/messages/${msgId}`, {
+            method:  "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ deleteFor: "me" }),
+          })
+        )
+      );
+    } catch {
+      // Messages already removed from UI
+    }
+  }, [selectedIds, conversation.id, setMessages]);
 
   // Sync in-progress uploads into store
   useEffect(() => {
@@ -141,10 +198,14 @@ export function ChatPanel({
     fetch(`/api/conversations/${conversation.id}/read`, { method: "PATCH" }).catch(() => {});
   }, [conversation.id]);
 
+  useEffect(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, [conversation.id]);
+
   const handleTyping = useCallback(() => sendTyping(), [sendTyping]);
 
   const handleClearChat = useCallback(async () => {
-    // Update client state immediately
     updateConversations((prev) =>
       prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "" } : c)
     );
@@ -388,6 +449,16 @@ export function ChatPanel({
         .avatar-lightbox-inner { animation: avatarFadeIn 0.2s ease forwards; }
         .desktop-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 8px; border-radius: 8px; transition: all 0.15s ease; color: #A3A3C2; }
         .desktop-icon-btn:hover { color: #FFFFFF; background-color: #1C1C2E; }
+        @keyframes selectBarSlideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to   { transform: translateY(0);   opacity: 1; }
+        }
+        .select-bar { animation: selectBarSlideUp 0.25s ease-out forwards; }
+        .select-bar-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 10px; border-radius: 8px; transition: all 0.15s ease; color: #A3A3C2; }
+        .select-bar-btn:hover { color: #FFFFFF; background-color: rgba(255,255,255,0.06); }
+        .select-bar-btn:active { background-color: rgba(255,255,255,0.1); }
+        .select-bar-btn--danger { color: #EF4444; }
+        .select-bar-btn--danger:hover { color: #EF4444; background-color: rgba(239,68,68,0.1); }
       `}</style>
 
       {/* Avatar lightbox */}
@@ -415,6 +486,7 @@ export function ChatPanel({
           participant={participant}
           isBlocked={isBlocked}
           isRestricted={isRestricted}
+          isMuted={conversation.isMuted}
           onClose={() => setDesktopModalOpen(false)}
           onClearChat={handleClearChat}
           onDeleteChat={handleDeleteChat}
@@ -444,6 +516,7 @@ export function ChatPanel({
           conversation={conversation}
           onBack={onBack}
           isTyping={isTyping}
+          onSelectMode={handleEnterSelectMode}
           onMessagesCleared={() => { clearCachedMessages(conversation.id); onClearMessages?.(); setMessages([]); }}
         />
 
@@ -495,15 +568,10 @@ export function ChatPanel({
             </div>
           </div>
 
-          {/* Right: media icon + 3-dot menu */}
           <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0 }}>
-            <button
-              className="desktop-icon-btn"
-              onClick={() => router.push(`/messages/${conversation.id}/gallery`)}
-            >
+            <button className="desktop-icon-btn" onClick={() => router.push(`/messages/${conversation.id}/gallery`)}>
               <Images size={20} strokeWidth={1.8} />
             </button>
-
             <button
               ref={desktopMenuBtnRef}
               className="desktop-icon-btn"
@@ -531,16 +599,51 @@ export function ChatPanel({
             loadingMore={loadingMore}
             loadingMessages={loadingMessages}
             onMessagesUpdate={handleMessagesUpdate}
+            selectMode={selectMode}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onSelectMessage={handleSelectMessage}
           />
         </div>
 
-        <MessageInput
-          onSend={handleSend}
-          onTyping={handleTyping}
-          disabled={false}
-          replyTo={replyTo}
-          onCancelReply={() => setReplyTo(null)}
-        />
+        {selectMode ? (
+          <div
+            className="select-bar"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "8px 16px", backgroundColor: "#0D0D1A",
+              borderTop: "1px solid #1E1E2E", flexShrink: 0,
+              fontFamily: "'Inter', sans-serif", minHeight: "56px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <button className="select-bar-btn" onClick={handleExitSelectMode}>
+                <X size={20} strokeWidth={1.8} />
+              </button>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>
+                {selectedIds.size} selected
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <button
+                className="select-bar-btn select-bar-btn--danger"
+                onClick={handleDeleteSelected}
+                disabled={selectedIds.size === 0}
+                style={{ opacity: selectedIds.size === 0 ? 0.35 : 1 }}
+              >
+                <Trash2 size={20} strokeWidth={1.8} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <MessageInput
+            onSend={handleSend}
+            onTyping={handleTyping}
+            disabled={false}
+            replyTo={replyTo}
+            onCancelReply={() => setReplyTo(null)}
+          />
+        )}
       </div>
     </>
   );

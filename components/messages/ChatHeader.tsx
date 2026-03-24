@@ -17,9 +17,10 @@ interface Props {
   onBack:             () => void;
   onMessagesCleared?: () => void;
   isTyping?:          boolean;
+  onSelectMode?:      () => void;
 }
 
-export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping = false }: Props) {
+export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping = false, onSelectMode }: Props) {
   const { participant } = conversation;
   const router = useRouter();
   const { setMessages } = useMessageStore();
@@ -51,7 +52,6 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
   };
 
   const handleClearChat = useCallback(async () => {
-    // Update client state immediately
     updateConversations((prev) =>
       prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "" } : c)
     );
@@ -157,6 +157,7 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
           onRestrict={() => setRestrictConfirm(true)}
           onUnrestrict={() => setUnrestrictConfirm(true)}
           onReport={() => setReportOpen(true)}
+          onSelectMode={onSelectMode}
           x={modalPos.x}
           y={modalPos.y}
         />

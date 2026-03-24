@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, getUser } from "@/lib/supabase/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createServerSupabaseClient();
   const { user, error: authError } = await getUser();
 
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const { searchParams } = new URL(request.url);
+  const showArchived = searchParams.get("archived") === "true";
 
   const { data, error } = await supabase
     .from("conversations")
@@ -28,6 +31,9 @@ export async function GET() {
       ),
       fan:profiles!conversations_fan_id_fkey (
         id, username, display_name, avatar_url, is_verified, role
+      ),
+      conversation_user_settings (
+        user_id, is_pinned, is_archived, is_muted
       )
     `)
     .or(`creator_id.eq.${user.id},fan_id.eq.${user.id}`)
@@ -39,7 +45,7 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const conversations = (data ?? [])
+  const allConversations = (data ?? [])
     .filter((row: any) => {
       const isCreator = row.creator_id === user.id;
       if (isCreator && row.deleted_for_creator) return false;
@@ -50,6 +56,11 @@ export async function GET() {
       const isCreator   = row.creator_id === user.id;
       const participant = isCreator ? row.fan : row.creator;
       const unreadCount = isCreator ? row.unread_count_creator : row.unread_count_fan;
+
+      // Find this user's settings row from the joined array
+      const settings = (row.conversation_user_settings ?? []).find(
+        (s: any) => s.user_id === user.id
+      );
 
       return {
         id:          row.id,
@@ -66,10 +77,20 @@ export async function GET() {
         lastMessageAt: row.last_message_at ?? "",
         unreadCount:   unreadCount ?? 0,
         hasMedia:      false,
+        isPinned:      settings?.is_pinned   ?? false,
+        isArchived:    settings?.is_archived  ?? false,
+        isMuted:       settings?.is_muted     ?? false,
       };
     });
 
-  return NextResponse.json({ conversations });
+  const archivedCount = allConversations.filter((c: any) => c.isArchived).length;
+  const archivedIds   = allConversations.filter((c: any) => c.isArchived).map((c: any) => c.id);
+
+  const conversations = showArchived
+    ? allConversations.filter((c: any) => c.isArchived)
+    : allConversations.filter((c: any) => !c.isArchived);
+
+  return NextResponse.json({ conversations, archivedCount, archivedIds });
 }
 
 export async function POST(request: Request) {

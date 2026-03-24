@@ -27,7 +27,16 @@ const typingChannels  = new Map<number, any>();
 const messageCache    = new Map<number, { messages: Message[]; timestamp: number }>();
 
 let typingConvIds = new Set<number>();
-const blockedConversationIds = new Set<number>();
+const blockedConversationIds  = new Set<number>();
+const archivedConversationIds = new Set<number>();
+
+export function addArchivedId(id: number) {
+  archivedConversationIds.add(id);
+}
+
+export function removeArchivedId(id: number) {
+  archivedConversationIds.delete(id);
+}
 
 // ─── Message cache helpers ────────────────────────────────────────────────────
 export function getCachedMessages(conversationId: number): Message[] | null {
@@ -61,6 +70,9 @@ export function appendCachedMessage(conversationId: number, message: Message) {
 // ─── Conversation sorting ─────────────────────────────────────────────────────
 function sortConversations(convs: Conversation[]): Conversation[] {
   return [...convs].sort((a, b) => {
+    const aPinned = a.isPinned ? 1 : 0;
+    const bPinned = b.isPinned ? 1 : 0;
+    if (aPinned !== bPinned) return bPinned - aPinned;
     if (!a.lastMessage && b.lastMessage) return 1;
     if (a.lastMessage && !b.lastMessage) return -1;
     return (
@@ -155,6 +167,12 @@ function ensureConversationsFetched() {
     })
     .then((data) => {
       const convs = data.conversations ?? [];
+
+      // Track archived IDs so realtime doesn't re-add them
+      if (data.archivedIds) {
+        data.archivedIds.forEach((id: number) => archivedConversationIds.add(id));
+      }
+
       cachedConversations = sortConversations(convs);
       listeners.forEach((fn) => fn(cachedConversations!));
       getAuthenticatedBrowserClient().then((supabase) => {
@@ -203,8 +221,9 @@ function startGlobalRealtime() {
           console.log("[CONV INSERT] alreadyExists in cache:", alreadyExists);
           if (alreadyExists) return;
 
-          // Never re-add a blocked conversation
+          // Never re-add a blocked or archived conversation
           if (blockedConversationIds.has(row.id)) return;
+          if (archivedConversationIds.has(row.id)) return;
 
           console.log("[CONV INSERT] fetching /api/conversations/" + row.id);
           fetch(`/api/conversations/${row.id}`)
@@ -214,7 +233,7 @@ function startGlobalRealtime() {
             })
             .then((data) => {
               console.log("[CONV INSERT] fetch response:", JSON.stringify(data));
-              if (data.conversation) {
+              if (data.conversation && !archivedConversationIds.has(row.id)) {
                 updateConversations((prev) => {
                   if (prev.some((c) => c.id === row.id)) {
                     console.log("[CONV INSERT] duplicate guard hit — not adding");
@@ -249,12 +268,13 @@ function startGlobalRealtime() {
 
           const convoExists = cachedConversations?.some((c) => c.id === row.conversation_id) ?? false;
           if (!convoExists) {
-            // Never re-add a blocked conversation
+            // Never re-add a blocked or archived conversation
             if (blockedConversationIds.has(row.conversation_id)) return;
+            if (archivedConversationIds.has(row.conversation_id)) return;
             fetch(`/api/conversations/${row.conversation_id}`)
               .then((r) => r.json())
               .then((data) => {
-                if (data.conversation) {
+                if (data.conversation && !archivedConversationIds.has(row.conversation_id)) {
                   updateConversations((prev) => {
                     if (prev.some((c) => c.id === row.conversation_id)) return prev;
                     return [data.conversation, ...prev];
@@ -478,10 +498,11 @@ function startGlobalRealtime() {
 
             if (!exists) {
               if (blockedConversationIds.has(row.id)) return prev;
+              if (archivedConversationIds.has(row.id)) return prev;
               fetch(`/api/conversations/${row.id}`)
                 .then((r) => r.json())
                 .then((data) => {
-                  if (data.conversation) {
+                  if (data.conversation && !archivedConversationIds.has(row.id)) {
                     updateConversations((p) => {
                       if (p.some((c) => c.id === row.id)) return p;
                       return [data.conversation, ...p];

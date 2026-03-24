@@ -21,6 +21,9 @@ export interface Conversation {
   hasMedia:      boolean;
   isBlocked?:    boolean;
   isRestricted?: boolean;
+  isPinned?:     boolean;
+  isArchived?:   boolean;
+  isMuted?:      boolean;
 }
 
 export interface Message {

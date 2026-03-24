@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Archive, User, Pin, MailOpen, Star, Trash2 } from "lucide-react";
-import { clearCachedMessages, updateConversations, blockConversation } from "@/app/(main)/messages/page";
+import { Archive, ArchiveRestore, User, Pin, PinOff, MailOpen, Star, Trash2 } from "lucide-react";
+import { clearCachedMessages, updateConversations, blockConversation, addArchivedId, removeArchivedId } from "@/app/(main)/messages/page";
 import { FavouritesModal } from "@/components/messages/FavouritesModal";
 import { useNav } from "@/lib/hooks/useNav";
 
@@ -16,14 +16,17 @@ interface Participant {
 interface Props {
   conversationId: number;
   participant:    Participant;
+  isPinned?:      boolean;
+  isArchived?:    boolean;
   onClose:        () => void;
   onCleared:      () => void;
+  onArchived?:    () => void;
   x?:             number;
   y?:             number;
 }
 
 export function ConversationActionModal({
-  conversationId, participant, onClose, onCleared, x = 0, y = 0,
+  conversationId, participant, isPinned = false, isArchived = false, onClose, onCleared, onArchived, x = 0, y = 0,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -47,7 +50,71 @@ export function ConversationActionModal({
     } catch {}
   };
 
-  // Clamp to viewport, flip upward if not enough space below
+  const handlePin = async () => {
+    const newPinned = !isPinned;
+    updateConversations((prev) =>
+      prev.map((c) => c.id === conversationId ? { ...c, isPinned: newPinned } : c)
+    );
+    onClose();
+    try {
+      await fetch(`/api/conversations/${conversationId}/pin`, { method: "PATCH" });
+    } catch {
+      updateConversations((prev) =>
+        prev.map((c) => c.id === conversationId ? { ...c, isPinned: !newPinned } : c)
+      );
+    }
+  };
+
+  const handleArchive = async () => {
+    if (isArchived) {
+      // Remove from archived tracking so realtime/main list can accept it
+      removeArchivedId(conversationId);
+      // Optimistically remove from archived list
+      updateConversations((prev) =>
+        prev.filter((c) => c.id !== conversationId)
+      );
+      onClose();
+      onArchived?.();
+      try {
+        await fetch(`/api/conversations/${conversationId}/archive`, { method: "PATCH" });
+        // Fetch fresh conversation and push into main list
+        const res = await fetch(`/api/conversations/${conversationId}`);
+        const data = await res.json();
+        if (data.conversation) {
+          updateConversations((prev) => {
+            if (prev.some((c) => c.id === conversationId)) return prev;
+            return [{ ...data.conversation, isArchived: false }, ...prev];
+          });
+        }
+        window.dispatchEvent(new CustomEvent("conversation-unarchived", { detail: { id: conversationId } }));
+        window.dispatchEvent(new Event("conversations-updated"));
+      } catch {}
+    } else {
+      // Archive
+      addArchivedId(conversationId);
+      updateConversations((prev) =>
+        prev.filter((c) => c.id !== conversationId)
+      );
+      onClose();
+      onArchived?.();
+      try {
+        await fetch(`/api/conversations/${conversationId}/archive`, { method: "PATCH" });
+        window.dispatchEvent(new Event("conversations-updated"));
+      } catch {
+        try {
+          const res = await fetch(`/api/conversations/${conversationId}`);
+          const data = await res.json();
+          if (data.conversation) {
+            updateConversations((prev) => {
+              if (prev.some((c) => c.id === conversationId)) return prev;
+              return [data.conversation, ...prev];
+            });
+          }
+        } catch {}
+      }
+    }
+  };
+
   useEffect(() => {
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
@@ -55,10 +122,7 @@ export function ConversationActionModal({
     let left = x - rect.width;
     let top  = y;
 
-    if (top + rect.height + pad > window.innerHeight) {
-      top = y - rect.height;
-    }
-
+    if (top + rect.height + pad > window.innerHeight) top = y - rect.height;
     if (left < pad) left = pad;
     if (left + rect.width + pad > window.innerWidth) left = window.innerWidth - rect.width - pad;
     if (top < pad) top = pad;
@@ -93,18 +157,21 @@ export function ConversationActionModal({
         fetch(`/api/favourites/chatlists/by-conversation/${conversationId}`, { method: "DELETE" }),
       ]);
       window.dispatchEvent(new Event("favourites-updated"));
-    } catch {
-      // already removed from UI
-    }
+    } catch {}
   };
 
   const menuItems = [
-    { icon: <Archive  size={15} strokeWidth={1.6} />, label: "Archive chat",     danger: false, action: onClose },
-    { icon: <User     size={15} strokeWidth={1.6} />, label: "View profile",     danger: false, action: handleViewProfile },
-    { icon: <Pin      size={15} strokeWidth={1.6} />, label: "Pin chat",         danger: false, action: onClose },
-    { icon: <MailOpen size={15} strokeWidth={1.6} />, label: "Mark as unread",   danger: false, action: handleMarkUnread },
-    { icon: <Star     size={15} strokeWidth={1.6} />, label: "Favourites",       danger: false, action: () => setShowFavourites(true) },
-    { icon: <Trash2   size={15} strokeWidth={1.6} />, label: "Delete chat",      danger: true,  action: () => setConfirm(true) },
+    {
+      icon:   isArchived ? <ArchiveRestore size={15} strokeWidth={1.6} /> : <Archive size={15} strokeWidth={1.6} />,
+      label:  isArchived ? "Unarchive chat" : "Archive chat",
+      danger: false,
+      action: handleArchive,
+    },
+    { icon: <User     size={15} strokeWidth={1.6} />, label: "View profile",    danger: false, action: handleViewProfile },
+    { icon: isPinned ? <PinOff size={15} strokeWidth={1.6} /> : <Pin size={15} strokeWidth={1.6} />, label: isPinned ? "Unpin chat" : "Pin chat", danger: false, action: handlePin },
+    { icon: <MailOpen size={15} strokeWidth={1.6} />, label: "Mark as unread",  danger: false, action: handleMarkUnread },
+    { icon: <Star     size={15} strokeWidth={1.6} />, label: "Favourites",      danger: false, action: () => setShowFavourites(true) },
+    { icon: <Trash2   size={15} strokeWidth={1.6} />, label: "Delete chat",     danger: true,  action: () => setConfirm(true) },
   ];
 
   const dangerStart = menuItems.findIndex((m) => m.danger);

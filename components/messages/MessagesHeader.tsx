@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Search, Plus, Settings, MessageCircle, CheckCircle } from "lucide-react";
+import { Search, Plus, Settings, CheckCircle } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { WelcomeMessageModal } from "@/components/messages/WelcomeMessageModal";
 import { ConversationSearch } from "@/components/messages/ConversationSearch";
+import { MessagesSettingsModal } from "@/components/messages/MessagesSettingsModal";
 
 interface MessagesHeaderProps {
-  searchQuery?: string;
+  searchQuery?:    string;
   onSearchChange?: (query: string) => void;
 }
 
@@ -16,48 +17,33 @@ export function MessagesHeader({ searchQuery = "", onSearchChange }: MessagesHea
   const isCreator  = viewer?.role === "creator";
 
   const [dropdownOpen,     setDropdownOpen]     = useState(false);
+  const [dropdownPos,      setDropdownPos]      = useState({ x: 0, y: 0 });
   const [welcomeModalOpen, setWelcomeModalOpen] = useState(false);
   const [showToast,        setShowToast]        = useState(false);
   const [searchOpen,       setSearchOpen]       = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const openSearch = () => {
-    setSearchOpen(true);
+  const gearBtnRef = useRef<HTMLButtonElement>(null);
+
+  const openSearch  = () => setSearchOpen(true);
+  const closeSearch = () => { setSearchOpen(false); onSearchChange?.(""); };
+
+  const handleOpenDropdown = () => {
+    if (gearBtnRef.current) {
+      const rect = gearBtnRef.current.getBoundingClientRect();
+      setDropdownPos({ x: rect.right, y: rect.bottom + 6 });
+    }
+    setDropdownOpen(true);
   };
-
-  const closeSearch = () => {
-    setSearchOpen(false);
-    onSearchChange?.("");
-  };
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const menuItems = [
-    { icon: MessageCircle, label: "Welcome message", action: () => { setDropdownOpen(false); setWelcomeModalOpen(true); }, danger: false },
-  ];
 
   return (
     <>
       <style>{`
-        @keyframes dropdownIn {
-          from { opacity: 0; transform: translateY(-6px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .gear-dropdown { animation: dropdownIn 0.15s ease forwards; }
         @media (min-width: 768px) {
           .messages-header-fixed { display: none !important; }
         }
         @keyframes toastSlideIn {
-          from { opacity: 0; transform: translateY(-12px); }
-          to   { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; transform: translateY(-12px) translateX(-50%); }
+          to   { opacity: 1; transform: translateY(0)    translateX(-50%); }
         }
         .mh-normal {
           transition: opacity 0.2s ease, transform 0.2s ease;
@@ -69,29 +55,35 @@ export function MessagesHeader({ searchQuery = "", onSearchChange }: MessagesHea
           padding: 0 16px;
         }
         .mh-normal.hidden { opacity: 0; transform: translateX(-20px); pointer-events: none; }
+        .mh-icon-btn {
+          background: none; border: none; cursor: pointer;
+          color: #A3A3C2; display: flex; align-items: center;
+          padding: 8px; border-radius: 8px; transition: all 0.15s ease;
+        }
+        .mh-icon-btn:hover { color: #FFFFFF; background-color: #1C1C2E; }
+        .mh-icon-btn--active { color: #8B5CF6 !important; background-color: rgba(139,92,246,0.1) !important; }
       `}</style>
 
       {/* Toast */}
       {showToast && (
-        <div
-          style={{
-            position: "fixed",
-            top: "24px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 10000,
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            padding: "12px 20px",
-            borderRadius: "12px",
-            backgroundColor: "#1C1C2E",
-            border: "1px solid #22C55E",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-            animation: "toastSlideIn 0.25s ease forwards",
-            fontFamily: "'Inter', sans-serif",
-          }}
-        >
+        <div style={{
+          position:        "fixed",
+          top:             "24px",
+          left:            "50%",
+          transform:       "translateX(-50%)",
+          zIndex:          10000,
+          display:         "flex",
+          alignItems:      "center",
+          gap:             "10px",
+          padding:         "12px 20px",
+          borderRadius:    "12px",
+          backgroundColor: "#1C1C2E",
+          border:          "1px solid #22C55E",
+          boxShadow:       "0 8px 32px rgba(0,0,0,0.5)",
+          animation:       "toastSlideIn 0.25s ease forwards",
+          fontFamily:      "'Inter', sans-serif",
+          whiteSpace:      "nowrap",
+        }}>
           <CheckCircle size={18} color="#22C55E" strokeWidth={2} />
           <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>
             Welcome message saved
@@ -109,6 +101,15 @@ export function MessagesHeader({ searchQuery = "", onSearchChange }: MessagesHea
         />
       )}
 
+      {dropdownOpen && (
+        <MessagesSettingsModal
+          onClose={() => setDropdownOpen(false)}
+          onWelcomeMessage={() => setWelcomeModalOpen(true)}
+          x={dropdownPos.x}
+          y={dropdownPos.y}
+        />
+      )}
+
       <div
         className="messages-header-fixed"
         style={{
@@ -122,101 +123,31 @@ export function MessagesHeader({ searchQuery = "", onSearchChange }: MessagesHea
           borderBottom:    "1px solid #1F1F2A",
           zIndex:          100,
           fontFamily:      "'Inter', sans-serif",
-          
         }}
       >
         {/* Normal header */}
-        <div className={`mh-normal${searchOpen ? " hidden" : ""}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%" }}>
+        <div className={`mh-normal${searchOpen ? " hidden" : ""}`}>
           <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>
             Messages
           </span>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "4px", position: "relative" }}>
-            <button
-              onClick={openSearch}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease" }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "transparent"; }}
-            >
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <button className="mh-icon-btn" onClick={openSearch}>
               <Search size={22} strokeWidth={1.8} />
             </button>
 
-            <button
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease" }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "transparent"; }}
-            >
+            <button className="mh-icon-btn">
               <Plus size={22} strokeWidth={1.8} />
             </button>
 
             {isCreator && (
-              <div ref={dropdownRef} style={{ position: "relative" }}>
-                <button
-                  onClick={() => setDropdownOpen((o) => !o)}
-                  style={{
-                    background:      "none",
-                    border:          "none",
-                    cursor:          "pointer",
-                    color:           dropdownOpen ? "#8B5CF6" : "#A3A3C2",
-                    display:         "flex",
-                    alignItems:      "center",
-                    padding:         "8px",
-                    borderRadius:    "8px",
-                    transition:      "all 0.15s ease",
-                    backgroundColor: dropdownOpen ? "rgba(139,92,246,0.1)" : "transparent",
-                  }}
-                  onMouseEnter={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1C1C2E"; }}}
-                  onMouseLeave={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "transparent"; }}}
-                >
-                  <Settings size={22} strokeWidth={1.8} />
-                </button>
-
-                {dropdownOpen && (
-                  <div
-                    className="gear-dropdown"
-                    style={{
-                      position:        "absolute",
-                      top:             "calc(100% + 6px)",
-                      right:           0,
-                      backgroundColor: "#1C1C2E",
-                      border:          "1px solid #2A2A3D",
-                      borderRadius:    "12px",
-                      padding:         "6px",
-                      minWidth:        "180px",
-                      zIndex:          100,
-                      boxShadow:       "0 8px 24px rgba(0,0,0,0.4)",
-                    }}
-                  >
-                    {menuItems.map(({ icon: Icon, label, action, danger }) => (
-                      <button
-                        key={label}
-                        onClick={action}
-                        style={{
-                          display:         "flex",
-                          alignItems:      "center",
-                          gap:             "10px",
-                          width:           "100%",
-                          padding:         "10px 12px",
-                          borderRadius:    "8px",
-                          border:          "none",
-                          cursor:          "pointer",
-                          backgroundColor: "transparent",
-                          color:           danger ? "#EF4444" : "#FFFFFF",
-                          fontSize:        "14px",
-                          fontFamily:      "'Inter', sans-serif",
-                          textAlign:       "left",
-                          transition:      "background-color 0.15s ease",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                      >
-                        <Icon size={15} color={danger ? "#EF4444" : "#A3A3C2"} strokeWidth={1.8} />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <button
+                ref={gearBtnRef}
+                className={`mh-icon-btn${dropdownOpen ? " mh-icon-btn--active" : ""}`}
+                onClick={handleOpenDropdown}
+              >
+                <Settings size={22} strokeWidth={1.8} />
+              </button>
             )}
           </div>
         </div>

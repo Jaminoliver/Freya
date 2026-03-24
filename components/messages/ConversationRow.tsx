@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, ImageIcon, Star } from "lucide-react";
+import { Sparkles, ImageIcon, Star, Pin, BellOff } from "lucide-react";
 import { ConversationActionModal } from "@/components/messages/ConversationActionModal";
 import { updateConversations } from "@/app/(main)/messages/page";
 import type { Conversation } from "@/lib/types/messages";
@@ -16,12 +16,13 @@ interface Props {
 }
 
 export function ConversationRow({ conversation, isActive, isTyping = false, isFavourited = false, onSelect }: Props) {
-  const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia } = conversation;
+  const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia, isPinned, isMuted } = conversation;
   const router = useRouter();
 
-  const [hovered,   setHovered]   = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [menuPos,   setMenuPos]   = useState({ x: 0, y: 0 });
+  const [hovered,     setHovered]     = useState(false);
+  const [modalOpen,   setModalOpen]   = useState(false);
+  const [menuPos,     setMenuPos]     = useState({ x: 0, y: 0 });
+  const [imgBroken,   setImgBroken]   = useState(false);
 
   const rowRef         = useRef<HTMLDivElement>(null);
   const touchStartY    = useRef<number>(0);
@@ -93,9 +94,7 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
   };
 
   const handleCleared = () => {
-    if (isActive) {
-      router.push("/messages");
-    }
+    if (isActive) router.push("/messages");
   };
 
   const formattedTime = (() => {
@@ -116,6 +115,8 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
 
   const bg = isActive ? "#1C1C2E" : hovered ? "#14141F" : "transparent";
 
+  const showInitial = !participant.avatarUrl || imgBroken;
+
   return (
     <>
       <style>{`
@@ -133,6 +134,8 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
         <ConversationActionModal
           conversationId={conversation.id}
           participant={participant}
+          isPinned={isPinned}
+          isArchived={conversation.isArchived}
           x={menuPos.x}
           y={menuPos.y}
           onClose={() => setModalOpen(false)}
@@ -166,12 +169,17 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
       >
         <div style={{ position: "relative", flexShrink: 0 }}>
           <div style={{ width: "48px", height: "48px", borderRadius: "50%", overflow: "hidden", backgroundColor: "#2A2A3D" }}>
-            {participant.avatarUrl ? (
-              <img src={participant.avatarUrl} alt={participant.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            ) : (
+            {showInitial ? (
               <div style={{ width: "100%", height: "100%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", fontSize: "18px", fontWeight: 700 }}>
                 {participant.name[0].toUpperCase()}
               </div>
+            ) : (
+              <img
+                src={participant.avatarUrl!}
+                alt={participant.name}
+                onError={() => setImgBroken(true)}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
             )}
           </div>
           {participant.isOnline && (
@@ -199,14 +207,20 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px", flexShrink: 0 }}>
-          <span style={{ fontSize: "12px", color: unreadCount > 0 ? "#8B5CF6" : "#9090A8", fontWeight: unreadCount > 0 ? 500 : 400 }}>
-            {formattedTime}
-          </span>
-          {unreadCount > 0 && (
-            <div style={{ minWidth: "18px", height: "18px", borderRadius: "9px", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", fontSize: "11px", fontWeight: 700, color: "#FFFFFF", fontFamily: "'Inter', sans-serif" }}>
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            {isPinned && <Pin size={11} color="#4A4A6A" strokeWidth={1.8} style={{ transform: "rotate(45deg)" }} />}
+            <span style={{ fontSize: "12px", color: unreadCount > 0 ? "#8B5CF6" : "#9090A8", fontWeight: unreadCount > 0 ? 500 : 400 }}>
+              {formattedTime}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            {isMuted && <BellOff size={12} color="#4A4A6A" strokeWidth={1.6} />}
+            {unreadCount > 0 && (
+              <div style={{ minWidth: "18px", height: "18px", borderRadius: "9px", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", fontSize: "11px", fontWeight: 700, color: "#FFFFFF", fontFamily: "'Inter', sans-serif" }}>
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </div>
+            )}
+          </div>
         </div>
 
         {hovered && (
