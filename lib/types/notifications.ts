@@ -22,6 +22,8 @@ export type NotificationType =
   | "renewal_failed"
   | "renewal_success"
   | "subscription_charged"
+  | "subscription_activated"
+  | "subscription_cancelled"
   | "tip_sent"
   | "wallet_topup"
   // both
@@ -61,8 +63,10 @@ export interface NotificationPreferences {
   payout_failed:       boolean;
   renewal_failed:      boolean;
   renewal_success:     boolean;
-  subscription_charged:boolean;
-  tip_sent:            boolean;
+  subscription_charged:  boolean;
+  subscription_activated:boolean;
+  subscription_cancelled:boolean;
+  tip_sent:              boolean;
   wallet_topup:        boolean;
   message:             boolean;
 }

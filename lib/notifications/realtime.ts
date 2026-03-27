@@ -1,6 +1,7 @@
 import { getBrowserClient } from "@/lib/supabase/browserClient";
 import type { RealtimeChannel }  from "@supabase/supabase-js";
 import type { NotificationItem, NotificationType, NotificationRole } from "@/lib/types/notifications";
+import { incrementUnreadCount } from "@/lib/notifications/store";
 
 export type NewNotificationHandler = (notification: NotificationItem) => void;
 
@@ -48,6 +49,7 @@ export function subscribeToNotifications(
         const notification = dbRowToNotificationItem(
           payload.new as Record<string, unknown>
         );
+        incrementUnreadCount();
         onNew(notification);
       }
     )

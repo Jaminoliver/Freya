@@ -25,6 +25,8 @@ const TYPE_TO_FILTER: Record<NotificationItem["type"], NotificationFilterTab> = 
   renewal_failed:       "subscriptions",
   renewal_success:      "payments",
   subscription_charged: "payments",
+  subscription_activated:"subscriptions",
+  subscription_cancelled:"subscriptions",
   tip_sent:             "payments",
   wallet_topup:         "payments",
   // both

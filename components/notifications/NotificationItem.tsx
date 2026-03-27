@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart, MessageCircle, Banknote, UserPlus, Lock, RefreshCcw, Wallet, AlertCircle, CheckCircle, Send } from "lucide-react";
+import { Heart, MessageCircle, Banknote, UserPlus, Lock, RefreshCcw, Wallet, AlertCircle, CheckCircle, Send, UserCheck, UserMinus } from "lucide-react";
 import type { NotificationItem as NotificationItemType } from "@/lib/types/notifications";
 
 interface Props {
@@ -20,7 +20,8 @@ function TypeIcon({ type }: { type: NotificationItemType["type"] }) {
     ppv_purchased:        { icon: Lock,           bg: "#2A2A10", color: "#F5A623" },
     payout_completed:     { icon: CheckCircle,    bg: "#1A2A1A", color: "#10B981" },
     payout_failed:        { icon: AlertCircle,    bg: "#2A1A1A", color: "#EF4444" },
-    // fan
+    subscription_activated: { icon: CheckCircle,    bg: "#1A1A2E", color: "#8B5CF6" },
+    subscription_cancelled: { icon: AlertCircle,    bg: "#2A1A1A", color: "#EF4444" },
     renewal_failed:       { icon: AlertCircle,    bg: "#2A1A1A", color: "#EF4444" },
     renewal_success:      { icon: CheckCircle,    bg: "#1A2A1A", color: "#10B981" },
     subscription_charged: { icon: Banknote,       bg: "#1A1A2E", color: "#8B5CF6" },
@@ -122,9 +123,13 @@ export function NotificationItem({ notification, onClick }: Props) {
       {/* Text */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ margin: "0 0 3px", fontSize: "14px", color: "#FFFFFF", lineHeight: 1.4 }}>
-          <span style={{ fontWeight: 700 }}>{actorName}</span>
-          {" "}
-          <span style={{ color: "#C4C4D4" }}>{bodyText}</span>
+          {actorName && (
+            <>
+              <span style={{ fontWeight: 700 }}>{actorName}</span>
+              {" "}
+            </>
+          )}
+          <span style={{ color: actorName ? "#C4C4D4" : "#FFFFFF" }}>{bodyText}</span>
         </p>
         <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {subText}

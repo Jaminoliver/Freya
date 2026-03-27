@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { debitWallet, creditWallet, hasSufficientBalance } from "@/lib/utils/wallet";
 import { sendWelcomeMessage } from "@/lib/welcome-message";
 
@@ -30,7 +30,6 @@ export async function POST(req: NextRequest) {
 
     const isFree = amount === 0;
 
-    // Only check balance if there's an actual charge
     if (!isFree) {
       const sufficient = await hasSufficientBalance(user.id, amount);
       if (!sufficient) {
@@ -39,7 +38,7 @@ export async function POST(req: NextRequest) {
     }
 
     const PLATFORM_FEE_RATE = 0.18;
-    const platformFee = Math.floor(amount * PLATFORM_FEE_RATE);
+    const platformFee    = Math.floor(amount * PLATFORM_FEE_RATE);
     const creatorEarning = amount - platformFee;
 
     // ─── Subscription ───────────────────────────────────────────────────────
@@ -49,7 +48,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: "tierId is required for paid subscription" }, { status: 400 });
       }
 
-      // Check for ANY existing subscription row (any status) to avoid unique constraint violation
       const existingSubQuery = supabase
         .from("subscriptions")
         .select("id, status")
@@ -77,21 +75,23 @@ export async function POST(req: NextRequest) {
       const nextRenewal = new Date();
       nextRenewal.setMonth(nextRenewal.getMonth() + 1);
 
-      let subId: string;
+      let subId:          string;
+      let isResubscription = false;
 
       if (existingSub) {
+        isResubscription = true;
         console.log("[Checkout] updating existing sub row:", existingSub.id);
         const { data: updatedSub, error: updateError } = await supabase
           .from("subscriptions")
           .update({
-            tier_id: tierId ?? null,
-            price_paid: amount,
-            status: "active",
-            auto_renew: !isFree,
+            tier_id:              tierId ?? null,
+            price_paid:           amount,
+            status:               "active",
+            auto_renew:           !isFree,
             current_period_start: now.toISOString(),
-            current_period_end: nextRenewal.toISOString(),
-            last_renewed_at: now.toISOString(),
-            last_payment_method: "WALLET",
+            current_period_end:   nextRenewal.toISOString(),
+            last_renewed_at:      now.toISOString(),
+            last_payment_method:  "WALLET",
           })
           .eq("id", existingSub.id)
           .select("id")
@@ -110,16 +110,16 @@ export async function POST(req: NextRequest) {
         const { data: newSub, error: subError } = await supabase
           .from("subscriptions")
           .insert({
-            fan_id: user.id,
-            creator_id: creatorId,
-            tier_id: tierId ?? null,
-            price_paid: amount,
-            status: "active",
-            auto_renew: !isFree,
+            fan_id:               user.id,
+            creator_id:           creatorId,
+            tier_id:              tierId ?? null,
+            price_paid:           amount,
+            status:               "active",
+            auto_renew:           !isFree,
             current_period_start: now.toISOString(),
-            current_period_end: nextRenewal.toISOString(),
-            last_renewed_at: now.toISOString(),
-            last_payment_method: "WALLET",
+            current_period_end:   nextRenewal.toISOString(),
+            last_renewed_at:      now.toISOString(),
+            last_payment_method:  "WALLET",
           })
           .select("id")
           .single();
@@ -134,33 +134,103 @@ export async function POST(req: NextRequest) {
         subId = newSub.id;
       }
 
-      // ✅ Increment subscriber_count on creator's profile
       await supabase.rpc("increment_subscriber_count", { creator_id: creatorId });
 
       if (!isFree) {
         await debitWallet({
-          userId: user.id,
+          userId:         user.id,
           amount,
-          category: "SUBSCRIPTION_PAYMENT",
-          provider: "INTERNAL",
-          description: "Subscription payment via wallet",
-          referenceId: subId,
+          category:       "SUBSCRIPTION_PAYMENT",
+          provider:       "INTERNAL",
+          description:    "Subscription payment via wallet",
+          referenceId:    subId,
           useServiceRole: true,
         });
 
         await creditWallet({
-          userId: creatorId,
-          fanId: user.id,
-          amount: creatorEarning,
-          category: "CREATOR_EARNING",
-          provider: "INTERNAL",
-          description: "Subscription earning",
-          referenceId: subId,
+          userId:         creatorId,
+          fanId:          user.id,
+          amount:         creatorEarning,
+          category:       "CREATOR_EARNING",
+          provider:       "INTERNAL",
+          description:    "Subscription earning",
+          referenceId:    subId,
           useServiceRole: true,
         });
       }
 
-      // Send welcome message (fire-and-forget — don't block checkout)
+      // ── Notify creator ──────────────────────────────────────────────────
+      try {
+        const { data: fanProfile, error: profileErr } = await supabase
+          .from("profiles")
+          .select("display_name, username, avatar_url")
+          .eq("id", user.id)
+          .single();
+
+        if (profileErr) console.error("[Checkout] fan profile fetch failed:", profileErr.message);
+        console.log("[Checkout] fan profile:", fanProfile);
+
+        const { data: creatorProfile } = await supabase
+          .from("profiles")
+          .select("display_name, username, avatar_url")
+          .eq("id", creatorId)
+          .single();
+
+        const serviceSupabase  = createServiceSupabaseClient();
+        const notifType        = isResubscription ? "resubscription" : "subscription";
+        const notifBody        = isResubscription ? "resubscribed to your page" : "just subscribed to your page";
+
+        console.log("[Checkout] inserting notification — type:", notifType, "for creator:", creatorId);
+
+        const { error: notifError } = await serviceSupabase.from("notifications").insert({
+          user_id:      creatorId,
+          type:         notifType,
+          role:         "creator",
+          actor_id:     user.id,
+          actor_name:   fanProfile?.display_name ?? fanProfile?.username ?? "Someone",
+          actor_handle: fanProfile?.username ?? "",
+          actor_avatar: fanProfile?.avatar_url ?? null,
+          body_text:    notifBody,
+          sub_text:     `@${fanProfile?.username ?? ""}`,
+          reference_id: user.id,
+          is_read:      false,
+        });
+
+        if (notifError) {
+          console.error("[Checkout] notification insert failed:", notifError.message, notifError.details);
+        } else {
+          console.log("[Checkout] creator notification inserted successfully");
+        }
+
+        // ── Notify fan — subscription confirmation ──────────────────────
+        const creatorDisplayName = creatorProfile?.display_name ?? creatorProfile?.username ?? "this creator";
+        const fanNotifBody = isResubscription
+          ? `You resubscribed to ${creatorDisplayName}`
+          : `You subscribed to ${creatorDisplayName}`;
+
+        const { error: fanNotifError } = await serviceSupabase.from("notifications").insert({
+          user_id:      user.id,
+          type:         "subscription_activated",
+          role:         "fan",
+          actor_id:     creatorId,
+          actor_name:   "",
+          actor_handle: creatorProfile?.username ?? "",
+          actor_avatar: creatorProfile?.avatar_url ?? null,
+          body_text:    fanNotifBody,
+          sub_text:     isFree ? "Free subscription · Monthly" : `₦${(amount / 100).toLocaleString()} · Monthly`,
+          reference_id: creatorId,
+          is_read:      false,
+        });
+
+        if (fanNotifError) {
+          console.error("[Checkout] fan notification insert failed:", fanNotifError.message);
+        } else {
+          console.log("[Checkout] fan notification inserted successfully");
+        }
+      } catch (notifErr) {
+        console.error("[Checkout] subscription notification failed:", notifErr);
+      }
+
       sendWelcomeMessage(creatorId, user.id).catch((err) =>
         console.error("[Checkout] Welcome message failed:", err)
       );
@@ -175,11 +245,11 @@ export async function POST(req: NextRequest) {
       const { data: tip, error: tipError } = await supabase
         .from("tips")
         .insert({
-          tipper_id: user.id,
+          tipper_id:    user.id,
           recipient_id: creatorId,
-          post_id: postId ?? null,
+          post_id:      postId ?? null,
           amount,
-          message: message ?? null,
+          message:      message ?? null,
         })
         .select("id")
         .single();
@@ -189,23 +259,23 @@ export async function POST(req: NextRequest) {
       }
 
       await debitWallet({
-        userId: user.id,
+        userId:         user.id,
         amount,
-        category: "SUBSCRIPTION_PAYMENT",
-        provider: "INTERNAL",
-        description: "Tip to creator",
-        referenceId: tip.id,
+        category:       "SUBSCRIPTION_PAYMENT",
+        provider:       "INTERNAL",
+        description:    "Tip to creator",
+        referenceId:    tip.id,
         useServiceRole: true,
       });
 
       await creditWallet({
-        userId: creatorId,
-        fanId: user.id,
-        amount: creatorEarning,
-        category: "CREATOR_EARNING",
-        provider: "INTERNAL",
-        description: "Tip received",
-        referenceId: tip.id,
+        userId:         creatorId,
+        fanId:          user.id,
+        amount:         creatorEarning,
+        category:       "CREATOR_EARNING",
+        provider:       "INTERNAL",
+        description:    "Tip received",
+        referenceId:    tip.id,
         useServiceRole: true,
       });
 
@@ -233,8 +303,8 @@ export async function POST(req: NextRequest) {
       const { data: unlock, error: unlockError } = await supabase
         .from("ppv_unlocks")
         .insert({
-          fan_id: user.id,
-          post_id: postId,
+          fan_id:     user.id,
+          post_id:    postId,
           creator_id: creatorId,
           amount_paid: amount,
         })
@@ -246,23 +316,23 @@ export async function POST(req: NextRequest) {
       }
 
       await debitWallet({
-        userId: user.id,
+        userId:         user.id,
         amount,
-        category: "SUBSCRIPTION_PAYMENT",
-        provider: "INTERNAL",
-        description: "PPV content unlock",
-        referenceId: unlock.id,
+        category:       "SUBSCRIPTION_PAYMENT",
+        provider:       "INTERNAL",
+        description:    "PPV content unlock",
+        referenceId:    unlock.id,
         useServiceRole: true,
       });
 
       await creditWallet({
-        userId: creatorId,
-        fanId: user.id,
-        amount: creatorEarning,
-        category: "CREATOR_EARNING",
-        provider: "INTERNAL",
-        description: "PPV content earning",
-        referenceId: unlock.id,
+        userId:         creatorId,
+        fanId:          user.id,
+        amount:         creatorEarning,
+        category:       "CREATOR_EARNING",
+        provider:       "INTERNAL",
+        description:    "PPV content earning",
+        referenceId:    unlock.id,
         useServiceRole: true,
       });
 

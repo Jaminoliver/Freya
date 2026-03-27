@@ -7,6 +7,7 @@ import { NotificationFilterTabs }            from "@/components/notifications/No
 import { NotificationsList }                 from "@/components/notifications/NotificationsList";
 import { subscribeToNotifications }          from "@/lib/notifications/realtime";
 import { getAuthenticatedBrowserClient }     from "@/lib/supabase/browserClient";
+import { decrementUnreadCount, resetUnreadCount, initNotificationStore } from "@/lib/notifications/store";
 import type { NotificationItem, NotificationFilterTab } from "@/lib/types/notifications";
 
 function timeAgo(isoString: string): string {
@@ -48,7 +49,10 @@ export default function NotificationsPage() {
     }
   }, []);
 
-  // ── Initial load + re-fetch on tab change ────────────────────────────────
+  // ── Init store on mount ───────────────────────────────────────────────────
+  useEffect(() => {
+    initNotificationStore();
+  }, []);
   useEffect(() => {
     fetchNotifications(filter);
   }, [filter, fetchNotifications]);
@@ -73,19 +77,44 @@ export default function NotificationsPage() {
 
   // ── Mark single read ──────────────────────────────────────────────────────
   const handleSelect = useCallback(async (item: NotificationItem) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === item.id ? { ...n, isUnread: false } : n))
-    );
-    await fetch(`/api/notifications/${item.id}/read`, { method: "PATCH" });
+    if (!item.isUnread) {
+      // still navigate even if already read
+    } else {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, isUnread: false } : n))
+      );
+      decrementUnreadCount();
+      await fetch(`/api/notifications/${item.id}/read`, { method: "PATCH" });
+    }
 
+    // ── Navigation by type ──────────────────────────────────────────────────
     if (item.type === "message" && item.referenceId) {
       router.push(`/messages/${item.referenceId}`);
+    } else if (
+      (item.type === "subscription" || item.type === "resubscription") &&
+      item.actorHandle
+    ) {
+      router.push(`/${item.actorHandle}`);
+    } else if (item.type === "renewal_failed") {
+      router.push("/wallet");
+    } else if (
+      (item.type === "renewal_success" || item.type === "subscription_charged" ||
+       item.type === "subscription_activated" || item.type === "subscription_cancelled") &&
+      item.actorHandle
+    ) {
+      router.push(`/${item.actorHandle}`);
+    } else if (
+      (item.type === "subscription_activated" || item.type === "subscription_cancelled") &&
+      item.actorHandle
+    ) {
+      router.push(`/${item.actorHandle}`);
     }
   }, [router]);
 
   // ── Mark all read ─────────────────────────────────────────────────────────
   const handleMarkAllRead = useCallback(async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
+    resetUnreadCount();
     await fetch("/api/notifications/read-all", { method: "PATCH" });
   }, []);
 

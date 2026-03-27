@@ -12,6 +12,7 @@ import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useAppStore } from "@/lib/store/appStore";
 import { useNav } from "@/lib/hooks/useNav";
 import { useUnreadConversationCount } from "@/app/(main)/messages/page";
+import { useUnreadNotificationCount } from "@/lib/notifications/store";
 
 const navItems = [
   { label: "Home",          href: "/dashboard",     icon: Home          },
@@ -61,7 +62,8 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
   const viewer   = useAppStore((s) => s.viewer);
   const username = viewer?.username ?? null;
 
-  const unreadCount = useUnreadConversationCount();
+  const unreadMessageCount      = useUnreadConversationCount();
+  const unreadNotificationCount = useUnreadNotificationCount();
 
   const isActive = (href: string) =>
     pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
@@ -163,8 +165,20 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
               <button onClick={() => setSearchOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
                 <Search size={22} strokeWidth={1.8} />
               </button>
-              <button onClick={() => handleNav("/notifications")} style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2", background: "none", border: "none", cursor: "pointer" }}>
+              <button onClick={() => handleNav("/notifications")} style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
                 <Bell size={22} strokeWidth={1.8} />
+                {unreadNotificationCount > 0 && (
+                  <span style={{
+                    position: "absolute", top: "4px", right: "4px",
+                    minWidth: "16px", height: "16px", borderRadius: "8px",
+                    backgroundColor: "#8B5CF6", color: "#FFFFFF",
+                    fontSize: "10px", fontWeight: 700, lineHeight: 1,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: "0 4px", border: "2px solid #13131F",
+                  }}>
+                    {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -252,6 +266,8 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
           {navItems.map(({ label, href, icon: Icon }) => {
             const active   = isActive(href);
             const isMsg    = href === "/messages";
+            const isNotif  = href === "/notifications";
+            const badge    = isMsg ? unreadMessageCount : isNotif ? unreadNotificationCount : 0;
             return (
               <button key={href} onClick={() => handleNav(href)}
                 style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", background: active ? "#1E1E2E" : "none", border: "none", cursor: "pointer", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease", width: "100%", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
@@ -260,7 +276,7 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
               >
                 <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
                 {label}
-                {isMsg && <UnreadBadge count={unreadCount} />}
+                <UnreadBadge count={badge} />
               </button>
             );
           })}
