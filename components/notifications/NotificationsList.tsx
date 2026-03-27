@@ -7,16 +7,28 @@ interface Props {
   notifications: NotificationItem[];
   filter:        NotificationFilterTab;
   onRefresh?:    () => Promise<void>;
-  onSelect?:     (id: string) => void;
+  onSelect?:     (item: NotificationItem) => void;
 }
 
 const TYPE_TO_FILTER: Record<NotificationItem["type"], NotificationFilterTab> = {
-  tip:          "tips",
-  subscription: "subscriptions",
-  message:      "messages",
-  like:         "likes",
-  comment:      "comments",
-  ppv_unlock:   "tips",
+  // creator
+  like:                 "likes",
+  comment:              "comments",
+  subscription:         "subscriptions",
+  resubscription:       "subscriptions",
+  tip_received:         "earnings",
+  ppv_unlocked:         "earnings",
+  ppv_purchased:        "earnings",
+  payout_completed:     "earnings",
+  payout_failed:        "earnings",
+  // fan
+  renewal_failed:       "subscriptions",
+  renewal_success:      "payments",
+  subscription_charged: "payments",
+  tip_sent:             "payments",
+  wallet_topup:         "payments",
+  // both
+  message:              "messages",
 };
 
 function groupByDate(items: NotificationItem[]): NotificationGroupType[] {

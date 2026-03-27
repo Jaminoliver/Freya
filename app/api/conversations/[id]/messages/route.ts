@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient, getUser } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient, getUser } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
 function refreshBunnyUrl(storedUrl: string | null): string | null {
@@ -45,7 +45,6 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const cursor = searchParams.get("cursor");
 
-  // 25 on initial load (no cursor), 40 on subsequent load-more (has cursor)
   const limit = cursor ? 40 : 25;
 
   const isCreator   = convo.creator_id === user.id;
@@ -69,7 +68,6 @@ export async function GET(
 
   const rows = data ?? [];
 
-  // Fetch message_media for multi-file support
   let mediaByMessageId = new Map<number, { url: string; thumbnail_url: string | null; media_type: string }[]>();
   if (rows.length > 0) {
     const messageIds = rows.map((r) => r.id);
@@ -89,7 +87,6 @@ export async function GET(
     }
   }
 
-  // Fetch ppv_unlocks for current user
   let unlockedByCurrentUser  = new Set<number>();
   let unlockCountByMessageId = new Map<number, number>();
   const ppvMessageIds = rows.filter((r) => r.is_ppv).map((r) => r.id);
@@ -230,7 +227,8 @@ export async function POST(
     return NextResponse.json({ error: "Content is required" }, { status: 400 });
   }
 
-  const receiverId = convo.creator_id === user.id ? convo.fan_id : convo.creator_id;
+  const receiverId     = convo.creator_id === user.id ? convo.fan_id : convo.creator_id;
+  const isCreatorSending = convo.creator_id === user.id;
 
   const { data: message, error: insertError } = await supabase
     .from("messages")
@@ -250,10 +248,9 @@ export async function POST(
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  const isCreatorSending = convo.creator_id === user.id;
-  const unreadField      = isCreatorSending ? "unread_count_fan" : "unread_count_creator";
+  const unreadField  = isCreatorSending ? "unread_count_fan" : "unread_count_creator";
+  const restoreField = isCreatorSending ? "deleted_for_fan"  : "deleted_for_creator";
 
-  const restoreField = isCreatorSending ? "deleted_for_fan" : "deleted_for_creator";
   await supabase
     .from("conversations")
     .update({ [restoreField]: false, updated_at: new Date().toISOString() })
@@ -272,6 +269,44 @@ export async function POST(
       updated_at:           new Date().toISOString(),
     })
     .eq("id", conversationId);
+
+  // ── Insert notification for receiver ────────────────────────────────────────
+  try {
+    const { data: senderProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("display_name, username, avatar_url")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError) console.error("[notifications] profile fetch failed:", profileError.message);
+
+    const serviceSupabase = createServiceSupabaseClient();
+    const receiverRole    = isCreatorSending ? "fan" : "creator";
+
+    console.log("[notifications] inserting for receiver:", receiverId, "role:", receiverRole, "reference_id:", conversationId.toString());
+
+    const { error: notifInsertError } = await serviceSupabase.from("notifications").insert({
+      user_id:      receiverId,
+      type:         "message",
+      role:         receiverRole,
+      actor_id:     user.id,
+      actor_name:   senderProfile?.display_name ?? senderProfile?.username ?? "Someone",
+      actor_handle: senderProfile?.username ?? "",
+      actor_avatar: senderProfile?.avatar_url ?? null,
+      body_text:    "sent you a message",
+      sub_text:     content.trim().slice(0, 80),
+      reference_id: conversationId.toString(),
+      is_read:      false,
+    });
+
+    if (notifInsertError) {
+      console.error("[notifications] insert failed:", notifInsertError.message, notifInsertError.details, notifInsertError.hint);
+    } else {
+      console.log("[notifications] inserted successfully");
+    }
+  } catch (notifError) {
+    console.error("[notifications] unexpected error:", notifError);
+  }
 
   return NextResponse.json({
     message: {

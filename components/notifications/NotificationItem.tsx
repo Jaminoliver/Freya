@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart, MessageCircle, Banknote, UserPlus, Lock, Sparkles } from "lucide-react";
+import { Heart, MessageCircle, Banknote, UserPlus, Lock, RefreshCcw, Wallet, AlertCircle, CheckCircle, Send } from "lucide-react";
 import type { NotificationItem as NotificationItemType } from "@/lib/types/notifications";
 
 interface Props {
@@ -9,13 +9,25 @@ interface Props {
 }
 
 function TypeIcon({ type }: { type: NotificationItemType["type"] }) {
-  const configs = {
-    tip:          { icon: Banknote,       bg: "#1A2A1A", color: "#10B981" },
-    subscription: { icon: UserPlus,       bg: "#1A1A2E", color: "#8B5CF6" },
-    message:      { icon: MessageCircle,  bg: "#1A1A2E", color: "#8B5CF6" },
-    like:         { icon: Heart,          bg: "#2A1A1A", color: "#EC4899" },
-    comment:      { icon: MessageCircle,  bg: "#1A2028", color: "#3B82F6" },
-    ppv_unlock:   { icon: Lock,           bg: "#2A2A10", color: "#F5A623" },
+  const configs: Record<NotificationItemType["type"], { icon: React.ElementType; bg: string; color: string }> = {
+    // creator
+    like:                 { icon: Heart,          bg: "#2A1A1A", color: "#EC4899" },
+    comment:              { icon: MessageCircle,  bg: "#1A2028", color: "#3B82F6" },
+    subscription:         { icon: UserPlus,       bg: "#1A1A2E", color: "#8B5CF6" },
+    resubscription:       { icon: RefreshCcw,     bg: "#1A1A2E", color: "#8B5CF6" },
+    tip_received:         { icon: Banknote,       bg: "#1A2A1A", color: "#10B981" },
+    ppv_unlocked:         { icon: Lock,           bg: "#2A2A10", color: "#F5A623" },
+    ppv_purchased:        { icon: Lock,           bg: "#2A2A10", color: "#F5A623" },
+    payout_completed:     { icon: CheckCircle,    bg: "#1A2A1A", color: "#10B981" },
+    payout_failed:        { icon: AlertCircle,    bg: "#2A1A1A", color: "#EF4444" },
+    // fan
+    renewal_failed:       { icon: AlertCircle,    bg: "#2A1A1A", color: "#EF4444" },
+    renewal_success:      { icon: CheckCircle,    bg: "#1A2A1A", color: "#10B981" },
+    subscription_charged: { icon: Banknote,       bg: "#1A1A2E", color: "#8B5CF6" },
+    tip_sent:             { icon: Send,           bg: "#1A2A1A", color: "#10B981" },
+    wallet_topup:         { icon: Wallet,         bg: "#1A2028", color: "#3B82F6" },
+    // both
+    message:              { icon: MessageCircle,  bg: "#1A1A2E", color: "#8B5CF6" },
   };
 
   const { icon: Icon, bg, color } = configs[type];
@@ -41,7 +53,7 @@ function TypeIcon({ type }: { type: NotificationItemType["type"] }) {
 }
 
 export function NotificationItem({ notification, onClick }: Props) {
-  const { actorName, actorAvatar, actorHandle, bodyText, subText, createdAt, isUnread, type } = notification;
+  const { actorName, actorAvatar, bodyText, subText, createdAt, isUnread, type } = notification;
 
   return (
     <div
@@ -100,7 +112,7 @@ export function NotificationItem({ notification, onClick }: Props) {
               fontSize:        "18px",
               fontWeight:      700,
             }}>
-              {actorName[0].toUpperCase()}
+              {actorName[0]?.toUpperCase()}
             </div>
           )}
         </div>

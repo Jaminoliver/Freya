@@ -1,118 +1,104 @@
 "use client";
 
-import { useState } from "react";
-import { NotificationsHeader }    from "@/components/notifications/NotificationsHeader";
-import { NotificationFilterTabs } from "@/components/notifications/NotificationFilterTabs";
-import { NotificationsList }      from "@/components/notifications/NotificationsList";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter }                         from "next/navigation";
+import { NotificationsHeader }               from "@/components/notifications/NotificationsHeader";
+import { NotificationFilterTabs }            from "@/components/notifications/NotificationFilterTabs";
+import { NotificationsList }                 from "@/components/notifications/NotificationsList";
+import { subscribeToNotifications }          from "@/lib/notifications/realtime";
+import { getAuthenticatedBrowserClient }     from "@/lib/supabase/browserClient";
 import type { NotificationItem, NotificationFilterTab } from "@/lib/types/notifications";
-export const DUMMY_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id:          "n1",
-    type:        "tip",
-    actorName:   "Sasha",
-    actorAvatar: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=100&q=80",
-    actorHandle: "sasha_v",
-    bodyText:    "tipped you ₦2,000",
-    subText:     "on your post · Photo set",
-    createdAt:   "2m ago",
-    isUnread:    true,
-  },
-  {
-    id:          "n2",
-    type:        "subscription",
-    actorName:   "Kemi",
-    actorAvatar: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=100&q=80",
-    actorHandle: "kemi_official",
-    bodyText:    "just subscribed to your page",
-    subText:     "@kemi_official · New subscriber",
-    createdAt:   "15m ago",
-    isUnread:    true,
-  },
-  {
-    id:          "n3",
-    type:        "message",
-    actorName:   "lily",
-    actorAvatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=100&q=80",
-    actorHandle: "lilyrose",
-    bodyText:    "sent you a message",
-    subText:     "am i too much to handle?? 🙈",
-    createdAt:   "1h ago",
-    isUnread:    true,
-  },
-  {
-    id:          "n4",
-    type:        "like",
-    actorName:   "Wren",
-    actorAvatar: "https://images.unsplash.com/photo-1499952127939-9bbf5af6c51c?w=100&q=80",
-    actorHandle: "chemwithwren",
-    bodyText:    "liked your post",
-    subText:     "Photo set · 4 likes total",
-    createdAt:   "3h ago",
-    isUnread:    false,
-  },
-  {
-    id:          "n5",
-    type:        "ppv_unlock",
-    actorName:   "Sandra",
-    actorAvatar: "https://images.unsplash.com/photo-1488716820095-cbe80883c496?w=100&q=80",
-    actorHandle: "sandra_official",
-    bodyText:    "unlocked your PPV message",
-    subText:     "₦5,000 · Night shoot video",
-    createdAt:   "5h ago",
-    isUnread:    false,
-  },
-  {
-    id:          "n6",
-    type:        "comment",
-    actorName:   "Karina",
-    actorAvatar: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=100&q=80",
-    actorHandle: "karina_official",
-    bodyText:    "commented on your post",
-    subText:     "\"This is absolutely stunning 🔥\"",
-    createdAt:   "Yesterday",
-    isUnread:    false,
-  },
-  {
-    id:          "n7",
-    type:        "tip",
-    actorName:   "Wren",
-    actorAvatar: "https://images.unsplash.com/photo-1499952127939-9bbf5af6c51c?w=100&q=80",
-    actorHandle: "chemwithwren",
-    bodyText:    "tipped you ₦10,000",
-    subText:     "on your post · Video",
-    createdAt:   "Yesterday",
-    isUnread:    false,
-  },
-  {
-    id:          "n8",
-    type:        "subscription",
-    actorName:   "Amara",
-    actorAvatar: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=100&q=80",
-    actorHandle: "amara_x",
-    bodyText:    "resubscribed to your page",
-    subText:     "@amara_x · Renewal",
-    createdAt:   "Yesterday",
-    isUnread:    false,
-  },
-];
+
+function timeAgo(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins  = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days  = Math.floor(diff / 86_400_000);
+  if (mins < 1)   return "Just now";
+  if (mins < 60)  return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return "Yesterday";
+  return `${days}d ago`;
+}
 
 export default function NotificationsPage() {
+  const router = useRouter();
+
   const [filter,        setFilter]        = useState<NotificationFilterTab>("all");
-  const [notifications, setNotifications] = useState<NotificationItem[]>(DUMMY_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [userId,        setUserId]        = useState<string | null>(null);
 
-  const handleMarkAllRead = () => {
+  // ── Fetch notifications from API ─────────────────────────────────────────
+  const fetchNotifications = useCallback(async (tab: NotificationFilterTab) => {
+    setLoading(true);
+    try {
+      const res  = await fetch(`/api/notifications?tab=${tab}`);
+      const data = await res.json();
+      if (res.ok) {
+        const items: NotificationItem[] = (data.notifications ?? []).map(
+          (n: NotificationItem) => ({ ...n, createdAt: timeAgo(n.createdAt) })
+        );
+        setNotifications(items);
+      }
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Initial load + re-fetch on tab change ────────────────────────────────
+  useEffect(() => {
+    fetchNotifications(filter);
+  }, [filter, fetchNotifications]);
+
+  // ── Get userId for Realtime ───────────────────────────────────────────────
+  useEffect(() => {
+    getAuthenticatedBrowserClient().then((supabase) => {
+      supabase.auth.getSession().then(({ data }: { data: { session: { user: { id: string } } | null } }) => {
+        if (data.session?.user.id) setUserId(data.session.user.id);
+      });
+    });
+  }, []);
+
+  // ── Realtime subscription ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!userId) return;
+    const unsub = subscribeToNotifications(userId, (newNotif) => {
+      setNotifications((prev) => [{ ...newNotif, createdAt: "Just now" }, ...prev]);
+    });
+    return unsub;
+  }, [userId]);
+
+  // ── Mark single read ──────────────────────────────────────────────────────
+  const handleSelect = useCallback(async (item: NotificationItem) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === item.id ? { ...n, isUnread: false } : n))
+    );
+    await fetch(`/api/notifications/${item.id}/read`, { method: "PATCH" });
+
+    if (item.type === "message" && item.referenceId) {
+      router.push(`/messages/${item.referenceId}`);
+    }
+  }, [router]);
+
+  // ── Mark all read ─────────────────────────────────────────────────────────
+  const handleMarkAllRead = useCallback(async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
-  };
+    await fetch("/api/notifications/read-all", { method: "PATCH" });
+  }, []);
 
-  const handleRefresh = async () => {
-    await new Promise((res) => setTimeout(res, 1000));
-    // TODO: re-fetch from Supabase here
-  };
+  // ── Refresh ───────────────────────────────────────────────────────────────
+  const handleRefresh = useCallback(async () => {
+    await fetchNotifications(filter);
+  }, [filter, fetchNotifications]);
 
   return (
     <>
       <style>{`
         .notif-desktop-header { display: flex; }
+        @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 767px) {
           .notif-desktop-header { display: none !important; }
           .notif-outer { padding-top: 56px; }
@@ -132,10 +118,8 @@ export default function NotificationsPage() {
           boxSizing:       "border-box",
         }}
       >
-        {/* Mobile: fixed header — hidden on desktop */}
         <NotificationsHeader onMarkAllRead={handleMarkAllRead} />
 
-        {/* Desktop inline header */}
         <div
           className="notif-desktop-header"
           style={{
@@ -159,11 +143,20 @@ export default function NotificationsPage() {
           </button>
         </div>
 
-        {/* Filter tabs */}
         <NotificationFilterTabs active={filter} onChange={setFilter} />
 
-        {/* List — owns its own scroll */}
-        <NotificationsList notifications={notifications} filter={filter} onRefresh={handleRefresh} />
+        {loading ? (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: "28px", height: "28px", border: "3px solid #2A2A3D", borderTopColor: "#8B5CF6", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+          </div>
+        ) : (
+          <NotificationsList
+            notifications={notifications}
+            filter={filter}
+            onRefresh={handleRefresh}
+            onSelect={handleSelect}
+          />
+        )}
       </div>
     </>
   );

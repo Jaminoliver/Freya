@@ -1,17 +1,16 @@
 "use client";
 
-import { NotificationItem } from "@/components/notifications/NotificationItem";
-import type { NotificationGroup as NotificationGroupType } from "@/lib/types/notifications";
+import { NotificationItem as NotificationItemComponent } from "@/components/notifications/NotificationItem";
+import type { NotificationItem, NotificationGroup as NotificationGroupType } from "@/lib/types/notifications";
 
 interface Props {
   group:     NotificationGroupType;
-  onSelect?: (id: string) => void;
+  onSelect?: (item: NotificationItem) => void;
 }
 
 export function NotificationGroup({ group, onSelect }: Props) {
   return (
     <div>
-      {/* Date label */}
       <div style={{
         padding:         "10px 20px 8px",
         fontSize:        "11px",
@@ -26,12 +25,11 @@ export function NotificationGroup({ group, onSelect }: Props) {
         {group.label}
       </div>
 
-      {/* Items */}
       {group.items.map((item) => (
-        <NotificationItem
+        <NotificationItemComponent
           key={item.id}
           notification={item}
-          onClick={() => onSelect?.(item.id)}
+          onClick={() => onSelect?.(item)}
         />
       ))}
     </div>
