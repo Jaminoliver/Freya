@@ -170,12 +170,13 @@ export async function POST(
       if (parent_comment_id) {
         const { data: parentComment, error: parentErr } = await service
           .from("comments")
-          .select("user_id")
+          .select("user_id, content")
           .eq("id", parent_comment_id)
           .single();
 
         if (parentErr) console.error("[Comments] Parent comment fetch error:", parentErr.message);
-        const parentAuthorId = parentComment?.user_id;
+        const parentAuthorId      = parentComment?.user_id;
+        const parentCommentPreview = (parentComment?.content ?? "").slice(0, 50);
         console.log("[Comments] parentAuthorId:", parentAuthorId, "userId:", user.id);
 
         if (parentAuthorId && parentAuthorId !== user.id) {
@@ -188,7 +189,7 @@ export async function POST(
             actor_handle: commenterHandle,
             actor_avatar: commenterAvatar,
             body_text:    "replied to your comment",
-            sub_text:     `"${preview}"`,
+            sub_text:     `Your comment: "${parentCommentPreview}" · Reply: "${preview}"`,
             reference_id: postId.toString(),
             is_read:      false,
           });

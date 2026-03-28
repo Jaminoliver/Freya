@@ -104,7 +104,7 @@ export default function NotificationsPage() {
     ) {
       router.push(`/${item.actorHandle}`);
     } else if (
-      (item.type === "like" || item.type === "comment") &&
+      (item.type === "like" || item.type === "comment" || item.type === "comment_liked") &&
       item.referenceId
     ) {
       router.push(`/posts/${item.referenceId}`);

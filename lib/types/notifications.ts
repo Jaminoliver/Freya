@@ -10,6 +10,7 @@ export type NotificationFilterTab =
 export type NotificationType =
   // creator only
   | "like"
+  | "comment_liked"
   | "comment"
   | "subscription"
   | "resubscription"
@@ -51,22 +52,23 @@ export interface NotificationGroup {
 }
 
 export interface NotificationPreferences {
-  userId:              string;
-  like:                boolean;
-  comment:             boolean;
-  subscription:        boolean;
-  resubscription:      boolean;
-  tip_received:        boolean;
-  ppv_unlocked:        boolean;
-  ppv_purchased:       boolean;
-  payout_completed:    boolean;
-  payout_failed:       boolean;
-  renewal_failed:      boolean;
-  renewal_success:     boolean;
-  subscription_charged:  boolean;
-  subscription_activated:boolean;
-  subscription_cancelled:boolean;
-  tip_sent:              boolean;
-  wallet_topup:        boolean;
-  message:             boolean;
+  userId:                 string;
+  like:                   boolean;
+  comment_liked:          boolean;
+  comment:                boolean;
+  subscription:           boolean;
+  resubscription:         boolean;
+  tip_received:           boolean;
+  ppv_unlocked:           boolean;
+  ppv_purchased:          boolean;
+  payout_completed:       boolean;
+  payout_failed:          boolean;
+  renewal_failed:         boolean;
+  renewal_success:        boolean;
+  subscription_charged:   boolean;
+  subscription_activated: boolean;
+  subscription_cancelled: boolean;
+  tip_sent:               boolean;
+  wallet_topup:           boolean;
+  message:                boolean;
 }

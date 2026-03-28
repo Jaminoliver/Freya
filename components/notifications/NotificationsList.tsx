@@ -13,6 +13,7 @@ interface Props {
 const TYPE_TO_FILTER: Record<NotificationItem["type"], NotificationFilterTab> = {
   // creator
   like:                 "likes",
+  comment_liked:        "likes",
   comment:              "comments",
   subscription:         "subscriptions",
   resubscription:       "subscriptions",

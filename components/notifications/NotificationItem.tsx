@@ -12,6 +12,7 @@ function TypeIcon({ type }: { type: NotificationItemType["type"] }) {
   const configs: Record<NotificationItemType["type"], { icon: React.ElementType; bg: string; color: string }> = {
     // creator
     like:                 { icon: Heart,          bg: "#2A1A1A", color: "#EC4899" },
+    comment_liked:        { icon: Heart,          bg: "#2A1A1A", color: "#EC4899" },
     comment:              { icon: MessageCircle,  bg: "#1A2028", color: "#3B82F6" },
     subscription:         { icon: UserPlus,       bg: "#1A1A2E", color: "#8B5CF6" },
     resubscription:       { icon: RefreshCcw,     bg: "#1A1A2E", color: "#8B5CF6" },
