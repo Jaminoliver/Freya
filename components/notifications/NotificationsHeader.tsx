@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Settings } from "lucide-react";
 
 interface Props {
-  onMarkAllRead?: () => void;
+  onMarkAllRead?:  () => void;
+  onDeleteAll?:    () => void;
 }
 
-export function NotificationsHeader({ onMarkAllRead }: Props) {
+export function NotificationsHeader({ onMarkAllRead, onDeleteAll }: Props) {
   const router = useRouter();
 
   return (
@@ -59,6 +60,14 @@ export function NotificationsHeader({ onMarkAllRead }: Props) {
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
             Mark all read
+          </button>
+          <button
+            onClick={onDeleteAll}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", fontSize: "14px", fontWeight: 600, fontFamily: "'Inter', sans-serif", padding: "6px 10px", borderRadius: "8px", transition: "opacity 0.15s ease" }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.75")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+          >
+            Delete all
           </button>
           <button
             style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "6px", borderRadius: "8px", transition: "all 0.15s ease" }}

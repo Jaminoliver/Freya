@@ -160,7 +160,7 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
-            <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
+            <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Fréya</span>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <button onClick={() => setSearchOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
                 <Search size={22} strokeWidth={1.8} />
@@ -256,7 +256,7 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
       {/* DESKTOP SIDEBAR */}
       <div className="hidden md:flex" style={{ width: "280px", flexShrink: 0, height: "100vh", backgroundColor: "#13131F", borderRight: "1px solid #1F1F2A", flexDirection: "column", padding: "24px 16px", position: "sticky", top: 0, overflowY: "hidden", fontFamily: "'Inter', sans-serif" }}>
         <div style={{ padding: "0 12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: "26px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Freya</span>
+          <span style={{ fontSize: "26px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Fréya</span>
           <button onClick={() => handleNav("/become-a-creator")} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 10px", borderRadius: "20px", cursor: "pointer", background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(109,40,217,0.15))", border: "1px solid rgba(139,92,246,0.35)", fontSize: "11px", fontWeight: 600, color: "#A78BFA", whiteSpace: "nowrap", fontFamily: "'Inter', sans-serif" }}>
             ✦ Creator
           </button>

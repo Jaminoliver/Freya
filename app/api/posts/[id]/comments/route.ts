@@ -150,8 +150,77 @@ export async function POST(
 
     console.log(`[Comments POST] Inserted id=${comment.id} parent=${comment.parent_comment_id ?? "null"}`);
 
-    // Always increment — applies to both top-level comments and replies
     await service.rpc("increment_comment_count", { post_id: postId });
+
+    // ── Notifications ─────────────────────────────────────────────────────
+    try {
+      const { data: commenter } = await service
+        .from("profiles")
+        .select("display_name, username, avatar_url")
+        .eq("id", user.id)
+        .single();
+
+      const commenterName   = commenter?.display_name ?? commenter?.username ?? "Someone";
+      const commenterHandle = commenter?.username ?? "";
+      const commenterAvatar = commenter?.avatar_url ?? null;
+      const preview         = hasText ? content.trim().slice(0, 80) : "sent a GIF";
+
+      if (parent_comment_id) {
+        // ── Reply — notify parent comment author ──────────────────────
+        const { data: parentComment } = await service
+          .from("comments")
+          .select("user_id")
+          .eq("id", parent_comment_id)
+          .single();
+
+        const parentAuthorId = parentComment?.user_id;
+
+        if (parentAuthorId && parentAuthorId !== user.id) {
+          await service.from("notifications").insert({
+            user_id:      parentAuthorId,
+            type:         "comment",
+            role:         "creator",
+            actor_id:     user.id,
+            actor_name:   commenterName,
+            actor_handle: commenterHandle,
+            actor_avatar: commenterAvatar,
+            body_text:    "replied to your comment",
+            sub_text:     `"${preview}"`,
+            reference_id: postId.toString(),
+            is_read:      false,
+          });
+          console.log("[Comments] Reply notification inserted for:", parentAuthorId);
+        }
+      } else {
+        // ── Top-level comment — notify post creator ───────────────────
+        const { data: post } = await service
+          .from("posts")
+          .select("creator_id")
+          .eq("id", postId)
+          .single();
+
+        const creatorId = post?.creator_id;
+
+        if (creatorId && creatorId !== user.id) {
+          await service.from("notifications").insert({
+            user_id:      creatorId,
+            type:         "comment",
+            role:         "creator",
+            actor_id:     user.id,
+            actor_name:   commenterName,
+            actor_handle: commenterHandle,
+            actor_avatar: commenterAvatar,
+            body_text:    "commented on your post",
+            sub_text:     `"${preview}"`,
+            reference_id: postId.toString(),
+            is_read:      false,
+          });
+          console.log("[Comments] Comment notification inserted for creator:", creatorId);
+        }
+      }
+    } catch (notifErr) {
+      console.error("[Comments] Notification error:", notifErr);
+    }
 
     return NextResponse.json({ comment: { ...comment, viewer_has_liked: false } });
 

@@ -104,6 +104,11 @@ export default function NotificationsPage() {
     ) {
       router.push(`/${item.actorHandle}`);
     } else if (
+      (item.type === "like" || item.type === "comment") &&
+      item.referenceId
+    ) {
+      router.push(`/posts/${item.referenceId}`);
+    } else if (
       (item.type === "subscription_activated" || item.type === "subscription_cancelled") &&
       item.actorHandle
     ) {
@@ -116,6 +121,13 @@ export default function NotificationsPage() {
     setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
     resetUnreadCount();
     await fetch("/api/notifications/read-all", { method: "PATCH" });
+  }, []);
+
+  // ── Delete all ────────────────────────────────────────────────────────────
+  const handleDeleteAll = useCallback(async () => {
+    setNotifications([]);
+    resetUnreadCount();
+    await fetch("/api/notifications/delete-all", { method: "DELETE" });
   }, []);
 
   // ── Refresh ───────────────────────────────────────────────────────────────
@@ -147,7 +159,7 @@ export default function NotificationsPage() {
           boxSizing:       "border-box",
         }}
       >
-        <NotificationsHeader onMarkAllRead={handleMarkAllRead} />
+        <NotificationsHeader onMarkAllRead={handleMarkAllRead} onDeleteAll={handleDeleteAll} />
 
         <div
           className="notif-desktop-header"
@@ -169,6 +181,12 @@ export default function NotificationsPage() {
             style={{ background: "none", border: "none", cursor: "pointer", color: "#8B5CF6", fontSize: "14px", fontWeight: 600, fontFamily: "'Inter', sans-serif", padding: "6px 10px", borderRadius: "8px" }}
           >
             Mark all read
+          </button>
+          <button
+            onClick={handleDeleteAll}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", fontSize: "14px", fontWeight: 600, fontFamily: "'Inter', sans-serif", padding: "6px 10px", borderRadius: "8px" }}
+          >
+            Delete all
           </button>
         </div>
 

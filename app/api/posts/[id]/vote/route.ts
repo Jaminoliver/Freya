@@ -55,7 +55,6 @@ export async function POST(
     });
 
     if (voteError) {
-      // Unique constraint hit — already voted
       if (voteError.code === "23505") {
         return NextResponse.json({ error: "You have already voted on this poll" }, { status: 400 });
       }
@@ -63,9 +62,80 @@ export async function POST(
       return NextResponse.json({ error: "Failed to cast vote" }, { status: 500 });
     }
 
+    // ── Notify creator — batched ──────────────────────────────────────────
+    try {
+      const { data: post } = await service
+        .from("posts")
+        .select("creator_id")
+        .eq("id", postId)
+        .single();
+
+      const creatorId = post?.creator_id;
+
+      if (creatorId && creatorId !== user.id) {
+        const { data: voter } = await service
+          .from("profiles")
+          .select("display_name, username, avatar_url")
+          .eq("id", user.id)
+          .single();
+
+        const voterName = voter?.display_name ?? voter?.username ?? "Someone";
+
+        // Check for existing unread poll notification for this post
+        const { data: existingNotif } = await service
+          .from("notifications")
+          .select("id, sub_text")
+          .eq("user_id", creatorId)
+          .eq("type", "comment")
+          .eq("reference_id", postId.toString())
+          .eq("is_read", false)
+          .like("body_text", "%voted on your poll%")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingNotif) {
+          const match     = existingNotif.sub_text?.match(/and (\d+) others/);
+          const prevCount = match ? parseInt(match[1]) : 0;
+          const newCount  = prevCount + 1;
+
+          await service
+            .from("notifications")
+            .update({
+              actor_name:   voterName,
+              actor_handle: voter?.username ?? "",
+              actor_avatar: voter?.avatar_url ?? null,
+              sub_text:     `and ${newCount} others voted on your poll`,
+              is_read:      false,
+            })
+            .eq("id", existingNotif.id);
+
+          console.log("[Vote] Updated batched notification:", existingNotif.id);
+        } else {
+          await service.from("notifications").insert({
+            user_id:      creatorId,
+            type:         "comment",
+            role:         "creator",
+            actor_id:     user.id,
+            actor_name:   voterName,
+            actor_handle: voter?.username ?? "",
+            actor_avatar: voter?.avatar_url ?? null,
+            body_text:    "voted on your poll",
+            sub_text:     "",
+            reference_id: postId.toString(),
+            is_read:      false,
+          });
+
+          console.log("[Vote] Inserted new poll vote notification");
+        }
+      }
+    } catch (notifErr) {
+      console.error("[Vote] Notification error:", notifErr);
+    }
+
     return NextResponse.json({
-      success:    true,
-      voted:      true,
+      success:  true,
+      voted:    true,
       option_id,
       options,
     });
