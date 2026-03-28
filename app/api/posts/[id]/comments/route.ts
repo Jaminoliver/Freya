@@ -165,18 +165,21 @@ export async function POST(
       const commenterAvatar = commenter?.avatar_url ?? null;
       const preview         = hasText ? content.trim().slice(0, 80) : "sent a GIF";
 
+      console.log("[Comments] commenterName:", commenterName, "parent_comment_id:", parent_comment_id ?? "null");
+
       if (parent_comment_id) {
-        // ── Reply — notify parent comment author ──────────────────────
-        const { data: parentComment } = await service
+        const { data: parentComment, error: parentErr } = await service
           .from("comments")
           .select("user_id")
           .eq("id", parent_comment_id)
           .single();
 
+        if (parentErr) console.error("[Comments] Parent comment fetch error:", parentErr.message);
         const parentAuthorId = parentComment?.user_id;
+        console.log("[Comments] parentAuthorId:", parentAuthorId, "userId:", user.id);
 
         if (parentAuthorId && parentAuthorId !== user.id) {
-          await service.from("notifications").insert({
+          const { error: notifErr } = await service.from("notifications").insert({
             user_id:      parentAuthorId,
             type:         "comment",
             role:         "creator",
@@ -189,20 +192,22 @@ export async function POST(
             reference_id: postId.toString(),
             is_read:      false,
           });
-          console.log("[Comments] Reply notification inserted for:", parentAuthorId);
+          if (notifErr) console.error("[Comments] Reply notification error:", notifErr.message);
+          else console.log("[Comments] Reply notification inserted for:", parentAuthorId);
         }
       } else {
-        // ── Top-level comment — notify post creator ───────────────────
-        const { data: post } = await service
+        const { data: post, error: postErr } = await service
           .from("posts")
           .select("creator_id")
           .eq("id", postId)
           .single();
 
+        if (postErr) console.error("[Comments] Post fetch error:", postErr.message);
         const creatorId = post?.creator_id;
+        console.log("[Comments] creatorId:", creatorId, "userId:", user.id);
 
         if (creatorId && creatorId !== user.id) {
-          await service.from("notifications").insert({
+          const { error: notifErr } = await service.from("notifications").insert({
             user_id:      creatorId,
             type:         "comment",
             role:         "creator",
@@ -215,7 +220,8 @@ export async function POST(
             reference_id: postId.toString(),
             is_read:      false,
           });
-          console.log("[Comments] Comment notification inserted for creator:", creatorId);
+          if (notifErr) console.error("[Comments] Comment notification error:", notifErr.message, notifErr.details);
+          else console.log("[Comments] Comment notification inserted for creator:", creatorId);
         }
       }
     } catch (notifErr) {
