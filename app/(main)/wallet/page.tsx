@@ -34,6 +34,35 @@ function mapCategoryToType(category: string): Transaction["type"] {
   }
 }
 
+function CheckoutLoadingOverlay() {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      backgroundColor: "#0A0A0F",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      gap: "20px", fontFamily: "'Inter', sans-serif",
+    }}>
+      <div style={{
+        width: "48px", height: "48px",
+        border: "3px solid #1E1E2E",
+        borderTop: "3px solid #8B5CF6",
+        borderRadius: "50%",
+        animation: "spin 0.8s linear infinite",
+      }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{ textAlign: "center" }}>
+        <p style={{ fontSize: "16px", fontWeight: 600, color: "#F1F5F9", margin: "0 0 6px" }}>
+          Redirecting to checkout
+        </p>
+        <p style={{ fontSize: "13px", color: "#6B6B8A", margin: 0 }}>
+          Secured by Monnify — please don&apos;t close this tab
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function PaymentBanner({ status, onDismiss }: { status: "success" | "failed"; onDismiss: () => void }) {
   const success = status === "success";
   return (
@@ -75,6 +104,7 @@ function WalletContent() {
   const cached = contentFeeds[CACHE_KEY];
   const fresh  = cached && !isStale(cached.fetchedAt);
 
+  // Restore cached wallet data if fresh
   const cachedData = fresh ? (cached.posts as unknown as {
     balance: number; transactions: Transaction[]; cards: SavedCard[];
   }) : null;
@@ -86,9 +116,9 @@ function WalletContent() {
   const [cards,          setCards]          = useState<SavedCard[]>(cachedData?.cards ?? []);
   const [loading,        setLoading]        = useState(!fresh);
   const [revealed,       setRevealed]       = useState(fresh ?? false);
+  const [redirecting,    setRedirecting]    = useState(false);
   const [paymentStatus,  setPaymentStatus]  = useState<"success" | "failed" | null>(null);
 
-  // Handle redirect-based success (fallback if SDK not available)
   useEffect(() => {
     const ref = searchParams.get("ref");
     if (ref) { setPaymentStatus("success"); router.replace("/wallet"); }
@@ -137,6 +167,7 @@ function WalletContent() {
         setCards(newCards);
       }
 
+      // Write to store
       setContentFeed(CACHE_KEY, {
         posts:     [{ balance: newBalance, transactions: newTx, cards: newCards }] as any,
         media:     [],
@@ -156,22 +187,56 @@ function WalletContent() {
     fetchWalletData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Called when Monnify SDK completes payment
-  const handlePaymentComplete = useCallback(async (reference: string) => {
-    console.log("[WalletPage] Payment complete, reference:", reference);
+  const handlePaymentConfirmed = useCallback(async () => {
+    await fetchWalletData(true);
     setPaymentStatus("success");
-    // Small delay to let webhook process
-    setTimeout(() => fetchWalletData(true), 2000);
   }, [fetchWalletData]);
 
-  const handlePaymentFailed = useCallback(() => {
-    setPaymentStatus("failed");
-  }, []);
-
-  async function handleAddCard() {
-    // Trigger a small card payment to save the card
-    // The Monnify SDK will handle this inline
+  async function handleTopUp(amount: number, cardId?: number) {
+    try {
+      setRedirecting(true);
+      const body = cardId ? { amount, cardId } : { amount };
+      const res  = await fetch("/api/wallet/topup/card", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { setRedirecting(false); setPaymentStatus("failed"); return; }
+      if (data.authorizationUrl) {
+        window.location.href = data.authorizationUrl;
+      } else {
+        setRedirecting(false);
+        await fetchWalletData(true);
+        setPaymentStatus("success");
+      }
+    } catch {
+      setRedirecting(false);
+      setPaymentStatus("failed");
+    }
   }
+
+  async function handleBankTransfer(amount: number) {
+    try {
+      setRedirecting(true);
+      const res = await fetch("/api/wallet/topup/virtual-account", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setRedirecting(false); setPaymentStatus("failed"); return; }
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        setRedirecting(false);
+        setPaymentStatus("failed");
+      }
+    } catch {
+      setRedirecting(false);
+      setPaymentStatus("failed");
+    }
+  }
+
+  async function handleAddCard() { await handleTopUp(100); }
 
   async function handleSetDefault(cardId: number) {
     try {
@@ -194,72 +259,80 @@ function WalletContent() {
   }
 
   return (
-    <div style={{
-      maxWidth: "768px", margin: "0 auto",
-      minHeight: "100vh", backgroundColor: "#0A0A0F",
-      fontFamily: "'Inter', sans-serif",
-    }}>
-      {/* Header + tabs */}
-      <div style={{ padding: "24px 24px 0", borderBottom: "1px solid #1E1E2E" }}>
-        <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 2px" }}>Wallet</h1>
-        <p style={{ fontSize: "13px", color: "#6B6B8A", margin: "0 0 20px" }}>Freya Credits</p>
-        <div style={{ display: "flex" }}>
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              style={{
-                padding: "10px 20px", fontSize: "15px", fontWeight: 500,
-                background: "none", border: "none", cursor: "pointer",
-                color: activeTab === tab.key ? "#8B5CF6" : "#64748B",
-                borderBottom: activeTab === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
-                marginBottom: "-1px", transition: "color 0.15s ease",
-                fontFamily: "'Inter', sans-serif",
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+    <>
+      {redirecting && <CheckoutLoadingOverlay />}
+      <div style={{
+        maxWidth: "768px", margin: "0 auto",
+        minHeight: "100vh", backgroundColor: "#0A0A0F",
+        fontFamily: "'Inter', sans-serif",
+      }}>
+        {/* Header + tabs */}
+        <div style={{ padding: "24px 24px 0", borderBottom: "1px solid #1E1E2E" }}>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 2px" }}>Wallet</h1>
+          <p style={{ fontSize: "13px", color: "#6B6B8A", margin: "0 0 20px" }}>Freya Credits</p>
+          <div style={{ display: "flex" }}>
+            {TABS.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  padding: "10px 20px", fontSize: "15px", fontWeight: 500,
+                  background: "none", border: "none", cursor: "pointer",
+                  color: activeTab === tab.key ? "#8B5CF6" : "#64748B",
+                  borderBottom: activeTab === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
+                  marginBottom: "-1px", transition: "color 0.15s ease",
+                  fontFamily: "'Inter', sans-serif",
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ padding: "20px 24px 100px" }}>
+          {paymentStatus && (
+            <PaymentBanner status={paymentStatus} onDismiss={() => setPaymentStatus(null)} />
+          )}
+
+          {/* ── Skeleton phase ── */}
+          {loading && <WalletSkeleton tab={activeTab} />}
+
+          {/* ── Revealed content ── */}
+          {!loading && (
+            <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
+              {activeTab === "wallet" && (
+                <WalletTab
+                  balance={balance}
+                  autoRecharge={autoRecharge}
+                  transactions={transactions}
+                  onAutoRechargeChange={setAutoRecharge}
+                  onTopUp={(amount) => handleTopUp(amount)}
+                  onBankTransfer={(amount) => handleBankTransfer(amount)}
+                  bankTransferLoading={false}
+                  bankAccount={null}
+                  onPaymentConfirmed={handlePaymentConfirmed}
+                />
+              )}
+              {activeTab === "cards" && (
+                <CardsTab
+                  cards={cards.map((c) => ({
+                    id: String(c.id), last_four: c.lastFour,
+                    card_type: c.cardType, expiry: "••/••", is_default: c.isDefault,
+                  }))}
+                  onAddCard={handleAddCard}
+                  onSetDefault={(id) => handleSetDefault(Number(id))}
+                  onRemoveCard={(id) => handleRemoveCard(Number(id))}
+                />
+              )}
+              {activeTab === "history" && (
+                <HistoryTab transactions={transactions} />
+              )}
+            </div>
+          )}
         </div>
       </div>
-
-      <div style={{ padding: "20px 24px 100px" }}>
-        {paymentStatus && (
-          <PaymentBanner status={paymentStatus} onDismiss={() => setPaymentStatus(null)} />
-        )}
-
-        {loading && <WalletSkeleton tab={activeTab} />}
-
-        {!loading && (
-          <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
-            {activeTab === "wallet" && (
-              <WalletTab
-                balance={balance}
-                autoRecharge={autoRecharge}
-                transactions={transactions}
-                onAutoRechargeChange={setAutoRecharge}
-                onPaymentComplete={handlePaymentComplete}
-                onPaymentFailed={handlePaymentFailed}
-              />
-            )}
-            {activeTab === "cards" && (
-              <CardsTab
-                cards={cards.map((c) => ({
-                  id: String(c.id), last_four: c.lastFour,
-                  card_type: c.cardType, expiry: "••/••", is_default: c.isDefault,
-                }))}
-                onAddCard={handleAddCard}
-                onSetDefault={(id) => handleSetDefault(Number(id))}
-                onRemoveCard={(id) => handleRemoveCard(Number(id))}
-              />
-            )}
-            {activeTab === "history" && (
-              <HistoryTab transactions={transactions} />
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   );
 }
 

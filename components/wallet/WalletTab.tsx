@@ -10,14 +10,23 @@ interface WalletTabProps {
   autoRecharge: boolean;
   transactions: Transaction[];
   onAutoRechargeChange: (val: boolean) => void;
-  onPaymentComplete: (reference: string) => void;
-  onPaymentFailed: () => void;
+  onTopUp: (amount: number) => void;
+  onBankTransfer: (amount: number) => void;
+  bankTransferLoading?: boolean;
+  bankAccount?: {
+    accountNumber: string;
+    bankName: string;
+    accountName: string;
+    onusReference: string;
+    amount: number;
+  } | null;
+  onPaymentConfirmed?: () => void;
 }
 
 export default function WalletTab({
   balance, autoRecharge,
-  transactions, onAutoRechargeChange,
-  onPaymentComplete, onPaymentFailed,
+  transactions, onAutoRechargeChange, onTopUp,
+  onBankTransfer, bankTransferLoading, bankAccount, onPaymentConfirmed,
 }: WalletTabProps) {
   const [filter, setFilter] = useState("All");
   const filters = ["All", "Credits", "Debits", "Subscriptions", "Tips", "PPV"];
@@ -36,8 +45,11 @@ export default function WalletTab({
     <div style={{ display: "flex", flexDirection: "column" }}>
       <BalanceCard
         balance={balance}
-        onPaymentComplete={onPaymentComplete}
-        onPaymentFailed={onPaymentFailed}
+        onProceedCard={onTopUp}
+        onProceedBankTransfer={onBankTransfer}
+        bankTransferLoading={bankTransferLoading}
+        bankAccount={bankAccount}
+        onPaymentConfirmed={onPaymentConfirmed}
       />
       <AutoRechargeToggle enabled={autoRecharge} onChange={onAutoRechargeChange} />
 
