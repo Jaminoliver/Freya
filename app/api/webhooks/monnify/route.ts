@@ -19,10 +19,16 @@ import type {
 } from "@/lib/monnify/webhook";
 
 export async function POST(request: NextRequest) {
+  console.log("[Monnify Webhook] ========== WEBHOOK HIT ==========");
+  console.log("[Monnify Webhook] Method:", request.method);
+  console.log("[Monnify Webhook] URL:", request.url);
+
   let rawBody: string;
 
   try {
     rawBody = await request.text();
+    console.log("[Monnify Webhook] Raw body length:", rawBody.length);
+    console.log("[Monnify Webhook] Raw body preview:", rawBody.substring(0, 300));
   } catch (error) {
     console.error("[Monnify Webhook] Failed to read request body:", error);
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
@@ -30,18 +36,22 @@ export async function POST(request: NextRequest) {
 
   // 1. Verify webhook signature
   const signature = request.headers.get("monnify-signature");
+  console.log("[Monnify Webhook] Signature present:", !!signature);
+  console.log("[Monnify Webhook] Signature preview:", signature?.substring(0, 30) + "...");
 
   if (!verifyWebhookSignature(rawBody, signature)) {
     console.error("[Monnify Webhook] Invalid signature — rejecting");
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
+  console.log("[Monnify Webhook] Signature verified OK");
+
   // 2. Optional: IP whitelist check
   const forwardedFor = request.headers.get("x-forwarded-for");
   const clientIp = forwardedFor?.split(",")[0]?.trim();
+  console.log("[Monnify Webhook] Client IP:", clientIp);
   if (clientIp && clientIp !== MONNIFY_WEBHOOK_IP) {
     console.warn("[Monnify Webhook] Request from unexpected IP:", clientIp);
-    // Log but don't reject — Vercel proxy may alter IPs
   }
 
   // 3. Parse the event
@@ -53,14 +63,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  console.log("[Monnify Webhook] Received event:", event.eventType);
+  console.log("[Monnify Webhook] Event type:", event.eventType);
+  console.log("[Monnify Webhook] Event data:", JSON.stringify(event, null, 2).substring(0, 500));
 
   // 4. Route to handler based on event type
-  // Return 200 immediately, process in try/catch to avoid timeout
   try {
     if (isSuccessfulTransaction(event)) {
+      console.log("[Monnify Webhook] Routing to handleSuccessfulTransaction");
       await handleSuccessfulTransaction(event);
     } else if (isFailedTransaction(event)) {
+      console.log("[Monnify Webhook] Routing to handleFailedTransaction");
       await handleFailedTransaction(event);
     } else if (isSuccessfulDisbursement(event)) {
       await handleSuccessfulDisbursement(event);
@@ -90,18 +102,40 @@ async function handleSuccessfulTransaction(event: MonnifyTransactionEvent) {
   const supabase = createServiceSupabaseClient();
 
   console.log("[Monnify Webhook] Processing successful transaction:", {
-    reference: eventData.paymentReference,
+    transactionReference: eventData.transactionReference,
+    paymentReference: eventData.paymentReference,
     amount: eventData.amountPaid,
     method: eventData.paymentMethod,
     status: eventData.paymentStatus,
   });
+  console.log("[Monnify Webhook] MetaData:", JSON.stringify(eventData.metaData));
+  console.log("[Monnify Webhook] Customer:", JSON.stringify(eventData.customer));
+  console.log("[Monnify Webhook] Product:", JSON.stringify(eventData.product));
 
-  // Idempotency check — skip if already processed
-  const { data: existingTx } = await supabase
+  // Idempotency check — try by monnify_transaction_ref first, then by provider_txn_id (paymentReference)
+  let existingTx: { id: number; status: string } | null = null;
+
+  const { data: txByRef } = await supabase
     .from("transactions")
     .select("id, status")
     .eq("monnify_transaction_ref", eventData.transactionReference)
     .single();
+
+  console.log("[Monnify Webhook] Lookup by monnify_transaction_ref:", txByRef);
+
+  if (txByRef) {
+    existingTx = txByRef;
+  } else {
+    // Fallback: lookup by paymentReference (our provider_txn_id)
+    const { data: txByPayRef } = await supabase
+      .from("transactions")
+      .select("id, status")
+      .eq("provider_txn_id", eventData.paymentReference)
+      .single();
+
+    console.log("[Monnify Webhook] Lookup by provider_txn_id:", txByPayRef);
+    existingTx = txByPayRef;
+  }
 
   if (existingTx && existingTx.status === "confirmed") {
     console.log("[Monnify Webhook] Transaction already processed, skipping:", eventData.transactionReference);
@@ -116,8 +150,40 @@ async function handleSuccessfulTransaction(event: MonnifyTransactionEvent) {
   const purpose = metadata.purpose || "WALLET_TOPUP";
   const userId = metadata.user_id;
 
+  console.log("[Monnify Webhook] Extracted — purpose:", purpose, "userId:", userId, "amountKobo:", amountKobo);
+
   if (!userId) {
-    console.error("[Monnify Webhook] No user_id in metadata — cannot process:", eventData.transactionReference);
+    // Try to get userId from existing transaction row
+    if (existingTx) {
+      const { data: txRow } = await supabase
+        .from("transactions")
+        .select("user_id, purpose, metadata")
+        .eq("id", existingTx.id)
+        .single();
+
+      console.log("[Monnify Webhook] Fallback txRow lookup:", txRow);
+
+      if (txRow?.user_id) {
+        const fallbackUserId = txRow.user_id;
+        const fallbackPurpose = txRow.metadata?.purpose || txRow.purpose || "WALLET_TOPUP";
+        console.log("[Monnify Webhook] Using fallback userId:", fallbackUserId, "purpose:", fallbackPurpose);
+
+        if (fallbackPurpose === "WALLET_TOPUP") {
+          await processWalletTopUp(supabase, {
+            userId: fallbackUserId,
+            amountKobo,
+            transactionReference: eventData.transactionReference,
+            paymentReference: eventData.paymentReference,
+            paymentMethod: eventData.paymentMethod === "CARD" ? "CARD" : "BANK_TRANSFER",
+            cardDetails: eventData.cardDetails,
+            existingTxId: existingTx.id,
+          });
+        }
+        return;
+      }
+    }
+
+    console.error("[Monnify Webhook] No user_id found anywhere — cannot process:", eventData.transactionReference);
     return;
   }
 
@@ -165,9 +231,11 @@ async function processWalletTopUp(
 ) {
   const { userId, amountKobo, transactionReference, paymentReference, paymentMethod, cardDetails, existingTxId } = params;
 
+  console.log("[processWalletTopUp] Starting:", { userId, amountKobo, transactionReference, paymentReference, paymentMethod, existingTxId });
+
   // Update or insert transaction record
   if (existingTxId) {
-    await supabase
+    const { error: updateErr } = await supabase
       .from("transactions")
       .update({
         status: "confirmed",
@@ -175,8 +243,10 @@ async function processWalletTopUp(
         monnify_transaction_ref: transactionReference,
       })
       .eq("id", existingTxId);
+
+    console.log("[processWalletTopUp] Transaction update:", updateErr ? `ERROR: ${updateErr.message}` : "OK");
   } else {
-    await supabase.from("transactions").insert({
+    const { error: insertErr } = await supabase.from("transactions").insert({
       user_id: userId,
       fan_id: userId,
       amount: amountKobo,
@@ -189,20 +259,26 @@ async function processWalletTopUp(
       purpose: "WALLET_TOPUP",
       confirmed_at: new Date().toISOString(),
     });
+
+    console.log("[processWalletTopUp] Transaction insert:", insertErr ? `ERROR: ${insertErr.message}` : "OK");
   }
 
   // Get current wallet balance for balance_after calculation
-  const { data: wallet } = await supabase
+  const { data: wallet, error: walletErr } = await supabase
     .from("wallets")
     .select("balance")
     .eq("user_id", userId)
     .single();
 
+  console.log("[processWalletTopUp] Wallet lookup:", { wallet, error: walletErr?.message });
+
   const currentBalance = wallet?.balance || 0;
   const newBalance = currentBalance + amountKobo;
 
+  console.log("[processWalletTopUp] Balance calc:", { currentBalance, amountKobo, newBalance });
+
   // Insert ledger entry
-  await supabase.from("ledger").insert({
+  const { error: ledgerErr } = await supabase.from("ledger").insert({
     user_id: userId,
     type: "CREDIT",
     amount: amountKobo,
@@ -213,15 +289,19 @@ async function processWalletTopUp(
     provider_reference: transactionReference,
   });
 
+  console.log("[processWalletTopUp] Ledger insert:", ledgerErr ? `ERROR: ${ledgerErr.message}` : "OK");
+
   // Update wallet balance
-  await supabase
+  const { error: walletUpdateErr } = await supabase
     .from("wallets")
     .update({
       balance: newBalance,
-      total_earned: (wallet?.balance || 0) + amountKobo, // total_earned tracks all inflows
+      total_earned: (wallet?.balance || 0) + amountKobo,
       updated_at: new Date().toISOString(),
     })
     .eq("user_id", userId);
+
+  console.log("[processWalletTopUp] Wallet update:", walletUpdateErr ? `ERROR: ${walletUpdateErr.message}` : "OK");
 
   // Save card token for future charges if card payment
   if (paymentMethod === "CARD" && cardDetails?.reusableToken) {
