@@ -140,7 +140,7 @@ function WalletContent() {
 
       if (balanceRes.ok) {
         const data = await balanceRes.json();
-        newBalance = data.balance;
+        newBalance = data.balanceNaira;
         setBalance(newBalance);
       }
 
