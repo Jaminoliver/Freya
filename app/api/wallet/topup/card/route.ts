@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
     // Convert naira to kobo for storage
     const amountKobo = Math.round(amount * 100);
 
+    console.log("[Card Topup] Frontend amount (naira):", amount);
+    console.log("[Card Topup] Converted to kobo:", amountKobo);
+
     // Get user profile
     const { data: profile } = await supabase
       .from("profiles")
@@ -79,6 +82,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Initialize Monnify checkout
+    console.log("[Card Topup] Calling initializeTransaction with amountKobo:", amountKobo);
+
     const result = await initializeTransaction({
       amount: amountKobo,
       customerName: name,
@@ -93,6 +98,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    console.log("[Card Topup] Monnify returned checkoutUrl:", result.checkoutUrl);
+    console.log("[Card Topup] Monnify transactionReference:", result.transactionReference);
+
     // Update transaction with Monnify's reference
     await supabase
       .from("transactions")
@@ -101,9 +109,23 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       message: "Checkout initialized",
-      authorizationUrl: result.checkoutUrl,
+      // SDK data for inline checkout
       reference,
       transactionReference: result.transactionReference,
+      amountNaira: amount,
+      customerName: name,
+      customerEmail: email,
+      apiKey: process.env.MONNIFY_API_KEY,
+      contractCode: process.env.MONNIFY_CONTRACT_CODE,
+      paymentDescription: `Freya wallet top-up — ₦${amount.toLocaleString()}`,
+      isTestMode: (process.env.MONNIFY_BASE_URL || "").includes("sandbox"),
+      metadata: {
+        user_id: user.id,
+        purpose: "WALLET_TOPUP",
+      },
+      // Fallback for redirect flow
+      authorizationUrl: result.checkoutUrl,
+      checkoutUrl: result.checkoutUrl,
     });
   } catch (error) {
     console.error("[Card Topup Error]", error);

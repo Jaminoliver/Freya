@@ -10,6 +10,7 @@ import UploadProgressBar from "@/components/layout/UploadProgressBar";
 import { AppStoreProvider } from "@/lib/providers/AppStoreProvider";
 import PageLoader from "@/components/ui/PageLoader";
 import { useAppStore } from "@/lib/store/appStore";
+import Script from "next/script";
 
 function NavigationWatcher() {
   const pathname     = usePathname();
@@ -74,6 +75,12 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#0A0A0F", overflow: "hidden", width: "100%" }}>
+      {/* Monnify Inline SDK */}
+      <Script
+        src="https://sdk.monnify.com/plugin/monnify.js"
+        strategy="lazyOnload"
+      />
+
       <PageLoader />
       <Suspense fallback={null}>
         <NavigationWatcher />

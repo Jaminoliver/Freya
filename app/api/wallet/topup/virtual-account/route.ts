@@ -97,9 +97,22 @@ export async function POST(req: NextRequest) {
     // The fan sees: account number, bank name, amount, countdown timer
     return NextResponse.json({
       message: "Bank transfer initialized",
-      checkoutUrl: result.checkoutUrl,
+      // SDK data for inline checkout
       reference,
       transactionReference: result.transactionReference,
+      amountNaira: amount,
+      customerName: name,
+      customerEmail: email,
+      apiKey: process.env.MONNIFY_API_KEY,
+      contractCode: process.env.MONNIFY_CONTRACT_CODE,
+      paymentDescription: `Freya wallet top-up — ₦${amount.toLocaleString()}`,
+      isTestMode: (process.env.MONNIFY_BASE_URL || "").includes("sandbox"),
+      metadata: {
+        user_id: user.id,
+        purpose: "WALLET_TOPUP",
+      },
+      // Fallback for redirect flow
+      checkoutUrl: result.checkoutUrl,
       amount,
       currency: "NGN",
     });

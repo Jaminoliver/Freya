@@ -1,52 +1,54 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
+
+// Declare MonnifySDK on window
+declare global {
+  interface Window {
+    MonnifySDK: {
+      initialize: (config: {
+        amount: number;
+        currency: string;
+        reference: string;
+        customerName: string;
+        customerEmail: string;
+        apiKey: string;
+        contractCode: string;
+        paymentDescription: string;
+        isTestMode: boolean;
+        metadata: Record<string, any>;
+        paymentMethods?: string[];
+        onComplete: (response: any) => void;
+        onClose: (data: any) => void;
+      }) => void;
+    };
+  }
+}
 
 interface BalanceCardProps {
   balance: number;
-  onProceedCard: (amount: number) => void;
-  onProceedBankTransfer: (amount: number) => void;
-  bankAccount?: {
-    accountNumber: string;
-    bankName: string;
-    accountName: string;
-    onusReference: string;
-    amount: number;
-  } | null;
-  bankTransferLoading?: boolean;
-  onPaymentConfirmed?: () => void;
+  onPaymentComplete: (reference: string) => void;
+  onPaymentFailed: () => void;
 }
 
 const PRESET_AMOUNTS = [1000, 2500, 5000, 10000];
 const MIN_AMOUNT = 500;
-const POLL_INTERVAL = 3000;
-const POLL_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
 function calculateFee(amount: number): number {
   return Math.min(Math.round(amount * 0.015), 2000);
 }
 
-type TransferStatus = "idle" | "waiting" | "success" | "expired";
-
 export default function BalanceCard({
   balance,
-  onProceedCard,
-  onProceedBankTransfer,
-  bankAccount,
-  bankTransferLoading,
-  onPaymentConfirmed,
+  onPaymentComplete,
+  onPaymentFailed,
 }: BalanceCardProps) {
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<"card" | "bank">("card");
   const [selected, setSelected] = useState<number | null>(null);
   const [custom, setCustom] = useState("");
   const [focused, setFocused] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [transferStatus, setTransferStatus] = useState<TransferStatus>("idle");
-
-  const pollRef = useRef<NodeJS.Timeout | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastBalanceRef = useRef<number>(balance);
+  const [loading, setLoading] = useState(false);
 
   const fmt = (n: number) =>
     "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -54,51 +56,6 @@ export default function BalanceCard({
   const amount = selected ?? (custom ? parseInt(custom.replace(/\D/g, ""), 10) : 0);
   const fee = amount ? calculateFee(amount) : 0;
   const canProceed = amount >= MIN_AMOUNT;
-
-  // Start polling when bank account is shown
-  useEffect(() => {
-    if (!bankAccount) {
-      stopPolling();
-      if (transferStatus === "waiting") setTransferStatus("idle");
-      return;
-    }
-
-    lastBalanceRef.current = balance;
-    setTransferStatus("waiting");
-    startPolling();
-
-    // Auto-expire after 10 minutes
-    timeoutRef.current = setTimeout(() => {
-      stopPolling();
-      setTransferStatus("expired");
-    }, POLL_TIMEOUT);
-
-    return () => stopPolling();
-  }, [bankAccount]);
-
-  function startPolling() {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch("/api/wallet/balance");
-        if (!res.ok) return;
-        const { balance: newBalance } = await res.json();
-        if (newBalance > lastBalanceRef.current) {
-          stopPolling();
-          setTransferStatus("success");
-          onPaymentConfirmed?.();
-          setTimeout(() => setOpen(false), 2500);
-        }
-      } catch {
-        // silently retry
-      }
-    }, POLL_INTERVAL);
-  }
-
-  function stopPolling() {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-  }
 
   const handleCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSelected(null);
@@ -111,20 +68,79 @@ export default function BalanceCard({
     setCustom("");
   };
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const handleProceed = async () => {
+    if (!canProceed || loading) return;
+    setLoading(true);
 
-  const handleProceed = () => {
-    if (!canProceed) return;
-    if (method === "card") {
-      onProceedCard(amount);
-      setOpen(false);
-    } else {
-      setTransferStatus("idle");
-      onProceedBankTransfer(amount);
+    try {
+      // Call our API to initialize the transaction
+      const endpoint = method === "card"
+        ? "/api/wallet/topup/card"
+        : "/api/wallet/topup/virtual-account";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("[BalanceCard] API error:", data.message);
+        onPaymentFailed();
+        setLoading(false);
+        return;
+      }
+
+      // Check if MonnifySDK is loaded
+      if (typeof window === "undefined" || !window.MonnifySDK) {
+        // Fallback: redirect to checkout URL if SDK not loaded
+        if (data.authorizationUrl || data.checkoutUrl) {
+          window.location.href = data.authorizationUrl || data.checkoutUrl;
+          return;
+        }
+        console.error("[BalanceCard] MonnifySDK not loaded and no checkout URL");
+        onPaymentFailed();
+        setLoading(false);
+        return;
+      }
+
+      // Launch Monnify inline checkout modal
+      window.MonnifySDK.initialize({
+        amount: data.amountNaira,
+        currency: "NGN",
+        reference: data.reference,
+        customerName: data.customerName,
+        customerEmail: data.customerEmail,
+        apiKey: data.apiKey,
+        contractCode: data.contractCode,
+        paymentDescription: data.paymentDescription,
+        isTestMode: data.isTestMode,
+        metadata: data.metadata || {},
+        paymentMethods: method === "card" ? ["CARD"] : ["ACCOUNT_TRANSFER"],
+        onComplete: (response: any) => {
+          console.log("[Monnify SDK] Payment complete:", response);
+          setLoading(false);
+          setOpen(false);
+          setSelected(null);
+          setCustom("");
+          // Webhook handles DB update, but we can refresh UI immediately
+          if (response.paymentStatus === "PAID" || response.status === "SUCCESS") {
+            onPaymentComplete(data.reference);
+          } else {
+            onPaymentFailed();
+          }
+        },
+        onClose: (data: any) => {
+          console.log("[Monnify SDK] Modal closed:", data);
+          setLoading(false);
+        },
+      });
+    } catch (error) {
+      console.error("[BalanceCard] Error:", error);
+      onPaymentFailed();
+      setLoading(false);
     }
   };
 
@@ -241,153 +257,26 @@ export default function BalanceCard({
           {/* Proceed button */}
           <button
             onClick={handleProceed}
-            disabled={!canProceed || bankTransferLoading}
+            disabled={!canProceed || loading}
             style={{
               width: "100%", padding: "11px", borderRadius: "8px", border: "none",
-              backgroundColor: canProceed ? "#8B5CF6" : "#1E1E2E",
-              color: canProceed ? "#fff" : "#6B6B8A",
+              backgroundColor: canProceed && !loading ? "#8B5CF6" : "#1E1E2E",
+              color: canProceed && !loading ? "#fff" : "#6B6B8A",
               fontSize: "13px", fontWeight: 600,
-              cursor: canProceed && !bankTransferLoading ? "pointer" : "not-allowed",
+              cursor: canProceed && !loading ? "pointer" : "not-allowed",
               fontFamily: "'Inter', sans-serif", transition: "opacity 0.15s", marginBottom: "10px",
             }}
           >
-            {bankTransferLoading
-              ? "Generating account..."
+            {loading
+              ? "Opening checkout..."
               : method === "card"
-              ? "Proceed to Checkout"
-              : "Generate Bank Account"}
+              ? "Pay with Card"
+              : "Pay with Bank Transfer"}
           </button>
 
           <p style={{ fontSize: "11px", color: "#6B6B8A", textAlign: "center", margin: 0 }}>
-            {method === "card" ? "Secured by PayOnUs" : "Powered by PayOnUs"}
+            Secured by Monnify
           </p>
-
-          {/* Bank account details */}
-          {method === "bank" && bankAccount && (
-            <div style={{
-              marginTop: "20px",
-              backgroundColor: "#1C1C2E",
-              border: `1.5px solid ${
-                transferStatus === "success" ? "#22C55E" :
-                transferStatus === "expired" ? "#EF4444" : "#2A2A3D"
-              }`,
-              borderRadius: "10px", padding: "16px",
-              transition: "border-color 0.3s",
-            }}>
-
-              {/* ── Status bar ── */}
-              {transferStatus === "waiting" && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "10px",
-                  backgroundColor: "rgba(139,92,246,0.08)",
-                  border: "1px solid rgba(139,92,246,0.25)",
-                  borderRadius: "8px", padding: "10px 14px", marginBottom: "16px",
-                }}>
-                  <div style={{
-                    width: "16px", height: "16px", flexShrink: 0,
-                    border: "2px solid #2A2A3D",
-                    borderTop: "2px solid #8B5CF6",
-                    borderRadius: "50%",
-                    animation: "spin 0.8s linear infinite",
-                  }} />
-                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                  <div>
-                    <p style={{ fontSize: "12px", fontWeight: 600, color: "#A78BFA", margin: "0 0 1px" }}>
-                      Waiting for payment...
-                    </p>
-                    <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>
-                      Transfer ₦{bankAccount.amount.toLocaleString()} to confirm automatically
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {transferStatus === "success" && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "10px",
-                  backgroundColor: "rgba(34,197,94,0.08)",
-                  border: "1px solid rgba(34,197,94,0.25)",
-                  borderRadius: "8px", padding: "10px 14px", marginBottom: "16px",
-                }}>
-                  <span style={{ fontSize: "20px" }}>✅</span>
-                  <div>
-                    <p style={{ fontSize: "12px", fontWeight: 600, color: "#22C55E", margin: "0 0 1px" }}>
-                      Payment received!
-                    </p>
-                    <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>
-                      ₦{bankAccount.amount.toLocaleString()} has been added to your wallet
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {transferStatus === "expired" && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: "10px",
-                  backgroundColor: "rgba(239,68,68,0.08)",
-                  border: "1px solid rgba(239,68,68,0.25)",
-                  borderRadius: "8px", padding: "10px 14px", marginBottom: "16px",
-                }}>
-                  <span style={{ fontSize: "20px" }}>⏱</span>
-                  <div>
-                    <p style={{ fontSize: "12px", fontWeight: 600, color: "#EF4444", margin: "0 0 1px" }}>
-                      Session expired
-                    </p>
-                    <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>
-                      Generate a new account to continue
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <p style={{ fontSize: "11px", fontWeight: 600, color: "#8B5CF6", margin: "0 0 12px", letterSpacing: "0.06em" }}>
-                TRANSFER DETAILS
-              </p>
-
-              {[
-                { label: "Bank", value: bankAccount.bankName },
-                { label: "Account Name", value: bankAccount.accountName },
-                { label: "Amount", value: `₦${bankAccount.amount.toLocaleString()}` },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                  <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{label}</span>
-                  <span style={{ fontSize: "12px", fontWeight: 600, color: "#F1F5F9" }}>{value}</span>
-                </div>
-              ))}
-
-              {/* Account number with copy */}
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                backgroundColor: "#0A0A0F", borderRadius: "8px", padding: "10px 12px", marginTop: "4px",
-              }}>
-                <div>
-                  <p style={{ fontSize: "10px", color: "#6B6B8A", margin: "0 0 2px" }}>Account Number</p>
-                  <p style={{ fontSize: "18px", fontWeight: 700, color: "#F1F5F9", margin: 0, letterSpacing: "2px" }}>
-                    {bankAccount.accountNumber}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleCopy(bankAccount.accountNumber)}
-                  style={{
-                    backgroundColor: copied ? "rgba(34,197,94,0.1)" : "rgba(139,92,246,0.1)",
-                    border: `1px solid ${copied ? "#22C55E" : "#8B5CF6"}`,
-                    color: copied ? "#22C55E" : "#A78BFA",
-                    borderRadius: "6px", padding: "6px 12px",
-                    fontSize: "12px", fontWeight: 600, cursor: "pointer",
-                    fontFamily: "'Inter', sans-serif",
-                  }}
-                >
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-
-              {transferStatus !== "success" && transferStatus !== "expired" && (
-                <p style={{ fontSize: "11px", color: "#F59E0B", margin: "12px 0 0", textAlign: "center" }}>
-                  ⏱ Transfer exactly ₦{bankAccount.amount.toLocaleString()} before this account expires
-                </p>
-              )}
-            </div>
-          )}
         </div>
       )}
     </div>
