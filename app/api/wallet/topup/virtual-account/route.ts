@@ -1,14 +1,18 @@
+// app/api/wallet/topup/virtual-account/route.ts
+// Bank transfer top-up via Monnify — generates temporary account for one-time transfer
+
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createDynamicAccount, generatePayOnUsReference } from "@/lib/utils/payonus";
-
-// ─── POST /api/wallet/topup/virtual-account ───────────────────────────────────
+import { initializeTransaction } from "@/lib/monnify/client";
 
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
@@ -16,72 +20,94 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { amount } = body;
 
+    // amount comes from frontend in naira
     if (!amount || amount < 500) {
-      return NextResponse.json({ message: "Minimum top-up amount is ₦500" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Minimum top-up amount is ₦500" },
+        { status: 400 }
+      );
     }
+
+    // Convert naira to kobo for storage
+    const amountKobo = Math.round(amount * 100);
 
     // Get user profile
     const { data: profile } = await supabase
       .from("profiles")
-      .select("email, full_name, phone")
+      .select("email, full_name")
       .eq("id", user.id)
       .single();
 
     const email = profile?.email ?? user.email ?? "";
-    const name  = profile?.full_name ?? "Freya User";
-    const phone = profile?.phone ?? "+2340000000000";
+    const name = profile?.full_name ?? "Freya User";
 
-    const reference = generatePayOnUsReference("VA-TOPUP");
+    // Generate unique payment reference
+    const reference = `FRY-VA-${user.id.slice(0, 8)}-${Date.now()}`;
 
-    // Create PayOnUs dynamic account
-    const result = await createDynamicAccount({
-      amount,
-      reference,
-      customer: {
-        name,
-        email,
-        phone,
-        externalId: user.id,
-        address: {
-          countryCode: "NG",
-          state: "Lagos",
-          line1: "Nigeria",
-        },
+    // Insert pending transaction
+    const { error: insertError } = await supabase.from("transactions").insert({
+      user_id: user.id,
+      fan_id: user.id,
+      provider: "MONNIFY",
+      provider_txn_id: reference,
+      amount: amountKobo,
+      currency: "NGN",
+      status: "pending",
+      payment_method: "BANK_TRANSFER",
+      purpose: "WALLET_TOPUP",
+      metadata: {
+        user_id: user.id,
+        purpose: "WALLET_TOPUP",
       },
     });
 
-    // Save pending transaction
-    const { error: insertError } = await supabase.from("transactions").insert({
-      user_id:          user.id,
-      fan_id:           user.id,
-      transaction_type: "wallet_topup",
-      provider:         "PAYONUS",
-      provider_txn_id:  reference,
-      amount,
-      currency:         "NGN",
-      status:           "pending",
-      payment_method:   "VIRTUAL_ACCOUNT",
-      purpose:          "WALLET_TOPUP",
-      description:      "Wallet top-up via bank transfer",
-    });
-
     if (insertError) {
-      console.error("[Wallet Topup] Failed to insert transaction:", insertError.message);
+      console.error("[VA Topup] Failed to insert transaction:", insertError.message);
+      return NextResponse.json(
+        { message: "Failed to create transaction" },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({
-      message:       "Dynamic account created",
-      accountNumber: result.accountNumber,
-      bankName:      result.bankName,
-      accountName:   result.accountName,
-      onusReference: result.onusReference,
-      amount,
-      currency:      "NGN",
-      reference,
+    // Initialize Monnify transaction with ACCOUNT_TRANSFER only
+    // This returns a checkout URL — Monnify's checkout page shows the
+    // temporary bank account details (account number, bank name, amount)
+    // The fan can then transfer from their banking app
+    const result = await initializeTransaction({
+      amount: amountKobo,
+      customerName: name,
+      customerEmail: email,
+      paymentReference: reference,
+      paymentDescription: `Freya wallet top-up — ₦${amount.toLocaleString()}`,
+      redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL}/wallet?ref=${reference}`,
+      paymentMethods: ["ACCOUNT_TRANSFER"],
+      metadata: {
+        user_id: user.id,
+        purpose: "WALLET_TOPUP",
+      },
     });
 
+    // Update transaction with Monnify's reference
+    await supabase
+      .from("transactions")
+      .update({ monnify_transaction_ref: result.transactionReference })
+      .eq("provider_txn_id", reference);
+
+    // Return checkout URL — Monnify's hosted page displays the account details
+    // The fan sees: account number, bank name, amount, countdown timer
+    return NextResponse.json({
+      message: "Bank transfer initialized",
+      checkoutUrl: result.checkoutUrl,
+      reference,
+      transactionReference: result.transactionReference,
+      amount,
+      currency: "NGN",
+    });
   } catch (error) {
-    console.error("[Wallet Topup Virtual Account Error]", error);
-    return NextResponse.json({ message: "Something went wrong" }, { status: 500 });
+    console.error("[VA Topup Error]", error);
+    return NextResponse.json(
+      { message: "Something went wrong" },
+      { status: 500 }
+    );
   }
 }

@@ -27,6 +27,9 @@ function mapCategoryToType(category: string): Transaction["type"] {
     case "AUTO_SUBSCRIPTION":   return "subscription";
     case "CREATOR_EARNING":     return "premium";
     case "PAYOUT":              return "topup";
+    case "TIP":                 return "topup";
+    case "PPV_PURCHASE":
+    case "PPV_MESSAGE":         return "premium";
     default:                    return "topup";
   }
 }
@@ -53,7 +56,7 @@ function CheckoutLoadingOverlay() {
           Redirecting to checkout
         </p>
         <p style={{ fontSize: "13px", color: "#6B6B8A", margin: 0 }}>
-          Secured by PayOnUs — please don&apos;t close this tab
+          Secured by Monnify — please don&apos;t close this tab
         </p>
       </div>
     </div>
@@ -115,11 +118,6 @@ function WalletContent() {
   const [revealed,       setRevealed]       = useState(fresh ?? false);
   const [redirecting,    setRedirecting]    = useState(false);
   const [paymentStatus,  setPaymentStatus]  = useState<"success" | "failed" | null>(null);
-  const [bankTransferLoading, setBankTransferLoading] = useState(false);
-  const [bankAccount,    setBankAccount]    = useState<{
-    accountNumber: string; bankName: string; accountName: string;
-    onusReference: string; amount: number;
-  } | null>(null);
 
   useEffect(() => {
     const ref = searchParams.get("ref");
@@ -149,15 +147,15 @@ function WalletContent() {
       if (txRes.ok) {
         const { transactions: txData } = await txRes.json();
         newTx = txData.map((t: {
-          id: number; category: string; amount: number;
-          provider: string; description: string; created_at: string;
+          id: string; category: string; amount: number;
+          amountNaira: number; provider: string; description: string; date: string; type: string;
         }) => ({
-          id:       String(t.id),
+          id:       t.id,
           type:     mapCategoryToType(t.category),
           label:    t.description ?? t.category,
           subtitle: t.provider,
           amount:   t.amount,
-          date:     new Date(t.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+          date:     new Date(t.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
           status:   "completed" as const,
         }));
         setTransactions(newTx);
@@ -191,7 +189,6 @@ function WalletContent() {
 
   const handlePaymentConfirmed = useCallback(async () => {
     await fetchWalletData(true);
-    setBankAccount(null);
     setPaymentStatus("success");
   }, [fetchWalletData]);
 
@@ -220,23 +217,22 @@ function WalletContent() {
 
   async function handleBankTransfer(amount: number) {
     try {
-      setBankTransferLoading(true);
-      setBankAccount(null);
-      const res  = await fetch("/api/wallet/topup/virtual-account", {
+      setRedirecting(true);
+      const res = await fetch("/api/wallet/topup/virtual-account", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount }),
       });
       const data = await res.json();
-      if (!res.ok) { setPaymentStatus("failed"); return; }
-      setBankAccount({
-        accountNumber: data.accountNumber, bankName: data.bankName,
-        accountName: data.accountName, onusReference: data.onusReference,
-        amount: data.amount,
-      });
+      if (!res.ok) { setRedirecting(false); setPaymentStatus("failed"); return; }
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        setRedirecting(false);
+        setPaymentStatus("failed");
+      }
     } catch {
+      setRedirecting(false);
       setPaymentStatus("failed");
-    } finally {
-      setBankTransferLoading(false);
     }
   }
 
@@ -313,8 +309,8 @@ function WalletContent() {
                   onAutoRechargeChange={setAutoRecharge}
                   onTopUp={(amount) => handleTopUp(amount)}
                   onBankTransfer={(amount) => handleBankTransfer(amount)}
-                  bankTransferLoading={bankTransferLoading}
-                  bankAccount={bankAccount}
+                  bankTransferLoading={false}
+                  bankAccount={null}
                   onPaymentConfirmed={handlePaymentConfirmed}
                 />
               )}
