@@ -26,7 +26,7 @@ export default function PaymentMethodCard({
   amount,
   virtualAccount,
 }: PaymentMethodCardProps) {
-  const isBankTransfer = method.id === "kyshi_virtual_account";
+  const isBankTransfer = method.id === "bank_transfer";
   const showBankDetails = selected && isBankTransfer;
 
   const borderColor = selected ? "#8B5CF6" : "#2A2A3D";
