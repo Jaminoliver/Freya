@@ -241,13 +241,14 @@ async function processWalletTopUp(
   const currentBalance = wallet?.balance || 0;
   const newBalance = currentBalance + amountKobo;
 
-  await supabase.from("ledger").insert({
+  const { error: ledgerTopupError } = await supabase.from("ledger").insert({
     user_id: userId, type: "CREDIT", amount: amountKobo, balance_after: newBalance,
     category: "WALLET_TOPUP", reference_id: paymentReference,
     provider: "MONNIFY", provider_reference: transactionReference,
   });
+  if (ledgerTopupError) console.error("[processWalletTopUp] Ledger insert error:", ledgerTopupError);
 
-  // FIX: Only update balance here — total_earned is for creator earnings only
+  // FIX: removed total_earned — topups should not set creator earnings field
   await supabase.from("wallets")
     .update({ balance: newBalance, updated_at: new Date().toISOString() })
     .eq("user_id", userId);
@@ -344,19 +345,25 @@ async function processDirectSubscription(
     });
   }
 
-  // FIX: Only write to ledger — do NOT update wallets.balance with creator earnings
-  await supabase.from("ledger").insert([
-    {
-      user_id: creatorId, type: "CREDIT", amount: creatorEarning,
-      category: "CREATOR_EARNING", reference_id: paymentReference,
-      provider: "MONNIFY", provider_reference: transactionReference,
-    },
-    {
-      user_id: creatorId, type: "CREDIT", amount: platformFee,
-      category: "PLATFORM_FEE", reference_id: paymentReference,
-      provider: "MONNIFY", provider_reference: transactionReference,
-    },
-  ]);
+  const { data: creatorWallet } = await supabase.from("wallets").select("balance").eq("user_id", creatorId).single();
+  const creatorCurrentBalance = creatorWallet?.balance || 0;
+  const creatorNewBalance = creatorCurrentBalance + creatorEarning;
+
+  const { error: ledgerSubEarningError } = await supabase.from("ledger").insert({
+    user_id: creatorId, type: "CREDIT", amount: creatorEarning, balance_after: creatorNewBalance,
+    category: "CREATOR_EARNING", reference_id: paymentReference,
+    provider: "MONNIFY", provider_reference: transactionReference,
+  });
+  if (ledgerSubEarningError) console.error("[processDirectSubscription] Ledger CREATOR_EARNING error:", ledgerSubEarningError);
+
+  const { error: ledgerSubFeeError } = await supabase.from("ledger").insert({
+    user_id: creatorId, type: "CREDIT", amount: platformFee, balance_after: creatorNewBalance,
+    category: "PLATFORM_FEE", reference_id: paymentReference,
+    provider: "MONNIFY", provider_reference: transactionReference,
+  });
+  if (ledgerSubFeeError) console.error("[processDirectSubscription] Ledger PLATFORM_FEE error:", ledgerSubFeeError);
+
+  // FIX: removed wallets.update — creator earnings must not touch wallets.balance
 
   if (paymentMethod === "CARD" && cardDetails?.reusableToken) {
     const { data: existingCard } = await supabase
@@ -435,12 +442,18 @@ async function processTip(
     transaction_id: confirmedTxId,
   });
 
-  // FIX: Only write to ledger — do NOT update wallets.balance with creator earnings
-  await supabase.from("ledger").insert({
-    user_id: creatorId, type: "CREDIT", amount: creatorEarning,
+  const { data: creatorWallet } = await supabase.from("wallets").select("balance").eq("user_id", creatorId).single();
+  const creatorCurrentBalance = creatorWallet?.balance || 0;
+  const creatorNewBalance = creatorCurrentBalance + creatorEarning;
+
+  const { error: ledgerTipError } = await supabase.from("ledger").insert({
+    user_id: creatorId, type: "CREDIT", amount: creatorEarning, balance_after: creatorNewBalance,
     category: "CREATOR_EARNING", reference_id: paymentReference,
     provider: "MONNIFY", provider_reference: transactionReference,
   });
+  if (ledgerTipError) console.error("[processTip] Ledger insert error:", ledgerTipError);
+
+  // FIX: removed wallets.update — creator earnings must not touch wallets.balance
 
   console.log("[Monnify Webhook] Tip processed:", { userId, creatorId, amountKobo, creatorEarning });
 }
@@ -513,12 +526,18 @@ async function processPPV(
     unlocked_at: now.toISOString(),
   });
 
-  // FIX: Only write to ledger — do NOT update wallets.balance with creator earnings
-  await supabase.from("ledger").insert({
-    user_id: creatorId, type: "CREDIT", amount: creatorEarning,
+  const { data: creatorWallet } = await supabase.from("wallets").select("balance").eq("user_id", creatorId).single();
+  const creatorCurrentBalance = creatorWallet?.balance || 0;
+  const creatorNewBalance = creatorCurrentBalance + creatorEarning;
+
+  const { error: ledgerPPVError } = await supabase.from("ledger").insert({
+    user_id: creatorId, type: "CREDIT", amount: creatorEarning, balance_after: creatorNewBalance,
     category: "CREATOR_EARNING", reference_id: paymentReference,
     provider: "MONNIFY", provider_reference: transactionReference,
   });
+  if (ledgerPPVError) console.error("[processPPV] Ledger insert error:", ledgerPPVError);
+
+  // FIX: removed wallets.update — creator earnings must not touch wallets.balance
 
   console.log("[Monnify Webhook] PPV processed:", { userId, creatorId, postId, amountKobo, creatorEarning });
 }
@@ -565,18 +584,25 @@ async function handleSuccessfulDisbursement(event: MonnifyDisbursementEvent) {
     return;
   }
 
+  const { data: wallet } = await supabase.from("wallets").select("balance").eq("user_id", payout.creator_id).single();
+  const currentBalance = wallet?.balance || 0;
+  const newBalance = currentBalance - payout.amount;
+
   await supabase.from("payout_requests")
     .update({ status: "COMPLETED", completed_at: new Date().toISOString() })
     .eq("id", payout.id);
 
-  // FIX: Payout debit only touches ledger — wallets.balance is fan-only
   await supabase.from("ledger").insert({
-    user_id: payout.creator_id, type: "DEBIT", amount: payout.amount,
+    user_id: payout.creator_id, type: "DEBIT", amount: payout.amount, balance_after: newBalance,
     category: "PAYOUT", reference_id: String(payout.id),
     provider: "MONNIFY", provider_reference: eventData.reference,
   });
 
-  console.log("[Monnify Webhook] Payout completed:", { creatorId: payout.creator_id, amount: payout.amount });
+  await supabase.from("wallets")
+    .update({ balance: newBalance, total_spent: currentBalance + payout.amount, updated_at: new Date().toISOString() })
+    .eq("user_id", payout.creator_id);
+
+  console.log("[Monnify Webhook] Payout completed:", { creatorId: payout.creator_id, amount: payout.amount, newBalance });
 }
 
 // ============================================================
