@@ -1,6 +1,4 @@
 // app/api/earnings/history/route.ts
-// Returns creator earning history from the ledger table
-
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
@@ -19,7 +17,6 @@ export async function GET(req: NextRequest) {
     const limit = 20;
     const offset = (page - 1) * limit;
 
-    // Fetch CREATOR_EARNING CREDIT entries from ledger
     const { data: entries, error } = await supabase
       .from("ledger")
       .select("id, amount, reference_id, created_at")
@@ -35,11 +32,8 @@ export async function GET(req: NextRequest) {
     }
 
     const serviceSupabase = createServiceSupabaseClient();
-
-    // Get reference_ids to look up the fan-side debit entries for type info
     const refIds = entries.map((e) => e.reference_id).filter(Boolean) as string[];
 
-    // Look up fan-side debit entries to determine type and fan_id
     let fanDebitMap: Record<string, { category: string; userId: string }> = {};
 
     if (refIds.length > 0) {
@@ -62,19 +56,27 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // For entries with no fan debit (bank transfer payments), check transactions table
+    // Fallback: look up transactions table for bank transfer payments
+    // Map transaction purpose → ledger category, and get fan_id
     const missingRefIds = refIds.filter((r) => !fanDebitMap[r]);
     if (missingRefIds.length > 0) {
-      const { data: txFans } = await serviceSupabase
+      const { data: txRows } = await serviceSupabase
         .from("transactions")
-        .select("provider_txn_id, fan_id")
+        .select("provider_txn_id, fan_id, purpose")
         .in("provider_txn_id", missingRefIds);
 
-      if (txFans) {
-        txFans.forEach((tx) => {
+      const PURPOSE_TO_CATEGORY: Record<string, string> = {
+        SUBSCRIPTION: "SUBSCRIPTION_PAYMENT",
+        TIP: "TIP",
+        PPV: "PPV_PURCHASE",
+        WALLET_TOPUP: "WALLET_TOPUP",
+      };
+
+      if (txRows) {
+        txRows.forEach((tx) => {
           if (tx.provider_txn_id && tx.fan_id && !fanDebitMap[tx.provider_txn_id]) {
             fanDebitMap[tx.provider_txn_id] = {
-              category: "SUBSCRIPTION_PAYMENT",
+              category: PURPOSE_TO_CATEGORY[tx.purpose] ?? "SUBSCRIPTION_PAYMENT",
               userId: tx.fan_id,
             };
           }
@@ -97,7 +99,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Map category to display label
     const CATEGORY_LABEL: Record<string, string> = {
       SUBSCRIPTION_PAYMENT: "Subscription",
       AUTO_SUBSCRIPTION: "Subscription",
@@ -111,19 +112,16 @@ export async function GET(req: NextRequest) {
         const fanDebit = entry.reference_id ? fanDebitMap[entry.reference_id] : null;
         const typeLabel = fanDebit ? (CATEGORY_LABEL[fanDebit.category] ?? "Other") : "Other";
 
-        // Apply filter
         if (filter !== "all" && typeLabel.toLowerCase() !== filter.toLowerCase()) return null;
 
         const fan = fanDebit?.userId ? fanMap[fanDebit.userId] : null;
 
         return {
           id: entry.id,
-          amount: entry.amount / 100, // kobo to naira
+          amount: entry.amount / 100,
           type: typeLabel,
           date: new Date(entry.created_at).toLocaleDateString("en-NG", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
+            day: "numeric", month: "short", year: "numeric",
           }),
           fan: fan?.display_name ?? "Anonymous",
           username: fan?.username ? `@${fan.username}` : "",

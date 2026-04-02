@@ -65,13 +65,20 @@ export async function GET() {
       if (missingRefIds.length > 0) {
         const { data: txFans } = await serviceSupabase
           .from("transactions")
-          .select("provider_txn_id")
+          .select("provider_txn_id, purpose")
           .in("provider_txn_id", missingRefIds);
+
+        const PURPOSE_TO_CATEGORY: Record<string, string> = {
+          SUBSCRIPTION: "SUBSCRIPTION_PAYMENT",
+          TIP: "TIP",
+          PPV: "PPV_PURCHASE",
+          WALLET_TOPUP: "WALLET_TOPUP",
+        };
 
         if (txFans) {
           txFans.forEach((tx) => {
             if (tx.provider_txn_id && !txCategoryMap[tx.provider_txn_id]) {
-              txCategoryMap[tx.provider_txn_id] = "SUBSCRIPTION_PAYMENT";
+              txCategoryMap[tx.provider_txn_id] = PURPOSE_TO_CATEGORY[tx.purpose] ?? "SUBSCRIPTION_PAYMENT";
             }
           });
         }
