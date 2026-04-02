@@ -13,7 +13,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from("subscription_tiers")
-      .select("id, monthly_price, three_month_price, six_month_price, is_active")
+      .select("id, price_monthly, three_month_price, six_month_price, is_active")
       .eq("creator_id", user.id)
       .maybeSingle();
 
@@ -72,12 +72,11 @@ export async function PATCH(req: NextRequest) {
         const { error } = await supabase
           .from("subscription_tiers")
           .update({
-            price_monthly: monthly_price,
-            monthly_price,
-            three_month_price: three_month_price ?? null,
-            six_month_price: six_month_price ?? null,
-            updated_at: new Date().toISOString(),
-          })
+  price_monthly: monthly_price,
+  three_month_price: three_month_price ?? null,
+  six_month_price: six_month_price ?? null,
+  updated_at: new Date().toISOString(),
+})
           .eq("creator_id", user.id);
 
         if (error) {
@@ -88,15 +87,13 @@ export async function PATCH(req: NextRequest) {
         const { error } = await supabase
           .from("subscription_tiers")
           .insert({
-            creator_id: user.id,
-            tier_name: "Basic",
-            price_monthly: monthly_price,
-            monthly_price,
-            three_month_price: three_month_price ?? null,
-            six_month_price: six_month_price ?? null,
-            is_active: true,
-          });
-
+  creator_id: user.id,
+  tier_name: "Basic",
+  price_monthly: monthly_price,
+  three_month_price: three_month_price ?? null,
+  six_month_price: six_month_price ?? null,
+  is_active: true,
+})
         if (error) {
           console.error("[Pricing PATCH] insert error:", error);
           return NextResponse.json({ message: "Failed to create pricing" }, { status: 500 });

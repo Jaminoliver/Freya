@@ -7,8 +7,9 @@ import CurrencySwitcher, { CURRENCIES } from "../components/CurrencySwitcher";
 import PaymentMethodCard from "../components/PaymentMethodCard";
 
 const PAYMENT_METHODS: PaymentMethod[] = [
-  { id: "freya_wallet",          name: "Freya Wallet",   subtitle: "Instant payment",        color: "#7C3AED", letter: "F" },
-  { id: "kyshi_virtual_account", name: "Bank Transfer",  subtitle: "Virtual bank transfer",  color: "#8B5CF6", letter: "B" },
+  { id: "freya_wallet",  name: "Freya Wallet",   subtitle: "Instant payment",        color: "#7C3AED", letter: "F" },
+  { id: "bank_transfer", name: "Bank Transfer",  subtitle: "Virtual bank transfer",  color: "#8B5CF6", letter: "B" },
+  { id: "card",          name: "Card Payment",   subtitle: "Visa / Mastercard / Verve", color: "#6366F1", letter: "C" },
 ];
 
 const POLL_INTERVAL = 3000;
@@ -57,7 +58,8 @@ export default function PaymentScreen({
   const currencyOption = CURRENCIES.find((c) => c.code === currency)!;
   const symbol = currencyOption.symbol;
 
-  const isBankTransfer = selectedMethod === "kyshi_virtual_account";
+  const isBankTransfer = selectedMethod === "bank_transfer";
+  const isCard = selectedMethod === "card";
   const isWallet = selectedMethod === "freya_wallet";
   const insufficientBalance = isWallet && walletBalance < amount;
   const canProceed = selectedMethod !== null && !insufficientBalance && !loading && transferStatus !== "waiting";
@@ -68,7 +70,7 @@ export default function PaymentScreen({
     ? `${label} · ${TIER_LABEL[tier]}`
     : type === "tips" ? `Tip to ${label}` : label;
 
-  // ── Polling ──────────────────────────────────────────────────────────────
+  // ── Polling for bank transfer ────────────────────────────────────────────
   React.useEffect(() => {
     if (!virtualAccount) {
       stopPolling();
@@ -93,30 +95,16 @@ export default function PaymentScreen({
     stopPolling();
     pollRef.current = setInterval(async () => {
       try {
-        // Tips: poll transaction status by reference
-        // Subscriptions: poll subscription status by creatorId
-        if (type === "tips") {
-          const ref = vaRef.current?.reference;
-          if (!ref) return;
-          const res = await fetch(`/api/tips/status?reference=${ref}`);
-          if (!res.ok) return;
-          const { completed } = await res.json();
-          if (completed) {
-            stopPolling();
-            setTransferStatus("success");
-            onPaymentConfirmed?.();
-            setTimeout(() => onClose(), 2500);
-          }
-        } else {
-          const res = await fetch(`/api/subscriptions/status?creatorId=${creatorId}`);
-          if (!res.ok) return;
-          const { active } = await res.json();
-          if (active) {
-            stopPolling();
-            setTransferStatus("success");
-            onPaymentConfirmed?.();
-            setTimeout(() => onClose(), 2500);
-          }
+        const ref = vaRef.current?.reference;
+        if (!ref) return;
+        const res = await fetch(`/api/checkout/status?reference=${ref}`);
+        if (!res.ok) return;
+        const { confirmed } = await res.json();
+        if (confirmed) {
+          stopPolling();
+          setTransferStatus("success");
+          onPaymentConfirmed?.();
+          setTimeout(() => onClose(), 2500);
         }
       } catch {
         // silently retry
@@ -137,9 +125,14 @@ export default function PaymentScreen({
   };
 
   const ctaLabel = () => {
-    if (loading) return isBankTransfer && !virtualAccount ? "Generating account..." : "Processing...";
+    if (loading) {
+      if (isBankTransfer && !virtualAccount) return "Generating account...";
+      if (isCard) return "Redirecting to checkout...";
+      return "Processing...";
+    }
     if (isBankTransfer && virtualAccount) return "I've Completed the Transfer";
     if (isBankTransfer) return "Generate Bank Account";
+    if (isCard) return "Pay with Card";
     return "Pay Now";
   };
 
@@ -225,7 +218,7 @@ export default function PaymentScreen({
         </div>
       )}
 
-      {/* Virtual account details */}
+      {/* Virtual account details — only for bank transfer */}
       {isBankTransfer && virtualAccount && (
         <div style={{
           margin: "0 20px 16px",
@@ -366,7 +359,7 @@ export default function PaymentScreen({
       <div style={{ padding: "8px 20px 18px", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
         <Lock size={11} color="#6B6B8A" />
         <p style={{ margin: 0, fontSize: "11px", color: "#6B6B8A" }}>
-          Secured. Charges appear as "Freya Credits"
+          Secured by Monnify. Charges appear as &quot;Freya Credits&quot;
         </p>
       </div>
     </div>

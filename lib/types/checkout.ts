@@ -3,7 +3,7 @@ import type { User } from "@/lib/types/profile";
 export type CheckoutType = "subscription" | "ppv" | "locked_post" | "tips";
 export type CheckoutScreen = "plan" | "tip_input" | "payment" | "success";
 export type Currency = "NGN" | "GHS" | "KES" | "XOF";
-export type PaymentMethodId = "freya_wallet" | "kyshi_card" | "kyshi_virtual_account";
+export type PaymentMethodId = "freya_wallet" | "bank_transfer" | "card";
 export type SubscriptionTier = "monthly" | "three_month" | "six_month";
 
 // ─── Kyshi ───────────────────────────────────────────────────────────────────
@@ -255,4 +255,3 @@ export interface VirtualAccountDisplay {
   reference: string;
   amount?: number;
 }
-

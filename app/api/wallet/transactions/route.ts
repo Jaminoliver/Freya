@@ -37,8 +37,9 @@ export async function GET(req: NextRequest) {
       query = query.eq("category", category);
     }
 
-    // Exclude platform fees from fan-facing view
-    query = query.not("category", "eq", "PLATFORM_FEE");
+    // Exclude creator earnings and platform fees from fan wallet view
+    // These belong on the earnings page, not the wallet
+    query = query.not("category", "in", "(PLATFORM_FEE,CREATOR_EARNING)");
 
     const { data: entries, error: ledgerError, count } = await query;
 

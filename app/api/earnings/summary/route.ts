@@ -1,3 +1,4 @@
+// app/api/earnings/summary/route.ts
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
@@ -10,60 +11,73 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Fetch all CREATOR_EARNING ledger entries for this user
-    const { data: entries, error } = await supabase
-      .from("ledger_entries")
-      .select("amount, type, created_at, transaction_id")
+    const { data: earnings, error: earningsError } = await supabase
+      .from("ledger")
+      .select("amount, category, reference_id, created_at")
       .eq("user_id", user.id)
+      .eq("type", "CREDIT")
       .eq("category", "CREATOR_EARNING");
 
-    if (error) throw error;
+    if (earningsError) throw earningsError;
 
-    // Fetch all PAYOUT DEBIT entries to calculate available balance
     const { data: payouts, error: payoutError } = await supabase
-      .from("ledger_entries")
-      .select("amount, type")
+      .from("ledger")
+      .select("amount")
       .eq("user_id", user.id)
-      .eq("category", "PAYOUT")
-      .eq("type", "DEBIT");
+      .eq("type", "DEBIT")
+      .eq("category", "PAYOUT");
 
     if (payoutError) throw payoutError;
 
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-    // Total earned = sum of all CREDIT CREATOR_EARNING entries
-    const totalEarned = (entries ?? [])
-      .filter((e) => e.type === "CREDIT")
-      .reduce((sum, e) => sum + e.amount, 0);
-
-    // Total paid out
-    const totalPaidOut = (payouts ?? [])
-      .reduce((sum, e) => sum + e.amount, 0);
-
-    // Available = total earned - total paid out
+    const totalEarned = (earnings ?? []).reduce((sum, e) => sum + e.amount, 0);
+    const totalPaidOut = (payouts ?? []).reduce((sum, e) => sum + e.amount, 0);
     const available = Math.max(0, totalEarned - totalPaidOut);
 
-    // This month entries
-    const thisMonthEntries = (entries ?? []).filter(
-      (e) => e.type === "CREDIT" && e.created_at >= startOfMonth
-    );
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const thisMonthEntries = (earnings ?? []).filter((e) => e.created_at >= startOfMonth);
 
-    // Fetch transaction types for this month entries
-    const txIds = thisMonthEntries.map((e) => e.transaction_id);
+    const refIds = thisMonthEntries.map((e) => e.reference_id).filter(Boolean) as string[];
 
-    let txMap: Record<number, string> = {};
-    if (txIds.length > 0) {
+    let txCategoryMap: Record<string, string> = {};
+
+    if (refIds.length > 0) {
+      // Use service client to bypass RLS when reading other users' ledger rows
       const serviceSupabase = createServiceSupabaseClient();
-      const { data: txs } = await serviceSupabase
-        .from("transactions")
-        .select("id, transaction_type")
-        .in("id", txIds);
 
-      txMap = Object.fromEntries((txs ?? []).map((t) => [t.id, t.transaction_type]));
+      const { data: fanEntries } = await serviceSupabase
+        .from("ledger")
+        .select("reference_id, category")
+        .in("reference_id", refIds)
+        .eq("type", "DEBIT")
+        .in("category", ["SUBSCRIPTION_PAYMENT", "AUTO_SUBSCRIPTION", "TIP", "PPV_PURCHASE", "PPV_MESSAGE"]);
+
+      if (fanEntries) {
+        fanEntries.forEach((fe) => {
+          if (fe.reference_id) {
+            txCategoryMap[fe.reference_id] = fe.category;
+          }
+        });
+      }
+
+      // Fallback: ref_ids still unmatched → check transactions table (bank transfer subs)
+      const missingRefIds = refIds.filter((r) => !txCategoryMap[r]);
+      if (missingRefIds.length > 0) {
+        const { data: txFans } = await serviceSupabase
+          .from("transactions")
+          .select("provider_txn_id")
+          .in("provider_txn_id", missingRefIds);
+
+        if (txFans) {
+          txFans.forEach((tx) => {
+            if (tx.provider_txn_id && !txCategoryMap[tx.provider_txn_id]) {
+              txCategoryMap[tx.provider_txn_id] = "SUBSCRIPTION_PAYMENT";
+            }
+          });
+        }
+      }
     }
 
-    // Breakdown by type this month
     const breakdown = {
       subscriptions: 0,
       tips: 0,
@@ -73,22 +87,33 @@ export async function GET() {
     };
 
     thisMonthEntries.forEach((e) => {
-      const txType = txMap[e.transaction_id];
-      if (txType === "subscription_payment") breakdown.subscriptions += e.amount;
-      else if (txType === "tip") breakdown.tips += e.amount;
-      else if (txType === "ppv_unlock") breakdown.ppv += e.amount;
-      else if (txType === "ppv_message") breakdown.messages += e.amount;
-      else if (txType === "bundle_purchase") breakdown.on_request += e.amount;
+      const fanCategory = e.reference_id ? txCategoryMap[e.reference_id] : null;
+
+      if (fanCategory === "SUBSCRIPTION_PAYMENT" || fanCategory === "AUTO_SUBSCRIPTION") {
+        breakdown.subscriptions += e.amount;
+      } else if (fanCategory === "TIP") {
+        breakdown.tips += e.amount;
+      } else if (fanCategory === "PPV_PURCHASE") {
+        breakdown.ppv += e.amount;
+      } else if (fanCategory === "PPV_MESSAGE") {
+        breakdown.messages += e.amount;
+      } else {
+        breakdown.on_request += e.amount;
+      }
     });
 
     const thisMonthTotal = Object.values(breakdown).reduce((a, b) => a + b, 0);
 
     return NextResponse.json({
-      totalEarned,
-      available,
+      totalEarned: totalEarned / 100,
+      available: available / 100,
       thisMonth: {
-        ...breakdown,
-        total: thisMonthTotal,
+        subscriptions: breakdown.subscriptions / 100,
+        tips: breakdown.tips / 100,
+        ppv: breakdown.ppv / 100,
+        messages: breakdown.messages / 100,
+        on_request: breakdown.on_request / 100,
+        total: thisMonthTotal / 100,
       },
     });
   } catch (err) {

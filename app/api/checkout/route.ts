@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Amount is in kobo from frontend
-    const amountKobo = amount;
+    const amountKobo = Math.round(amount * 100);
     const isFree = amountKobo === 0;
 
     // Check balance for paid transactions

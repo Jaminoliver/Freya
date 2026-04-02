@@ -154,7 +154,7 @@ function WalletContent() {
           type:     mapCategoryToType(t.category),
           label:    t.description ?? t.category,
           subtitle: t.provider,
-          amount:   t.amount,
+          amount:   t.amountNaira,
           date:     new Date(t.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
           status:   "completed" as const,
         }));

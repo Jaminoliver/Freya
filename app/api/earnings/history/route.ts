@@ -1,3 +1,6 @@
+// app/api/earnings/history/route.ts
+// Returns creator earning history from the ledger table
+
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
@@ -16,10 +19,10 @@ export async function GET(req: NextRequest) {
     const limit = 20;
     const offset = (page - 1) * limit;
 
-    // Fetch CREATOR_EARNING CREDIT entries
+    // Fetch CREATOR_EARNING CREDIT entries from ledger
     const { data: entries, error } = await supabase
-      .from("ledger_entries")
-      .select("id, amount, created_at, transaction_id")
+      .from("ledger")
+      .select("id, amount, reference_id, created_at")
       .eq("user_id", user.id)
       .eq("category", "CREATOR_EARNING")
       .eq("type", "CREDIT")
@@ -31,20 +34,56 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ history: [] });
     }
 
-    // Use service role to bypass RLS for fan transactions and profiles
     const serviceSupabase = createServiceSupabaseClient();
 
-    // Fetch transactions for these entries
-    const txIds = entries.map((e) => e.transaction_id);
-    const { data: txs } = await serviceSupabase
-      .from("transactions")
-      .select("id, transaction_type, fan_id, created_at, status")
-      .in("id", txIds);
+    // Get reference_ids to look up the fan-side debit entries for type info
+    const refIds = entries.map((e) => e.reference_id).filter(Boolean) as string[];
 
-    const txMap = Object.fromEntries((txs ?? []).map((t) => [t.id, t]));
+    // Look up fan-side debit entries to determine type and fan_id
+    let fanDebitMap: Record<string, { category: string; userId: string }> = {};
+
+    if (refIds.length > 0) {
+      const { data: fanDebits } = await serviceSupabase
+        .from("ledger")
+        .select("reference_id, category, user_id")
+        .in("reference_id", refIds)
+        .eq("type", "DEBIT")
+        .in("category", ["SUBSCRIPTION_PAYMENT", "AUTO_SUBSCRIPTION", "TIP", "PPV_PURCHASE", "PPV_MESSAGE"]);
+
+      if (fanDebits) {
+        fanDebits.forEach((fd) => {
+          if (fd.reference_id) {
+            fanDebitMap[fd.reference_id] = {
+              category: fd.category,
+              userId: fd.user_id,
+            };
+          }
+        });
+      }
+    }
+
+    // For entries with no fan debit (bank transfer payments), check transactions table
+    const missingRefIds = refIds.filter((r) => !fanDebitMap[r]);
+    if (missingRefIds.length > 0) {
+      const { data: txFans } = await serviceSupabase
+        .from("transactions")
+        .select("provider_txn_id, fan_id")
+        .in("provider_txn_id", missingRefIds);
+
+      if (txFans) {
+        txFans.forEach((tx) => {
+          if (tx.provider_txn_id && tx.fan_id && !fanDebitMap[tx.provider_txn_id]) {
+            fanDebitMap[tx.provider_txn_id] = {
+              category: "SUBSCRIPTION_PAYMENT",
+              userId: tx.fan_id,
+            };
+          }
+        });
+      }
+    }
 
     // Fetch fan profiles
-    const fanIds = [...new Set((txs ?? []).map((t) => t.fan_id).filter(Boolean))];
+    const fanIds = [...new Set(Object.values(fanDebitMap).map((d) => d.userId).filter(Boolean))];
     let fanMap: Record<string, { display_name: string; username: string }> = {};
 
     if (fanIds.length > 0) {
@@ -58,37 +97,37 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const TYPE_LABEL: Record<string, string> = {
-      subscription_payment: "Subscription",
-      tip:                  "Tip",
-      ppv_unlock:           "PPV",
-      ppv_message:          "Message",
-      bundle_purchase:      "On Request",
+    // Map category to display label
+    const CATEGORY_LABEL: Record<string, string> = {
+      SUBSCRIPTION_PAYMENT: "Subscription",
+      AUTO_SUBSCRIPTION: "Subscription",
+      TIP: "Tip",
+      PPV_PURCHASE: "PPV",
+      PPV_MESSAGE: "Message",
     };
 
     const history = entries
       .map((entry) => {
-        const tx = txMap[entry.transaction_id];
-        if (!tx) return null;
-
-        const txType = tx.transaction_type;
-        const typeLabel = TYPE_LABEL[txType] ?? txType;
+        const fanDebit = entry.reference_id ? fanDebitMap[entry.reference_id] : null;
+        const typeLabel = fanDebit ? (CATEGORY_LABEL[fanDebit.category] ?? "Other") : "Other";
 
         // Apply filter
         if (filter !== "all" && typeLabel.toLowerCase() !== filter.toLowerCase()) return null;
 
-        const fan = tx.fan_id ? fanMap[tx.fan_id] : null;
+        const fan = fanDebit?.userId ? fanMap[fanDebit.userId] : null;
 
         return {
           id: entry.id,
-          amount: entry.amount,
+          amount: entry.amount / 100, // kobo to naira
           type: typeLabel,
           date: new Date(entry.created_at).toLocaleDateString("en-NG", {
-            day: "numeric", month: "short", year: "numeric",
+            day: "numeric",
+            month: "short",
+            year: "numeric",
           }),
           fan: fan?.display_name ?? "Anonymous",
           username: fan?.username ? `@${fan.username}` : "",
-          status: tx.status,
+          status: "completed",
         };
       })
       .filter(Boolean);

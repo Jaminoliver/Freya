@@ -57,20 +57,18 @@ export default function CheckoutModal({
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Prevent useEffect from resetting screen after success
   const successRef = React.useRef(false);
 
   React.useEffect(() => {
     if (isOpen) {
       fetch("/api/wallet/balance")
         .then((r) => r.json())
-        .then(({ balance }) => setWalletBalance(balance ?? 0))
+        .then((data) => setWalletBalance(data.balanceNaira ?? 0))
         .catch(() => setWalletBalance(0));
     }
   }, [isOpen]);
 
   React.useEffect(() => {
-    console.log("[Modal] reset useEffect fired — isOpen:", isOpen, "type:", type, "initialTier:", initialTier, "successRef:", successRef.current);
     if (isOpen && !successRef.current) {
       setScreen(type === "tips" ? "tip_input" : type === "subscription" ? "plan" : "payment");
       setSelectedMethod(null);
@@ -125,6 +123,7 @@ export default function CheckoutModal({
   const handleNext = async () => {
     if (screen === "plan") {
       if (getAmount() === 0) {
+        // Free subscription
         setLoading(true);
         setError(null);
         try {
@@ -139,7 +138,6 @@ export default function CheckoutModal({
             }),
           });
           const data = await res.json();
-          console.log("[Checkout] status:", res.status, "data:", data);
           if (!res.ok) { setError(data.message ?? "Subscription failed"); return; }
           handlePaymentSuccess();
         } catch {
@@ -186,30 +184,26 @@ export default function CheckoutModal({
         return;
       }
 
-      // ── Bank Transfer — generate virtual account ──
-      if (selectedMethod === "kyshi_virtual_account") {
+      // ── Bank Transfer — generate virtual account inline ──
+      if (selectedMethod === "bank_transfer") {
         if (virtualAccount) {
+          // User clicked "I've Completed the Transfer"
           handlePaymentSuccess();
           return;
         }
 
         setLoading(true);
         try {
-          const endpoint =
-            type === "subscription" ? "/api/subscriptions/checkout/virtual-account" :
-            type === "tips"         ? "/api/tips/checkout/virtual-account" :
-                                      "/api/ppv/checkout/virtual-account";
-
-          const res = await fetch(endpoint, {
+          const res = await fetch("/api/checkout/initialize", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              amount:       getAmount(),
-              creatorId:    creator.id,
-              tierId:       type === "subscription" ? tierId : undefined,
-              tierDuration: type === "subscription" ? selectedTier : undefined,
-              postId:       type === "ppv" ? postId : undefined,
-              currency,
+              paymentMethod: "BANK_TRANSFER",
+              type: type === "tips" ? "tip" : type === "subscription" ? "subscription" : "ppv",
+              amount: getAmount(),
+              creatorId: creator.id,
+              tierId: type === "subscription" ? tierId : undefined,
+              postId: type === "ppv" ? postId : undefined,
             }),
           });
 
@@ -219,16 +213,61 @@ export default function CheckoutModal({
             setError(data.message ?? "Failed to generate bank account");
             return;
           }
-          setVirtualAccount({
-            accountNumber: data.accountNumber,
-            bankName:      data.bankName,
-            accountName:   data.accountName,
-            expiresAt:     data.expiresAt,
-            amount:        data.amount,
-            reference:     data.reference,
-          });
+
+          // If inline account details returned
+          if (data.accountNumber) {
+            setVirtualAccount({
+              accountNumber: data.accountNumber,
+              bankName: data.bankName,
+              accountName: data.accountName,
+              expiresAt: data.expiresAt,
+              amount: data.amount,
+              reference: data.reference,
+            });
+          } else if (data.checkoutUrl) {
+            // Fallback: redirect to Monnify checkout
+            window.location.href = data.checkoutUrl;
+          }
         } catch (err) {
-          console.error("[Checkout] VA fetch error:", err);
+          console.error("[Checkout] Bank transfer init error:", err);
+          setError("Something went wrong. Please try again.");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      // ── Card Payment — redirect to Monnify checkout ──
+      if (selectedMethod === "card") {
+        setLoading(true);
+        try {
+          const res = await fetch("/api/checkout/initialize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              paymentMethod: "CARD",
+              type: type === "tips" ? "tip" : type === "subscription" ? "subscription" : "ppv",
+              amount: getAmount(),
+              creatorId: creator.id,
+              tierId: type === "subscription" ? tierId : undefined,
+              postId: type === "ppv" ? postId : undefined,
+            }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            setError(data.message ?? "Failed to initialize payment");
+            return;
+          }
+
+          if (data.checkoutUrl) {
+            window.location.href = data.checkoutUrl;
+          } else {
+            setError("No checkout URL returned. Please try again.");
+          }
+        } catch (err) {
+          console.error("[Checkout] Card init error:", err);
           setError("Something went wrong. Please try again.");
         } finally {
           setLoading(false);

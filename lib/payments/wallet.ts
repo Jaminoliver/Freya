@@ -231,7 +231,7 @@ export async function debitFanCreditCreator(params: {
   const platformFee = Math.round(amountKobo * commissionRate);
   const creatorEarning = amountKobo - platformFee;
 
-  // 1. Debit fan
+  // 1. Debit fan wallet (updates wallets.balance)
   await debitWallet({
     userId: fanId,
     amountKobo,
@@ -239,20 +239,29 @@ export async function debitFanCreditCreator(params: {
     referenceId,
   });
 
-  // 2. Credit creator (their share after commission)
-  await creditWallet({
-    userId: creatorId,
-    amountKobo: creatorEarning,
+  // 2. Credit creator earnings — ledger ONLY, NOT wallets.balance
+  // Creator earnings are separate from fan wallet. Earnings are calculated
+  // from the ledger table by the earnings API routes.
+  const { error: earningError } = await supabase.from("ledger").insert({
+    user_id: creatorId,
+    type: "CREDIT",
+    amount: creatorEarning,
+    balance_after: 0, // Not tracked in wallets table — earnings page reads from ledger
     category: creatorCategory,
-    referenceId,
+    reference_id: referenceId ?? null,
+    provider: "INTERNAL",
   });
+
+  if (earningError) {
+    console.error("[debitFanCreditCreator] Failed to record creator earning:", earningError.message);
+  }
 
   // 3. Record platform fee in ledger (under creator's user_id for tracking)
   const { error: feeError } = await supabase.from("ledger").insert({
     user_id: creatorId,
     type: "CREDIT",
     amount: platformFee,
-    balance_after: 0, // Platform fee is not in creator's wallet — tracked separately
+    balance_after: 0,
     category: "PLATFORM_FEE",
     reference_id: referenceId ?? null,
     provider: "INTERNAL",
