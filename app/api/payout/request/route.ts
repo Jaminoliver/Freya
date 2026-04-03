@@ -1,149 +1,170 @@
+// app/api/payout/request/route.ts
+// Creator requests a payout — validates balance, creates payout_request,
+// initiates Monnify transfer
+
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
-import { generatePayOnUsReference, initiateBankTransfer } from "@/lib/utils/payonus";
+import { initiateTransfer } from "@/lib/monnify/client";
 
-const MIN_PAYOUT   = 5000;
-const WEBHOOK_URL  = process.env.NEXT_PUBLIC_APP_URL + "/api/webhooks/payonus";
-const IS_SANDBOX   = process.env.PAYONUS_BASE_URL?.includes("sandbox");
+const MIN_WITHDRAWAL_NAIRA = 5000;
+const MIN_WITHDRAWAL_KOBO = MIN_WITHDRAWAL_NAIRA * 100;
 
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { amount } = await req.json();
-    const numAmount = Number(amount);
 
-    if (!numAmount || numAmount < MIN_PAYOUT) {
-      return NextResponse.json(
-        { error: `Minimum withdrawal is ${MIN_PAYOUT.toLocaleString()}` },
-        { status: 400 }
-      );
+    // Amount from frontend is in naira
+    if (!amount || typeof amount !== "number" || amount < MIN_WITHDRAWAL_NAIRA) {
+      return NextResponse.json({ error: `Minimum withdrawal is ₦${MIN_WITHDRAWAL_NAIRA.toLocaleString()}` }, { status: 400 });
     }
 
-    // Check available balance
-    const service = createServiceSupabaseClient();
+    const amountKobo = Math.round(amount * 100);
+    const serviceSupabase = createServiceSupabaseClient();
 
-    const { data: credits } = await service
-      .from("ledger_entries").select("amount")
-      .eq("user_id", user.id).eq("category", "CREATOR_EARNING").eq("type", "CREDIT");
+    // Calculate available earnings from ledger
+    const { data: earnings } = await serviceSupabase
+      .from("ledger")
+      .select("amount")
+      .eq("user_id", user.id)
+      .eq("type", "CREDIT")
+      .eq("category", "CREATOR_EARNING");
 
-    const { data: debits } = await service
-      .from("ledger_entries").select("amount")
-      .eq("user_id", user.id).eq("category", "PAYOUT").eq("type", "DEBIT");
+    const { data: payouts } = await serviceSupabase
+      .from("ledger")
+      .select("amount")
+      .eq("user_id", user.id)
+      .eq("type", "DEBIT")
+      .eq("category", "PAYOUT");
 
-    const totalEarned = (credits ?? []).reduce((s: number, r: { amount: string }) => s + Number(r.amount), 0);
-    const totalPaid   = (debits  ?? []).reduce((s: number, r: { amount: string }) => s + Number(r.amount), 0);
-    const available   = Math.max(0, totalEarned - totalPaid);
+    const totalEarned = (earnings ?? []).reduce((sum, e) => sum + e.amount, 0);
+    const totalPaidOut = (payouts ?? []).reduce((sum, e) => sum + e.amount, 0);
+    const availableKobo = totalEarned - totalPaidOut;
 
-    if (numAmount > available) {
-      return NextResponse.json({ error: "Insufficient balance" }, { status: 400 });
+    if (amountKobo > availableKobo) {
+      return NextResponse.json({ error: "Insufficient earnings balance" }, { status: 400 });
     }
 
-    // Fetch verified bank account
-    const { data: bankAccount } = await supabase
-      .from("bank_accounts")
-      .select("id, bank_name, bank_code, account_number, account_name")
-      .eq("creator_id", user.id)
-      .eq("is_verified", true)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (!bankAccount) {
-      return NextResponse.json(
-        { error: "No verified bank account found. Please add one in Payout Settings." },
-        { status: 400 }
-      );
-    }
-
-    // Block duplicate pending payout
-    const { data: pending } = await supabase
+    // Check for pending payouts
+    const { data: pendingPayouts } = await serviceSupabase
       .from("payout_requests")
       .select("id")
       .eq("creator_id", user.id)
-      .eq("status", "PENDING")
-      .maybeSingle();
+      .in("status", ["PENDING", "PROCESSING"]);
 
-    if (pending) {
-      return NextResponse.json(
-        { error: "You already have a pending payout request." },
-        { status: 409 }
-      );
+    if (pendingPayouts && pendingPayouts.length > 0) {
+      return NextResponse.json({ error: "You have a pending payout. Please wait for it to complete." }, { status: 400 });
     }
 
-    // Fetch creator email
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("id", user.id)
+    // Get active payout account
+    const { data: payoutAccount } = await serviceSupabase
+      .from("creator_payout_accounts")
+      .select("id, bank_name, bank_code, account_number, account_name, is_verified, is_active, created_at, updated_at")
+      .eq("creator_id", user.id)
+      .eq("is_active", true)
+      .eq("is_verified", true)
       .single();
 
-    const email     = profile?.email ?? user.email ?? "";
-    const reference = generatePayOnUsReference("PAYOUT");
+    if (!payoutAccount) {
+      return NextResponse.json({ error: "No verified payout account found. Please add one in settings." }, { status: 400 });
+    }
 
-    let onusReference: string | null = null;
+    // Check 48hr cooling period on new accounts
+    // Only applies if creator previously had a different account (removed/replaced)
+    const accountAge = (Date.now() - new Date(payoutAccount.created_at).getTime()) / (1000 * 60 * 60);
 
-    if (IS_SANDBOX) {
-      // Sandbox: skip PayOnUs transfer call — save directly as PENDING
-      // Use test-payonus-payout.ts script to simulate webhook approval
-      console.log("[Payout Request] Sandbox mode — skipping PayOnUs transfer call");
-      onusReference = "SANDBOX-" + reference;
-    } else {
-      // Production: call PayOnUs transfer API
-      console.log("[Payout Request] Calling PayOnUs transfer", { amount: numAmount, reference });
-      try {
-        const transferResult = await initiateBankTransfer({
-          reference,
-          amount:                   numAmount,
-          beneficiaryAccountNumber: bankAccount.account_number,
-          beneficiaryAccountName:   bankAccount.account_name,
-          beneficiaryBankCode:      bankAccount.bank_code,
-          email,
-          notificationUrl:          WEBHOOK_URL,
-        });
-        console.log("[Payout Request] PayOnUs response:", JSON.stringify(transferResult, null, 2));
-        onusReference = transferResult.onusReference ?? null;
-      } catch (err) {
-        console.error("[Payout Request] PayOnUs transfer error:", err);
-        return NextResponse.json(
-          { error: err instanceof Error ? err.message : "Transfer failed. Please try again." },
-          { status: 400 }
-        );
+    if (accountAge < 48) {
+      // Check if any other account rows exist (soft-deleted or inactive)
+      // If yes, this is a replacement account → cooling applies
+      const { data: otherAccounts } = await serviceSupabase
+        .from("creator_payout_accounts")
+        .select("id")
+        .eq("creator_id", user.id)
+        .neq("id", payoutAccount.id)
+        .limit(1);
+
+      if (otherAccounts && otherAccounts.length > 0) {
+        const hoursLeft = Math.ceil(48 - accountAge);
+        return NextResponse.json({
+          error: `For your security, new bank accounts require a 48-hour waiting period before payouts. You can request a payout in ${hoursLeft} hours.`,
+        }, { status: 400 });
       }
     }
 
-    // Save payout_requests row
-    const { data: payoutRow, error: insertError } = await supabase
+    // Generate unique reference
+    const reference = `FRY-PAY-${user.id.slice(0, 8)}-${Date.now()}`;
+
+    // Insert payout request as PENDING
+    const { data: payoutRequest, error: insertError } = await serviceSupabase
       .from("payout_requests")
       .insert({
-        creator_id:          user.id,
-        amount:              numAmount,
-        status:              "PENDING",
-        kyshi_transfer_code: onusReference,
-        bank_account_number: bankAccount.account_number,
-        bank_code:           bankAccount.bank_code,
+        creator_id: user.id,
+        amount: amountKobo,
+        status: "PENDING",
+        monnify_transfer_ref: reference,
+        bank_account_number: payoutAccount.account_number,
+        bank_code: payoutAccount.bank_code,
       })
       .select("id")
       .single();
 
     if (insertError) {
-      console.error("[Payout Request] Insert error:", insertError.message);
-      return NextResponse.json({ error: "Payout initiated but failed to save record." }, { status: 500 });
+      console.error("[Payout Request] Insert error:", insertError);
+      return NextResponse.json({ error: "Failed to create payout request" }, { status: 500 });
     }
 
-    console.log("[Payout Request] Saved payout row:", payoutRow.id);
+    // Initiate Monnify transfer
+    try {
+      const transferResult = await initiateTransfer({
+        amount: amountKobo,
+        reference,
+        narration: `Freya earnings payout - ${new Date().toLocaleDateString("en-NG")}`,
+        bankCode: payoutAccount.bank_code,
+        accountNumber: payoutAccount.account_number,
+        accountName: payoutAccount.account_name,
+      });
 
-    return NextResponse.json({
-      success:      true,
-      payoutId:     payoutRow.id,
-      reference,
-      onusReference,
-      status:       "PENDING",
-    });
+      // Update payout request with Monnify response
+      await serviceSupabase
+        .from("payout_requests")
+        .update({
+          status: "PROCESSING",
+          monnify_transfer_ref: transferResult.reference || reference,
+        })
+        .eq("id", payoutRequest.id);
 
-  } catch (err) {
-    console.error("[Payout Request] Error:", err);
+      console.log("[Payout Request] Transfer initiated:", {
+        reference,
+        amount: amountKobo,
+        status: transferResult.status,
+      });
+
+      return NextResponse.json({
+        message: "Payout initiated",
+        payoutId: payoutRequest.id,
+        reference,
+      });
+    } catch (transferError: any) {
+      console.error("[Payout Request] Monnify transfer error:", transferError);
+
+      // Mark payout as failed
+      await serviceSupabase
+        .from("payout_requests")
+        .update({ status: "FAILED" })
+        .eq("id", payoutRequest.id);
+
+      return NextResponse.json({
+        error: "Failed to initiate bank transfer. Please try again later.",
+      }, { status: 500 });
+    }
+  } catch (error) {
+    console.error("[Payout Request] Error:", error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

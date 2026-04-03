@@ -2,10 +2,8 @@ export type NotificationFilterTab =
   | "all"
   | "messages"
   | "subscriptions"
-  | "likes"
-  | "comments"
   | "earnings"
-  | "payments";
+  | "activity";
 
 export type NotificationType =
   // creator only

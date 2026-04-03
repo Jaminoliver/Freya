@@ -119,10 +119,10 @@ export default function HomePage() {
   const [slideMap,    setSlideMap]    = useState<Record<string, number>>({});
 
   // PPV checkout state
-  const [ppvOpen,      setPpvOpen]      = useState(false);
-  const [ppvPrice,     setPpvPrice]     = useState(0);
-  const [ppvPostId,    setPpvPostId]    = useState<number | undefined>(undefined);
-  const [ppvCreator,   setPpvCreator]   = useState<User | null>(null);
+  const [ppvOpen,    setPpvOpen]    = useState(false);
+  const [ppvPrice,   setPpvPrice]   = useState(0);
+  const [ppvPostId,  setPpvPostId]  = useState<number | undefined>(undefined);
+  const [ppvCreator, setPpvCreator] = useState<User | null>(null);
 
   // Story viewer state
   const [storyGroups,     setStoryGroups]     = useState<CreatorStoryGroup[]>([]);
@@ -234,7 +234,6 @@ export default function HomePage() {
     });
   }, [updateFeedPost]);
 
-  // Handle PPV unlock — same pattern as profile page
   const handleUnlock = useCallback((postId: string) => {
     const post = postsRef.current.find((p) => String(p.id) === postId);
     if (!post) return;
@@ -252,6 +251,16 @@ export default function HomePage() {
     setPpvPrice((post.ppv_price ?? 0) / 100);
     setPpvOpen(true);
   }, []);
+
+  // Instantly unlock the post in state after successful PPV payment
+  const handlePpvSuccess = useCallback(() => {
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p
+      )
+    );
+    // Don't close — let success screen show, modal closes via onViewContent
+  }, [ppvPostId]);
 
   const handleOpenViewer = useCallback((groups: CreatorStoryGroup[], startIndex: number) => {
     setStoryGroups(groups);
@@ -282,7 +291,6 @@ export default function HomePage() {
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>
 
-      {/* PPV Checkout Modal — owned by HomePage like profile page */}
       {ppvCreator && (
         <CheckoutModal
           isOpen={ppvOpen}
@@ -291,6 +299,7 @@ export default function HomePage() {
           creator={ppvCreator}
           postPrice={ppvPrice}
           postId={ppvPostId}
+          onSuccess={handlePpvSuccess}
         />
       )}
 

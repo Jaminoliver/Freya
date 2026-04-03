@@ -12,26 +12,26 @@ interface Props {
 
 const TYPE_TO_FILTER: Record<NotificationItem["type"], NotificationFilterTab> = {
   // creator
-  like:                 "likes",
-  comment_liked:        "likes",
-  comment:              "comments",
-  subscription:         "subscriptions",
-  resubscription:       "subscriptions",
-  tip_received:         "earnings",
-  ppv_unlocked:         "earnings",
-  ppv_purchased:        "earnings",
-  payout_completed:     "earnings",
-  payout_failed:        "earnings",
+  like:                  "activity",
+  comment_liked:         "activity",
+  comment:               "activity",
+  subscription:          "subscriptions",
+  resubscription:        "subscriptions",
+  tip_received:          "earnings",
+  ppv_unlocked:          "earnings",
+  ppv_purchased:         "activity",
+  payout_completed:      "earnings",
+  payout_failed:         "earnings",
   // fan
-  renewal_failed:       "subscriptions",
-  renewal_success:      "payments",
-  subscription_charged: "payments",
+  renewal_failed:        "subscriptions",
+  renewal_success:       "activity",
+  subscription_charged:  "activity",
   subscription_activated:"subscriptions",
   subscription_cancelled:"subscriptions",
-  tip_sent:             "payments",
-  wallet_topup:         "payments",
+  tip_sent:              "activity",
+  wallet_topup:          "activity",
   // both
-  message:              "messages",
+  message:               "messages",
 };
 
 function groupByDate(items: NotificationItem[]): NotificationGroupType[] {

@@ -9,12 +9,10 @@ interface Props {
 
 const TABS: { label: string; value: NotificationFilterTab }[] = [
   { label: "All",           value: "all"           },
+  { label: "Activity",      value: "activity"      },
   { label: "Messages",      value: "messages"      },
   { label: "Subscriptions", value: "subscriptions" },
-  { label: "Likes",         value: "likes"         },
-  { label: "Comments",      value: "comments"      },
   { label: "Earnings",      value: "earnings"      },
-  { label: "Payments",      value: "payments"      },
 ];
 
 export function NotificationFilterTabs({ active, onChange }: Props) {

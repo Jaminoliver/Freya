@@ -1,5 +1,8 @@
+// app/api/payout/remove/route.ts
+// Removes a bank account from creator's payout accounts
+
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -11,47 +14,50 @@ export async function DELETE(req: NextRequest) {
     }
 
     const { accountId } = await req.json();
-
     if (!accountId) {
-      return NextResponse.json({ error: "Account ID is required" }, { status: 400 });
+      return NextResponse.json({ error: "accountId is required" }, { status: 400 });
     }
 
-    // Check if it's the primary — if so, assign primary to another account after deletion
-    const { data: account } = await supabase
-      .from("bank_accounts")
-      .select("is_primary")
+    const serviceSupabase = createServiceSupabaseClient();
+
+    // Verify the account belongs to this user
+    const { data: account } = await serviceSupabase
+      .from("creator_payout_accounts")
+      .select("id, is_active")
       .eq("id", accountId)
       .eq("creator_id", user.id)
       .single();
 
-    const { error } = await supabase
-      .from("bank_accounts")
-      .delete()
-      .eq("id", accountId)
-      .eq("creator_id", user.id);
+    if (!account) {
+      return NextResponse.json({ error: "Account not found" }, { status: 404 });
+    }
 
-    if (error) throw error;
+    // Soft-delete the account (keep row for cooling period tracking)
+    await serviceSupabase
+      .from("creator_payout_accounts")
+      .update({ is_active: false, is_verified: false, updated_at: new Date().toISOString() })
+      .eq("id", accountId);
 
-    // If deleted account was primary, make the next one primary
-    if (account?.is_primary) {
-      const { data: remaining } = await supabase
-        .from("bank_accounts")
+    // If the removed account was active, promote the next one
+    if (account.is_active) {
+      const { data: remaining } = await serviceSupabase
+        .from("creator_payout_accounts")
         .select("id")
         .eq("creator_id", user.id)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(1);
 
       if (remaining && remaining.length > 0) {
-        await supabase
-          .from("bank_accounts")
-          .update({ is_primary: true })
+        await serviceSupabase
+          .from("creator_payout_accounts")
+          .update({ is_active: true })
           .eq("id", remaining[0].id);
       }
     }
 
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("[Remove Account Error]", err);
-    return NextResponse.json({ error: "Failed to remove account" }, { status: 500 });
+    return NextResponse.json({ message: "Account removed" });
+  } catch (error) {
+    console.error("[Payout Remove] Error:", error);
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

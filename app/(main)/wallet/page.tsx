@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import WalletTab from "@/components/wallet/WalletTab";
 import CardsTab from "@/components/wallet/CardsTab";
-import HistoryTab from "@/components/wallet/HistoryTab";
+import TransactionsTab from "@/components/wallet/TransactionsTab";
 import { WalletSkeleton } from "@/components/loadscreen/WalletSkeleton";
 import { Transaction } from "@/components/wallet/TransactionItem";
 import { SavedCard } from "@/lib/types/checkout";
@@ -45,10 +45,8 @@ function CheckoutLoadingOverlay() {
     }}>
       <div style={{
         width: "48px", height: "48px",
-        border: "3px solid #1E1E2E",
-        borderTop: "3px solid #8B5CF6",
-        borderRadius: "50%",
-        animation: "spin 0.8s linear infinite",
+        border: "3px solid #1E1E2E", borderTop: "3px solid #8B5CF6",
+        borderRadius: "50%", animation: "spin 0.8s linear infinite",
       }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       <div style={{ textAlign: "center" }}>
@@ -101,23 +99,16 @@ function WalletContent() {
   const searchParams = useSearchParams();
 
   const { contentFeeds, setContentFeed } = useAppStore();
-  const cached = contentFeeds[CACHE_KEY];
-  const fresh  = cached && !isStale(cached.fetchedAt);
 
-  // Restore cached wallet data if fresh
-  const cachedData = fresh ? (cached.posts as unknown as {
-    balance: number; transactions: Transaction[]; cards: SavedCard[];
-  }) : null;
-
-  const [activeTab,      setActiveTab]      = useState<Tab>("wallet");
-  const [autoRecharge,   setAutoRecharge]   = useState(false);
-  const [balance,        setBalance]        = useState(cachedData?.balance ?? 0);
-  const [transactions,   setTransactions]   = useState<Transaction[]>(cachedData?.transactions ?? []);
-  const [cards,          setCards]          = useState<SavedCard[]>(cachedData?.cards ?? []);
-  const [loading,        setLoading]        = useState(!fresh);
-  const [revealed,       setRevealed]       = useState(fresh ?? false);
-  const [redirecting,    setRedirecting]    = useState(false);
-  const [paymentStatus,  setPaymentStatus]  = useState<"success" | "failed" | null>(null);
+  const [activeTab,     setActiveTab]     = useState<Tab>("wallet");
+  const [autoRecharge,  setAutoRecharge]  = useState(false);
+  const [balance,       setBalance]       = useState(0);
+  const [transactions,  setTransactions]  = useState<Transaction[]>([]);
+  const [cards,         setCards]         = useState<SavedCard[]>([]);
+  const [loading,       setLoading]       = useState(true);  // always true on server — safe
+  const [revealed,      setRevealed]      = useState(false); // always false on server — safe
+  const [redirecting,   setRedirecting]   = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<"success" | "failed" | null>(null);
 
   useEffect(() => {
     const ref = searchParams.get("ref");
@@ -125,7 +116,6 @@ function WalletContent() {
   }, [searchParams, router]);
 
   const fetchWalletData = useCallback(async (silent = false) => {
-    if (!silent && fresh) { setRevealed(true); return; }
     if (!silent) setLoading(true);
     try {
       const [balanceRes, txRes, cardsRes] = await Promise.all([
@@ -134,9 +124,9 @@ function WalletContent() {
         fetch("/api/wallet/cards"),
       ]);
 
-      let newBalance = balance;
-      let newTx: Transaction[] = transactions;
-      let newCards: SavedCard[] = cards;
+      let newBalance = 0;
+      let newTx: Transaction[] = [];
+      let newCards: SavedCard[] = [];
 
       if (balanceRes.ok) {
         const data = await balanceRes.json();
@@ -167,7 +157,6 @@ function WalletContent() {
         setCards(newCards);
       }
 
-      // Write to store
       setContentFeed(CACHE_KEY, {
         posts:     [{ balance: newBalance, transactions: newTx, cards: newCards }] as any,
         media:     [],
@@ -180,10 +169,27 @@ function WalletContent() {
       setLoading(false);
       requestAnimationFrame(() => setRevealed(true));
     }
-  }, [fresh, balance, transactions, cards, setContentFeed]);
+  }, [setContentFeed]);
 
+  // Hydrate from cache or fetch — runs only on client
   useEffect(() => {
-    if (fresh) { setRevealed(true); return; }
+    const cached = contentFeeds[CACHE_KEY];
+    const fresh  = cached && !isStale(cached.fetchedAt);
+
+    if (fresh) {
+      const cachedData = cached.posts[0] as unknown as {
+        balance: number; transactions: Transaction[]; cards: SavedCard[];
+      };
+      if (cachedData) {
+        setBalance(cachedData.balance ?? 0);
+        setTransactions(cachedData.transactions ?? []);
+        setCards(cachedData.cards ?? []);
+      }
+      setLoading(false);
+      requestAnimationFrame(() => setRevealed(true));
+      return;
+    }
+
     fetchWalletData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -208,27 +214,6 @@ function WalletContent() {
         setRedirecting(false);
         await fetchWalletData(true);
         setPaymentStatus("success");
-      }
-    } catch {
-      setRedirecting(false);
-      setPaymentStatus("failed");
-    }
-  }
-
-  async function handleBankTransfer(amount: number) {
-    try {
-      setRedirecting(true);
-      const res = await fetch("/api/wallet/topup/virtual-account", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setRedirecting(false); setPaymentStatus("failed"); return; }
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-      } else {
-        setRedirecting(false);
-        setPaymentStatus("failed");
       }
     } catch {
       setRedirecting(false);
@@ -261,6 +246,7 @@ function WalletContent() {
   return (
     <>
       {redirecting && <CheckoutLoadingOverlay />}
+
       <div style={{
         maxWidth: "768px", margin: "0 auto",
         minHeight: "100vh", backgroundColor: "#0A0A0F",
@@ -295,10 +281,8 @@ function WalletContent() {
             <PaymentBanner status={paymentStatus} onDismiss={() => setPaymentStatus(null)} />
           )}
 
-          {/* ── Skeleton phase ── */}
           {loading && <WalletSkeleton tab={activeTab} />}
 
-          {/* ── Revealed content ── */}
           {!loading && (
             <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
               {activeTab === "wallet" && (
@@ -307,10 +291,7 @@ function WalletContent() {
                   autoRecharge={autoRecharge}
                   transactions={transactions}
                   onAutoRechargeChange={setAutoRecharge}
-                  onTopUp={(amount) => handleTopUp(amount)}
-                  onBankTransfer={(amount) => handleBankTransfer(amount)}
-                  bankTransferLoading={false}
-                  bankAccount={null}
+                  onTopUp={handleTopUp}
                   onPaymentConfirmed={handlePaymentConfirmed}
                 />
               )}
@@ -326,7 +307,7 @@ function WalletContent() {
                 />
               )}
               {activeTab === "history" && (
-                <HistoryTab transactions={transactions} />
+                <TransactionsTab />
               )}
             </div>
           )}

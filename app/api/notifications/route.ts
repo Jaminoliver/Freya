@@ -4,7 +4,7 @@ import type { NotificationItem, NotificationType, NotificationRole } from "@/lib
 
 const TAB_TYPES: Record<string, NotificationType[]> = {
   messages:      ["message"],
-  subscriptions: ["subscription", "resubscription", "renewal_failed", "renewal_success", "subscription_charged"],
+  subscriptions: ["subscription", "resubscription", "renewal_failed", "renewal_success", "subscription_charged", "subscription_activated", "subscription_cancelled"],
   likes:         ["like"],
   comments:      ["comment"],
   earnings:      ["tip_received", "ppv_unlocked", "ppv_purchased", "payout_completed", "payout_failed"],

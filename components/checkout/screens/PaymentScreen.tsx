@@ -118,11 +118,36 @@ export default function PaymentScreen({
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopy = (text: string | undefined) => {
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+};
+
+const fallbackCopy = (text: string) => {
+  const el = document.createElement("textarea");
+  el.value = text;
+  el.style.position = "fixed";
+  el.style.opacity = "0";
+  document.body.appendChild(el);
+  el.focus();
+  el.select();
+  try {
+    document.execCommand("copy");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
+  } catch {
+    // silently fail
+  } finally {
+    document.body.removeChild(el);
+  }
+};
 
   const ctaLabel = () => {
     if (loading) {

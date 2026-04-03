@@ -58,7 +58,6 @@ function ProfilePageInner() {
   const [checkoutTier,    setCheckoutTier]    = React.useState<SubscriptionTier>("monthly");
   const [lockedPostId,    setLockedPostId]    = React.useState<number | undefined>(undefined);
   const [lockedPostPrice, setLockedPostPrice] = React.useState<number>(0);
-  const [tierId,          setTierId]          = React.useState<number | undefined>(undefined);
 
   const [fanSubscription, setFanSubscription] = React.useState<Subscription | null>(null);
 
@@ -98,8 +97,17 @@ function ProfilePageInner() {
     }
   };
 
-  // ── Message handler ──────────────────────────────────────────────────────────
-  // POST /api/conversations to find-or-create, then navigate to the real convo
+  const handleCheckoutSuccess = React.useCallback(() => {
+    if (checkoutType === "ppv" && lockedPostId) {
+      setApiPosts((prev) =>
+        prev.map((p) =>
+          p.id === lockedPostId ? { ...p, locked: false, can_access: true } : p
+        )
+      );
+      setFeedRefreshKey((k) => k + 1);
+    }
+  }, [checkoutType, lockedPostId]);
+
   const handleMessage = React.useCallback(async () => {
     if (!profile) return;
     try {
@@ -198,7 +206,6 @@ function ProfilePageInner() {
       setSubscriptionPeriodEnd(cached.subscriptionPeriodEnd ?? null);
       setIsFollowing(cached.isFollowing ?? false);
       setTotalLikes(cached.totalLikes ?? 0);
-      setTierId(cached.tierId);
       if (cached.fanSubscription) setFanSubscription(cached.fanSubscription);
       setApiLoading(false);
       requestAnimationFrame(() => setRevealed(true));
@@ -229,7 +236,6 @@ function ProfilePageInner() {
 
         let enriched: User | null           = null;
         let likesCount                      = 0;
-        let tierIdVal: number | undefined;
         let followingVal                    = false;
         let subscribedVal                   = false;
         let periodEndVal: string | null     = null;
@@ -255,12 +261,7 @@ function ProfilePageInner() {
           const isCreator    = profileRaw.role === "creator";
 
           if (isCreator) {
-            const [tierRes, subRes, followRes, postsRes, fanSubRes] = await Promise.allSettled([
-              supabase
-                .from("subscription_tiers")
-                .select("id")
-                .eq("creator_id", profileRaw.id)
-                .maybeSingle(),
+            const [subRes, followRes, postsRes, fanSubRes] = await Promise.allSettled([
               !isOwnProfile && userId
                 ? fetch(`/api/subscriptions/status?creatorId=${profileRaw.id}`)
                 : Promise.resolve(null),
@@ -273,10 +274,6 @@ function ProfilePageInner() {
                 : Promise.resolve(null),
             ]);
 
-            if (tierRes.status === "fulfilled" && tierRes.value.data) {
-              tierIdVal = tierRes.value.data.id;
-              setTierId(tierIdVal);
-            }
             if (subRes.status === "fulfilled" && subRes.value instanceof Response && subRes.value.ok) {
               const data = await subRes.value.json();
               subscribedVal = !!data.active;
@@ -324,7 +321,7 @@ function ProfilePageInner() {
 
         setStoreProfile(username, {
           viewer: viewerData, profile: enriched, totalLikes: likesCount,
-          tierId: tierIdVal, isFollowing: followingVal,
+          isFollowing: followingVal,
           isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
           apiPosts: fetchedPosts, fetchedAt: Date.now(),
           fanSubscription: fanSubData ?? undefined,
@@ -487,9 +484,9 @@ function ProfilePageInner() {
           threeMonthPrice={profile.bundlePricing?.threeMonths}
           sixMonthPrice={profile.bundlePricing?.sixMonths}
           initialTier={checkoutTier}
-          tierId={tierId}
           postPrice={lockedPostPrice}
           postId={lockedPostId}
+          onSuccess={handleCheckoutSuccess}
           onViewContent={() => router.push(`/${profile.username}`)}
           onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
           onSubscriptionSuccess={handleSubscriptionSuccess}

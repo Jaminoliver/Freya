@@ -126,21 +126,40 @@ export function CreatorOnboarding({ onBack }: CreatorOnboardingProps) {
 
       if (profileError) throw new Error(profileError.message);
 
-      // 2. Insert bank account
+      // 2. Insert payout account
       const { error: bankError } = await supabase
-        .from("bank_accounts")
+        .from("creator_payout_accounts")
         .insert({
           creator_id: user.id,
           bank_name: (step2Data as Step2Data).bank_name,
           bank_code: (step2Data as Step2Data).bank_code,
           account_number: (step2Data as Step2Data).account_number,
           account_name: (step2Data as Step2Data).resolved_account_name,
-          is_primary: true,
+          is_active: true,
+          is_verified: true,
         });
 
       if (bankError) throw new Error(bankError.message);
 
-      // 3. Show toast then redirect
+      // 3. Create subscription tier if paid
+      if (step3Data.monthly_price > 0) {
+        const { error: tierError } = await supabase
+          .from("subscription_tiers")
+          .upsert({
+            creator_id: user.id,
+            tier_name: "Basic",
+            price_monthly: step3Data.monthly_price,
+            three_month_price: step3Data.three_month_price || null,
+            six_month_price: step3Data.six_month_price || null,
+            is_active: true,
+          }, { onConflict: "creator_id" });
+
+        if (tierError) {
+          console.error("[Onboarding] Tier upsert error:", tierError.message);
+        }
+      }
+
+      // 4. Show toast then redirect
       setShowToast(true);
       setTimeout(() => {
         router.push(`/${(step1Data as Step1Data).username}`);

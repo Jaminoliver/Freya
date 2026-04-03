@@ -8,6 +8,18 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 import { hasSufficientBalance, debitFanCreditCreator, ensureWalletExists } from "@/lib/payments/wallet";
 import { sendWelcomeMessage } from "@/lib/welcome-message";
 
+const TIER_MONTHS: Record<string, number> = {
+  monthly: 1,
+  three_month: 3,
+  six_month: 6,
+};
+
+const TIER_LABEL: Record<string, string> = {
+  monthly: "1 Month",
+  three_month: "3 Months",
+  six_month: "6 Months",
+};
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -21,9 +33,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { type, amount, creatorId, tierId, postId, message } = body;
+    const { type, amount, creatorId, selectedTier = "monthly", postId, message } = body;
 
-    console.log("[Checkout] incoming:", { type, amount, creatorId, tierId, postId, userId: user.id });
+    console.log("[Checkout] incoming:", { type, amount, creatorId, selectedTier, postId, userId: user.id });
 
     if (!type || amount === undefined || amount === null || !creatorId) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
@@ -54,26 +66,17 @@ export async function POST(req: NextRequest) {
     // ─── Subscription ─────────────────────────────────────────────────────
 
     if (type === "subscription") {
-      if (!isFree && !tierId) {
-        return NextResponse.json({ message: "tierId is required for paid subscription" }, { status: 400 });
-      }
+      const months = TIER_MONTHS[selectedTier] ?? 1;
 
       // Check for existing subscription
-      let existingSubQuery = serviceSupabase
+      const { data: existingSub } = await serviceSupabase
         .from("subscriptions")
         .select("id, status")
         .eq("fan_id", user.id)
         .eq("creator_id", creatorId)
         .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (tierId) {
-        existingSubQuery = existingSubQuery.eq("tier_id", tierId);
-      } else {
-        existingSubQuery = existingSubQuery.is("tier_id", null);
-      }
-
-      const { data: existingSub } = await existingSubQuery.maybeSingle();
+        .limit(1)
+        .maybeSingle();
 
       if (existingSub?.status === "active") {
         return NextResponse.json({ message: "Already subscribed to this creator" }, { status: 409 });
@@ -81,8 +84,8 @@ export async function POST(req: NextRequest) {
 
       const now = new Date();
       const nextRenewal = new Date(now);
-      nextRenewal.setMonth(nextRenewal.getMonth() + 1);
-      const nextRenewalDate = nextRenewal.toISOString().split("T")[0]; // date only for cron
+      nextRenewal.setMonth(nextRenewal.getMonth() + months);
+      const nextRenewalDate = nextRenewal.toISOString().split("T")[0];
 
       let subId: string;
       let isResubscription = false;
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
         const { data: updatedSub, error: updateError } = await serviceSupabase
           .from("subscriptions")
           .update({
-            tier_id: tierId ?? null,
+            selected_tier: selectedTier,
             price_paid: amountKobo,
             status: "active",
             auto_renew: !isFree,
@@ -121,7 +124,7 @@ export async function POST(req: NextRequest) {
           .insert({
             fan_id: user.id,
             creator_id: creatorId,
-            tier_id: tierId ?? null,
+            selected_tier: selectedTier,
             price_paid: amountKobo,
             status: "active",
             auto_renew: !isFree,
@@ -155,63 +158,6 @@ export async function POST(req: NextRequest) {
           creatorCategory: "CREATOR_EARNING",
           referenceId: subId,
         });
-      }
-
-      // ── Notifications ─────────────────────────────────────────────────
-      try {
-        const { data: fanProfile } = await supabase
-          .from("profiles")
-          .select("display_name, username, avatar_url")
-          .eq("id", user.id)
-          .single();
-
-        const { data: creatorProfile } = await supabase
-          .from("profiles")
-          .select("display_name, username, avatar_url")
-          .eq("id", creatorId)
-          .single();
-
-        const notifType = isResubscription ? "resubscription" : "subscription";
-        const notifBody = isResubscription ? "resubscribed to your page" : "just subscribed to your page";
-
-        // Notify creator
-        await serviceSupabase.from("notifications").insert({
-          user_id: creatorId,
-          type: notifType,
-          role: "creator",
-          actor_id: user.id,
-          actor_name: fanProfile?.display_name ?? fanProfile?.username ?? "Someone",
-          actor_handle: fanProfile?.username ?? "",
-          actor_avatar: fanProfile?.avatar_url ?? null,
-          body_text: notifBody,
-          sub_text: `@${fanProfile?.username ?? ""}`,
-          reference_id: user.id,
-          is_read: false,
-        });
-
-        // Notify fan
-        const creatorDisplayName = creatorProfile?.display_name ?? creatorProfile?.username ?? "this creator";
-        const fanNotifBody = isResubscription
-          ? `You resubscribed to ${creatorDisplayName}`
-          : `You subscribed to ${creatorDisplayName}`;
-
-        await serviceSupabase.from("notifications").insert({
-          user_id: user.id,
-          type: "subscription_activated",
-          role: "fan",
-          actor_id: creatorId,
-          actor_name: "",
-          actor_handle: creatorProfile?.username ?? "",
-          actor_avatar: creatorProfile?.avatar_url ?? null,
-          body_text: fanNotifBody,
-          sub_text: isFree
-            ? "Free subscription · Monthly"
-            : `₦${(amountKobo / 100).toLocaleString()} · Monthly`,
-          reference_id: creatorId,
-          is_read: false,
-        });
-      } catch (notifErr) {
-        console.error("[Checkout] notification error:", notifErr);
       }
 
       // Send welcome message (fire and forget)

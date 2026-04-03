@@ -1,5 +1,8 @@
+// app/api/payout/set-default/route.ts
+// Sets a bank account as the primary (active) payout account
+
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
 export async function PATCH(req: NextRequest) {
   try {
@@ -11,29 +14,39 @@ export async function PATCH(req: NextRequest) {
     }
 
     const { accountId } = await req.json();
-
     if (!accountId) {
-      return NextResponse.json({ error: "Account ID is required" }, { status: 400 });
+      return NextResponse.json({ error: "accountId is required" }, { status: 400 });
     }
 
-    // Remove primary from all accounts
-    await supabase
-      .from("bank_accounts")
-      .update({ is_primary: false })
-      .eq("creator_id", user.id);
+    const serviceSupabase = createServiceSupabaseClient();
 
-    // Set the selected one as primary
-    const { error } = await supabase
-      .from("bank_accounts")
-      .update({ is_primary: true })
+    // Verify the account belongs to this user
+    const { data: account } = await serviceSupabase
+      .from("creator_payout_accounts")
+      .select("id")
       .eq("id", accountId)
+      .eq("creator_id", user.id)
+      .single();
+
+    if (!account) {
+      return NextResponse.json({ error: "Account not found" }, { status: 404 });
+    }
+
+    // Set all accounts to inactive
+    await serviceSupabase
+      .from("creator_payout_accounts")
+      .update({ is_active: false })
       .eq("creator_id", user.id);
 
-    if (error) throw error;
+    // Set selected account to active
+    await serviceSupabase
+      .from("creator_payout_accounts")
+      .update({ is_active: true, updated_at: new Date().toISOString() })
+      .eq("id", accountId);
 
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("[Set Default Error]", err);
-    return NextResponse.json({ error: "Failed to update default account" }, { status: 500 });
+    return NextResponse.json({ message: "Default account updated" });
+  } catch (error) {
+    console.error("[Payout Set Default] Error:", error);
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

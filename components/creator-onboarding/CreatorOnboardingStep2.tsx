@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Info } from "lucide-react";
 
 interface Step2Data {
@@ -8,6 +8,11 @@ interface Step2Data {
   bank_code: string;
   account_number: string;
   resolved_account_name: string;
+}
+
+interface Bank {
+  name: string;
+  code: string;
 }
 
 interface CreatorOnboardingStep2Props {
@@ -25,10 +30,64 @@ export function CreatorOnboardingStep2({ onContinue, onBack, defaultValues = {} 
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof Step2Data, string>>>({});
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [banksLoading, setBanksLoading] = useState(true);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
+  const [bankSearch, setBankSearch] = useState(defaultValues.bank_name ?? "");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const set = (key: keyof Step2Data, value: string) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setErrors((prev) => ({ ...prev, [key]: undefined }));
+  // Fetch banks on mount
+  useEffect(() => {
+    fetch("/api/banks")
+      .then((r) => r.json())
+      .then((data) => setBanks(data.banks ?? []))
+      .catch(() => setBanks([]))
+      .finally(() => setBanksLoading(false));
+  }, []);
+
+  // Auto-verify when account number is 10 digits and bank is selected
+  useEffect(() => {
+    if (form.account_number.length === 10 && form.bank_code) {
+      verifyAccount(form.account_number, form.bank_code);
+    } else {
+      setForm((prev) => ({ ...prev, resolved_account_name: "" }));
+      setVerifyError("");
+    }
+  }, [form.account_number, form.bank_code]);
+
+  const verifyAccount = async (accountNumber: string, bankCode: string) => {
+    setVerifying(true);
+    setVerifyError("");
+    setForm((prev) => ({ ...prev, resolved_account_name: "" }));
+
+    try {
+      const res = await fetch("/api/banks/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountNumber, bankCode }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setVerifyError(data.error || "Could not verify account");
+        return;
+      }
+
+      setForm((prev) => ({ ...prev, resolved_account_name: data.accountName }));
+    } catch {
+      setVerifyError("Network error. Please try again.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleBankSelect = (bank: Bank) => {
+    setForm((prev) => ({ ...prev, bank_name: bank.name, bank_code: bank.code }));
+    setBankSearch(bank.name);
+    setDropdownOpen(false);
+    setErrors((prev) => ({ ...prev, bank_name: undefined }));
   };
 
   const handleAccountNumberChange = (value: string) => {
@@ -37,8 +96,13 @@ export function CreatorOnboardingStep2({ onContinue, onBack, defaultValues = {} 
     setErrors((prev) => ({ ...prev, account_number: undefined }));
   };
 
+  const filteredBanks = banks.filter((b) =>
+    b.name.toLowerCase().includes(bankSearch.toLowerCase())
+  );
+
   const isFormValid =
     form.bank_name.trim().length > 0 &&
+    form.bank_code.length > 0 &&
     form.account_number.length === 10 &&
     form.resolved_account_name.length > 0;
 
@@ -73,22 +137,63 @@ export function CreatorOnboardingStep2({ onContinue, onBack, defaultValues = {} 
 
       <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "rgba(139,92,246,0.08)", border: "1.5px solid rgba(139,92,246,0.2)", borderRadius: "10px", padding: "12px 14px", marginBottom: "20px" }}>
         <Info size={15} style={{ color: "#8B5CF6", flexShrink: 0 }} />
-        <span style={{ fontSize: "13px", color: "#A3A3C2", lineHeight: 1.5 }}>Payouts are sent every Monday directly to your Nigerian bank account.</span>
+        <span style={{ fontSize: "13px", color: "#A3A3C2", lineHeight: 1.5 }}>Payouts are sent directly to your Nigerian bank account. Your account name will be verified automatically.</span>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-        <div>
+        {/* Bank Name — searchable dropdown */}
+        <div style={{ position: "relative" }}>
           <label style={labelStyle}>Bank Name</label>
           <input
             type="text"
-            value={form.bank_name}
-            onChange={(e) => { set("bank_name", e.target.value); }}
-            placeholder="e.g. Zenith Bank, GTBank, Access Bank"
-            style={{ ...inputBase, border: `1.5px solid ${errors.bank_name ? "#EF4444" : "#2A2A3D"}` }}
+            value={bankSearch}
+            onChange={(e) => {
+              setBankSearch(e.target.value);
+              setDropdownOpen(true);
+              if (!e.target.value) {
+                setForm((prev) => ({ ...prev, bank_name: "", bank_code: "" }));
+              }
+            }}
+            onFocus={() => setDropdownOpen(true)}
+            placeholder={banksLoading ? "Loading banks..." : "Search and select your bank"}
+            style={{ ...inputBase, border: `1.5px solid ${errors.bank_name ? "#EF4444" : dropdownOpen ? "#8B5CF6" : "#2A2A3D"}` }}
+            disabled={banksLoading}
           />
           {errMsg("bank_name")}
+
+          {dropdownOpen && filteredBanks.length > 0 && (
+            <>
+              <div
+                style={{ position: "fixed", inset: 0, zIndex: 99 }}
+                onClick={() => setDropdownOpen(false)}
+              />
+              <div style={{
+                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+                backgroundColor: "#141420", border: "1.5px solid #2A2A3D", borderRadius: "10px",
+                maxHeight: "200px", overflowY: "auto", marginTop: "4px",
+                scrollbarWidth: "thin", scrollbarColor: "#2A2A3D #141420",
+              }}>
+                {filteredBanks.map((bank) => (
+                  <button
+                    key={bank.code}
+                    onClick={() => handleBankSelect(bank)}
+                    style={{
+                      width: "100%", padding: "10px 14px", border: "none", cursor: "pointer",
+                      backgroundColor: form.bank_code === bank.code ? "rgba(139,92,246,0.1)" : "transparent",
+                      color: form.bank_code === bank.code ? "#A78BFA" : "#F1F5F9",
+                      fontSize: "13px", fontFamily: "'Inter', sans-serif", textAlign: "left",
+                      borderBottom: "1px solid #1E1E2E",
+                    }}
+                  >
+                    {bank.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
+        {/* Account Number */}
         <div>
           <label style={labelStyle}>Account Number</label>
           <input type="text" inputMode="numeric" value={form.account_number}
@@ -99,15 +204,41 @@ export function CreatorOnboardingStep2({ onContinue, onBack, defaultValues = {} 
           {errMsg("account_number")}
         </div>
 
+        {/* Account Name — auto-filled, read-only */}
         <div>
           <label style={labelStyle}>Account Name</label>
-          <input
-            type="text"
-            value={form.resolved_account_name}
-            onChange={(e) => set("resolved_account_name", e.target.value)}
-            placeholder="Full name on your bank account"
-            style={{ ...inputBase, border: `1.5px solid ${errors.resolved_account_name ? "#EF4444" : "#2A2A3D"}` }}
-          />
+          {verifying ? (
+            <div style={{ ...inputBase, display: "flex", alignItems: "center", gap: "8px", color: "#6B6B8A" }}>
+              <div style={{
+                width: "14px", height: "14px", border: "2px solid #2A2A3D",
+                borderTop: "2px solid #8B5CF6", borderRadius: "50%",
+                animation: "spin 0.8s linear infinite", flexShrink: 0,
+              }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <span style={{ fontSize: "13px" }}>Verifying account...</span>
+            </div>
+          ) : form.resolved_account_name ? (
+            <div style={{
+              ...inputBase,
+              backgroundColor: "rgba(16,185,129,0.06)",
+              border: "1.5px solid rgba(16,185,129,0.3)",
+              color: "#10B981",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}>
+              <span style={{ fontSize: "14px" }}>✓</span>
+              {form.resolved_account_name}
+            </div>
+          ) : (
+            <div style={{ ...inputBase, color: "#6B6B8A", fontSize: "13px" }}>
+              {verifyError ? verifyError : "Select bank and enter account number to verify"}
+            </div>
+          )}
+          {verifyError && (
+            <span style={{ fontSize: "11px", color: "#EF4444", marginTop: "4px", display: "block" }}>{verifyError}</span>
+          )}
           {errMsg("resolved_account_name")}
         </div>
       </div>

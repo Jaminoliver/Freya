@@ -170,6 +170,21 @@ function buildMediaFromPosts(fetchedPosts: ApiPost[]): ApiMedia[] {
   return allMedia;
 }
 
+// Merge incoming posts into existing state — only update changed fields, never replace wholesale
+function mergeApiPosts(existing: ApiPost[], incoming: ApiPost[]): ApiPost[] {
+  const existingMap = new Map(existing.map((p) => [p.id, p]));
+  return incoming.map((incomingPost) => {
+    const existingPost = existingMap.get(incomingPost.id);
+    if (!existingPost) return incomingPost;
+    // Preserve local locked/can_access state if it's already unlocked
+    return {
+      ...incomingPost,
+      locked:     existingPost.locked === false ? false : incomingPost.locked,
+      can_access: existingPost.can_access === true ? true  : incomingPost.can_access,
+    };
+  });
+}
+
 export default function ContentFeed({
   posts, isSubscribed, isOwnProfile = false,
   creatorUsername, initialApiPosts,
@@ -219,8 +234,9 @@ export default function ContentFeed({
       prevRefreshKey.current = refreshKey;
       feedPostsCache.delete(cacheKey);
       if (initialApiPosts) {
+        // Merge to preserve any locally unlocked posts
+        setApiPosts((prev) => mergeApiPosts(prev, initialApiPosts));
         const freshMedia = buildMediaFromPosts(initialApiPosts);
-        setApiPosts(initialApiPosts);
         setApiMedia(freshMedia);
         feedPostsCache.set(cacheKey, { posts: initialApiPosts, media: freshMedia });
       }
@@ -241,8 +257,9 @@ export default function ContentFeed({
     if (!initialApiPosts) return;
     if (prevInitialPostsRef.current === initialApiPosts) return;
     prevInitialPostsRef.current = initialApiPosts;
+    // Merge instead of replace — preserves locally unlocked state
+    setApiPosts((prev) => mergeApiPosts(prev, initialApiPosts));
     const freshMedia = buildMediaFromPosts(initialApiPosts);
-    setApiPosts(initialApiPosts);
     setApiMedia(freshMedia);
     feedPostsCache.set(cacheKey, { posts: initialApiPosts, media: freshMedia });
   }, [initialApiPosts, cacheKey]);

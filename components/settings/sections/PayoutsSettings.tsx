@@ -6,7 +6,7 @@ import { MoreVertical, Plus } from "lucide-react";
 type PayoutsTab = "request" | "history" | "settings";
 
 const fmt = (n: number) =>
-  "N" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const TABS: { key: PayoutsTab; label: string }[] = [
   { key: "request",  label: "Request Payout"  },
@@ -17,8 +17,14 @@ const TABS: { key: PayoutsTab; label: string }[] = [
 const STATUS_STYLE: Record<string, { color: string; bg: string }> = {
   completed: { color: "#10B981", bg: "rgba(16,185,129,0.1)" },
   pending:   { color: "#F59E0B", bg: "rgba(245,158,11,0.1)" },
+  processing:{ color: "#3B82F6", bg: "rgba(59,130,246,0.1)" },
   failed:    { color: "#EF4444", bg: "rgba(239,68,68,0.1)"  },
 };
+
+interface Bank {
+  name: string;
+  code: string;
+}
 
 interface BankAccount {
   id: number; bank_name: string; bank_code: string;
@@ -167,13 +173,13 @@ function RequestTab({ savedBanks, onAddBank, loading }: {
       <div>
         <p style={{ fontSize: "12px", fontWeight: 600, color: "#94A3B8", margin: "0 0 8px", fontFamily: "'Inter', sans-serif" }}>Amount</p>
         <input
-          type="number" placeholder="Enter amount (min 5,000)" value={amount}
+          type="number" placeholder="Enter amount (min ₦5,000)" value={amount}
           onChange={(e) => { setAmount(e.target.value); setSubmitError(""); }}
           style={{ width: "100%", borderRadius: "10px", padding: "12px 14px", fontSize: "14px", outline: "none", backgroundColor: "#141420", border: "1.5px solid #2A2A3D", color: "#F1F5F9", boxSizing: "border-box", fontFamily: "'Inter', sans-serif" }}
           onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
           onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
         />
-        <p style={{ fontSize: "11px", color: "#6B6B8A", margin: "6px 0 0", fontFamily: "'Inter', sans-serif" }}>Minimum withdrawal: 5,000</p>
+        <p style={{ fontSize: "11px", color: "#6B6B8A", margin: "6px 0 0", fontFamily: "'Inter', sans-serif" }}>Minimum withdrawal: ₦5,000</p>
       </div>
 
       <div>
@@ -189,7 +195,7 @@ function RequestTab({ savedBanks, onAddBank, loading }: {
             </div>
             <div>
               <p style={{ margin: "0 0 1px", fontSize: "13px", fontWeight: 600, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>{defaultBank.bank_name}</p>
-              <p style={{ margin: 0, fontSize: "11px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>.... {defaultBank.account_number.slice(-4)} - {defaultBank.account_name}</p>
+              <p style={{ margin: 0, fontSize: "11px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>.... {defaultBank.account_number.slice(-4)} — {defaultBank.account_name}</p>
             </div>
           </div>
         ) : (
@@ -208,12 +214,12 @@ function RequestTab({ savedBanks, onAddBank, loading }: {
       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span style={{ fontSize: "12px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>Transfer fee:</span>
-          <span style={{ fontSize: "12px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>10 flat</span>
+          <span style={{ fontSize: "12px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>₦10 flat</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span style={{ fontSize: "13px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>You receive:</span>
           <span style={{ fontSize: "13px", fontWeight: 700, color: youReceive > 0 ? "#10B981" : "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>
-            {youReceive > 0 ? fmt(youReceive) : "N-"}
+            {youReceive > 0 ? fmt(youReceive) : "₦-"}
           </span>
         </div>
       </div>
@@ -232,11 +238,11 @@ function RequestTab({ savedBanks, onAddBank, loading }: {
           fontFamily: "'Inter', sans-serif",
         }}
       >
-        {submitting ? "Submitting..." : !hasBankAccount ? "Add bank account to enable" : numAmount < 5000 ? "Minimum 5,000" : "Request Payout"}
+        {submitting ? "Submitting..." : !hasBankAccount ? "Add bank account to enable" : numAmount < 5000 ? "Minimum ₦5,000" : "Request Payout"}
       </button>
 
       <p style={{ fontSize: "11px", color: "#6B6B8A", textAlign: "center", margin: 0, fontFamily: "'Inter', sans-serif" }}>
-        Payouts are processed within 1-3 business days.
+        Payouts are processed within 1-3 business days via Monnify.
       </p>
     </div>
   );
@@ -273,7 +279,7 @@ function HistoryTab() {
           <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "12px 0", borderBottom: "1px solid #1E1E2E" }}>
             <div>
               <p style={{ margin: "0 0 2px", fontSize: "13px", fontWeight: 600, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>{fmt(item.amount)}</p>
-              <p style={{ margin: 0, fontSize: "11px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>{item.bank} - {item.date}</p>
+              <p style={{ margin: 0, fontSize: "11px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>{item.bank} — {item.date}</p>
             </div>
             <span style={{ fontSize: "11px", fontWeight: 600, color: ss.color, backgroundColor: ss.bg, borderRadius: "5px", padding: "2px 8px", fontFamily: "'Inter', sans-serif", textTransform: "capitalize", flexShrink: 0 }}>
               {item.status}
@@ -295,13 +301,73 @@ function SettingsTab({ savedBanks, setSavedBanks, formOpen, setFormOpen, onRefre
 }) {
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
   const [accountNumber, setAccountNumber] = useState("");
+  const [bankCode, setBankCode] = useState("");
   const [bankName, setBankName] = useState("");
+  const [bankSearch, setBankSearch] = useState("");
   const [accountName, setAccountName] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [focused, setFocused] = useState<string | null>(null);
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
 
-  const canSave = accountNumber.length >= 6 && bankName.trim() && accountName.trim() && !saving;
+  // Fetch banks when form opens
+  useEffect(() => {
+    if (formOpen && banks.length === 0) {
+      setBanksLoading(true);
+      fetch("/api/banks")
+        .then((r) => r.json())
+        .then((data) => setBanks(data.banks ?? []))
+        .catch(() => setBanks([]))
+        .finally(() => setBanksLoading(false));
+    }
+  }, [formOpen, banks.length]);
+
+  // Auto-verify when account number is 10 digits and bank is selected
+  useEffect(() => {
+    if (accountNumber.length === 10 && bankCode) {
+      verifyAccount(accountNumber, bankCode);
+    } else {
+      setAccountName("");
+      setVerifyError("");
+    }
+  }, [accountNumber, bankCode]);
+
+  const verifyAccount = async (accNum: string, bCode: string) => {
+    setVerifying(true);
+    setVerifyError("");
+    setAccountName("");
+    try {
+      const res = await fetch("/api/banks/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountNumber: accNum, bankCode: bCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setVerifyError(data.error || "Could not verify account"); return; }
+      setAccountName(data.accountName);
+    } catch {
+      setVerifyError("Network error. Please try again.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleBankSelect = (bank: Bank) => {
+    setBankName(bank.name);
+    setBankCode(bank.code);
+    setBankSearch(bank.name);
+    setDropdownOpen(false);
+  };
+
+  const filteredBanks = banks.filter((b) =>
+    b.name.toLowerCase().includes(bankSearch.toLowerCase())
+  );
+
+  const canSave = accountNumber.length === 10 && bankCode && accountName && !saving && !verifying;
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -310,12 +376,12 @@ function SettingsTab({ savedBanks, setSavedBanks, formOpen, setFormOpen, onRefre
       const res = await fetch("/api/payout/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankName, bankCode: bankName, accountNumber, accountName }),
+        body: JSON.stringify({ bankName, bankCode, accountNumber, accountName }),
       });
       const data = await res.json();
       if (!res.ok) { setSaveError(data.error || "Failed to save account"); return; }
       await onRefresh(); setFormOpen(false);
-      setAccountNumber(""); setBankName(""); setAccountName("");
+      setAccountNumber(""); setBankName(""); setBankCode(""); setBankSearch(""); setAccountName("");
     } catch { setSaveError("Network error — try again"); }
     finally { setSaving(false); }
   };
@@ -348,7 +414,7 @@ function SettingsTab({ savedBanks, setSavedBanks, formOpen, setFormOpen, onRefre
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
         <p style={{ fontSize: "10px", fontWeight: 600, color: "#6B6B8A", textTransform: "uppercase", letterSpacing: "0.07em", margin: 0, fontFamily: "'Inter', sans-serif" }}>Bank Accounts</p>
         <button
-          onClick={() => { setFormOpen(!formOpen); setSaveError(""); }}
+          onClick={() => { setFormOpen(!formOpen); setSaveError(""); setVerifyError(""); }}
           style={{ display: "flex", alignItems: "center", gap: "5px", padding: "7px 14px", borderRadius: "8px", backgroundColor: formOpen ? "transparent" : "#8B5CF6", color: formOpen ? "#6B6B8A" : "#fff", border: formOpen ? "1px solid #2A2A3D" : "none", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.2s" }}
         >
           {formOpen ? "Cancel" : savedBanks.length > 0 ? "Edit" : <><Plus size={13} /> Add Account</>}
@@ -359,10 +425,52 @@ function SettingsTab({ savedBanks, setSavedBanks, formOpen, setFormOpen, onRefre
         <div style={{ backgroundColor: "#0D0D18", border: "1.5px solid #2A2A3D", borderRadius: "10px", padding: "20px 16px", marginBottom: "14px" }}>
           <p style={{ fontSize: "11px", fontWeight: 500, color: "#6B6B8A", margin: "0 0 16px", letterSpacing: "0.04em", fontFamily: "'Inter', sans-serif" }}>Bank account details</p>
 
+          {/* Bank dropdown */}
+          <div style={{ marginBottom: "16px", position: "relative" }}>
+            <label style={{ fontSize: "11px", color: "#6B6B8A", display: "block", marginBottom: "4px", fontFamily: "'Inter', sans-serif" }}>Bank name</label>
+            <input
+              type="text"
+              placeholder={banksLoading ? "Loading banks..." : "Search and select bank"}
+              value={bankSearch}
+              onChange={(e) => { setBankSearch(e.target.value); setDropdownOpen(true); if (!e.target.value) { setBankName(""); setBankCode(""); } }}
+              onFocus={() => setDropdownOpen(true)}
+              disabled={banksLoading}
+              style={inputStyle("bank")}
+            />
+            {dropdownOpen && filteredBanks.length > 0 && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setDropdownOpen(false)} />
+                <div style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+                  backgroundColor: "#141420", border: "1.5px solid #2A2A3D", borderRadius: "8px",
+                  maxHeight: "180px", overflowY: "auto", marginTop: "4px",
+                  scrollbarWidth: "thin", scrollbarColor: "#2A2A3D #141420",
+                }}>
+                  {filteredBanks.map((bank) => (
+                    <button
+                      key={bank.code}
+                      onClick={() => handleBankSelect(bank)}
+                      style={{
+                        width: "100%", padding: "9px 12px", border: "none", cursor: "pointer",
+                        backgroundColor: bankCode === bank.code ? "rgba(139,92,246,0.1)" : "transparent",
+                        color: bankCode === bank.code ? "#A78BFA" : "#F1F5F9",
+                        fontSize: "12px", fontFamily: "'Inter', sans-serif", textAlign: "left",
+                        borderBottom: "1px solid #1E1E2E",
+                      }}
+                    >
+                      {bank.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Account number */}
           <div style={{ marginBottom: "16px" }}>
             <label style={{ fontSize: "11px", color: "#6B6B8A", display: "block", marginBottom: "4px", fontFamily: "'Inter', sans-serif" }}>Account number</label>
             <input
-              type="text" inputMode="numeric" placeholder="Enter account number"
+              type="text" inputMode="numeric" placeholder="Enter 10-digit account number"
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
               onFocus={() => setFocused("account")} onBlur={() => setFocused(null)}
@@ -370,26 +478,29 @@ function SettingsTab({ savedBanks, setSavedBanks, formOpen, setFormOpen, onRefre
             />
           </div>
 
-          <div style={{ marginBottom: "16px" }}>
-            <label style={{ fontSize: "11px", color: "#6B6B8A", display: "block", marginBottom: "4px", fontFamily: "'Inter', sans-serif" }}>Bank name</label>
-            <input
-              type="text" placeholder="e.g. GTBank"
-              value={bankName}
-              onChange={(e) => setBankName(e.target.value)}
-              onFocus={() => setFocused("bank")} onBlur={() => setFocused(null)}
-              style={inputStyle("bank")}
-            />
-          </div>
-
+          {/* Account name — auto-filled */}
           <div style={{ marginBottom: "20px" }}>
             <label style={{ fontSize: "11px", color: "#6B6B8A", display: "block", marginBottom: "4px", fontFamily: "'Inter', sans-serif" }}>Account name</label>
-            <input
-              type="text" placeholder="e.g. John Doe"
-              value={accountName}
-              onChange={(e) => setAccountName(e.target.value)}
-              onFocus={() => setFocused("name")} onBlur={() => setFocused(null)}
-              style={inputStyle("name")}
-            />
+            {verifying ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0" }}>
+                <div style={{
+                  width: "14px", height: "14px", border: "2px solid #2A2A3D",
+                  borderTop: "2px solid #8B5CF6", borderRadius: "50%",
+                  animation: "spin 0.8s linear infinite", flexShrink: 0,
+                }} />
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                <span style={{ fontSize: "12px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>Verifying...</span>
+              </div>
+            ) : accountName ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 0" }}>
+                <span style={{ color: "#10B981", fontSize: "14px" }}>✓</span>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "#10B981", fontFamily: "'Inter', sans-serif" }}>{accountName}</span>
+              </div>
+            ) : (
+              <p style={{ fontSize: "12px", color: verifyError ? "#EF4444" : "#6B6B8A", margin: 0, padding: "8px 0", fontFamily: "'Inter', sans-serif" }}>
+                {verifyError || "Select bank and enter account number"}
+              </p>
+            )}
           </div>
 
           {saveError && <p style={{ fontSize: "12px", color: "#EF4444", margin: "0 0 10px", fontFamily: "'Inter', sans-serif" }}>{saveError}</p>}
@@ -413,7 +524,7 @@ function SettingsTab({ savedBanks, setSavedBanks, formOpen, setFormOpen, onRefre
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ margin: "0 0 1px", fontSize: "13px", fontWeight: 600, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>{b.bank_name}</p>
-                <p style={{ margin: 0, fontSize: "11px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>.... {b.account_number.slice(-4)} - {b.account_name}</p>
+                <p style={{ margin: 0, fontSize: "11px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>.... {b.account_number.slice(-4)} — {b.account_name}</p>
               </div>
               {b.is_primary && <span style={{ fontSize: "10px", fontWeight: 600, color: "#8B5CF6", border: "1.5px solid #8B5CF6", borderRadius: "5px", padding: "2px 8px", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>Default</span>}
               <div style={{ position: "relative" }}>

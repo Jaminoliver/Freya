@@ -19,7 +19,6 @@ interface CheckoutModalProps {
   threeMonthPrice?: number;
   sixMonthPrice?: number;
   initialTier?: SubscriptionTier;
-  tierId?: number;
   postPrice?: number;
   postTitle?: string;
   postId?: number;
@@ -38,7 +37,7 @@ const TIER_LABEL: Record<SubscriptionTier, string> = {
 export default function CheckoutModal({
   isOpen, onClose, type, creator,
   monthlyPrice = 2000, threeMonthPrice, sixMonthPrice, initialTier = "monthly",
-  tierId, postPrice = 0, postTitle, postId,
+  postPrice = 0, postTitle, postId,
   onSuccess, onSubscriptionSuccess, onViewContent, onGoToSubscriptions,
 }: CheckoutModalProps) {
   const [screen, setScreen] = React.useState<CheckoutScreen>(
@@ -82,10 +81,15 @@ export default function CheckoutModal({
   React.useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
     }
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    };
   }, [isOpen]);
 
   const handleClose = () => {
@@ -123,7 +127,6 @@ export default function CheckoutModal({
   const handleNext = async () => {
     if (screen === "plan") {
       if (getAmount() === 0) {
-        // Free subscription
         setLoading(true);
         setError(null);
         try {
@@ -134,7 +137,7 @@ export default function CheckoutModal({
               type: "subscription",
               amount: 0,
               creatorId: creator.id,
-              tierId,
+              selectedTier,
             }),
           });
           const data = await res.json();
@@ -155,7 +158,6 @@ export default function CheckoutModal({
     if (screen === "payment") {
       setError(null);
 
-      // ── Freya Wallet payment ──
       if (selectedMethod === "freya_wallet") {
         setLoading(true);
         try {
@@ -166,7 +168,7 @@ export default function CheckoutModal({
               type: type === "tips" ? "tip" : type === "subscription" ? "subscription" : "ppv",
               amount: getAmount(),
               creatorId: creator.id,
-              tierId: type === "subscription" ? tierId : undefined,
+              selectedTier: type === "subscription" ? selectedTier : undefined,
               postId: type === "ppv" ? postId : undefined,
             }),
           });
@@ -184,10 +186,8 @@ export default function CheckoutModal({
         return;
       }
 
-      // ── Bank Transfer — generate virtual account inline ──
       if (selectedMethod === "bank_transfer") {
         if (virtualAccount) {
-          // User clicked "I've Completed the Transfer"
           handlePaymentSuccess();
           return;
         }
@@ -202,7 +202,7 @@ export default function CheckoutModal({
               type: type === "tips" ? "tip" : type === "subscription" ? "subscription" : "ppv",
               amount: getAmount(),
               creatorId: creator.id,
-              tierId: type === "subscription" ? tierId : undefined,
+              selectedTier: type === "subscription" ? selectedTier : undefined,
               postId: type === "ppv" ? postId : undefined,
             }),
           });
@@ -214,7 +214,6 @@ export default function CheckoutModal({
             return;
           }
 
-          // If inline account details returned
           if (data.accountNumber) {
             setVirtualAccount({
               accountNumber: data.accountNumber,
@@ -225,7 +224,6 @@ export default function CheckoutModal({
               reference: data.reference,
             });
           } else if (data.checkoutUrl) {
-            // Fallback: redirect to Monnify checkout
             window.location.href = data.checkoutUrl;
           }
         } catch (err) {
@@ -237,7 +235,6 @@ export default function CheckoutModal({
         return;
       }
 
-      // ── Card Payment — redirect to Monnify checkout ──
       if (selectedMethod === "card") {
         setLoading(true);
         try {
@@ -249,7 +246,7 @@ export default function CheckoutModal({
               type: type === "tips" ? "tip" : type === "subscription" ? "subscription" : "ppv",
               amount: getAmount(),
               creatorId: creator.id,
-              tierId: type === "subscription" ? tierId : undefined,
+              selectedTier: type === "subscription" ? selectedTier : undefined,
               postId: type === "ppv" ? postId : undefined,
             }),
           });
@@ -293,8 +290,10 @@ export default function CheckoutModal({
 
   return (
     <>
+      {/* Backdrop */}
       <div
         onClick={handleClose}
+        onTouchMove={(e) => e.preventDefault()}
         style={{
           position: "fixed", inset: 0,
           backgroundColor: "rgba(0,0,0,0.7)",
@@ -305,7 +304,9 @@ export default function CheckoutModal({
         }}
       />
 
+      {/* Modal */}
       <div
+        onTouchMove={(e) => e.stopPropagation()}
         style={{
           position: "fixed",
           top: "50%", left: "50%",
@@ -317,7 +318,8 @@ export default function CheckoutModal({
           borderRadius: "16px",
           border: "1px solid #1E1E2E",
           boxShadow: "0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(139,92,246,0.08)",
-          overflowY: "auto",
+          overflowY: "scroll",
+          WebkitOverflowScrolling: "touch",
           scrollbarWidth: "none",
           opacity: isClosing ? 0 : 1,
           transition: "all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",

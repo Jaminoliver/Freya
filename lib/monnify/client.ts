@@ -134,6 +134,25 @@ export async function initializeTransaction(params: {
   paymentMethods?: ("CARD" | "ACCOUNT_TRANSFER")[];
   metadata?: Record<string, any>;
 }) {
+  const amountInNaira = params.amount / 100;
+
+  const requestBody = {
+    amount: amountInNaira,
+    customerName: params.customerName,
+    customerEmail: params.customerEmail,
+    paymentReference: params.paymentReference,
+    paymentDescription: params.paymentDescription,
+    currencyCode: "NGN",
+    contractCode: MONNIFY_CONTRACT_CODE,
+    redirectUrl: params.redirectUrl,
+    paymentMethods: params.paymentMethods || ["CARD", "ACCOUNT_TRANSFER"],
+    ...(params.metadata && { metaData: params.metadata }),
+  };
+
+  console.log("[Monnify initializeTransaction] Input amountKobo:", params.amount);
+  console.log("[Monnify initializeTransaction] Sending amountNaira:", amountInNaira);
+  console.log("[Monnify initializeTransaction] Full request body:", JSON.stringify(requestBody, null, 2));
+
   const response = await monnifyRequest<{
     requestSuccessful: boolean;
     responseMessage: string;
@@ -147,19 +166,10 @@ export async function initializeTransaction(params: {
     };
   }>("/api/v1/merchant/transactions/init-transaction", {
     method: "POST",
-    body: {
-      amount: params.amount / 100, // Convert kobo to naira for Monnify
-      customerName: params.customerName,
-      customerEmail: params.customerEmail,
-      paymentReference: params.paymentReference,
-      paymentDescription: params.paymentDescription,
-      currencyCode: "NGN",
-      contractCode: MONNIFY_CONTRACT_CODE,
-      redirectUrl: params.redirectUrl,
-      paymentMethods: params.paymentMethods || ["CARD", "ACCOUNT_TRANSFER"],
-      ...(params.metadata && { metaData: params.metadata }),
-    },
+    body: requestBody,
   });
+
+  console.log("[Monnify initializeTransaction] Response:", JSON.stringify(response.responseBody, null, 2));
 
   return response.responseBody;
 }
@@ -261,7 +271,7 @@ export async function initiateTransfer(params: {
       destinationAccountNumber: params.accountNumber,
       destinationAccountName: params.accountName,
       currency: params.currency || "NGN",
-      sourceAccountNumber: "", // Uses default Monnify wallet
+      sourceAccountNumber: process.env.MONNIFY_WALLET_ACCOUNT_NUMBER || "", // Merchant wallet account number
     },
   });
 
