@@ -292,11 +292,26 @@ async function processDirectSubscription(
     existingTxId: number | null;
   }
 ) {
-  const { userId, amountKobo, transactionReference, paymentReference, paymentMethod, cardDetails, creatorId, tierId, existingTxId } = params;
+  const { userId, amountKobo, transactionReference, paymentReference, paymentMethod, cardDetails, creatorId, existingTxId } = params;
+  let tierId = params.tierId;
 
-  if (!creatorId || !tierId) {
-    console.error("[Monnify Webhook] Missing creator_id or tier_id for subscription:", transactionReference);
+  if (!creatorId) {
+    console.error("[Monnify Webhook] Missing creator_id for subscription:", transactionReference);
     return;
+  }
+
+  // Look up tierId if not in metadata
+  if (!tierId) {
+    const { data: tier } = await supabase
+      .from("subscription_tiers")
+      .select("id")
+      .eq("creator_id", creatorId)
+      .eq("is_active", true)
+      .single();
+    if (tier) {
+      tierId = String(tier.id);
+      console.log("[processDirectSubscription] Resolved tierId:", tierId);
+    }
   }
 
   const { data: settings } = await supabase
