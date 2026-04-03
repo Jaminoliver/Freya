@@ -5,7 +5,7 @@
 // Bank transfer → returns inline account details
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { initializeTransaction } from "@/lib/monnify/client";
 
 export async function POST(req: NextRequest) {
@@ -64,7 +64,6 @@ export async function POST(req: NextRequest) {
     else description = `Freya content unlock — ₦${amount.toLocaleString()}`;
 
     // Build metadata — this is how the webhook knows what to do
-    // tierId is stored here only; subscription row doesn't exist yet at this stage
     const metadata: Record<string, any> = {
       user_id: user.id,
       purpose: type === "subscription" ? "SUBSCRIPTION" : type === "tip" ? "TIP" : "PPV",
@@ -78,10 +77,11 @@ export async function POST(req: NextRequest) {
     const monnifyMethods: ("CARD" | "ACCOUNT_TRANSFER")[] =
       paymentMethod === "CARD" ? ["CARD"] : ["ACCOUNT_TRANSFER"];
 
+    // Use service role for DB operations to bypass RLS
+    const serviceSupabase = createServiceSupabaseClient();
+
     // Insert pending transaction
-    // NOTE: subscription_id is intentionally omitted — the subscription row does not
-    // exist yet at init time. The webhook creates it after payment is confirmed.
-    const { error: insertError } = await supabase.from("transactions").insert({
+    const { error: insertError } = await serviceSupabase.from("transactions").insert({
       user_id: user.id,
       fan_id: user.id,
       provider: "MONNIFY",
@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
       status: "pending",
       payment_method: paymentMethod,
       purpose: type === "subscription" ? "SUBSCRIPTION" : type === "tip" ? "TIP" : "PPV",
+      subscription_id: tierId ? Number(tierId) : null,
       metadata,
     });
 
@@ -112,10 +113,16 @@ export async function POST(req: NextRequest) {
     });
 
     // Update transaction with Monnify reference
-    await supabase
+    const { error: updateError } = await serviceSupabase
       .from("transactions")
       .update({ monnify_transaction_ref: result.transactionReference })
       .eq("provider_txn_id", reference);
+
+    if (updateError) {
+      console.error("[Checkout Initialize] Failed to update monnify_transaction_ref:", updateError.message);
+    } else {
+      console.log("[Checkout Initialize] Saved monnify_transaction_ref:", result.transactionReference, "for reference:", reference);
+    }
 
     // For bank transfer — fetch the account details from Monnify
     if (paymentMethod === "BANK_TRANSFER") {
