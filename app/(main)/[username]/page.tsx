@@ -320,13 +320,13 @@ function ProfilePageInner() {
         }
 
         setStoreProfile(username, {
-          viewer: viewerData, profile: enriched, totalLikes: likesCount,
-          isFollowing: followingVal,
-          isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
-          apiPosts: fetchedPosts, fetchedAt: Date.now(),
-          fanSubscription: fanSubData ?? undefined,
-        });
-
+  viewer: viewerData, profile: enriched, totalLikes: likesCount,
+  tierId: undefined,
+  isFollowing: followingVal,
+  isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
+  apiPosts: fetchedPosts, fetchedAt: Date.now(),
+  fanSubscription: fanSubData ?? undefined,
+});
       } catch (err) {
         console.error("[ProfilePage] fetchData UNCAUGHT ERROR:", err);
         setFetchError(true);
