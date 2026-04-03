@@ -15,15 +15,17 @@ const FILTER_MAP: Record<string, string> = {
 };
 
 const TYPE_ICON: Record<string, { icon: string; color: string; bg: string }> = {
-  "Wallet top-up":  { icon: "↑", color: "#10B981", bg: "rgba(16,185,129,0.12)" },
-  "Subscription":   { icon: "★", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)" },
-  "Auto-renewal":   { icon: "↻", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)" },
-  "Tip":            { icon: "♥", color: "#EC4899", bg: "rgba(236,72,153,0.12)" },
-  "PPV unlock":     { icon: "🔓", color: "#F59E0B", bg: "rgba(245,158,11,0.12)" },
-  "PPV message":    { icon: "✉", color: "#3B82F6", bg: "rgba(59,130,246,0.12)" },
-  "Withdrawal":     { icon: "↓", color: "#EF4444", bg: "rgba(239,68,68,0.12)" },
-  "Refund":         { icon: "↩", color: "#6B6B8A", bg: "rgba(107,107,138,0.12)" },
+  "Wallet top-up": { icon: "↑", color: "#10B981", bg: "rgba(16,185,129,0.12)" },
+  "Subscription":  { icon: "★", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)" },
+  "Auto-renewal":  { icon: "↻", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)" },
+  "Tip":           { icon: "♥", color: "#EC4899", bg: "rgba(236,72,153,0.12)" },
+  "PPV unlock":    { icon: "🔓", color: "#F59E0B", bg: "rgba(245,158,11,0.12)" },
+  "PPV message":   { icon: "✉", color: "#3B82F6", bg: "rgba(59,130,246,0.12)" },
+  "Withdrawal":    { icon: "↓", color: "#EF4444", bg: "rgba(239,68,68,0.12)" },
+  "Refund":        { icon: "↩", color: "#6B6B8A", bg: "rgba(107,107,138,0.12)" },
 };
+
+const PAGE_SIZE = 15;
 
 interface TxItem {
   id: string;
@@ -40,15 +42,16 @@ interface TxItem {
 }
 
 export default function TransactionsTab() {
-  const [filter, setFilter] = useState("All");
+  const [filter,       setFilter]       = useState("All");
   const [transactions, setTransactions] = useState<TxItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading,      setLoading]      = useState(true);
+  const [page,         setPage]         = useState(1);
 
   const fetchTransactions = useCallback(async (filterKey: string) => {
     setLoading(true);
     try {
       const param = FILTER_MAP[filterKey] || "all";
-      const res = await fetch(`/api/wallet/all-transactions?filter=${param}&limit=50`);
+      const res  = await fetch(`/api/wallet/all-transactions?filter=${param}&limit=200`);
       const data = await res.json();
       if (data.transactions) setTransactions(data.transactions);
     } catch (err) {
@@ -62,10 +65,16 @@ export default function TransactionsTab() {
     fetchTransactions(filter);
   }, [filter, fetchTransactions]);
 
-  const getIcon = (label: string) => {
-    const match = TYPE_ICON[label] ?? { icon: "•", color: "#6B6B8A", bg: "rgba(107,107,138,0.12)" };
-    return match;
-  };
+  function handleFilterChange(val: string) {
+    setFilter(val);
+    setPage(1);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(transactions.length / PAGE_SIZE));
+  const paginated  = transactions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const getIcon = (label: string) =>
+    TYPE_ICON[label] ?? { icon: "•", color: "#6B6B8A", bg: "rgba(107,107,138,0.12)" };
 
   return (
     <div>
@@ -74,7 +83,7 @@ export default function TransactionsTab() {
         {FILTERS.map((f) => (
           <button
             key={f}
-            onClick={() => setFilter(f)}
+            onClick={() => handleFilterChange(f)}
             style={{
               padding: "5px 12px", borderRadius: "50px",
               border: `1px solid ${filter === f ? "#8B5CF6" : "#2A2A3D"}`,
@@ -108,51 +117,91 @@ export default function TransactionsTab() {
 
       {/* Transaction list */}
       {!loading && transactions.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {transactions.map((tx) => {
-            const icon = getIcon(tx.label);
-            const isCredit = tx.type === "credit";
-            return (
-              <div key={tx.id} style={{
-                display: "flex", alignItems: "center", gap: "12px",
-                padding: "12px 0", borderBottom: "1px solid #1A1A2E",
-              }}>
-                {/* Icon */}
-                <div style={{
-                  width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0,
-                  backgroundColor: icon.bg,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "14px", color: icon.color,
+        <>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {paginated.map((tx) => {
+              const icon     = getIcon(tx.label);
+              const isCredit = tx.type === "credit";
+              return (
+                <div key={tx.id} style={{
+                  display: "flex", alignItems: "center", gap: "12px",
+                  padding: "12px 0", borderBottom: "1px solid #1A1A2E",
                 }}>
-                  {icon.icon}
-                </div>
-
-                {/* Label + sublabel */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{
-                    fontSize: "13px", fontWeight: 500, color: "#F1F5F9", margin: "0 0 2px",
-                    fontFamily: "'Inter', sans-serif",
-                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  <div style={{
+                    width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0,
+                    backgroundColor: icon.bg,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "14px", color: icon.color,
                   }}>
-                    {tx.label}
-                  </p>
-                  <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0, fontFamily: "'Inter', sans-serif" }}>
-                    {tx.sublabel} · {new Date(tx.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                  </p>
-                </div>
+                    {icon.icon}
+                  </div>
 
-                {/* Amount */}
-                <span style={{
-                  fontSize: "13px", fontWeight: 600, flexShrink: 0,
-                  color: isCredit ? "#10B981" : "#F1F5F9",
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{
+                      fontSize: "13px", fontWeight: 500, color: "#F1F5F9", margin: "0 0 2px",
+                      fontFamily: "'Inter', sans-serif",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}>
+                      {tx.label}
+                    </p>
+                    <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0, fontFamily: "'Inter', sans-serif" }}>
+                      {tx.sublabel} · {new Date(tx.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    </p>
+                  </div>
+
+                  <span style={{
+                    fontSize: "13px", fontWeight: 600, flexShrink: 0,
+                    color: isCredit ? "#10B981" : "#F1F5F9",
+                    fontFamily: "'Inter', sans-serif",
+                  }}>
+                    {isCredit ? "+" : "-"}{fmt(tx.amountNaira)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "16px 0 4px", fontFamily: "'Inter', sans-serif",
+            }}>
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={{
+                  backgroundColor: page === 1 ? "#1A1A2E" : "#1C1C2E",
+                  border: "1px solid #2A2A3D", borderRadius: "6px",
+                  color: page === 1 ? "#3A3A5C" : "#F1F5F9",
+                  fontSize: "12px", fontWeight: 500,
+                  padding: "6px 14px", cursor: page === 1 ? "not-allowed" : "pointer",
                   fontFamily: "'Inter', sans-serif",
-                }}>
-                  {isCredit ? "+" : "-"}{fmt(tx.amountNaira)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+                }}
+              >
+                ← Prev
+              </button>
+
+              <span style={{ fontSize: "11px", color: "#6B6B8A" }}>
+                {page} of {totalPages}
+              </span>
+
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                style={{
+                  backgroundColor: page === totalPages ? "#1A1A2E" : "#1C1C2E",
+                  border: "1px solid #2A2A3D", borderRadius: "6px",
+                  color: page === totalPages ? "#3A3A5C" : "#F1F5F9",
+                  fontSize: "12px", fontWeight: 500,
+                  padding: "6px 14px", cursor: page === totalPages ? "not-allowed" : "pointer",
+                  fontFamily: "'Inter', sans-serif",
+                }}
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

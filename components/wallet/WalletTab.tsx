@@ -14,11 +14,14 @@ export interface WalletTabProps {
   onPaymentConfirmed?:  () => void;
 }
 
+const PAGE_SIZE = 10;
+
 export default function WalletTab({
   balance, autoRecharge, transactions,
   onAutoRechargeChange, onTopUp, onPaymentConfirmed,
 }: WalletTabProps) {
   const [filter, setFilter] = useState("All");
+  const [page,   setPage]   = useState(1);
   const filters = ["All", "Credits", "Debits", "Subscriptions", "Tips", "PPV"];
 
   const filtered = transactions.filter((t) => {
@@ -30,6 +33,14 @@ export default function WalletTab({
     if (filter === "PPV")           return t.type === "ppv";
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function handleFilterChange(val: string) {
+    setFilter(val);
+    setPage(1);
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
@@ -51,7 +62,7 @@ export default function WalletTab({
           </p>
           <select
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => handleFilterChange(e.target.value)}
             style={{
               backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D",
               borderRadius: "6px", color: "#F1F5F9", fontSize: "12px",
@@ -71,7 +82,50 @@ export default function WalletTab({
             No transactions yet
           </p>
         ) : (
-          filtered.map((t) => <TransactionItem key={t.id} transaction={t} />)
+          <>
+            {paginated.map((t) => <TransactionItem key={t.id} transaction={t} />)}
+
+            {totalPages > 1 && (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "16px 0 4px", fontFamily: "'Inter', sans-serif",
+              }}>
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  style={{
+                    backgroundColor: page === 1 ? "#1A1A2E" : "#1C1C2E",
+                    border: "1px solid #2A2A3D", borderRadius: "6px",
+                    color: page === 1 ? "#3A3A5C" : "#F1F5F9",
+                    fontSize: "12px", fontWeight: 500,
+                    padding: "6px 14px", cursor: page === 1 ? "not-allowed" : "pointer",
+                    fontFamily: "'Inter', sans-serif",
+                  }}
+                >
+                  ← Prev
+                </button>
+
+                <span style={{ fontSize: "11px", color: "#6B6B8A" }}>
+                  {page} of {totalPages}
+                </span>
+
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  style={{
+                    backgroundColor: page === totalPages ? "#1A1A2E" : "#1C1C2E",
+                    border: "1px solid #2A2A3D", borderRadius: "6px",
+                    color: page === totalPages ? "#3A3A5C" : "#F1F5F9",
+                    fontSize: "12px", fontWeight: 500,
+                    padding: "6px 14px", cursor: page === totalPages ? "not-allowed" : "pointer",
+                    fontFamily: "'Inter', sans-serif",
+                  }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

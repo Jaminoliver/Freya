@@ -27,12 +27,18 @@ const TYPE_TO_FILTER: Record<NotificationItem["type"], NotificationFilterTab> = 
   renewal_success:       "activity",
   subscription_charged:  "activity",
   subscription_activated:"subscriptions",
-  subscription_cancelled:"subscriptions",
+  subscription_cancelled:"subscriptions", // default — overridden by role below
   tip_sent:              "activity",
   wallet_topup:          "activity",
   // both
   message:               "messages",
 };
+
+function getFilter(n: NotificationItem): NotificationFilterTab {
+  // fan's own cancellation goes to Activity, creator's goes to Subscriptions
+  if (n.type === "subscription_cancelled" && n.role === "fan") return "activity";
+  return TYPE_TO_FILTER[n.type];
+}
 
 function groupByDate(items: NotificationItem[]): NotificationGroupType[] {
   const groups: Record<string, NotificationItem[]> = {};
@@ -58,7 +64,7 @@ function groupByDate(items: NotificationItem[]): NotificationGroupType[] {
 export function NotificationsList({ notifications, filter, onSelect }: Props) {
   const filtered = filter === "all"
     ? notifications
-    : notifications.filter((n) => TYPE_TO_FILTER[n.type] === filter);
+    : notifications.filter((n) => getFilter(n) === filter);
 
   const groups = groupByDate(filtered);
 

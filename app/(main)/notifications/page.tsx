@@ -8,6 +8,7 @@ import { NotificationsList }                 from "@/components/notifications/No
 import { subscribeToNotifications }          from "@/lib/notifications/realtime";
 import { getAuthenticatedBrowserClient }     from "@/lib/supabase/browserClient";
 import { decrementUnreadCount, resetUnreadCount, initNotificationStore } from "@/lib/notifications/store";
+import { useAppStore }                       from "@/lib/store/appStore";
 import type { NotificationItem, NotificationFilterTab } from "@/lib/types/notifications";
 
 function timeAgo(isoString: string): string {
@@ -24,13 +25,13 @@ function timeAgo(isoString: string): string {
 
 export default function NotificationsPage() {
   const router = useRouter();
+  const { viewer } = useAppStore();
 
   const [filter,        setFilter]        = useState<NotificationFilterTab>("all");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [userId,        setUserId]        = useState<string | null>(null);
 
-  // ── Fetch notifications from API ─────────────────────────────────────────
   const fetchNotifications = useCallback(async (tab: NotificationFilterTab) => {
     setLoading(true);
     try {
@@ -49,15 +50,9 @@ export default function NotificationsPage() {
     }
   }, []);
 
-  // ── Init store on mount ───────────────────────────────────────────────────
-  useEffect(() => {
-    initNotificationStore();
-  }, []);
-  useEffect(() => {
-    fetchNotifications(filter);
-  }, [filter, fetchNotifications]);
+  useEffect(() => { initNotificationStore(); }, []);
+  useEffect(() => { fetchNotifications(filter); }, [filter, fetchNotifications]);
 
-  // ── Get userId for Realtime ───────────────────────────────────────────────
   useEffect(() => {
     getAuthenticatedBrowserClient().then((supabase) => {
       supabase.auth.getSession().then(({ data }: { data: { session: { user: { id: string } } | null } }) => {
@@ -66,7 +61,6 @@ export default function NotificationsPage() {
     });
   }, []);
 
-  // ── Realtime subscription ─────────────────────────────────────────────────
   useEffect(() => {
     if (!userId) return;
     const unsub = subscribeToNotifications(userId, (newNotif) => {
@@ -75,24 +69,18 @@ export default function NotificationsPage() {
     return unsub;
   }, [userId]);
 
-  // ── Mark single read ──────────────────────────────────────────────────────
   const handleSelect = useCallback(async (item: NotificationItem) => {
-    if (!item.isUnread) {
-      // still navigate even if already read
-    } else {
+    if (item.isUnread) {
       setNotifications((prev) =>
         prev.map((n) => (n.id === item.id ? { ...n, isUnread: false } : n))
       );
       decrementUnreadCount();
       await fetch(`/api/notifications/${item.id}/read`, { method: "PATCH" });
     }
-
-    // ── Navigation by type ──────────────────────────────────────────────────
     if (item.type === "message" && item.referenceId) {
       router.push(`/messages/${item.referenceId}`);
     } else if (
-      (item.type === "subscription" || item.type === "resubscription") &&
-      item.actorHandle
+      (item.type === "subscription" || item.type === "resubscription") && item.actorHandle
     ) {
       router.push(`/${item.actorHandle}`);
     } else if (item.type === "renewal_failed") {
@@ -108,29 +96,21 @@ export default function NotificationsPage() {
       item.referenceId
     ) {
       router.push(`/posts/${item.referenceId}`);
-    } else if (
-      (item.type === "subscription_activated" || item.type === "subscription_cancelled") &&
-      item.actorHandle
-    ) {
-      router.push(`/${item.actorHandle}`);
     }
   }, [router]);
 
-  // ── Mark all read ─────────────────────────────────────────────────────────
   const handleMarkAllRead = useCallback(async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
     resetUnreadCount();
     await fetch("/api/notifications/read-all", { method: "PATCH" });
   }, []);
 
-  // ── Delete all ────────────────────────────────────────────────────────────
   const handleDeleteAll = useCallback(async () => {
     setNotifications([]);
     resetUnreadCount();
     await fetch("/api/notifications/delete-all", { method: "DELETE" });
   }, []);
 
-  // ── Refresh ───────────────────────────────────────────────────────────────
   const handleRefresh = useCallback(async () => {
     await fetchNotifications(filter);
   }, [filter, fetchNotifications]);
@@ -154,9 +134,9 @@ export default function NotificationsPage() {
           backgroundColor: "#0A0A0F",
           display:         "flex",
           flexDirection:   "column",
-          overflow:        "hidden",
           fontFamily:      "'Inter', sans-serif",
           boxSizing:       "border-box",
+          /* No overflow:hidden — kills sticky on Safari */
         }}
       >
         <NotificationsHeader onMarkAllRead={handleMarkAllRead} onDeleteAll={handleDeleteAll} />
@@ -176,34 +156,34 @@ export default function NotificationsPage() {
           <span style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "'Inter', sans-serif" }}>
             Notifications
           </span>
-          <button
-            onClick={handleMarkAllRead}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#8B5CF6", fontSize: "14px", fontWeight: 600, fontFamily: "'Inter', sans-serif", padding: "6px 10px", borderRadius: "8px" }}
-          >
-            Mark all read
-          </button>
-          <button
-            onClick={handleDeleteAll}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", fontSize: "14px", fontWeight: 600, fontFamily: "'Inter', sans-serif", padding: "6px 10px", borderRadius: "8px" }}
-          >
-            Delete all
-          </button>
         </div>
 
-        <NotificationFilterTabs active={filter} onChange={setFilter} />
+        <NotificationFilterTabs
+          active={filter}
+          onChange={setFilter}
+          role={viewer?.role as "fan" | "creator" | undefined}
+        />
 
-        {loading ? (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ width: "28px", height: "28px", border: "3px solid #2A2A3D", borderTopColor: "#8B5CF6", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-          </div>
-        ) : (
-          <NotificationsList
-            notifications={notifications}
-            filter={filter}
-            onRefresh={handleRefresh}
-            onSelect={handleSelect}
-          />
-        )}
+        {/* Only this div scrolls */}
+        <div style={{
+          flex:                    1,
+          overflowY:               "auto",
+          WebkitOverflowScrolling: "touch" as any,
+          minHeight:               0,
+        }}>
+          {loading ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px 0" }}>
+              <div style={{ width: "28px", height: "28px", border: "3px solid #2A2A3D", borderTopColor: "#8B5CF6", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+            </div>
+          ) : (
+            <NotificationsList
+              notifications={notifications}
+              filter={filter}
+              onRefresh={handleRefresh}
+              onSelect={handleSelect}
+            />
+          )}
+        </div>
       </div>
     </>
   );

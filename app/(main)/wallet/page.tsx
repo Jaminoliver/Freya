@@ -27,7 +27,7 @@ function mapCategoryToType(category: string): Transaction["type"] {
     case "AUTO_SUBSCRIPTION":   return "subscription";
     case "CREATOR_EARNING":     return "premium";
     case "PAYOUT":              return "topup";
-    case "TIP":                 return "topup";
+    case "TIP": return "tip";
     case "PPV_PURCHASE":
     case "PPV_MESSAGE":         return "premium";
     default:                    return "topup";
