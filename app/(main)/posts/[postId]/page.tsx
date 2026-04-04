@@ -182,7 +182,6 @@ export default function SinglePostPage() {
     load();
   }, [postId]);
 
-  // ── Fetch initial saved state ─────────────────────────────────────────────
   useEffect(() => {
     if (!postId || !post) return;
     const fetchSavedState = async () => {
@@ -301,7 +300,6 @@ export default function SinglePostPage() {
     }
   };
 
-  // ── Save / unsave post ────────────────────────────────────────────────────
   const handleBookmark = useCallback(async () => {
     if (!post) return;
     const next = !savedPost;
@@ -411,6 +409,7 @@ export default function SinglePostPage() {
         />
       )}
 
+      {/* Pass post.id as postId so the thumbnail shows in tip/unlock notifications */}
       <CheckoutModal
         isOpen={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
@@ -419,6 +418,7 @@ export default function SinglePostPage() {
         monthlyPrice={post.profiles?.subscription_price ?? 0}
         initialTier={checkoutTier}
         postPrice={post.ppv_price ? post.ppv_price / 100 : 0}
+        postId={post.id}
         onViewContent={() => setCheckoutOpen(false)}
         onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
       />

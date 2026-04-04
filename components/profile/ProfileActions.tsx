@@ -8,7 +8,7 @@ interface ProfileActionsProps {
   targetUserId?: string;
   onEditProfile?: () => void;
   onMessage?: () => void;
-  onTip?: () => void;
+  onTip?: (postId?: string) => void;
   onShare?: () => void;
   onFollow?: () => void;
   isFollowing?: boolean;
@@ -30,8 +30,6 @@ export default function ProfileActions({
     onEditProfile?.();
   };
 
-  // Just call onMessage — the profile page already handles full navigation
-  // with name, username, avatar, verified params.
   const handleMessage = () => {
     onMessage?.();
   };
@@ -116,7 +114,8 @@ export default function ProfileActions({
           <MessageCircle size={18} strokeWidth={1.8} />
         </button>
 
-        <button onClick={onTip} style={iconBtn} title="Send Tip"
+        {/* No post_id on profile page — tip opens without a specific post */}
+        <button onClick={() => onTip?.(undefined)} style={iconBtn} title="Send Tip"
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(236,72,153,0.15)"; e.currentTarget.style.borderColor = "#EC4899"; e.currentTarget.style.color = "#EC4899"; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}>
           <Banknote size={18} strokeWidth={1.8} />

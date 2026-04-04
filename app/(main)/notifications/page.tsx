@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter }                         from "next/navigation";
+import { MoreVertical }                      from "lucide-react";
 import { NotificationsHeader }               from "@/components/notifications/NotificationsHeader";
 import { NotificationFilterTabs }            from "@/components/notifications/NotificationFilterTabs";
 import { NotificationsList }                 from "@/components/notifications/NotificationsList";
+import { NotificationsSettingsModal }        from "@/components/notifications/NotificationsSettingsModal";
 import { subscribeToNotifications }          from "@/lib/notifications/realtime";
 import { getAuthenticatedBrowserClient }     from "@/lib/supabase/browserClient";
 import { decrementUnreadCount, resetUnreadCount, initNotificationStore } from "@/lib/notifications/store";
@@ -23,6 +25,11 @@ function timeAgo(isoString: string): string {
   return `${days}d ago`;
 }
 
+function parseReferenceId(raw?: string | null): Record<string, string> | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
 export default function NotificationsPage() {
   const router = useRouter();
   const { viewer } = useAppStore();
@@ -31,6 +38,9 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [userId,        setUserId]        = useState<string | null>(null);
+  const [dropdownOpen,  setDropdownOpen]  = useState(false);
+  const [dropdownPos,   setDropdownPos]   = useState({ x: 0, y: 0 });
+  const dotsBtnRef = useRef<HTMLButtonElement>(null);
 
   const fetchNotifications = useCallback(async (tab: NotificationFilterTab) => {
     setLoading(true);
@@ -77,6 +87,7 @@ export default function NotificationsPage() {
       decrementUnreadCount();
       await fetch(`/api/notifications/${item.id}/read`, { method: "PATCH" });
     }
+
     if (item.type === "message" && item.referenceId) {
       router.push(`/messages/${item.referenceId}`);
     } else if (
@@ -92,10 +103,20 @@ export default function NotificationsPage() {
     ) {
       router.push(`/${item.actorHandle}`);
     } else if (
-      (item.type === "like" || item.type === "comment" || item.type === "comment_liked") &&
+      (item.type === "like" || item.type === "comment" || item.type === "comment_liked" ||
+       item.type === "ppv_unlocked" || item.type === "ppv_purchased" ||
+       item.type === "tip_received" || item.type === "tip_sent") &&
       item.referenceId
     ) {
-      router.push(`/posts/${item.referenceId}`);
+      const parsed = parseReferenceId(item.referenceId as string);
+
+      if (parsed?.kind === "story" && item.actorHandle) {
+        router.push(`/${item.actorHandle}?story=${parsed.id}`);
+      } else if (parsed?.kind === "post" && parsed?.id) {
+        router.push(`/posts/${parsed.id}`);
+      } else if (item.type !== "tip_received" && item.type !== "tip_sent") {
+        router.push(`/posts/${item.referenceId}`);
+      }
     }
   }, [router]);
 
@@ -115,6 +136,14 @@ export default function NotificationsPage() {
     await fetchNotifications(filter);
   }, [filter, fetchNotifications]);
 
+  const handleOpenDropdown = () => {
+    if (dotsBtnRef.current) {
+      const rect = dotsBtnRef.current.getBoundingClientRect();
+      setDropdownPos({ x: rect.right, y: rect.bottom + 6 });
+    }
+    setDropdownOpen(true);
+  };
+
   return (
     <>
       <style>{`
@@ -124,19 +153,33 @@ export default function NotificationsPage() {
           .notif-desktop-header { display: none !important; }
           .notif-outer { padding-top: 56px; }
         }
+        .nh-icon-btn {
+          background: none; border: none; cursor: pointer;
+          color: #A3A3C2; display: flex; align-items: center;
+          padding: 8px; border-radius: 8px; transition: all 0.15s ease;
+        }
+        .nh-icon-btn:hover { color: #FFFFFF; background-color: #1C1C2E; }
+        .nh-icon-btn--active { color: #8B5CF6 !important; background-color: rgba(139,92,246,0.1) !important; }
       `}</style>
+
+      {dropdownOpen && (
+        <NotificationsSettingsModal
+          onClose={() => setDropdownOpen(false)}
+          onMarkAllRead={handleMarkAllRead}
+          onDeleteAll={handleDeleteAll}
+          x={dropdownPos.x}
+          y={dropdownPos.y}
+        />
+      )}
 
       <div
         className="notif-outer"
         style={{
-          width:           "100%",
-          height:          "100vh",
+          width: "100%", height: "100vh",
           backgroundColor: "#0A0A0F",
-          display:         "flex",
-          flexDirection:   "column",
-          fontFamily:      "'Inter', sans-serif",
-          boxSizing:       "border-box",
-          /* No overflow:hidden — kills sticky on Safari */
+          display: "flex", flexDirection: "column",
+          fontFamily: "'Inter', sans-serif",
+          boxSizing: "border-box",
         }}
       >
         <NotificationsHeader onMarkAllRead={handleMarkAllRead} onDeleteAll={handleDeleteAll} />
@@ -144,18 +187,22 @@ export default function NotificationsPage() {
         <div
           className="notif-desktop-header"
           style={{
-            alignItems:      "center",
-            justifyContent:  "space-between",
-            padding:         "0 16px",
-            height:          "56px",
-            flexShrink:      0,
-            backgroundColor: "#0D0D1A",
-            borderBottom:    "1px solid #1E1E2E",
+            alignItems: "center", justifyContent: "space-between",
+            padding: "0 16px", height: "56px", flexShrink: 0,
+            backgroundColor: "#0D0D1A", borderBottom: "1px solid #1E1E2E",
           }}
         >
           <span style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "'Inter', sans-serif" }}>
             Notifications
           </span>
+
+          <button
+            ref={dotsBtnRef}
+            className={`nh-icon-btn${dropdownOpen ? " nh-icon-btn--active" : ""}`}
+            onClick={handleOpenDropdown}
+          >
+            <MoreVertical size={22} strokeWidth={1.8} />
+          </button>
         </div>
 
         <NotificationFilterTabs
@@ -164,12 +211,10 @@ export default function NotificationsPage() {
           role={viewer?.role as "fan" | "creator" | undefined}
         />
 
-        {/* Only this div scrolls */}
         <div style={{
-          flex:                    1,
-          overflowY:               "auto",
+          flex: 1, overflowY: "auto",
           WebkitOverflowScrolling: "touch" as any,
-          minHeight:               0,
+          minHeight: 0,
         }}>
           {loading ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px 0" }}>

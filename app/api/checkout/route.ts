@@ -175,14 +175,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: "Tip amount must be greater than 0" }, { status: 400 });
       }
 
+      // Insert tip — the notify_on_tip trigger handles both tip_received and tip_sent notifications
+      // It sets reference_id to {"kind":"post","id":POST_ID} when post_id is present, otherwise plain tip id
       const { data: tip, error: tipError } = await serviceSupabase
         .from("tips")
         .insert({
-          tipper_id: user.id,
+          tipper_id:    user.id,
           recipient_id: creatorId,
-          post_id: postId ?? null,
-          amount: amountKobo,
-          message: message ?? null,
+          post_id:      postId ?? null,
+          amount:       amountKobo,
+          message:      message ?? null,
         })
         .select("id")
         .single();
@@ -192,41 +194,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: "Failed to record tip" }, { status: 500 });
       }
 
-      const tipRefId = String(tip.id);
-
       await debitFanCreditCreator({
-        fanId: user.id,
+        fanId:           user.id,
         creatorId,
         amountKobo,
-        fanCategory: "TIP",
+        fanCategory:     "TIP",
         creatorCategory: "CREATOR_EARNING",
-        referenceId: tipRefId,
+        referenceId:     String(tip.id),
       });
-
-      // Notify creator about tip
-      try {
-        const { data: fanProfile } = await supabase
-          .from("profiles")
-          .select("display_name, username, avatar_url")
-          .eq("id", user.id)
-          .single();
-
-        await serviceSupabase.from("notifications").insert({
-          user_id: creatorId,
-          type: "tip",
-          role: "creator",
-          actor_id: user.id,
-          actor_name: fanProfile?.display_name ?? fanProfile?.username ?? "Someone",
-          actor_handle: fanProfile?.username ?? "",
-          actor_avatar: fanProfile?.avatar_url ?? null,
-          body_text: `sent you a ₦${(amountKobo / 100).toLocaleString()} tip`,
-          sub_text: message ?? "",
-          reference_id: tipRefId,
-          is_read: false,
-        });
-      } catch (notifErr) {
-        console.error("[Checkout] tip notification error:", notifErr);
-      }
 
       return NextResponse.json({ message: "Tip sent", tipId: tip.id });
     }
@@ -257,9 +232,9 @@ export async function POST(req: NextRequest) {
       const { data: unlock, error: unlockError } = await serviceSupabase
         .from("ppv_unlocks")
         .insert({
-          fan_id: user.id,
-          post_id: postId,
-          creator_id: creatorId,
+          fan_id:      user.id,
+          post_id:     postId,
+          creator_id:  creatorId,
           amount_paid: amountKobo,
         })
         .select("id")
@@ -273,12 +248,12 @@ export async function POST(req: NextRequest) {
       const unlockRefId = String(unlock.id);
 
       await debitFanCreditCreator({
-        fanId: user.id,
+        fanId:           user.id,
         creatorId,
         amountKobo,
-        fanCategory: "PPV_PURCHASE",
+        fanCategory:     "PPV_PURCHASE",
         creatorCategory: "CREATOR_EARNING",
-        referenceId: unlockRefId,
+        referenceId:     unlockRefId,
       });
 
       // Notify creator about PPV purchase
@@ -290,17 +265,17 @@ export async function POST(req: NextRequest) {
           .single();
 
         await serviceSupabase.from("notifications").insert({
-          user_id: creatorId,
-          type: "ppv_purchase",
-          role: "creator",
-          actor_id: user.id,
-          actor_name: fanProfile?.display_name ?? fanProfile?.username ?? "Someone",
+          user_id:      creatorId,
+          type:         "ppv_purchase",
+          role:         "creator",
+          actor_id:     user.id,
+          actor_name:   fanProfile?.display_name ?? fanProfile?.username ?? "Someone",
           actor_handle: fanProfile?.username ?? "",
           actor_avatar: fanProfile?.avatar_url ?? null,
-          body_text: `unlocked your content for ₦${(amountKobo / 100).toLocaleString()}`,
-          sub_text: "",
+          body_text:    `unlocked your content for ₦${(amountKobo / 100).toLocaleString()}`,
+          sub_text:     "",
           reference_id: unlockRefId,
-          is_read: false,
+          is_read:      false,
         });
       } catch (notifErr) {
         console.error("[Checkout] ppv notification error:", notifErr);

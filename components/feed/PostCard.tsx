@@ -296,7 +296,14 @@ export function PostCard({
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
 
-      <CheckoutModal isOpen={tipOpen} onClose={() => setTipOpen(false)} type="tips" creator={creatorAsUser} />
+      {/* Pass post.id as postId so the thumbnail shows in tip notifications */}
+      <CheckoutModal
+        isOpen={tipOpen}
+        onClose={() => setTipOpen(false)}
+        type="tips"
+        creator={creatorAsUser}
+        postId={Number(post.id)}
+      />
 
       {lightboxOpen && lightboxPost.media.length > 0 && (
         <Lightbox post={lightboxPost} allPosts={[lightboxPost]} initialMediaIndex={lightboxMediaIdx} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
@@ -385,7 +392,7 @@ export function PostCard({
       )}
 
       <div style={{ padding: "0 16px" }}>
-        <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={true} isOwnProfile={false} onLike={handleLike} onComment={() => setCommentOpen((p) => !p)} onTip={() => setTipOpen(true)} onBookmark={handleSavePost} />
+        <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={true} isOwnProfile={false} onLike={handleLike} onComment={() => setCommentOpen((p) => !p)} onTip={() => { console.log("[PostCard] tip postId:", post.id, "as number:", Number(post.id)); setTipOpen(true); }} onBookmark={handleSavePost} />
         <CommentSection postId={post.id} comments={comments} viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null} viewerUserId={viewer?.id} isOpen={commentOpen} onAddComment={handleAddComment} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} />
       </div>
     </div>

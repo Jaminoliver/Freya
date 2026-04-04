@@ -78,11 +78,22 @@ function CaptionBlock({ caption, showReplyPill, onExpandChange }: { caption: str
         margin: 0, fontSize: 15, fontWeight: 400, color: "#fff",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', sans-serif",
         lineHeight: 1.45, textAlign: "center",
-        textShadow: "0 1px 8px rgba(0,0,0,0.9), 0 2px 16px rgba(0,0,0,0.8)",
+        textShadow: "0 1px 8px rgba(0,0,0,0.9), 0 2px 16px rgba(0,0,0,0.8), 0 0 30px rgba(0,0,0,0.7)",
       }}>
         {needsTrunc && !expanded ? caption.slice(0, LIMIT).trimEnd() + "... " : caption}
         {needsTrunc && !expanded && (
-          <span onClick={toggle} onTouchEnd={toggle} style={{ color: "rgba(255,255,255,0.6)", cursor: "pointer" }}>more</span>
+          <span
+            onClick={toggle}
+            onTouchEnd={toggle}
+            style={{
+              color: "rgba(255,255,255,0.75)",
+              cursor: "pointer",
+              padding: "4px 8px",
+              margin: "-4px -4px",
+              display: "inline-block",
+              fontWeight: 600,
+            }}
+          >more</span>
         )}
       </p>
     </div>

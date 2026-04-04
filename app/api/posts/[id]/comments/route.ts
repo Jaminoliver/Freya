@@ -47,20 +47,16 @@ export async function GET(
     let replyCountMap: Record<number, number> = {};
 
     if (commentIds.length > 0) {
-      const { data: replyCounts, error: replyCountError } = await service
+      const { data: replyCounts } = await service
         .from("comments")
         .select("parent_comment_id")
         .in("parent_comment_id", commentIds)
         .eq("is_deleted", false);
 
-      if (replyCountError) {
-        console.error("[Comments GET] Reply count error:", replyCountError.message);
-      } else {
-        (replyCounts ?? []).forEach((r) => {
-          const pid = r.parent_comment_id;
-          replyCountMap[pid] = (replyCountMap[pid] ?? 0) + 1;
-        });
-      }
+      (replyCounts ?? []).forEach((r) => {
+        const pid = r.parent_comment_id;
+        replyCountMap[pid] = (replyCountMap[pid] ?? 0) + 1;
+      });
     }
 
     let likedCommentIds = new Set<number>();
@@ -102,8 +98,6 @@ export async function POST(
 
     const { content, gif_url, parent_comment_id, reply_to_username, reply_to_id } = await req.json();
 
-    console.log(`[Comments POST] postId=${postId} parent=${parent_comment_id ?? "null"} reply_to_username=${reply_to_username ?? "null"}`);
-
     const hasText = content && content.trim().length > 0;
     const hasGif  = gif_url && gif_url.trim().length > 0;
 
@@ -117,13 +111,13 @@ export async function POST(
     const { data: comment, error } = await service
       .from("comments")
       .insert({
-        user_id:            user.id,
-        post_id:            postId,
-        content:            hasText ? content.trim() : "",
-        gif_url:            hasGif ? gif_url.trim() : null,
-        parent_comment_id:  parent_comment_id ?? null,
-        reply_to_username:  reply_to_username ?? null,
-        reply_to_id:        reply_to_id ?? null,
+        user_id:           user.id,
+        post_id:           postId,
+        content:           hasText ? content.trim() : "",
+        gif_url:           hasGif ? gif_url.trim() : null,
+        parent_comment_id: parent_comment_id ?? null,
+        reply_to_username: reply_to_username ?? null,
+        reply_to_id:       reply_to_id ?? null,
       })
       .select(`
         id,
@@ -148,86 +142,8 @@ export async function POST(
       return NextResponse.json({ error: "Failed to add comment" }, { status: 500 });
     }
 
-    console.log(`[Comments POST] Inserted id=${comment.id} parent=${comment.parent_comment_id ?? "null"}`);
-
     await service.rpc("increment_comment_count", { post_id: postId });
-
-    // ── Notifications ─────────────────────────────────────────────────────
-    try {
-      const { data: commenter } = await service
-        .from("profiles")
-        .select("display_name, username, avatar_url")
-        .eq("id", user.id)
-        .single();
-
-      const commenterName   = commenter?.display_name ?? commenter?.username ?? "Someone";
-      const commenterHandle = commenter?.username ?? "";
-      const commenterAvatar = commenter?.avatar_url ?? null;
-      const preview         = hasText ? content.trim().slice(0, 80) : "sent a GIF";
-
-      console.log("[Comments] commenterName:", commenterName, "parent_comment_id:", parent_comment_id ?? "null");
-
-      if (parent_comment_id) {
-        const { data: parentComment, error: parentErr } = await service
-          .from("comments")
-          .select("user_id, content")
-          .eq("id", parent_comment_id)
-          .single();
-
-        if (parentErr) console.error("[Comments] Parent comment fetch error:", parentErr.message);
-        const parentAuthorId      = parentComment?.user_id;
-        const parentCommentPreview = (parentComment?.content ?? "").slice(0, 50);
-        console.log("[Comments] parentAuthorId:", parentAuthorId, "userId:", user.id);
-
-        if (parentAuthorId && parentAuthorId !== user.id) {
-          const { error: notifErr } = await service.from("notifications").insert({
-            user_id:      parentAuthorId,
-            type:         "comment",
-            role:         "creator",
-            actor_id:     user.id,
-            actor_name:   commenterName,
-            actor_handle: commenterHandle,
-            actor_avatar: commenterAvatar,
-            body_text:    "replied to your comment",
-            sub_text:     `Your comment: "${parentCommentPreview}" · Reply: "${preview}"`,
-            reference_id: postId.toString(),
-            is_read:      false,
-          });
-          if (notifErr) console.error("[Comments] Reply notification error:", notifErr.message);
-          else console.log("[Comments] Reply notification inserted for:", parentAuthorId);
-        }
-      } else {
-        const { data: post, error: postErr } = await service
-          .from("posts")
-          .select("creator_id")
-          .eq("id", postId)
-          .single();
-
-        if (postErr) console.error("[Comments] Post fetch error:", postErr.message);
-        const creatorId = post?.creator_id;
-        console.log("[Comments] creatorId:", creatorId, "userId:", user.id);
-
-        if (creatorId && creatorId !== user.id) {
-          const { error: notifErr } = await service.from("notifications").insert({
-            user_id:      creatorId,
-            type:         "comment",
-            role:         "creator",
-            actor_id:     user.id,
-            actor_name:   commenterName,
-            actor_handle: commenterHandle,
-            actor_avatar: commenterAvatar,
-            body_text:    "commented on your post",
-            sub_text:     `"${preview}"`,
-            reference_id: postId.toString(),
-            is_read:      false,
-          });
-          if (notifErr) console.error("[Comments] Comment notification error:", notifErr.message, notifErr.details);
-          else console.log("[Comments] Comment notification inserted for creator:", creatorId);
-        }
-      }
-    } catch (notifErr) {
-      console.error("[Comments] Notification error:", notifErr);
-    }
+    // Notification handled by DB trigger: handle_post_comment_notification
 
     return NextResponse.json({ comment: { ...comment, viewer_has_liked: false } });
 

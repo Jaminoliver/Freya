@@ -158,19 +158,24 @@ export default function CheckoutModal({
     if (screen === "payment") {
       setError(null);
 
+      // ── DEBUG — remove after confirming postId reaches API ──
+      console.log("[CheckoutModal] handleNext postId:", postId, "type:", type);
+
       if (selectedMethod === "freya_wallet") {
         setLoading(true);
         try {
+          const payload = {
+            type: type === "tips" ? "tip" : type === "subscription" ? "subscription" : "ppv",
+            amount: getAmount(),
+            creatorId: creator.id,
+            selectedTier: type === "subscription" ? selectedTier : undefined,
+            postId: (type === "ppv" || type === "tips") ? postId : undefined,
+          };
+          console.log("[CheckoutModal] wallet payload:", payload);
           const res = await fetch("/api/checkout", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              type: type === "tips" ? "tip" : type === "subscription" ? "subscription" : "ppv",
-              amount: getAmount(),
-              creatorId: creator.id,
-              selectedTier: type === "subscription" ? selectedTier : undefined,
-              postId: type === "ppv" ? postId : undefined,
-            }),
+            body: JSON.stringify(payload),
           });
           const data = await res.json();
           if (!res.ok) {
@@ -203,7 +208,7 @@ export default function CheckoutModal({
               amount: getAmount(),
               creatorId: creator.id,
               selectedTier: type === "subscription" ? selectedTier : undefined,
-              postId: type === "ppv" ? postId : undefined,
+              postId: (type === "ppv" || type === "tips") ? postId : undefined,
             }),
           });
 
@@ -247,7 +252,7 @@ export default function CheckoutModal({
               amount: getAmount(),
               creatorId: creator.id,
               selectedTier: type === "subscription" ? selectedTier : undefined,
-              postId: type === "ppv" ? postId : undefined,
+              postId: (type === "ppv" || type === "tips") ? postId : undefined,
             }),
           });
 

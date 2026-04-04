@@ -269,15 +269,10 @@ export default function PostRow({
     setIsPPV(post.is_ppv);
   }, [post.ppv_price, post.is_ppv]);
 
-  React.useEffect(() => {
-    setPpvPrice(post.ppv_price);
-    setIsPPV(post.is_ppv);
-  }, [post.ppv_price, post.is_ppv]);
   const isLiking = React.useRef(false);
 
   const firstMedia = post.media?.[0];
 
-  // A post is free/public if audience is 'everyone'
   const isFreePost = post.audience === "everyone";
 
   const viewerMedia = React.useMemo(() => {
@@ -296,7 +291,6 @@ export default function PostRow({
     }));
   }, [post.media]);
 
-  // ── Lazy-load saved state when fan sheet opens ────────────────────────────
   const savedFetched = React.useRef(false);
   const handleOpenFanSheet = React.useCallback(async () => {
     setSheetOpen(true);
@@ -410,7 +404,6 @@ export default function PostRow({
     if (firstMedia?.media_type !== "video") onImageClick?.(post, 0);
   };
 
-  // ── Save / unsave post ────────────────────────────────────────────────────
   const handleSavePost = React.useCallback(async () => {
     const next = !savedPost;
     setSavedPost(next);
@@ -425,7 +418,6 @@ export default function PostRow({
     }
   }, [savedPost, post.id]);
 
-  // ── Save / unsave creator ─────────────────────────────────────────────────
   const handleSaveCreator = React.useCallback(async () => {
     const next = !savedCreator;
     setSavedCreator(next);
@@ -466,7 +458,6 @@ export default function PostRow({
         />
       )}
 
-      {/* Fan sheet */}
       {!isOwnProfile && (
         <PostOptionsSheet
           isOpen={sheetOpen}
@@ -481,7 +472,6 @@ export default function PostRow({
         />
       )}
 
-      {/* Creator sheet */}
       {isOwnProfile && (
         <CreatorPostOptionsSheet
           isOpen={creatorSheetOpen}
@@ -511,7 +501,6 @@ export default function PostRow({
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {/* Post type badge */}
           {isPPV && ppvPrice ? (
             <span style={{ fontSize: "11px", fontWeight: 700, color: "#A78BFA", backgroundColor: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "6px", padding: "2px 7px", fontFamily: "'Inter', sans-serif", letterSpacing: "0.02em" }}>
               PPV · ₦{(ppvPrice / 100).toLocaleString("en-NG")}

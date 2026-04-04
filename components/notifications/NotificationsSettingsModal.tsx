@@ -66,13 +66,13 @@ export function NotificationsSettingsModal({ onClose, onMarkAllRead, onDeleteAll
     <>
       <style>{`
         @keyframes _notifSettingsPop {
-          0%   { opacity: 0; transform: scale(0.88) translateY(-4px); }
-          60%  { opacity: 1; transform: scale(1.02) translateY(0); }
-          100% { opacity: 1; transform: scale(1) translateY(0); }
+          0%   { opacity: 0; transform: translate(-50%, -48%) scale(0.88); }
+          60%  { opacity: 1; transform: translate(-50%, -50%) scale(1.02); }
+          100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
         .notif-settings-popup {
           animation: _notifSettingsPop 0.2s cubic-bezier(0.34,1.56,0.64,1) forwards;
-          transform-origin: top right;
+          transform-origin: center center;
         }
         .notif-settings-popup::before {
           content: '';
@@ -91,22 +91,23 @@ export function NotificationsSettingsModal({ onClose, onMarkAllRead, onDeleteAll
         .notif-settings-item--dummy:hover { background-color: transparent !important; }
       `}</style>
 
-      <div onMouseDown={onClose} style={{ position: "fixed", inset: 0, zIndex: 500 }} />
+      <div onMouseDown={onClose} style={{ position: "fixed", inset: 0, zIndex: 500, backgroundColor: "rgba(0,0,0,0.4)" }} />
 
       <div
         ref={ref}
         className="notif-settings-popup"
         style={{
           position:        "fixed",
-          top:             y,
-          right:           10,
+          top:             "50%",
+          left:            "50%",
+          transform:       "translate(-50%, -50%)",
           zIndex:          501,
           backgroundColor: "transparent",
           border:          "1px solid rgba(255,255,255,0.07)",
           borderRadius:    "16px",
           boxShadow:       "0 16px 48px rgba(0,0,0,0.6)",
           fontFamily:      "'Inter', sans-serif",
-          width:           "240px",
+          width:           "280px",
           overflow:        "hidden",
         }}
       >
