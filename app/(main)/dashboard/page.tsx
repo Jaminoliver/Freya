@@ -118,13 +118,11 @@ export default function HomePage() {
   const [error,       setError]       = useState<string | null>(null);
   const [slideMap,    setSlideMap]    = useState<Record<string, number>>({});
 
-  // PPV checkout state
   const [ppvOpen,    setPpvOpen]    = useState(false);
   const [ppvPrice,   setPpvPrice]   = useState(0);
   const [ppvPostId,  setPpvPostId]  = useState<number | undefined>(undefined);
   const [ppvCreator, setPpvCreator] = useState<User | null>(null);
 
-  // Story viewer state
   const [storyGroups,     setStoryGroups]     = useState<CreatorStoryGroup[]>([]);
   const [storyStartIdx,   setStoryStartIdx]   = useState(0);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
@@ -252,14 +250,12 @@ export default function HomePage() {
     setPpvOpen(true);
   }, []);
 
-  // Instantly unlock the post in state after successful PPV payment
   const handlePpvSuccess = useCallback(() => {
     setPosts((prev) =>
       prev.map((p) =>
         p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p
       )
     );
-    // Don't close — let success screen show, modal closes via onViewContent
   }, [ppvPostId]);
 
   const handleOpenViewer = useCallback((groups: CreatorStoryGroup[], startIndex: number) => {
@@ -307,10 +303,7 @@ export default function HomePage() {
         <StoryViewer groups={storyGroups} startGroupIndex={storyStartIdx} onClose={handleViewerClose} onGroupFullyViewed={handleGroupFullyViewed} />
       )}
 
-      <div style={{ padding: "0 16px", backgroundColor: "#0A0A0F" }}>
-        <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} />
-      </div>
-
+      {/* Tabs — above story bar */}
       <div style={{ borderBottom: "1px solid #1F1F2A", padding: "0 16px", backgroundColor: "#0A0A0F" }}>
         <div style={{ display: "flex" }}>
           {(["feed", "spotlight"] as const).map((tab) => (
@@ -319,6 +312,11 @@ export default function HomePage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Story bar — below tabs */}
+      <div style={{ padding: "0 16px", backgroundColor: "#0A0A0F" }}>
+        <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} />
       </div>
 
       <div style={{ padding: "0 0 40px" }}>

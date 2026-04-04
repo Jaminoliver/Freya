@@ -64,6 +64,12 @@ const GLOW        = "0 0 12px rgba(139,92,246,0.55), 0 0 24px rgba(236,72,153,0.
 const VIEWED_RING = "#2A2A3D";
 const VIEWED_KEY  = "sb_viewed_story_ids";
 
+// Card dimensions
+const CARD_W = 135;
+const CARD_H = 175;
+const CARD_RADIUS = 14;
+const BORDER = 2.5;
+
 function getLocalViewed(): Set<number> {
   try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) ?? "[]")); } catch { return new Set(); }
 }
@@ -270,7 +276,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
       setStoryUpload({ phase: "uploading", uploadPct: 0 });
 
-      // ── PHOTO — FormData, streams directly, no base64 ─────────────────
       if (job.mediaType === "photo") {
         const formData = new FormData();
         formData.append("file",      fileToUpload);
@@ -306,7 +311,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         return;
       }
 
-      // ── VIDEO — get TUS credentials, upload directly to Bunny ─────────
       const controller = new AbortController();
       abortControllerRef.current = controller;
       const timer = setTimeout(() => controller.abort(), 30000);
@@ -374,7 +378,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   }, [fetchStories, setStoryUpload, resetStoryUpload]);
 
   const scroll = (dir: "left" | "right") => {
-    scrollRef.current?.scrollBy({ left: dir === "right" ? 220 : -220, behavior: "smooth" });
+    scrollRef.current?.scrollBy({ left: dir === "right" ? 260 : -260, behavior: "smooth" });
   };
 
   const ownGroup = isCreator && globalViewer
@@ -429,18 +433,34 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         @media (max-width:767px) { .sb-arrow { display:none !important; } }
         .sb-scroll { padding:4px 36px; }
         @media (max-width:767px) { .sb-scroll { padding:4px 0; } }
-        .sb-item:hover .sb-label { color:#fff; }
+
         @keyframes sb-pulse {
           0%,100% { box-shadow:${GLOW}; }
           50%      { box-shadow:0 0 20px rgba(139,92,246,0.8),0 0 40px rgba(236,72,153,0.5); }
         }
         @keyframes sb-spin { to { transform:rotate(360deg); } }
-        .sb-own-circle { cursor:pointer; transition:opacity 0.15s; }
-        .sb-own-circle:hover { opacity:0.88; }
-        .sb-plus-btn { transition:transform 0.15s; }
-        .sb-plus-btn:hover { transform:scale(1.12); }
-        .sb-upload-overlay { background: rgba(0,0,0,0.5); transition: background 0.15s; }
-        .sb-upload-overlay:hover { background: rgba(0,0,0,0.7); }
+        @keyframes sb-dash-march {
+          to { stroke-dashoffset: -20; }
+        }
+
+        .sb-card {
+          cursor: pointer;
+          transition: transform 0.18s ease, opacity 0.18s ease;
+          flex-shrink: 0;
+        }
+        .sb-card:hover { transform: scale(1.04); opacity: 0.92; }
+        .sb-card:active { transform: scale(0.97); }
+
+        .sb-add-card {
+          cursor: pointer;
+          transition: transform 0.18s ease, opacity 0.18s ease;
+          flex-shrink: 0;
+        }
+        .sb-add-card:hover { transform: scale(1.04); opacity: 0.92; }
+        .sb-add-card:active { transform: scale(0.97); }
+
+        .sb-upload-overlay { background: rgba(0,0,0,0.45); transition: background 0.15s; }
+        .sb-upload-overlay:hover { background: rgba(0,0,0,0.65); }
         .sb-upload-overlay:hover .sb-upload-pct { display:none; }
         .sb-upload-overlay:hover .sb-upload-x { display:flex !important; }
       `}</style>
@@ -454,6 +474,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
       <div style={{ position: "relative", padding: "14px 0 10px" }}>
 
+        {/* Left arrow */}
         <button
           className="sb-arrow"
           onClick={() => scroll("left")}
@@ -467,90 +488,134 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         <div
           ref={scrollRef}
           className="sb-scroll"
-          style={{ display:"flex", gap:16, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none" }}
+          style={{ display:"flex", gap:10, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none", alignItems:"flex-start" }}
         >
+          {/* ── CREATOR CARD ── */}
           {isCreator && globalViewer && (
-            <div
-              className="sb-item"
-              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, flexShrink:0 }}
-            >
-              <div style={{ position: "relative" }}>
-                <div
-                  className={!isUploading && hasOwnStories ? "sb-own-circle" : undefined}
-                  onClick={!isUploading && hasOwnStories ? handleOpenOwnStories : undefined}
-                  style={{
-                    padding:      "2.5px",
-                    borderRadius: "50%",
-                    background:   isUploading ? "transparent" : hasOwnStories ? GRADIENT : "#2A2A3D",
-                    border:       isUploading || hasOwnStories ? "none" : "2px dashed #4A4A6A",
-                    boxShadow:    !isUploading && hasOwnStories ? GLOW : "none",
-                  }}
-                >
-                  <div style={{ padding: "2.5px", borderRadius: "50%", backgroundColor: "#0A0A0F", position: "relative", overflow: "hidden" }}>
-                    {isUploading ? (
-                      <Avatar src={globalViewer.avatar_url ?? null} name={globalViewer.display_name || globalViewer.username || "?"} size={80} />
-                    ) : hasOwnStories && ownThumbnail ? (
-                      <ThumbnailWithFallback src={ownThumbnail} name={globalViewer.display_name || globalViewer.username || "?"} avatarUrl={globalViewer.avatar_url ?? null} size={80} />
+            <div className="sb-add-card" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+              <div style={{ position:"relative", width:CARD_W, height:CARD_H }}>
+
+                {/* Gradient border wrapper */}
+                <div style={{
+                  position:     "absolute",
+                  inset:        0,
+                  borderRadius: CARD_RADIUS,
+                  padding:      BORDER,
+                  background:   isUploading
+                    ? "transparent"
+                    : hasOwnStories
+                      ? GRADIENT
+                      : "transparent",
+                  border:       !isUploading && !hasOwnStories ? `${BORDER}px solid #6D6D8A` : "none",
+                  boxSizing:    "border-box",
+                  boxShadow:    !isUploading && hasOwnStories ? GLOW : "none",
+                  animation:    !isUploading && hasOwnStories ? "sb-pulse 3s ease-in-out infinite" : "none",
+                }}>
+                  {/* Inner card */}
+                  <div
+                    onClick={!isUploading && hasOwnStories ? handleOpenOwnStories : undefined}
+                    style={{
+                      width:           "100%",
+                      height:          "100%",
+                      borderRadius:    CARD_RADIUS - BORDER,
+                      backgroundColor: "#0D0D18",
+                      overflow:        "hidden",
+                      position:        "relative",
+                      display:         "flex",
+                      alignItems:      "center",
+                      justifyContent:  "center",
+                    }}
+                  >
+                    {/* Background: thumbnail or avatar */}
+                    {hasOwnStories && ownThumbnail ? (
+                      <ThumbnailWithFallback
+                        src={ownThumbnail}
+                        name={globalViewer.display_name || globalViewer.username || "?"}
+                        avatarUrl={globalViewer.avatar_url ?? null}
+                        fill
+                      />
                     ) : (
-                      <Avatar src={globalViewer.avatar_url ?? null} name={globalViewer.display_name || globalViewer.username || "?"} size={80} />
+                      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+                        <Avatar
+                          src={globalViewer.avatar_url ?? null}
+                          name={globalViewer.display_name || globalViewer.username || "?"}
+                          size={52}
+                        />
+                      </div>
+                    )}
+
+                    {/* Upload overlay */}
+                    {isUploading && (
+                      <div
+                        className="sb-upload-overlay"
+                        onClick={(e) => { e.stopPropagation(); cancelUpload(); }}
+                        style={{ position:"absolute", inset:0, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", zIndex:3, borderRadius:CARD_RADIUS - BORDER }}
+                      >
+                        <span className="sb-upload-pct" style={{ color:"#fff", fontSize:18, fontWeight:700, fontFamily:"'Inter',sans-serif", pointerEvents:"none" }}>
+                          {`${displayPct}%`}
+                        </span>
+                        <span className="sb-upload-x" style={{ color:"#fff", pointerEvents:"none", display:"none" }}>
+                          <X size={22} strokeWidth={2.5} />
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Bottom username label */}
+                    {!isUploading && (
+                      <div style={{ position:"absolute", bottom:0, left:0, right:0, background:"linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 100%)", padding:"18px 6px 7px", borderBottomLeftRadius:CARD_RADIUS - BORDER, borderBottomRightRadius:CARD_RADIUS - BORDER }}>
+                        <span style={{ color:"#fff", fontSize:11, fontWeight:700, fontFamily:"'Inter',sans-serif", display:"block", textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {globalViewer.username || globalViewer.display_name}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
 
+                {/* Circular upload spinner — centered, does not wrap the card */}
                 {isUploading && (
-                  <div style={{ position:"absolute", inset:-1, borderRadius:"50%", border:"3px solid transparent", borderTop:"3px solid #8B5CF6", borderRight:"3px solid #EC4899", animation:"sb-spin 0.9s linear infinite", pointerEvents:"none" }} />
-                )}
-
-                {isUploading && (
-                  <div
-                    className="sb-upload-overlay"
-                    onClick={(e) => { e.stopPropagation(); cancelUpload(); }}
-                    style={{ position:"absolute", inset:0, borderRadius:"50%", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", zIndex:3 }}
-                  >
-                    <span className="sb-upload-pct" style={{ color:"#fff", fontSize:16, fontWeight:700, fontFamily:"'Inter',sans-serif", pointerEvents:"none" }}>
-                      {`${displayPct}%`}
-                    </span>
-                    <span className="sb-upload-x" style={{ color:"#fff", pointerEvents:"none", display:"none" }}>
-                      <X size={20} strokeWidth={2.5} />
-                    </span>
+                  <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", pointerEvents:"none", zIndex:6 }}>
+                    <div style={{ width:36, height:36, borderRadius:"50%", border:"3px solid rgba(139,92,246,0.25)", borderTop:"3px solid #8B5CF6", borderRight:"3px solid #EC4899", animation:"sb-spin 0.9s linear infinite" }} />
                   </div>
                 )}
 
+                {/* Plus button */}
                 {!isUploading && (
                   <button
-                    className="sb-plus-btn"
                     onClick={(e) => { e.stopPropagation(); openUpload(); }}
-                    style={{ position:"absolute", bottom:0, right:0, width:24, height:24, borderRadius:"50%", background:GRADIENT, border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0, zIndex:4 }}
+                    style={{ position:"absolute", top:8, right:8, width:22, height:22, borderRadius:"50%", background:GRADIENT, border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0, zIndex:4 }}
                   >
-                    <Plus size={12} color="#fff" strokeWidth={2.5} />
+                    <Plus size={11} color="#fff" strokeWidth={2.5} />
                   </button>
                 )}
 
+                {/* Error button */}
                 {uploadError && !isUploading && (
                   <button
                     title={uploadError}
                     onClick={(e) => { e.stopPropagation(); setStoryUpload({ error: null }); setUploadOpen(true); }}
-                    style={{ position:"absolute", bottom:0, right:0, width:22, height:22, borderRadius:"50%", background:"#EF4444", border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0, zIndex:4 }}
+                    style={{ position:"absolute", top:8, right:8, width:22, height:22, borderRadius:"50%", background:"#EF4444", border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0, zIndex:4 }}
                   >
-                    <AlertCircle size={12} color="#fff" />
+                    <AlertCircle size={11} color="#fff" />
                   </button>
                 )}
               </div>
 
+              {/* Cancel / Add to story label */}
               <button
                 onClick={isUploading ? cancelUpload : openUpload}
-                style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 4px", fontSize:12, fontWeight:700, color: isUploading ? "#EF4444" : uploadError ? "#EF4444" : "#C084FC", maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", fontFamily:"'Inter',sans-serif", textShadow:"0 1px 4px rgba(0,0,0,0.8)" }}
+                style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 4px", fontSize:11, fontWeight:700, color: isUploading ? "#EF4444" : uploadError ? "#EF4444" : "#C084FC", maxWidth:CARD_W, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", fontFamily:"'Inter',sans-serif" }}
               >
                 {isUploading ? "Cancel" : "Add to story"}
               </button>
             </div>
           )}
 
+          {/* ── SKELETON ── */}
           {loading
             ? Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, flexShrink:0 }}>
-                  <div style={{ width:88, height:88, borderRadius:"50%", backgroundColor:"#1C1C2E" }} />
-                  <div style={{ width:44, height:10, borderRadius:4, backgroundColor:"#1C1C2E" }} />
+                  <div style={{ width:CARD_W, height:CARD_H, borderRadius:CARD_RADIUS, backgroundColor:"#1C1C2E" }} />
+                  <div style={{ width:50, height:10, borderRadius:4, backgroundColor:"#1C1C2E" }} />
                 </div>
               ))
             : displayGroups.map((group, idx) => {
@@ -558,31 +623,66 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                 return (
                   <div
                     key={group.creatorId}
-                    className="sb-item"
+                    className="sb-card"
                     onClick={() => handleOpenStory(idx)}
-                    style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, flexShrink:0, cursor:"pointer" }}
+                    style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}
                   >
-                    <div style={{ padding:"2.5px", borderRadius:"50%", background: isViewed ? VIEWED_RING : GRADIENT, boxShadow: isViewed ? "none" : GLOW, animation: isViewed ? "none" : "sb-pulse 3s ease-in-out infinite", transition:"all 0.4s ease" }}>
-                      <div style={{ padding:"2.5px", borderRadius:"50%", backgroundColor:"#0A0A0F", position:"relative", overflow:"hidden" }}>
-                        {group.latestThumbnail ? (
-                          <ThumbnailWithFallback src={group.latestThumbnail} name={group.displayName} avatarUrl={group.avatarUrl} size={80} />
-                        ) : (
-                          <Avatar src={group.avatarUrl} name={group.displayName} size={80} />
-                        )}
+                    <div style={{ position:"relative", width:CARD_W, height:CARD_H }}>
+                      {/* Border wrapper */}
+                      <div style={{
+                        position:     "absolute",
+                        inset:        0,
+                        borderRadius: CARD_RADIUS,
+                        padding:      BORDER,
+                        background:   isViewed ? VIEWED_RING : GRADIENT,
+                        boxSizing:    "border-box",
+                        boxShadow:    isViewed ? "none" : GLOW,
+                        animation:    isViewed ? "none" : "sb-pulse 3s ease-in-out infinite",
+                        transition:   "all 0.4s ease",
+                      }}>
+                        {/* Inner card */}
+                        <div style={{
+                          width:           "100%",
+                          height:          "100%",
+                          borderRadius:    CARD_RADIUS - BORDER,
+                          backgroundColor: "#0D0D18",
+                          overflow:        "hidden",
+                          position:        "relative",
+                        }}>
+                          {/* Thumbnail or avatar fill */}
+                          {group.latestThumbnail ? (
+                            <ThumbnailWithFallback
+                              src={group.latestThumbnail}
+                              name={group.displayName}
+                              avatarUrl={group.avatarUrl}
+                              fill
+                            />
+                          ) : (
+                            <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                              <Avatar src={group.avatarUrl} name={group.displayName} size={52} />
+                            </div>
+                          )}
+
+                          <div style={{ position:"absolute", top:8, right:8, width:60, height:60, borderRadius:"50%", border:"2.5px solid #8B5CF6", overflow:"hidden", zIndex:3 }}>
+  <Avatar src={group.avatarUrl} name={group.displayName} size={60} />
+</div>
+
+                          {/* Username — bottom gradient */}
+                          <div style={{ position:"absolute", bottom:0, left:0, right:0, background:"linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)", padding:"20px 6px 7px", borderBottomLeftRadius:CARD_RADIUS - BORDER, borderBottomRightRadius:CARD_RADIUS - BORDER }}>
+                            <span style={{ color:"#fff", fontSize:11, fontWeight:700, fontFamily:"'Inter',sans-serif", display:"block", textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", opacity: isViewed ? 0.6 : 1, transition:"opacity 0.4s ease" }}>
+                              {group.username}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <span
-                      className="sb-label"
-                      style={{ fontSize:12, fontWeight:700, color: isViewed ? "#888899" : "#FFFFFF", maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", transition:"color 0.4s ease", fontFamily:"'Inter',sans-serif", textShadow: isViewed ? "none" : "0 1px 4px rgba(0,0,0,0.8)" }}
-                    >
-                      {group.username}
-                    </span>
                   </div>
                 );
               })
           }
         </div>
 
+        {/* Right arrow */}
         <button
           className="sb-arrow"
           onClick={() => scroll("right")}
@@ -598,12 +698,31 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 }
 
 function ThumbnailWithFallback({
-  src, name, avatarUrl, size,
+  src, name, avatarUrl, size, fill,
 }: {
-  src: string; name: string; avatarUrl: string | null; size: number;
+  src: string; name: string; avatarUrl: string | null; size?: number; fill?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <Avatar src={avatarUrl} name={name} size={size} />;
+
+  if (fill) {
+    if (failed) {
+      return (
+        <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Avatar src={avatarUrl} name={name} size={52} />
+        </div>
+      );
+    }
+    return (
+      <img
+        src={src}
+        alt={name}
+        onError={() => setFailed(true)}
+        style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", display:"block" }}
+      />
+    );
+  }
+
+  if (failed) return <Avatar src={avatarUrl} name={name} size={size ?? 80} />;
   return (
     <div style={{ position:"relative", width:size, height:size, borderRadius:"50%", overflow:"hidden" }}>
       <img src={src} alt={name} onError={() => setFailed(true)}

@@ -10,21 +10,22 @@ import { ReadTick } from "@/components/messages/ReadTick";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
-  messages:          Message[];
-  conversation:      Conversation;
-  currentUserId?:    string;
-  isTyping?:         boolean;
-  onReply?:          (message: Message) => void;
-  onDelete?:         (message: Message, deleteFor: "me" | "everyone") => void;
-  onLoadMore?:       () => void;
-  hasMore?:          boolean;
-  loadingMore?:      boolean;
-  loadingMessages?:  boolean;
-  onMessagesUpdate?: (updater: (msgs: Message[]) => Message[]) => void;
-  selectMode?:       boolean;
-  selectedIds?:      Set<number>;
-  onToggleSelect?:   (messageId: number) => void;
-  onSelectMessage?:  (messageId: number) => void;
+  messages:             Message[];
+  conversation:         Conversation;
+  currentUserId?:       string;
+  isTyping?:            boolean;
+  onReply?:             (message: Message) => void;
+  onDelete?:            (message: Message, deleteFor: "me" | "everyone") => void;
+  onLoadMore?:          () => void;
+  hasMore?:             boolean;
+  loadingMore?:         boolean;
+  loadingMessages?:     boolean;
+  onMessagesUpdate?:    (updater: (msgs: Message[]) => Message[]) => void;
+  selectMode?:          boolean;
+  selectedIds?:         Set<number>;
+  onToggleSelect?:      (messageId: number) => void;
+  onSelectMessage?:     (messageId: number) => void;
+  onStoryReplyClick?:   (storyId: number) => void;
 }
 
 interface LightboxState {
@@ -163,6 +164,7 @@ export function MessagesList({
   selectedIds,
   onToggleSelect,
   onSelectMessage,
+  onStoryReplyClick,
 }: Props) {
   const scrollRef         = useRef<HTMLDivElement>(null);
   const prevMessageIdsRef = useRef<Set<string>>(new Set(messages.map((m) => String(m.tempId ?? m.id))));
@@ -451,6 +453,7 @@ export function MessagesList({
                             onDelete={undefined}
                             onSelect={undefined}
                             replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
+                            onStoryReplyClick={onStoryReplyClick}
                           />
                         )}
                         {(msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0 && (
@@ -487,6 +490,7 @@ export function MessagesList({
                           onDelete={onDelete}
                           onSelect={onSelectMessage}
                           replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
+                          onStoryReplyClick={onStoryReplyClick}
                         />
                       )}
                       {(msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0 && (

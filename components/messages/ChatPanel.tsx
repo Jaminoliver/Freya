@@ -16,6 +16,8 @@ import { MessagesList } from "@/components/messages/MessagesList";
 import { MessageInput } from "@/components/messages/MessageInput";
 import { ReportModal } from "@/components/messages/ReportModal";
 import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
+import StoryViewer from "@/components/story/StoryViewer";
+import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import type { Conversation, Message } from "@/lib/types/messages";
 
 interface Props {
@@ -64,6 +66,12 @@ export function ChatPanel({
   const [sending,           setSending]           = useState(false);
   const [replyTo,           setReplyTo]           = useState<Message | null>(null);
 
+  // Story viewer state (opened when tapping a story reply bubble)
+  const [storyViewerGroups,     setStoryViewerGroups]     = useState<CreatorStoryGroup[]>([]);
+  const [storyViewerStartIndex, setStoryViewerStartIndex] = useState(0);
+  const [storyViewerStoryId,    setStoryViewerStoryId]    = useState<number | undefined>(undefined);
+  const [storyViewerOpen,       setStoryViewerOpen]       = useState(false);
+
   // Select mode state
   const [selectMode,   setSelectMode]   = useState(false);
   const [selectedIds,  setSelectedIds]  = useState<Set<number>>(new Set());
@@ -86,26 +94,17 @@ export function ChatPanel({
     setDesktopModalOpen(true);
   };
 
-  const handleEnterSelectMode = useCallback(() => {
-    setSelectMode(true);
-    setSelectedIds(new Set());
-  }, []);
-
-  const handleExitSelectMode = () => {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  };
+  const handleEnterSelectMode = useCallback(() => { setSelectMode(true); setSelectedIds(new Set()); }, []);
+  const handleExitSelectMode  = () => { setSelectMode(false); setSelectedIds(new Set()); };
 
   const handleToggleSelect = useCallback((messageId: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(messageId)) next.delete(messageId);
-      else next.add(messageId);
+      if (next.has(messageId)) next.delete(messageId); else next.add(messageId);
       return next;
     });
   }, []);
 
-  // Called from MessageActionModal "Select" — enters select mode and pre-selects the message
   const handleSelectMessage = useCallback((messageId: number) => {
     setSelectMode(true);
     setSelectedIds(new Set([messageId]));
@@ -115,55 +114,60 @@ export function ChatPanel({
     if (selectedIds.size === 0) return;
     const convId = conversation.id;
     if (convId === 0) return;
-
     const idsToDelete = Array.from(selectedIds);
-
     setMessages((prev) => prev.filter((m) => !selectedIds.has(m.id)));
     setSelectMode(false);
     setSelectedIds(new Set());
-
     try {
-      await Promise.all(
-        idsToDelete.map((msgId) =>
-          fetch(`/api/conversations/${convId}/messages/${msgId}`, {
-            method:  "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ deleteFor: "me" }),
-          })
-        )
-      );
-    } catch {
-      // Messages already removed from UI
-    }
+      await Promise.all(idsToDelete.map((msgId) =>
+        fetch(`/api/conversations/${convId}/messages/${msgId}`, {
+          method: "DELETE", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deleteFor: "me" }),
+        })
+      ));
+    } catch {}
   }, [selectedIds, conversation.id, setMessages]);
 
-  // Sync in-progress uploads into store
+  // ── Story reply click — fetch stories and open viewer ──────────────────
+  const handleStoryReplyClick = useCallback(async (storyId: number) => {
+    try {
+      const res  = await fetch("/api/stories");
+      const data = await res.json();
+      const allGroups: CreatorStoryGroup[] = data.groups ?? [];
+
+      const groupIdx = allGroups.findIndex((g) => g.items.some((s) => s.id === storyId));
+      if (groupIdx === -1) {
+        // Story has expired — do nothing (could show a toast here)
+        return;
+      }
+
+      setStoryViewerGroups(allGroups);
+      setStoryViewerStartIndex(groupIdx);
+      setStoryViewerStoryId(storyId);
+      setStoryViewerOpen(true);
+    } catch {
+      // silently fail
+    }
+  }, []);
+
+  // Sync in-progress uploads
   useEffect(() => {
     const inProgress = uploads.filter(
       (u) => u._isMessage && u._conversationId === conversation.id &&
         (u.phase === "uploading" || u.phase === "processing")
     );
     if (inProgress.length === 0) return;
-
     setMessages((prev) => {
       let updated = [...prev];
       for (const u of inProgress) {
         if (updated.some((m) => m.tempId === u._tempId)) continue;
         updated.push({
-          id:             Date.now() + Math.random(),
-          conversationId: conversation.id,
-          senderId:       currentUserId,
-          type:           u._isPPV ? "ppv" : "media",
-          text:           u._content || undefined,
-          mediaUrls:      [],
-          createdAt:      new Date().toISOString(),
-          isRead:         false,
-          status:         "sending",
-          uploadProgress: u.progress,
-          tempId:         u._tempId,
-          ...(u._isPPV && u._ppvPrice ? {
-            ppv: { price: u._ppvPrice, isUnlocked: true, unlockedCount: 0 },
-          } : {}),
+          id: Date.now() + Math.random(), conversationId: conversation.id,
+          senderId: currentUserId, type: u._isPPV ? "ppv" : "media",
+          text: u._content || undefined, mediaUrls: [],
+          createdAt: new Date().toISOString(), isRead: false,
+          status: "sending", uploadProgress: u.progress, tempId: u._tempId,
+          ...(u._isPPV && u._ppvPrice ? { ppv: { price: u._ppvPrice, isUnlocked: true, unlockedCount: 0 } } : {}),
         } as Message);
       }
       return updated;
@@ -171,12 +175,7 @@ export function ChatPanel({
   }, [uploads, conversation.id, currentUserId]);
 
   const { setTypingConversationId } = useMessagesContext();
-
-  const { sendTyping, isTyping } = useTypingIndicator({
-    conversationId:       conversation.id,
-    currentUserId,
-    realConversationIdRef,
-  });
+  const { sendTyping, isTyping }    = useTypingIndicator({ conversationId: conversation.id, currentUserId, realConversationIdRef });
 
   useEffect(() => {
     if (isTyping) setTypingConversationId(conversation.id);
@@ -192,90 +191,60 @@ export function ChatPanel({
 
   useEffect(() => {
     if (conversation.id === 0) return;
-    updateConversations((prev) =>
-      prev.map((c) => c.id === conversation.id ? { ...c, unreadCount: 0 } : c)
-    );
+    updateConversations((prev) => prev.map((c) => c.id === conversation.id ? { ...c, unreadCount: 0 } : c));
     fetch(`/api/conversations/${conversation.id}/read`, { method: "PATCH" }).catch(() => {});
   }, [conversation.id]);
 
-  useEffect(() => {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  }, [conversation.id]);
+  useEffect(() => { setSelectMode(false); setSelectedIds(new Set()); }, [conversation.id]);
 
   const handleTyping = useCallback(() => sendTyping(), [sendTyping]);
 
   const handleClearChat = useCallback(async () => {
-    updateConversations((prev) =>
-      prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "" } : c)
-    );
+    updateConversations((prev) => prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "" } : c));
     clearCachedMessages(conversation.id);
     setMessages([]);
     onClearMessages?.();
-
-    try {
-      await fetch(`/api/conversations/${conversation.id}/clear`, { method: "PATCH" });
-    } catch (err) {
-      console.error("[ChatPanel] clear chat error:", err);
-    }
+    try { await fetch(`/api/conversations/${conversation.id}/clear`, { method: "PATCH" }); } catch (err) { console.error("[ChatPanel] clear chat error:", err); }
   }, [conversation.id, onClearMessages, setMessages]);
 
   const handleDeleteChat = useCallback(async () => {
     blockConversation(conversation.id);
-    updateConversations((prev) =>
-      prev.filter((c) => c.id !== conversation.id)
-    );
+    updateConversations((prev) => prev.filter((c) => c.id !== conversation.id));
     clearCachedMessages(conversation.id);
     setMessages([]);
     onClearMessages?.();
     onBack();
-
     try {
       await Promise.all([
         fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" }),
         fetch(`/api/favourites/chatlists/by-conversation/${conversation.id}`, { method: "DELETE" }),
       ]);
       window.dispatchEvent(new Event("favourites-updated"));
-    } catch (err) {
-      console.error("[ChatPanel] delete chat error:", err);
-    }
+    } catch (err) { console.error("[ChatPanel] delete chat error:", err); }
   }, [conversation.id, onBack, onClearMessages, setMessages]);
 
   const handleDelete = useCallback(async (message: Message, deleteFor: "me" | "everyone") => {
     const convId = conversation.id;
     if (convId === 0) return;
-
     if (deleteFor === "me") {
       setMessages((prev) => prev.filter((m) => m.id !== message.id));
     } else {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === message.id
-            ? { ...m, text: "This message was deleted", type: "text" as const, mediaUrls: [], isDeleted: true }
-            : m
-        )
-      );
+      setMessages((prev) => prev.map((m) => m.id === message.id ? { ...m, text: "This message was deleted", type: "text" as const, mediaUrls: [], isDeleted: true } : m));
     }
-
     try {
       const res = await fetch(`/api/conversations/${convId}/messages/${message.id}`, {
-        method:  "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ deleteFor }),
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deleteFor }),
       });
       if (!res.ok) {
         setMessages((prev) => {
-          if (deleteFor === "me") {
-            return [...prev, message].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-          }
+          if (deleteFor === "me") return [...prev, message].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
           return prev.map((m) => m.id === message.id ? message : m);
         });
       }
     } catch {
       setMessages((prev) => {
-        if (deleteFor === "me") {
-          return [...prev, message].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        }
+        if (deleteFor === "me") return [...prev, message].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         return prev.map((m) => m.id === message.id ? message : m);
       });
     }
@@ -286,43 +255,25 @@ export function ChatPanel({
 
     if (mediaFiles && mediaFiles.length > 0) {
       const tempId    = `temp_${Date.now()}_${Math.random()}`;
-      const blobItems = mediaFiles.map((file) => ({
-        url:  URL.createObjectURL(file),
-        type: file.type.startsWith("video/") ? "video" as const : "image" as const,
-      }));
-
+      const blobItems = mediaFiles.map((file) => ({ url: URL.createObjectURL(file), type: file.type.startsWith("video/") ? "video" as const : "image" as const }));
       const optimistic: Message = {
-        id:             Date.now(),
-        conversationId: conversation.id,
-        senderId:       currentUserId,
-        type:           ppvPrice ? "ppv" : "media",
-        text:           text.trim() || undefined,
-        mediaUrls:      blobItems.map((b) => b.type === "video" ? `${b.url}#video` : b.url),
-        createdAt:      new Date().toISOString(),
-        isRead:         false,
-        status:         "sending",
-        uploadProgress: 0,
-        tempId,
+        id: Date.now(), conversationId: conversation.id, senderId: currentUserId,
+        type: ppvPrice ? "ppv" : "media", text: text.trim() || undefined,
+        mediaUrls: blobItems.map((b) => b.type === "video" ? `${b.url}#video` : b.url),
+        createdAt: new Date().toISOString(), isRead: false, status: "sending", uploadProgress: 0, tempId,
         ...(ppvPrice ? { ppv: { price: ppvPrice * 100, isUnlocked: true, unlockedCount: 0 } } : {}),
       };
       appendMessage(optimistic);
-
       startMessageUpload({
         files: mediaFiles, conversationId: conversation.id, content: text.trim() || undefined,
         isPPV: !!ppvPrice, ppvPrice: ppvPrice ? ppvPrice * 100 : undefined, tempId,
-        onProgress: (progress) => {
-          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, uploadProgress: progress } : m));
-        },
+        onProgress: (progress) => { setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, uploadProgress: progress } : m)); },
         onSent: (serverMessage) => {
           blobItems.forEach((b) => URL.revokeObjectURL(b.url));
           setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...serverMessage, status: "sent" as const } : m));
-          updateConversations((prev) => prev.map((c) =>
-            c.id === conversation.id ? { ...c, lastMessage: text || "📷 Media", lastMessageAt: new Date().toISOString() } : c
-          ));
+          updateConversations((prev) => prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: text || "📷 Media", lastMessageAt: new Date().toISOString() } : c));
         },
-        onError: () => {
-          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
-        },
+        onError: () => { setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m)); },
       });
 
     } else if (text.trim()) {
@@ -331,28 +282,16 @@ export function ChatPanel({
       setReplyTo(null);
 
       const optimistic: Message = {
-        id:             Date.now(),
-        conversationId: conversation.id,
-        senderId:       currentUserId,
-        type:           "text",
-        text:           text.trim(),
-        createdAt:      new Date().toISOString(),
-        isRead:         false,
-        status:         "sending",
-        tempId,
-        replyToId:      savedReplyToId,
+        id: Date.now(), conversationId: conversation.id, senderId: currentUserId,
+        type: "text", text: text.trim(), createdAt: new Date().toISOString(),
+        isRead: false, status: "sending", tempId, replyToId: savedReplyToId,
       };
       appendMessage(optimistic);
 
       try {
         let convId = realConversationIdRef.current ?? conversation.id;
-
         if (convId === 0) {
-          const createRes  = await fetch("/api/conversations", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ targetUserId: conversation.participant.id }),
-          });
+          const createRes  = await fetch("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUserId: conversation.participant.id }) });
           const createData = await createRes.json();
           convId                        = createData.conversationId;
           realConversationIdRef.current = convId;
@@ -361,29 +300,17 @@ export function ChatPanel({
           onConversationCreated?.(convId);
           updateConversations((prev) => {
             if (prev.some((c) => c.id === convId)) return prev;
-            return [{
-              ...conversation,
-              id:            convId,
-              lastMessage:   text.trim(),
-              lastMessageAt: new Date().toISOString(),
-              unreadCount:   0,
-            }, ...prev];
+            return [{ ...conversation, id: convId, lastMessage: text.trim(), lastMessageAt: new Date().toISOString(), unreadCount: 0 }, ...prev];
           });
         }
-
         const res  = await fetch(`/api/conversations/${convId}/messages`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ content: text.trim(), reply_to_id: savedReplyToId }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: text.trim(), reply_to_id: savedReplyToId }),
         });
         const data = await res.json();
         if (data.message) {
-          setMessages((prev) => prev.map((m) =>
-            m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m
-          ));
-          updateConversations((prev) => prev.map((c) =>
-            c.id === convId ? { ...c, lastMessage: text.trim(), lastMessageAt: new Date().toISOString() } : c
-          ));
+          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m));
+          updateConversations((prev) => prev.map((c) => c.id === convId ? { ...c, lastMessage: text.trim(), lastMessageAt: new Date().toISOString() } : c));
         } else {
           setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
         }
@@ -395,19 +322,9 @@ export function ChatPanel({
     }
   }, [sending, conversation, currentUserId, replyTo, startMessageUpload, appendMessage, setMessages, realConversationIdRef]);
 
-  const handleMessagesUpdate = useCallback((updater: (msgs: Message[]) => Message[]) => {
-    setMessages((prev) => updater(prev));
-  }, [setMessages]);
-
-  const handleBlockConfirm = useCallback(async () => {
-    await block();
-    handleBack();
-  }, [block]);
-
-  const handleRestrictConfirm = useCallback(async () => {
-    await restrict();
-    handleBack();
-  }, [restrict]);
+  const handleMessagesUpdate = useCallback((updater: (msgs: Message[]) => Message[]) => { setMessages((prev) => updater(prev)); }, [setMessages]);
+  const handleBlockConfirm   = useCallback(async () => { await block();    handleBack(); }, [block]);
+  const handleRestrictConfirm = useCallback(async () => { await restrict(); handleBack(); }, [restrict]);
 
   const showStatus = isTyping || participant.isOnline;
 
@@ -424,11 +341,9 @@ export function ChatPanel({
         @media (max-width: 767px) {
           .chat-panel-root {
             position: fixed !important; top: 0 !important; left: 0 !important;
-            right: 0 !important; height: 100dvh !important;
-            max-height: 100dvh !important; z-index: 100;
-            padding-top: env(safe-area-inset-top, 0px);
-            padding-bottom: env(safe-area-inset-bottom, 0px);
-            box-sizing: border-box;
+            right: 0 !important; height: 100dvh !important; max-height: 100dvh !important;
+            z-index: 100; padding-top: env(safe-area-inset-top, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box;
           }
         }
         .chat-messages-wall {
@@ -438,10 +353,7 @@ export function ChatPanel({
         }
         .desktop-header-name { transition: transform 0.2s ease; }
         .desktop-header-name--up { transform: translateY(-2px); }
-        @keyframes typing-bounce {
-          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-          40%            { transform: translateY(-4px); opacity: 1; }
-        }
+        @keyframes typing-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }
         .typing-dot { width: 4px; height: 4px; border-radius: 50%; background-color: #8B5CF6; display: inline-block; animation: typing-bounce 1.2s infinite ease-in-out; }
         .typing-dot:nth-child(2) { animation-delay: 0.15s; }
         .typing-dot:nth-child(3) { animation-delay: 0.3s; }
@@ -449,29 +361,32 @@ export function ChatPanel({
         .avatar-lightbox-inner { animation: avatarFadeIn 0.2s ease forwards; }
         .desktop-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 8px; border-radius: 8px; transition: all 0.15s ease; color: #A3A3C2; }
         .desktop-icon-btn:hover { color: #FFFFFF; background-color: #1C1C2E; }
-        @keyframes selectBarSlideUp {
-          from { transform: translateY(100%); opacity: 0; }
-          to   { transform: translateY(0);   opacity: 1; }
-        }
+        @keyframes selectBarSlideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         .select-bar { animation: selectBarSlideUp 0.25s ease-out forwards; }
         .select-bar-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 10px; border-radius: 8px; transition: all 0.15s ease; color: #A3A3C2; }
         .select-bar-btn:hover { color: #FFFFFF; background-color: rgba(255,255,255,0.06); }
-        .select-bar-btn:active { background-color: rgba(255,255,255,0.1); }
         .select-bar-btn--danger { color: #EF4444; }
         .select-bar-btn--danger:hover { color: #EF4444; background-color: rgba(239,68,68,0.1); }
       `}</style>
+
+      {/* Story Viewer — opened when tapping a story reply bubble */}
+      {storyViewerOpen && storyViewerGroups.length > 0 && (
+        <StoryViewer
+          groups={storyViewerGroups}
+          startGroupIndex={storyViewerStartIndex}
+          startStoryId={storyViewerStoryId}
+          onClose={() => setStoryViewerOpen(false)}
+        />
+      )}
 
       {/* Avatar lightbox */}
       {avatarOpen && (
         <div onClick={() => setAvatarOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 999, backgroundColor: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div className="avatar-lightbox-inner" onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
-            {participant.avatarUrl ? (
-              <img src={participant.avatarUrl} alt={participant.name} style={{ width: "280px", height: "280px", borderRadius: "50%", objectFit: "cover", border: "3px solid #2A2A3D" }} />
-            ) : (
-              <div style={{ width: "280px", height: "280px", borderRadius: "50%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "80px", fontWeight: 700, color: "#FFFFFF" }}>
-                {participant.name[0].toUpperCase()}
-              </div>
-            )}
+            {participant.avatarUrl
+              ? <img src={participant.avatarUrl} alt={participant.name} style={{ width: "280px", height: "280px", borderRadius: "50%", objectFit: "cover", border: "3px solid #2A2A3D" }} />
+              : <div style={{ width: "280px", height: "280px", borderRadius: "50%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "80px", fontWeight: 700, color: "#FFFFFF" }}>{participant.name[0].toUpperCase()}</div>
+            }
             <button onClick={() => setAvatarOpen(false)} style={{ position: "absolute", top: "-12px", right: "-12px", width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
               <X size={16} color="#A3A3C2" strokeWidth={1.8} />
             </button>
@@ -479,7 +394,6 @@ export function ChatPanel({
         </div>
       )}
 
-      {/* Desktop ChatActionModal */}
       {desktopModalOpen && (
         <ChatActionModal
           conversationId={conversation.id}
@@ -500,18 +414,13 @@ export function ChatPanel({
         />
       )}
 
-      {reportOpen && (
-        <ReportModal context="message" username={participant.username} reportedUserId={participant.id} onClose={() => setReportOpen(false)} />
-      )}
-
+      {reportOpen && <ReportModal context="message" username={participant.username} reportedUserId={participant.id} onClose={() => setReportOpen(false)} />}
       <BlockConfirmModal isOpen={blockConfirm}      onClose={() => setBlockConfirm(false)}      onConfirm={handleBlockConfirm}    type="block"    username={participant.username} />
       <BlockConfirmModal isOpen={unblockConfirm}    onClose={() => setUnblockConfirm(false)}    onConfirm={unblock}               type="block"    username={participant.username} />
       <BlockConfirmModal isOpen={restrictConfirm}   onClose={() => setRestrictConfirm(false)}   onConfirm={handleRestrictConfirm} type="restrict" username={participant.username} />
       <BlockConfirmModal isOpen={unrestrictConfirm} onClose={() => setUnrestrictConfirm(false)} onConfirm={unrestrict}            type="restrict" username={participant.username} />
 
       <div className="chat-panel-root">
-
-        {/* Mobile header */}
         <ChatHeader
           conversation={conversation}
           onBack={onBack}
@@ -524,29 +433,21 @@ export function ChatPanel({
         <div
           className="chat-desktop-header"
           style={{ alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "56px", flexShrink: 0, backgroundColor: "#0D0D1A", borderBottom: "1px solid #1E1E2E", fontFamily: "'Inter', sans-serif", touchAction: "none", userSelect: "none" }}
-          onTouchStart={(e) => e.stopPropagation()}
-          onTouchMove={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1, overflow: "hidden" }}>
             <button onClick={handleBack} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "6px", transition: "color 0.15s ease", flexShrink: 0 }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
               <ArrowLeft size={20} strokeWidth={1.8} />
             </button>
-
             <div style={{ position: "relative", flexShrink: 0, cursor: "pointer" }} onClick={() => setAvatarOpen(true)}>
               <div style={{ width: "40px", height: "40px", borderRadius: "50%", overflow: "hidden", backgroundColor: "#2A2A3D" }}>
-                {participant.avatarUrl ? (
-                  <img src={participant.avatarUrl} alt={participant.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                ) : (
-                  <div style={{ width: "100%", height: "100%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", fontSize: "16px", fontWeight: 700 }}>
-                    {participant.name[0].toUpperCase()}
-                  </div>
-                )}
+                {participant.avatarUrl
+                  ? <img src={participant.avatarUrl} alt={participant.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <div style={{ width: "100%", height: "100%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", fontSize: "16px", fontWeight: 700 }}>{participant.name[0].toUpperCase()}</div>
+                }
               </div>
-              {participant.isOnline && (
-                <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0D0D1A" }} />
-              )}
+              {participant.isOnline && <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0D0D1A" }} />}
             </div>
-
             <div style={{ display: "flex", flexDirection: "column", gap: "1px", minWidth: 0, overflow: "hidden" }}>
               <div className={`desktop-header-name${showStatus ? " desktop-header-name--up" : ""}`} style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", minWidth: 0 }} onClick={() => router.push(`/${participant.username}`)}>
                 <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{participant.name}</span>
@@ -554,9 +455,7 @@ export function ChatPanel({
               </div>
               {isTyping ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                  <div style={{ display: "flex", gap: "3px", alignItems: "center" }}>
-                    <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
-                  </div>
+                  <div style={{ display: "flex", gap: "3px", alignItems: "center" }}><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></div>
                   <span style={{ fontSize: "12px", color: "#8B5CF6", whiteSpace: "nowrap" }}>typing...</span>
                 </div>
               ) : participant.isOnline ? (
@@ -567,26 +466,20 @@ export function ChatPanel({
               ) : null}
             </div>
           </div>
-
           <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0 }}>
-            <button className="desktop-icon-btn" onClick={() => router.push(`/messages/${conversation.id}/gallery`)}>
-              <Images size={20} strokeWidth={1.8} />
-            </button>
-            <button
-              ref={desktopMenuBtnRef}
-              className="desktop-icon-btn"
-              onClick={handleOpenDesktopModal}
-              style={{
-                color: desktopModalOpen ? "#8B5CF6" : undefined,
-                backgroundColor: desktopModalOpen ? "rgba(139,92,246,0.1)" : undefined,
-              }}
-            >
+            <button className="desktop-icon-btn" onClick={() => router.push(`/messages/${conversation.id}/gallery`)}><Images size={20} strokeWidth={1.8} /></button>
+            <button ref={desktopMenuBtnRef} className="desktop-icon-btn" onClick={handleOpenDesktopModal} style={{ color: desktopModalOpen ? "#8B5CF6" : undefined, backgroundColor: desktopModalOpen ? "rgba(139,92,246,0.1)" : undefined }}>
               <MoreVertical size={20} strokeWidth={1.8} />
             </button>
           </div>
         </div>
 
         <div className="chat-messages-wall">
+          {/*
+            NOTE: Thread `onStoryReplyClick={handleStoryReplyClick}` through
+            MessagesList → MessageBubble so clicking a story reply bubble
+            opens the StoryViewer from here.
+          */}
           <MessagesList
             messages={messages}
             conversation={conversation}
@@ -603,46 +496,24 @@ export function ChatPanel({
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onSelectMessage={handleSelectMessage}
+            onStoryReplyClick={handleStoryReplyClick}
           />
         </div>
 
         {selectMode ? (
-          <div
-            className="select-bar"
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "8px 16px", backgroundColor: "#0D0D1A",
-              borderTop: "1px solid #1E1E2E", flexShrink: 0,
-              fontFamily: "'Inter', sans-serif", minHeight: "56px",
-            }}
-          >
+          <div className="select-bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", backgroundColor: "#0D0D1A", borderTop: "1px solid #1E1E2E", flexShrink: 0, fontFamily: "'Inter', sans-serif", minHeight: "56px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <button className="select-bar-btn" onClick={handleExitSelectMode}>
-                <X size={20} strokeWidth={1.8} />
-              </button>
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>
-                {selectedIds.size} selected
-              </span>
+              <button className="select-bar-btn" onClick={handleExitSelectMode}><X size={20} strokeWidth={1.8} /></button>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>{selectedIds.size} selected</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <button
-                className="select-bar-btn select-bar-btn--danger"
-                onClick={handleDeleteSelected}
-                disabled={selectedIds.size === 0}
-                style={{ opacity: selectedIds.size === 0 ? 0.35 : 1 }}
-              >
+              <button className="select-bar-btn select-bar-btn--danger" onClick={handleDeleteSelected} disabled={selectedIds.size === 0} style={{ opacity: selectedIds.size === 0 ? 0.35 : 1 }}>
                 <Trash2 size={20} strokeWidth={1.8} />
               </button>
             </div>
           </div>
         ) : (
-          <MessageInput
-            onSend={handleSend}
-            onTyping={handleTyping}
-            disabled={false}
-            replyTo={replyTo}
-            onCancelReply={() => setReplyTo(null)}
-          />
+          <MessageInput onSend={handleSend} onTyping={handleTyping} disabled={false} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
         )}
       </div>
     </>

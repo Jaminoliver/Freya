@@ -44,15 +44,14 @@ export async function GET(
 
   const { searchParams } = new URL(request.url);
   const cursor = searchParams.get("cursor");
-
-  const limit = cursor ? 40 : 25;
+  const limit  = cursor ? 40 : 25;
 
   const isCreator   = convo.creator_id === user.id;
   const deleteField = isCreator ? "deleted_for_creator" : "deleted_for_fan";
 
   let query = supabase
     .from("messages")
-    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, media_type, media_url, thumbnail_url, is_read, is_delivered, created_at, reply_to_id, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone")
+    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, media_type, media_url, thumbnail_url, is_read, is_delivered, created_at, reply_to_id, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone, story_reply_story_id, story_reply_thumbnail_url")
     .eq("conversation_id", conversationId)
     .eq(deleteField, false)
     .order("created_at", { ascending: false })
@@ -95,16 +94,13 @@ export async function GET(
       .from("ppv_unlocks")
       .select("message_id, fan_id")
       .in("message_id", ppvMessageIds);
-
     for (const u of unlocks ?? []) {
       if (u.fan_id === user.id) unlockedByCurrentUser.add(u.message_id);
       unlockCountByMessageId.set(u.message_id, (unlockCountByMessageId.get(u.message_id) ?? 0) + 1);
     }
   }
 
-  const deletedBefore = isCreator
-    ? (convo as any).deleted_before_creator
-    : (convo as any).deleted_before_fan;
+  const deletedBefore = isCreator ? (convo as any).deleted_before_creator : (convo as any).deleted_before_fan;
 
   const visibleRows = rows.filter((row) => {
     if (deletedBefore && new Date(row.created_at) <= new Date(deletedBefore)) return false;
@@ -128,13 +124,16 @@ export async function GET(
     }
 
     const base = {
-      id:             row.id,
-      conversationId: row.conversation_id,
-      senderId:       row.sender_id,
-      createdAt:      row.created_at,
-      isRead:         row.is_read      ?? false,
-      isDelivered:    row.is_delivered ?? false,
-      replyToId:      row.reply_to_id  ?? null,
+      id:                     row.id,
+      conversationId:         row.conversation_id,
+      senderId:               row.sender_id,
+      createdAt:              row.created_at,
+      isRead:                 row.is_read      ?? false,
+      isDelivered:            row.is_delivered ?? false,
+      replyToId:              row.reply_to_id  ?? null,
+      // Story reply fields — present on all message types
+      storyReplyStoryId:      row.story_reply_story_id      ?? null,
+      storyReplyThumbnailUrl: row.story_reply_thumbnail_url ?? null,
     };
 
     const mediaRows = mediaByMessageId.get(row.id) ?? [];
@@ -142,26 +141,19 @@ export async function GET(
       ? mediaRows.map((m) => m.url)
       : row.media_url ? [refreshBunnyUrl(row.media_url) ?? row.media_url] : [];
 
-    const thumbUrl = mediaRows[0]?.thumbnail_url
-      ?? refreshBunnyUrl(row.thumbnail_url)
-      ?? null;
+    const thumbUrl = mediaRows[0]?.thumbnail_url ?? refreshBunnyUrl(row.thumbnail_url) ?? null;
 
     if (row.is_ppv) {
       const isSender      = row.sender_id === user.id;
       const isUnlocked    = isSender || unlockedByCurrentUser.has(row.id);
       const unlockedCount = unlockCountByMessageId.get(row.id) ?? 0;
-
       return {
         ...base,
         type:         "ppv" as const,
         text:         row.content ?? undefined,
         mediaUrls:    isUnlocked ? mediaUrls : [],
         thumbnailUrl: thumbUrl,
-        ppv: {
-          price:      row.ppv_price ?? 0,
-          isUnlocked,
-          unlockedCount,
-        },
+        ppv: { price: row.ppv_price ?? 0, isUnlocked, unlockedCount },
       };
     }
 
@@ -183,7 +175,6 @@ export async function GET(
   });
 
   const nextCursor = rows.length === limit ? rows[rows.length - 1].created_at : null;
-
   return NextResponse.json({ messages, nextCursor });
 }
 
@@ -212,79 +203,57 @@ export async function POST(
     .or(`creator_id.eq.${user.id},fan_id.eq.${user.id}`)
     .single();
 
-  if (!convo) {
-    return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
-  }
-
-  if (convo.is_blocked) {
-    return NextResponse.json({ error: "Conversation is blocked" }, { status: 403 });
-  }
+  if (!convo) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+  if (convo.is_blocked) return NextResponse.json({ error: "Conversation is blocked" }, { status: 403 });
 
   const body = await request.json();
-  const { content, reply_to_id } = body;
+  const {
+    content,
+    reply_to_id,
+    story_reply_story_id,
+    story_reply_thumbnail_url,
+  } = body;
 
   if (!content?.trim()) {
     return NextResponse.json({ error: "Content is required" }, { status: 400 });
   }
 
-  const receiverId     = convo.creator_id === user.id ? convo.fan_id : convo.creator_id;
+  const receiverId       = convo.creator_id === user.id ? convo.fan_id : convo.creator_id;
   const isCreatorSending = convo.creator_id === user.id;
 
   const { data: message, error: insertError } = await supabase
     .from("messages")
     .insert({
-      conversation_id: conversationId,
-      sender_id:       user.id,
-      receiver_id:     receiverId,
-      content:         content.trim(),
-      is_ppv:          false,
-      is_unlocked:     true,
-      reply_to_id:     reply_to_id ?? null,
+      conversation_id:           conversationId,
+      sender_id:                 user.id,
+      receiver_id:               receiverId,
+      content:                   content.trim(),
+      is_ppv:                    false,
+      is_unlocked:               true,
+      reply_to_id:               reply_to_id               ?? null,
+      story_reply_story_id:      story_reply_story_id      ?? null,
+      story_reply_thumbnail_url: story_reply_thumbnail_url ?? null,
     })
-    .select("id, conversation_id, sender_id, content, created_at, reply_to_id")
+    .select("id, conversation_id, sender_id, content, created_at, reply_to_id, story_reply_story_id, story_reply_thumbnail_url")
     .single();
 
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  const unreadField  = isCreatorSending ? "unread_count_fan" : "unread_count_creator";
-  const restoreField = isCreatorSending ? "deleted_for_fan"  : "deleted_for_creator";
+  const unreadField  = isCreatorSending ? "unread_count_fan"    : "unread_count_creator";
+  const restoreField = isCreatorSending ? "deleted_for_fan"     : "deleted_for_creator";
 
-  await supabase
-    .from("conversations")
-    .update({ [restoreField]: false, updated_at: new Date().toISOString() })
-    .eq("id", conversationId);
+  await supabase.from("conversations").update({ [restoreField]: false, updated_at: new Date().toISOString() }).eq("id", conversationId);
+  await supabase.rpc("increment_unread_count", { p_conversation_id: conversationId, p_field: unreadField });
+  await supabase.from("conversations").update({ last_message_preview: content.trim().slice(0, 100), last_message_at: message.created_at, updated_at: new Date().toISOString() }).eq("id", conversationId);
 
-  await supabase.rpc("increment_unread_count", {
-    p_conversation_id: conversationId,
-    p_field:           unreadField,
-  });
-
-  await supabase
-    .from("conversations")
-    .update({
-      last_message_preview: content.trim().slice(0, 100),
-      last_message_at:      message.created_at,
-      updated_at:           new Date().toISOString(),
-    })
-    .eq("id", conversationId);
-
-  // ── Insert notification for receiver ────────────────────────────────────────
+  // Notification
   try {
-    const { data: senderProfile, error: profileError } = await supabase
-      .from("profiles")
-      .select("display_name, username, avatar_url")
-      .eq("id", user.id)
-      .single();
-
+    const { data: senderProfile, error: profileError } = await supabase.from("profiles").select("display_name, username, avatar_url").eq("id", user.id).single();
     if (profileError) console.error("[notifications] profile fetch failed:", profileError.message);
-
     const serviceSupabase = createServiceSupabaseClient();
     const receiverRole    = isCreatorSending ? "fan" : "creator";
-
-    console.log("[notifications] inserting for receiver:", receiverId, "role:", receiverRole, "reference_id:", conversationId.toString());
-
     const { error: notifInsertError } = await serviceSupabase.from("notifications").insert({
       user_id:      receiverId,
       type:         "message",
@@ -298,25 +267,22 @@ export async function POST(
       reference_id: conversationId.toString(),
       is_read:      false,
     });
-
-    if (notifInsertError) {
-      console.error("[notifications] insert failed:", notifInsertError.message, notifInsertError.details, notifInsertError.hint);
-    } else {
-      console.log("[notifications] inserted successfully");
-    }
+    if (notifInsertError) console.error("[notifications] insert failed:", notifInsertError.message);
   } catch (notifError) {
     console.error("[notifications] unexpected error:", notifError);
   }
 
   return NextResponse.json({
     message: {
-      id:             message.id,
-      conversationId: message.conversation_id,
-      senderId:       message.sender_id,
-      type:           "text",
-      text:           message.content,
-      createdAt:      message.created_at,
-      replyToId:      message.reply_to_id ?? null,
+      id:                     message.id,
+      conversationId:         message.conversation_id,
+      senderId:               message.sender_id,
+      type:                   "text",
+      text:                   message.content,
+      createdAt:              message.created_at,
+      replyToId:              message.reply_to_id              ?? null,
+      storyReplyStoryId:      message.story_reply_story_id      ?? null,
+      storyReplyThumbnailUrl: message.story_reply_thumbnail_url ?? null,
     },
   }, { status: 201 });
 }

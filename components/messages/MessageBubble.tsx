@@ -1,22 +1,23 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { MoreVertical } from "lucide-react";
+import { MoreVertical, Film } from "lucide-react";
 import { ReadTick } from "@/components/messages/ReadTick";
 import { MessageActionModal } from "@/components/messages/MessageActionModal";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
-  message:        Message;
-  conversation:   Conversation;
-  isOwn:          boolean;
-  isRead:         boolean;
-  isDelivered?:   boolean;
-  time:           string;
-  onReply?:       (message: Message) => void;
-  onDelete?:      (message: Message, deleteFor: "me" | "everyone") => void;
-  onSelect?:      (messageId: number) => void;
-  replyToMessage?: Message | null;
+  message:              Message;
+  conversation:         Conversation;
+  isOwn:                boolean;
+  isRead:               boolean;
+  isDelivered?:         boolean;
+  time:                 string;
+  onReply?:             (message: Message) => void;
+  onDelete?:            (message: Message, deleteFor: "me" | "everyone") => void;
+  onSelect?:            (messageId: number) => void;
+  replyToMessage?:      Message | null;
+  onStoryReplyClick?:   (storyId: number) => void;
 }
 
 function copyToClipboard(text: string) {
@@ -39,7 +40,10 @@ function fallbackCopy(text: string) {
   document.body.removeChild(el);
 }
 
-export function MessageBubble({ message, conversation, isOwn, isRead, isDelivered, time, onReply, onDelete, onSelect, replyToMessage }: Props) {
+export function MessageBubble({
+  message, conversation, isOwn, isRead, isDelivered, time,
+  onReply, onDelete, onSelect, replyToMessage, onStoryReplyClick,
+}: Props) {
   const { participant } = conversation;
 
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -88,6 +92,57 @@ export function MessageBubble({ message, conversation, isOwn, isRead, isDelivere
   const endLongPress    = () => { cancelLongPress(); setSwiping(false); setSwipeX(0); };
   const cancelLongPress = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
 
+  // ── Story reply preview ───────────────────────────────────────────────────
+  const storyReplyId      = (message as any).storyReplyStoryId as number | null | undefined;
+  const storyReplyThumb   = (message as any).storyReplyThumbnailUrl as string | null | undefined;
+  const hasStoryReply     = !!storyReplyId;
+
+  const storyReplyPreview = hasStoryReply ? (
+    <div
+      onClick={(e) => { e.stopPropagation(); if (storyReplyId) onStoryReplyClick?.(storyReplyId); }}
+      style={{
+        cursor:          "pointer",
+        marginBottom:    8,
+        borderRadius:    10,
+        overflow:        "hidden",
+        border:          `1px solid ${isOwn ? "rgba(255,255,255,0.18)" : "rgba(139,92,246,0.3)"}`,
+        background:      isOwn ? "rgba(0,0,0,0.2)" : "rgba(139,92,246,0.08)",
+        display:         "flex",
+        alignItems:      "stretch",
+        maxWidth:        220,
+        transition:      "opacity 0.15s",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+      onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+    >
+      {/* Thumbnail */}
+      <div style={{ width: 52, height: 72, flexShrink: 0, position: "relative", backgroundColor: "#1C1C2E", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {storyReplyThumb ? (
+          <img
+            src={storyReplyThumb}
+            alt="story"
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          <Film size={20} color="#6D6D8A" />
+        )}
+        {/* Overlay gradient */}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to right, transparent 60%, rgba(0,0,0,0.35) 100%)" }} />
+      </div>
+
+      {/* Label */}
+      <div style={{ flex: 1, padding: "8px 10px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 2 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: isOwn ? "rgba(255,255,255,0.5)" : "#8B5CF6", fontFamily: "Inter,sans-serif", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          Story
+        </span>
+        <span style={{ fontSize: 12, color: isOwn ? "rgba(255,255,255,0.75)" : "#C4B5FD", fontFamily: "Inter,sans-serif", fontWeight: 500, lineHeight: 1.3 }}>
+          Tap to view
+        </span>
+      </div>
+    </div>
+  ) : null;
+
+  // ── Normal reply preview ──────────────────────────────────────────────────
   const replyPreview = replyToMessage ? (
     <div style={{ borderLeft: `3px solid ${isOwn ? "rgba(255,255,255,0.5)" : "#8B5CF6"}`, backgroundColor: isOwn ? "rgba(0,0,0,0.15)" : "rgba(139,92,246,0.1)", borderRadius: "8px", padding: "5px 8px", marginBottom: "6px" }}>
       <p style={{ margin: 0, fontSize: "11px", fontWeight: 700, color: isOwn ? "rgba(255,255,255,0.7)" : "#8B5CF6", marginBottom: "2px" }}>
@@ -178,6 +233,7 @@ export function MessageBubble({ message, conversation, isOwn, isRead, isDelivere
           )}
 
           <div style={{ backgroundColor: isOwn ? "#8B5CF6" : "#1E1E2E", borderRadius: isOwn ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "8px 12px 6px", maxWidth: "100%", cursor: "pointer" }}>
+            {storyReplyPreview}
             {replyPreview}
             <p style={{ margin: 0, fontSize: "14px", color: "#FFFFFF", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
               {message.text}
