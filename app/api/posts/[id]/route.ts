@@ -98,16 +98,33 @@ export async function GET(
     let canAccess = post.is_free;
 
     if (user && !canAccess) {
-      const { data: sub } = await service
-        .from("subscriptions")
-        .select("id")
-        .eq("fan_id", user.id)
-        .eq("creator_id", post.creator_id)
-        .in("status", ["active", "ACTIVE"])
-        .maybeSingle();
+      // Creator always has access
+      if (user.id === post.creator_id) {
+        canAccess = true;
+      } else {
+        const { data: sub } = await service
+          .from("subscriptions")
+          .select("id")
+          .eq("fan_id", user.id)
+          .eq("creator_id", post.creator_id)
+          .in("status", ["active", "ACTIVE"])
+          .maybeSingle();
 
-      if (sub && !post.is_ppv) canAccess = true;
-      if (user.id === post.creator_id) canAccess = true;
+        // Subscribers get access to non-PPV posts
+        if (sub && !post.is_ppv) canAccess = true;
+
+        // PPV: check if user has purchased this specific post
+        if (!canAccess && post.is_ppv) {
+          const { data: ppvPurchase } = await service
+            .from("ppv_unlocks")
+            .select("id")
+            .eq("fan_id", user.id) 
+            .eq("post_id", postId)
+            .maybeSingle();
+
+          if (ppvPurchase) canAccess = true;
+        }
+      }
     }
 
     let liked = false;
@@ -247,7 +264,6 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Build update payload — only include fields that were sent
     const updates: Record<string, unknown> = {};
 
     if ("caption" in body) {

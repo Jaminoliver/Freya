@@ -157,30 +157,29 @@ export default function SinglePostPage() {
     load();
   }, []);
 
-  useEffect(() => {
+  const loadPost = useCallback(async () => {
     if (!postId) return;
-    const load = async () => {
-      try {
-        const res  = await fetch(`/api/posts/${postId}`);
-        const data = await res.json();
-        if (!res.ok) { setError(data.error || "Post not found"); return; }
-        const cached = postSyncStore.get(postId);
-        const post   = data.post as PostData;
-        if (cached) {
-          post.liked         = cached.liked;
-          post.like_count    = cached.like_count;
-          post.comment_count = cached.comment_count ?? post.comment_count;
-        }
-        setPost(post);
-        setCommentCount(post.comment_count);
-      } catch {
-        setError("Failed to load post");
-      } finally {
-        setLoading(false);
+    try {
+      const res  = await fetch(`/api/posts/${postId}`);
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Post not found"); return; }
+      const cached = postSyncStore.get(postId);
+      const post   = data.post as PostData;
+      if (cached) {
+        post.liked         = cached.liked;
+        post.like_count    = cached.like_count;
+        post.comment_count = cached.comment_count ?? post.comment_count;
       }
-    };
-    load();
+      setPost(post);
+      setCommentCount(post.comment_count);
+    } catch {
+      setError("Failed to load post");
+    } finally {
+      setLoading(false);
+    }
   }, [postId]);
+
+  useEffect(() => { loadPost(); }, [loadPost]);
 
   useEffect(() => {
     if (!postId || !post) return;
@@ -318,6 +317,12 @@ export default function SinglePostPage() {
   const openTip    = () => { setCheckoutType("tips");        setCheckoutOpen(true); };
   const openUnlock = () => { setCheckoutType("locked_post"); setCheckoutOpen(true); };
 
+  // Re-fetch post after PPV unlock so media and locked state update
+  const handleViewContent = useCallback(async () => {
+    setCheckoutOpen(false);
+    await loadPost();
+  }, [loadPost]);
+
   if (!postId) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "12px" }}>
@@ -409,7 +414,6 @@ export default function SinglePostPage() {
         />
       )}
 
-      {/* Pass post.id as postId so the thumbnail shows in tip/unlock notifications */}
       <CheckoutModal
         isOpen={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
@@ -419,7 +423,7 @@ export default function SinglePostPage() {
         initialTier={checkoutTier}
         postPrice={post.ppv_price ? post.ppv_price / 100 : 0}
         postId={post.id}
-        onViewContent={() => setCheckoutOpen(false)}
+        onViewContent={handleViewContent}
         onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
       />
 
