@@ -50,6 +50,45 @@ interface Props {
   onGroupFullyViewed?: (creatorId: string) => void;
 }
 
+function CaptionBlock({ caption, showReplyPill, onExpandChange }: { caption: string; showReplyPill: boolean; onExpandChange?: (v: boolean) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const LIMIT = 80;
+  const needsTrunc = caption.length > LIMIT;
+
+  const toggle = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    const next = !expanded;
+    setExpanded(next);
+    onExpandChange?.(next);
+  };
+
+  return (
+    <div
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: "absolute",
+        bottom: showReplyPill ? 62 : 10,
+        left: 0, right: 0,
+        padding: "12px 16px 8px",
+        zIndex: 10,
+        background: "none",
+      }}
+    >
+      <p style={{
+        margin: 0, fontSize: 15, fontWeight: 400, color: "#fff",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', sans-serif",
+        lineHeight: 1.45, textAlign: "center",
+        textShadow: "0 1px 8px rgba(0,0,0,0.9), 0 2px 16px rgba(0,0,0,0.8)",
+      }}>
+        {needsTrunc && !expanded ? caption.slice(0, LIMIT).trimEnd() + "... " : caption}
+        {needsTrunc && !expanded && (
+          <span onClick={toggle} onTouchEnd={toggle} style={{ color: "rgba(255,255,255,0.6)", cursor: "pointer" }}>more</span>
+        )}
+      </p>
+    </div>
+  );
+}
+
 export default function StoryViewer({ groups, startGroupIndex, startStoryId, onClose, onGroupFullyViewed }: Props) {
   const { viewer } = useAppStore();
 
@@ -473,7 +512,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
           )}
           {!isVideo && imgError && !imgLoaded && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", pointerEvents: "none" }}>
-              <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: "Inter,sans-serif" }}>Failed to load image</p>
+              <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.5)", fontFamily: "Inter,sans-serif" }}>Failed to load image</p>
             </div>
           )}
 
@@ -505,8 +544,18 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
 
           {/* Caption */}
           {story.caption && (
-            <div style={{ position: "absolute", bottom: showReplyPill ? 74 : 20, left: 0, right: 0, padding: "0 16px", zIndex: 10, pointerEvents: "none" }}>
-              <p style={{ margin: 0, fontSize: 14, color: "#fff", fontFamily: "Inter,sans-serif", lineHeight: 1.5, textAlign: "center", textShadow: "0 1px 6px rgba(0,0,0,0.7)" }}>{story.caption}</p>
+            <CaptionBlock
+              key={story.id}
+              caption={story.caption}
+              showReplyPill={showReplyPill}
+              onExpandChange={(expanded) => setPaused(expanded)}
+            />
+          )}
+
+          {/* Reply sent toast — floats above the reply pill */}
+          {sentToast && (
+            <div style={{ position: "absolute", bottom: 90, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 11, pointerEvents: "none", animation: "sv-toast 0.2s ease" }}>
+              <span style={{ fontSize: 15, fontWeight: 500, color: "rgba(255,255,255,0.85)", fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" }}>Reply sent ✓</span>
             </div>
           )}
 
@@ -517,22 +566,16 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
               onTouchEnd={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onMouseUp={(e) => e.stopPropagation()}
-              style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 16px calc(env(safe-area-inset-bottom) + 14px)", background: "linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%)", zIndex: 10, display: "flex", alignItems: "center", gap: 10 }}
+              style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 16px calc(env(safe-area-inset-bottom) + 14px)", background: "none", zIndex: 10, display: "flex", alignItems: "center", gap: 10 }}
             >
-              {sentToast ? (
-                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 16px", background: "rgba(139,92,246,0.2)", borderRadius: 24, border: "1px solid rgba(139,92,246,0.3)", animation: "sv-toast 0.2s ease" }}>
-                  <span style={{ fontSize: 14, color: "#C4B5FD", fontFamily: "Inter,sans-serif", fontWeight: 600 }}>Message sent ✓</span>
-                </div>
-              ) : (
-                <button onClick={handleOpenReply} style={{
-                  flex: 1, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)",
-                  borderRadius: 24, padding: "12px 18px", cursor: "pointer", textAlign: "left",
-                }}>
-                  <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 15, fontFamily: "Inter,sans-serif" }}>
-                    Reply to {group.displayName}…
-                  </span>
-                </button>
-              )}
+              <button onClick={handleOpenReply} style={{
+                flex: 1, background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 24, padding: "12px 18px", cursor: "pointer", textAlign: "left",
+              }}>
+                <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 15, fontFamily: "Inter,sans-serif" }}>
+                  Reply to {group.displayName}…
+                </span>
+              </button>
               <button onClick={handleLike} style={{
                 background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%",
                 width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
