@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, LockOpen } from "lucide-react";
 import { decode } from "blurhash";
 import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 
@@ -74,28 +74,55 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
   );
 }
 
-function getVideoRatio(item: MediaItem): string {
-  if (item.aspect_ratio && item.aspect_ratio > 0) return String(item.aspect_ratio);
-  if (item.width && item.height && item.width > 0 && item.height > 0) return `${item.width}/${item.height}`;
-  return "9/16";
+// ── UnlockedPPVBadge ──────────────────────────────────────────────────────────
+function UnlockedPPVBadge() {
+  return (
+    <div
+      style={{
+        position:       "absolute",
+        top:            "10px",
+        left:           "10px",
+        zIndex:         20,
+        display:        "flex",
+        alignItems:     "center",
+        gap:            "5px",
+        padding:        "4px 10px 4px 7px",
+        borderRadius:   "20px",
+        background:     "rgba(139,92,246,0.18)",
+        border:         "1px solid rgba(139,92,246,0.5)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        boxShadow:      "0 2px 12px rgba(139,92,246,0.25)",
+      }}
+    >
+      <LockOpen size={13} color="#C4B5FD" strokeWidth={2.2} />
+      <span
+        style={{
+          fontSize:      "11px",
+          fontWeight:    700,
+          color:         "#C4B5FD",
+          fontFamily:    "'Inter', sans-serif",
+          letterSpacing: "0.04em",
+          lineHeight:    1,
+        }}
+      >
+        Unlocked
+      </span>
+    </div>
+  );
 }
 
-export default function ImageCarousel({ media, onImageClick, initialIndex = 0, onSlideChange }: {
+export default function ImageCarousel({ media, onImageClick, initialIndex = 0, onSlideChange, containerRatio = 1, isUnlockedPPV = false }: {
   media: MediaItem[];
   onImageClick?: (index: number) => void;
   initialIndex?: number;
   onSlideChange?: (index: number) => void;
+  containerRatio?: number;
+  isUnlockedPPV?: boolean;
 }) {
   const [activeIndex, setActiveIndex]         = React.useState(initialIndex);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
   const [isDesktop, setIsDesktop]             = React.useState(false);
-
-  // Track each slide's rendered height; container locks to the max
-  const [slideHeights, setSlideHeights] = React.useState<Record<number, number>>({});
-  const maxHeight = Math.max(0, ...Object.values(slideHeights));
-
-  // Keep one ResizeObserver per slide index so we don't leak
-  const slideObservers = React.useRef<Record<number, ResizeObserver>>({});
 
   const startXRef         = React.useRef<number | null>(null);
   const startYRef         = React.useRef<number | null>(null);
@@ -111,13 +138,6 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
-  }, []);
-
-  // Cleanup all observers on unmount
-  React.useEffect(() => {
-    return () => {
-      Object.values(slideObservers.current).forEach((ro) => ro.disconnect());
-    };
   }, []);
 
   React.useEffect(() => {
@@ -217,27 +237,6 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     }
   };
 
-  // Callback ref — attaches a ResizeObserver to every slide and records its height
-  const slideRefCallback = React.useCallback((el: HTMLDivElement | null, index: number) => {
-    // Disconnect any previous observer for this slot
-    slideObservers.current[index]?.disconnect();
-    if (!el) return;
-
-    const measure = (h: number) => {
-      if (h > 0) setSlideHeights((prev) => {
-        if (prev[index] === Math.round(h)) return prev;
-        return { ...prev, [index]: Math.round(h) };
-      });
-    };
-
-    // Immediate read
-    measure(el.offsetHeight);
-
-    const ro = new ResizeObserver(([entry]) => measure(entry.contentRect.height));
-    ro.observe(el);
-    slideObservers.current[index] = ro;
-  }, []);
-
   const arrowStyle = (side: "left" | "right"): React.CSSProperties => ({
     position: "absolute", [side]: "10px", top: "50%", transform: "translateY(-50%)",
     zIndex: 10, width: "32px", height: "32px", borderRadius: "50%",
@@ -254,11 +253,18 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
       style={{
         position: "relative", width: "100%", backgroundColor: "#000",
         userSelect: "none", overflow: "hidden",
-        // Lock to the tallest slide — never shrinks when navigating to a shorter one
-        height: maxHeight > 0 ? `${maxHeight}px` : undefined,
+        aspectRatio: String(containerRatio), maxHeight: "85svh",
       }}
       onMouseLeave={handleMouseLeave}
     >
+      <style>{`
+        @media (min-width: 768px) {
+          .ic-blur-bg {
+            display: block !important;
+          }
+        }
+      `}</style>
+
       <div
         ref={stripRef}
         onTouchStart={handleTouchStart}
@@ -274,8 +280,6 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
           cursor: isDesktop ? (media.length > 1 ? "grab" : "pointer") : "default",
           willChange: "transform",
           touchAction: "pan-y",
-          // Center shorter slides (e.g. landscape video) within the locked height
-          alignItems: "center",
         }}
       >
         {media.map((item, i) => {
@@ -283,60 +287,94 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
           const isAdjacent = Math.abs(i - activeIndex) === 1;
           const shouldLoad = isActive || isAdjacent;
           const isVideo    = item.media_type === "video";
-          const blurBarSrc = isVideo && item.bunny_video_id
+
+          const videoBlurSrc = item.bunny_video_id
             ? getBunnyThumbnail(item.bunny_video_id)
-            : (item.thumbnail_url ?? undefined);
+            : item.thumbnail_url ?? undefined;
 
           return (
             <div
               key={i}
-              ref={(el) => slideRefCallback(el, i)}
-              style={{ flexShrink: 0, width: "100%", position: "relative", backgroundColor: "#000" }}
+              style={{ flexShrink: 0, width: "100%", height: "100%", position: "relative", overflow: "hidden" }}
             >
-              {blurBarSrc && shouldLoad && (
-                <>
-                  <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${blurBarSrc})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9, pointerEvents: "none", zIndex: 0 }} />
-                  <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${blurBarSrc})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9, pointerEvents: "none", zIndex: 0 }} />
-                </>
-              )}
-              <div style={{ position: "relative", zIndex: 1 }}>
-                {isVideo ? (
-                  shouldLoad ? (
-                    <VideoPlayer
-                      bunnyVideoId={item.bunny_video_id}
-                      thumbnailUrl={item.thumbnail_url}
-                      processingStatus={item.processing_status}
-                      rawVideoUrl={item.raw_video_url}
-                      fillParent={false}
-                      aspectRatio={getVideoRatio(item)}
-                      hideInternalBlur={true}
-                      blurHash={item.blur_hash}
-                    />
-                  ) : (
-                    <div style={{ width: "100%", aspectRatio: getVideoRatio(item), backgroundColor: "#0A0A14" }}>
-                      {item.blur_hash && <BlurHashCanvas hash={item.blur_hash} style={{ width: "100%", height: "100%" }} />}
+              {isVideo ? (
+                shouldLoad ? (
+                  <>
+                    <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
+                      {videoBlurSrc && (
+                        <img
+                          src={videoBlurSrc}
+                          alt=""
+                          aria-hidden
+                          style={{
+                            width: "100%", height: "100%",
+                            objectFit: "cover",
+                            filter: "blur(24px) brightness(0.5)",
+                            transform: "scale(1.08)",
+                          }}
+                        />
+                      )}
                     </div>
-                  )
+                    <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%" }}>
+                      <VideoPlayer
+                        bunnyVideoId={item.bunny_video_id}
+                        thumbnailUrl={item.thumbnail_url}
+                        processingStatus={item.processing_status}
+                        rawVideoUrl={item.raw_video_url}
+                        fillParent={true}
+                        hideInternalBlur={true}
+                        blurHash={item.blur_hash}
+                        objectFit="contain"
+                      />
+                    </div>
+                  </>
                 ) : (
-                  shouldLoad ? (
-                    <ProgressiveImage
-                      src={item.file_url}
-                      placeholder={item.thumbnail_url}
-                      blurHash={item.blur_hash}
-                      eager={isActive}
-                      style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block", pointerEvents: "none" }}
-                    />
-                  ) : (
-                    <div style={{ width: "100%", aspectRatio: "4/3", backgroundColor: "#0A0A14" }}>
-                      {item.blur_hash && <BlurHashCanvas hash={item.blur_hash} style={{ width: "100%", height: "100%" }} />}
+                  <div style={{ width: "100%", height: "100%", backgroundColor: "#0A0A14" }}>
+                    {item.blur_hash && <BlurHashCanvas hash={item.blur_hash} style={{ width: "100%", height: "100%" }} />}
+                  </div>
+                )
+              ) : (
+                shouldLoad ? (
+                  <>
+                    <div
+                      className="ic-blur-bg"
+                      style={{ display: "none", position: "absolute", inset: 0, zIndex: 0 }}
+                    >
+                      <img
+                        src={item.file_url ?? ""}
+                        alt=""
+                        aria-hidden
+                        style={{
+                          width: "100%", height: "100%",
+                          objectFit: "cover",
+                          filter: "blur(24px) brightness(0.5)",
+                          transform: "scale(1.08)",
+                        }}
+                      />
                     </div>
-                  )
-                )}
-              </div>
+                    <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%" }}>
+                      <ProgressiveImage
+                        src={item.file_url}
+                        placeholder={item.thumbnail_url}
+                        blurHash={item.blur_hash}
+                        eager={isActive}
+                        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", pointerEvents: "none" }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ width: "100%", height: "100%", backgroundColor: "#0A0A14" }}>
+                    {item.blur_hash && <BlurHashCanvas hash={item.blur_hash} style={{ width: "100%", height: "100%" }} />}
+                  </div>
+                )
+              )}
             </div>
           );
         })}
       </div>
+
+      {/* Unlocked PPV badge — sits above the carousel strip */}
+      {isUnlockedPPV && <UnlockedPPVBadge />}
 
       {media.length > 1 && (
         <div style={{ position: "absolute", top: "10px", right: "10px", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>

@@ -87,17 +87,23 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
         playsInline
         style={{ display: "none" }}
         onLoadedMetadata={() => {
-          const v = videoRef.current;
-          if (!v) return;
-          setDuration(v.duration);
-          const w = v.videoWidth;
-          const h = v.videoHeight;
-          setIsPortrait(h > w);
-          const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
-          const d   = gcd(w, h);
-          setAspectRatio(`${w / d}/${h / d}`);
-          v.currentTime = 0;
-        }}
+  const v = videoRef.current;
+  if (!v) return;
+  setDuration(v.duration);
+  const w = v.videoWidth;
+  const h = v.videoHeight;
+  setIsPortrait(h > w);
+  const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
+  const d   = gcd(w, h);
+  setAspectRatio(`${w / d}/${h / d}`);
+  // iOS requires play/pause to unblock seeking to frame 0
+  v.play().then(() => {
+    v.pause();
+    v.currentTime = 0.1;
+  }).catch(() => {
+    v.currentTime = 0.1;
+  });
+}}
         onSeeked={handleSeeked}
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />

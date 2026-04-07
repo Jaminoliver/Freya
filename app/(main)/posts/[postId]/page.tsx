@@ -483,6 +483,7 @@ export default function SinglePostPage() {
           media={normalizedMedia}
           isLocked={post.locked}
           price={post.ppv_price}
+          isUnlockedPPV={post.is_ppv && !post.locked}
           onDoubleTap={handleDoubleTapLike}
           onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
           onUnlock={openUnlock}

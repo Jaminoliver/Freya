@@ -114,7 +114,7 @@ export default function ProfileAvatar({
     setStoryUploading(true);
     try {
       const form = new FormData();
-      form.append("file",      job.file);
+      form.append("file",      job.files[0]);
       form.append("mediaType", job.mediaType);
       if (job.caption) form.append("caption", job.caption);
       form.append("clipStart", String(job.clipStart));

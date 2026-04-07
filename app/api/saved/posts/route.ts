@@ -40,10 +40,11 @@ export async function GET(req: NextRequest) {
     .from("saved_posts")
     .select(`
       post_id,
-      posts (
+      posts!inner (
         id,
         content_type,
         is_ppv,
+        is_deleted,
         audience,
         creator_id,
         published_at,
@@ -63,6 +64,7 @@ export async function GET(req: NextRequest) {
       )
     `)
     .eq("user_id", user.id)
+    .eq("posts.is_deleted", false)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -70,7 +72,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const postIds = (data ?? []).map((row: any) => Number(row.posts?.id)).filter(Boolean);
+  const filtered = (data ?? []).filter((row: any) => row.posts != null && !row.posts.is_deleted);
+
+  const postIds = filtered.map((row: any) => Number(row.posts?.id)).filter(Boolean);
 
   // Fetch subscriptions and PPV unlocks in parallel
   const [{ data: subsRaw }, { data: ppvUnlocksRaw }] = await Promise.all([
@@ -95,7 +99,7 @@ export async function GET(req: NextRequest) {
 
   const STREAM_CDN = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
 
-  const posts = (data ?? []).map((row: any) => {
+  const posts = filtered.map((row: any) => {
     const p      = row.posts;
     const media  = (p.media ?? []).sort((a: any, b: any) => a.display_order - b.display_order);
     const first  = media[0];

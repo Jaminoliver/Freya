@@ -383,7 +383,7 @@ function CreatePostContent() {
           <textarea
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
-            placeholder={hasPoll ? "Ask a question…" : "What's on your mind?"}
+            placeholder={hasPoll ? "Ask a question…" : "Add caption…"}
             rows={3}
             style={{
               flex: 1,

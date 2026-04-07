@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useRef, useState, useCallback, useEffect } from "react";
-import { Lock } from "lucide-react";
+import { Lock, LockOpen } from "lucide-react";
 import { decode } from "blurhash";
 import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import ImageCarousel from "@/components/profile/ImageCarousel";
@@ -22,14 +22,15 @@ export interface NormalizedMedia {
 }
 
 interface PostMediaViewerProps {
-  media:          NormalizedMedia[];
-  isLocked:       boolean;
-  price?:         number | null;
-  onDoubleTap?:   () => void;
-  onSingleTap?:   (index: number) => void;
-  onUnlock?:      () => void;
-  initialSlide?:  number;
-  onSlideChange?: (index: number) => void;
+  media:            NormalizedMedia[];
+  isLocked:         boolean;
+  isUnlockedPPV?:   boolean;
+  price?:           number | null;
+  onDoubleTap?:     () => void;
+  onSingleTap?:     (index: number) => void;
+  onUnlock?:        () => void;
+  initialSlide?:    number;
+  onSlideChange?:   (index: number) => void;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -55,19 +56,17 @@ function useMediaRatio(
     img.src = thumbSrc;
   }, [thumbSrc]);
 
-  const minRatio = isVideo ? (9 / 16) : 0.5;
-
   if (item?.aspectRatio != null && item.aspectRatio > 0) {
-    return Math.max(clampRatio(item.aspectRatio, 1), minRatio);
+    return clampRatio(item.aspectRatio, 1);
   }
 
   if (item?.width && item?.height) {
-    return Math.max(clampRatio(item.width, item.height), minRatio);
+    return clampRatio(item.width, item.height);
   }
 
-  if (detected != null) return Math.max(detected, minRatio);
+  if (detected != null) return detected;
 
-  return isVideo ? (9 / 16) : (4 / 3);
+  return 1;
 }
 
 // ── BlurHashCanvas ────────────────────────────────────────────────────────────
@@ -138,35 +137,57 @@ function ProgressiveImage({ src, placeholder, blurHash, style }: {
   );
 }
 
-// ── Responsive blur bar width ─────────────────────────────────────────────────
-function useBlurBarWidth(): number {
-  const [barWidth, setBarWidth] = React.useState<number>(
-    typeof window !== "undefined" && window.innerWidth <= 768 ? 40 : 80
+// ── UnlockedPPVBadge ──────────────────────────────────────────────────────────
+function UnlockedPPVBadge() {
+  return (
+    <div
+      style={{
+        position:       "absolute",
+        top:            "10px",
+        left:           "10px",
+        zIndex:         20,
+        display:        "flex",
+        alignItems:     "center",
+        gap:            "5px",
+        padding:        "4px 10px 4px 7px",
+        borderRadius:   "20px",
+        background:     "rgba(139,92,246,0.18)",
+        border:         "1px solid rgba(139,92,246,0.5)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        boxShadow:      "0 2px 12px rgba(139,92,246,0.25)",
+      }}
+    >
+      <LockOpen size={13} color="#C4B5FD" strokeWidth={2.2} />
+      <span
+        style={{
+          fontSize:      "11px",
+          fontWeight:    700,
+          color:         "#C4B5FD",
+          fontFamily:    "'Inter', sans-serif",
+          letterSpacing: "0.04em",
+          lineHeight:    1,
+        }}
+      >
+        Unlocked
+      </span>
+    </div>
   );
-
-  React.useEffect(() => {
-    const handler = () => setBarWidth(window.innerWidth <= 768 ? 40 : 80);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
-
-  return barWidth;
 }
 
 // ── PostMediaViewer ──────────────────────────────────────────────────────────
 export default function PostMediaViewer({
-  media, isLocked, price, onDoubleTap, onSingleTap, onUnlock, initialSlide = 0, onSlideChange,
+  media, isLocked, isUnlockedPPV = false, price, onDoubleTap, onSingleTap, onUnlock, initialSlide = 0, onSlideChange,
 }: PostMediaViewerProps) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
   const isMultiImg = !isVideo && media.length > 1;
 
-  const thumbSrc = isVideo && first?.bunnyVideoId
-    ? getBunnyThumbnail(first.bunnyVideoId)
+  const thumbSrc = isVideo
+    ? (first?.bunnyVideoId ? getBunnyThumbnail(first.bunnyVideoId) : first?.thumbnailUrl ?? undefined)
     : first?.thumbnailUrl ?? first?.url ?? undefined;
 
-  const ratio    = useMediaRatio(first, thumbSrc, isVideo);
-  const barWidth = useBlurBarWidth();
+  const ratio = useMediaRatio(first, thumbSrc, isVideo);
 
   const noop         = () => {};
   const doubleTap    = onDoubleTap ?? noop;
@@ -179,12 +200,12 @@ export default function PostMediaViewer({
     const blurSrc = isVideo
       ? (first.bunnyVideoId ? getBunnyThumbnail(first.bunnyVideoId) : first.thumbnailUrl ?? undefined)
       : (first.thumbnailUrl ?? first.url ?? undefined);
-    const isPPV   = price != null && price > 0;
-    const displayPrice = isPPV ? price! / 100 : 0; // convert kobo → naira once
+    const isPPV        = price != null && price > 0;
+    const displayPrice = isPPV ? price! / 100 : 0;
 
     return (
       <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
-        <div style={{ position: "relative", width: "100%", maxHeight: "85svh", aspectRatio: String(ratio), backgroundColor: "#0A0A0F", overflow: "hidden" }}>
+        <div style={{ position: "relative", width: "100%", aspectRatio: String(ratio), backgroundColor: "#0A0A0F", overflow: "hidden" }}>
           {first.blurHash && (
             <BlurHashCanvas
               hash={first.blurHash}
@@ -219,7 +240,6 @@ export default function PostMediaViewer({
             alignItems: "center", justifyContent: "center",
             gap: "16px",
           }}>
-            {/* Lock icon ring */}
             <div style={{
               width: "56px", height: "56px", borderRadius: "50%",
               background: "rgba(139,92,246,0.15)",
@@ -253,17 +273,11 @@ export default function PostMediaViewer({
                 <button
                   onClick={onUnlock}
                   style={{
-                    padding: "11px 28px",
-                    borderRadius: "10px",
+                    padding: "11px 28px", borderRadius: "10px",
                     background: "linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)",
-                    border: "none",
-                    color: "#fff",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    fontFamily: "'Inter', sans-serif",
-                    boxShadow: "0 4px 16px rgba(139,92,246,0.45)",
-                    transition: "opacity 0.15s",
+                    border: "none", color: "#fff", fontSize: "14px", fontWeight: 700,
+                    cursor: "pointer", fontFamily: "'Inter', sans-serif",
+                    boxShadow: "0 4px 16px rgba(139,92,246,0.45)", transition: "opacity 0.15s",
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
@@ -275,17 +289,11 @@ export default function PostMediaViewer({
               <button
                 onClick={onUnlock}
                 style={{
-                  padding: "11px 28px",
-                  borderRadius: "10px",
+                  padding: "11px 28px", borderRadius: "10px",
                   background: "linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)",
-                  border: "none",
-                  color: "#fff",
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "'Inter', sans-serif",
-                  boxShadow: "0 4px 16px rgba(139,92,246,0.45)",
-                  transition: "opacity 0.15s",
+                  border: "none", color: "#fff", fontSize: "14px", fontWeight: 700,
+                  cursor: "pointer", fontFamily: "'Inter', sans-serif",
+                  boxShadow: "0 4px 16px rgba(139,92,246,0.45)", transition: "opacity 0.15s",
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
@@ -301,14 +309,26 @@ export default function PostMediaViewer({
 
   // ── Video ────────────────────────────────────────────────────────────────
   if (isVideo) {
-    const blurSrc = first.thumbnailUrl ?? (first.bunnyVideoId ? getBunnyThumbnail(first.bunnyVideoId) : undefined);
+    const videoRatio = (() => {
+      if (first?.aspectRatio != null && first.aspectRatio > 0) {
+        return Math.min(Math.max(first.aspectRatio, 9 / 16), 1.91);
+      }
+      if (first?.width && first?.height) {
+        return Math.min(Math.max(first.width / first.height, 9 / 16), 1.91);
+      }
+      return ratio;
+    })();
+
+    const blurSrc = first.bunnyVideoId
+      ? getBunnyThumbnail(first.bunnyVideoId)
+      : first.thumbnailUrl ?? undefined;
 
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
         <div
-          className="post-video-outer"
           style={{
             width: "100%", position: "relative", overflow: "hidden",
+            aspectRatio: String(videoRatio), maxHeight: "85svh", backgroundColor: "#000",
             backgroundImage: blurSrc ? `url(${blurSrc})` : undefined,
             backgroundSize: "cover", backgroundPosition: "center",
           }}
@@ -316,7 +336,7 @@ export default function PostMediaViewer({
           {blurSrc && (
             <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", backgroundColor: "rgba(0,0,0,0.35)", zIndex: 0, pointerEvents: "none" }} />
           )}
-          <div style={{ position: "relative", zIndex: 2, aspectRatio: String(ratio), maxHeight: "80svh", marginLeft: "auto", marginRight: "auto" }}>
+          <div style={{ position: "relative", zIndex: 2, width: "100%", height: "100%" }}>
             <VideoPlayer
               bunnyVideoId={first.bunnyVideoId ?? null}
               thumbnailUrl={first.thumbnailUrl ?? null}
@@ -325,8 +345,11 @@ export default function PostMediaViewer({
               fillParent={true}
               hideInternalBlur={true}
               blurHash={first.blurHash}
+              objectFit="contain"
             />
           </div>
+
+          {isUnlockedPPV && <UnlockedPPVBadge />}
         </div>
       </DoubleTapLike>
     );
@@ -350,6 +373,13 @@ export default function PostMediaViewer({
       aspect_ratio:      m.aspectRatio ?? null,
     }));
 
+    const tallestRatio = media.reduce((min, m) => {
+      let r: number | null = null;
+      if (m.aspectRatio != null && m.aspectRatio > 0) r = clampRatio(m.aspectRatio, 1);
+      else if (m.width && m.height) r = clampRatio(m.width, m.height);
+      return r != null && r < min ? r : min;
+    }, ratio);
+
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%" }}>
         <ImageCarousel
@@ -357,29 +387,73 @@ export default function PostMediaViewer({
           onImageClick={(index) => onSingleTap?.(index)}
           initialIndex={initialSlide}
           onSlideChange={onSlideChange}
+          containerRatio={tallestRatio}
+          isUnlockedPPV={isUnlockedPPV}
         />
       </DoubleTapLike>
     );
   }
 
-  // ── Single image ─────────────────────────────────────────────────────────
-  const blurBarSrc = first.thumbnailUrl ?? undefined;
+  // ── Single image ─────────────────────────────────────────────────────────────
+  const imageRatio = (() => {
+    if (first?.aspectRatio != null && first.aspectRatio > 0) {
+      return Math.min(Math.max(first.aspectRatio, 0.4), 1.91);
+    }
+    if (first?.width && first?.height) {
+      return Math.min(Math.max(first.width / first.height, 0.4), 1.91);
+    }
+    return ratio;
+  })();
 
   return (
     <DoubleTapLike onSingleTap={singleTapAt0} onDoubleTap={doubleTap} style={{ width: "100%", cursor: "zoom-in" }}>
-      <div style={{ position: "relative", width: "100%", maxHeight: "85svh", aspectRatio: String(ratio), backgroundColor: "#000", overflow: "hidden" }}>
-        {blurBarSrc && (
-          <>
-            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${blurBarSrc})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9, zIndex: 1 }} />
-            <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "80px", backgroundImage: `url(${blurBarSrc})`, backgroundSize: "cover", backgroundPosition: "right center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9, zIndex: 1 }} />
-          </>
-        )}
-        <ProgressiveImage
-          src={first.url ?? undefined}
-          placeholder={first.thumbnailUrl ?? undefined}
-          blurHash={first.blurHash}
-          style={{ position: "relative", zIndex: 2, width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+      <style>{`
+        @media (min-width: 768px) {
+          .pmv-blur-bg {
+            display: block !important;
+          }
+        }
+      `}</style>
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          aspectRatio: String(imageRatio),
+          maxHeight: "85svh",
+          backgroundColor: "#000",
+          overflow: "hidden",
+        }}
+      >
+        {/* Blurred background — desktop only */}
+        <div
+          className="pmv-blur-bg"
+          style={{ display: "none", position: "absolute", inset: 0, zIndex: 0 }}
+        >
+          <img
+            src={first.url ?? ""}
+            alt=""
+            aria-hidden
+            style={{
+              width: "100%", height: "100%", objectFit: "cover",
+              filter: "blur(24px) brightness(0.5)", transform: "scale(1.08)",
+            }}
+          />
+        </div>
+
+        {/* Main image */}
+        <img
+          src={first.url ?? ""}
+          alt=""
+          draggable={false}
+          loading="lazy"
+          style={{
+            position: "relative", zIndex: 1,
+            width: "100%", height: "100%",
+            objectFit: "contain", display: "block",
+          }}
         />
+
+        {isUnlockedPPV && <UnlockedPPVBadge />}
       </div>
     </DoubleTapLike>
   );

@@ -414,7 +414,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                     {!isUploading && (
                       <div style={{ position:"absolute", bottom:0, left:0, right:0, background:"linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 100%)", padding:"18px 6px 7px", borderBottomLeftRadius:CARD_RADIUS - BORDER, borderBottomRightRadius:CARD_RADIUS - BORDER }}>
                         <span style={{ color:"#fff", fontSize:11, fontWeight:700, fontFamily:"'Inter',sans-serif", display:"block", textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                          {globalViewer.username || globalViewer.display_name}
+                          Your story
                         </span>
                       </div>
                     )}
@@ -429,11 +429,14 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
                 {!isUploading && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); openUpload(); }}
-                    style={{ position:"absolute", top:8, right:8, width:22, height:22, borderRadius:"50%", background:GRADIENT, border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0, zIndex:4 }}
-                  >
-                    <Plus size={11} color="#fff" strokeWidth={2.5} />
-                  </button>
+  onClick={(e) => { e.stopPropagation(); openUpload(); }}
+  style={{ position:"absolute", top:6, right:6, width:28, height:28,
+    borderRadius:"50%", background:GRADIENT,
+    display:"flex", alignItems:"center", justifyContent:"center",
+    cursor:"pointer", padding:0, zIndex:4 }}
+>
+  <Plus size={16} color="#fff" strokeWidth={2.5} />
+</button>
                 )}
 
                 {uploadError && !isUploading && (

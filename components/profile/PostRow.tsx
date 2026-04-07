@@ -406,11 +406,11 @@ export default function PostRow({
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {isPPV && ppvPrice ? (
-            <span style={{ fontSize: "11px", fontWeight: 700, color: "#A78BFA", backgroundColor: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "6px", padding: "2px 7px", fontFamily: "'Inter', sans-serif", letterSpacing: "0.02em" }}>
-              PPV · ₦{(ppvPrice / 100).toLocaleString("en-NG")}
-            </span>
-          ) : null}
+          {isOwnProfile && isPPV && ppvPrice ? (
+  <span style={{ fontSize: "11px", fontWeight: 700, color: "#fff", backgroundColor: "#8B5CF6", borderRadius: "6px", padding: "2px 7px", fontFamily: "'Inter', sans-serif", letterSpacing: "0.02em" }}>
+    PPV · ₦{(ppvPrice / 100).toLocaleString("en-NG")}
+  </span>
+) : null}
           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{getRelativeTime(post.published_at)}</span>
           <button
             onClick={() => isOwnProfile ? setCreatorSheetOpen(true) : handleOpenFanSheet()}
@@ -436,7 +436,7 @@ export default function PostRow({
       )}
 
       {viewerMedia.length > 0 && (
-        <PostMediaViewer media={viewerMedia} isLocked={post.locked} price={ppvPrice} onDoubleTap={handleDoubleTapLike} onSingleTap={handleSingleTap} onUnlock={() => onUnlock?.(String(post.id))} />
+        <PostMediaViewer media={viewerMedia} isLocked={post.locked} price={ppvPrice} isUnlockedPPV={post.is_ppv && !post.locked} onDoubleTap={handleDoubleTapLike} onSingleTap={handleSingleTap} onUnlock={() => onUnlock?.(String(post.id))} />
       )}
 
       {!post.locked && (

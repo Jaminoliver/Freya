@@ -78,8 +78,8 @@ function classifyError(err: unknown): string {
   if (!(err instanceof Error)) return "Upload failed";
   const msg = err.message.toLowerCase();
   if (msg.includes("abort") || msg.includes("cancel")) return "Upload cancelled";
-  if (msg.includes("network") || msg.includes("failed to fetch") || msg.includes("net::"))
-    return "Network error — check your connection and retry";
+  if (msg.includes("network") || msg.includes("failed to fetch") || msg.includes("net::") || msg.includes("xmlhttprequest") || msg.includes("progressevent") || msg.includes("tus: failed to create"))
+  return "Network error — check your connection and retry";
   if (msg.includes("timeout") || msg.includes("timed out"))
     return "Upload timed out — please retry";
   if (msg.includes("413")) return "File is too large for the server";
@@ -360,15 +360,17 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
             resolve();
           },
           onError(err) {
-            if (abortedRef.current.has(uploadId)) { resolve(); return; }
-            const body = (err as any).originalResponse?.getBody?.() ?? "no body";
-            fetch("/api/upload/video/log", {
-              method:  "POST",
-              headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody: body }),
-            }).catch(() => {});
-            reject(new Error(`Upload failed: ${err.message} — ${body}`));
-          },
+  if (abortedRef.current.has(uploadId)) { resolve(); return; }
+  const body = (err as any).originalResponse?.getBody?.() ?? "no body";
+  const responseCode = (err as any).originalResponse?.getStatus?.() ?? "n/a";
+  fetch("/api/upload/video/log", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody: body }),
+  }).catch(() => {});
+  const isNetwork = responseCode === "n/a" || String(responseCode) === "0";
+  reject(new Error(isNetwork ? "Network error — check your connection and retry" : `Upload failed: ${err.message} — ${body}`));
+},
         });
 
         tusInstances.current[uploadId] = upload;

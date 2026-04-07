@@ -341,16 +341,18 @@ function ProfilePageInner() {
   }, [username, viewerReady, globalViewer]);
 
   const prevUploadPhases = React.useRef<Record<string, string>>({});
-  React.useEffect(() => {
-    if (!profile || !viewer || viewer.id !== profile.id) return;
-    let shouldRefresh = false;
-    for (const u of uploads) {
-      const prev = prevUploadPhases.current[u.id];
-      if (prev && prev !== "done" && u.phase === "done") shouldRefresh = true;
-      prevUploadPhases.current[u.id] = u.phase;
-    }
-    if (shouldRefresh) refreshPosts(profile.username);
-  }, [uploads, profile, viewer, refreshPosts]);
+React.useEffect(() => {
+  if (!profile || !viewer || viewer.id !== profile.id) return;
+  let shouldRefresh = false;
+  for (const u of uploads) {
+    const prev = prevUploadPhases.current[u.id];
+    // Fire if: we've seen this upload before and it just hit "done"
+    // OR it mounted already in "done" state (prev undefined = fresh mount)
+    if (u.phase === "done" && prev !== "done") shouldRefresh = true;
+    prevUploadPhases.current[u.id] = u.phase;
+  }
+  if (shouldRefresh) refreshPosts(profile.username);
+}, [uploads, profile, viewer, refreshPosts]);
 
   React.useEffect(() => {
     if (!profileIdRef.current || !viewerIdRef.current) return;

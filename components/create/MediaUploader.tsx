@@ -38,7 +38,8 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
   const blobUrlsRef = useRef<Map<File, string>>(new Map());
 
   /* video durations cache */
-  const [durations, setDurations] = useState<Map<File, number>>(new Map());
+  const [durations,   setDurations]   = useState<Map<File, number>>(new Map());
+const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
 
   /* drag state */
   const [dragIdx, setDragIdx]     = useState<number | null>(null);
@@ -69,15 +70,30 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
 
   /* extract video duration */
   const loadDuration = useCallback((file: File) => {
-    if (durations.has(file) || !file.type.startsWith("video/")) return;
-    const url   = getBlobUrl(file);
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.src     = url;
-    video.onloadedmetadata = () => {
-      setDurations((prev) => new Map(prev).set(file, video.duration));
-    };
-  }, [durations, getBlobUrl]);
+  if (durations.has(file) || !file.type.startsWith("video/")) return;
+  const url    = getBlobUrl(file);
+  const video  = document.createElement("video");
+  const canvas = document.createElement("canvas");
+  video.preload    = "metadata";
+  video.muted      = true;
+  video.playsInline = true;
+  video.src        = url;
+  video.onloadedmetadata = () => {
+    setDurations((prev) => new Map(prev).set(file, video.duration));
+    video.currentTime = 0.1;
+  };
+  video.onseeked = () => {
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const poster = canvas.toDataURL("image/jpeg", 0.8);
+    setPosterUrls((prev) => new Map(prev).set(file, poster));
+  };
+  // iOS needs play() to unblock seeking
+  video.play().then(() => video.pause()).catch(() => {});
+}, [durations, getBlobUrl]);
 
   /* load durations for all video files */
   useEffect(() => {
@@ -326,14 +342,16 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
                 />
               )}
               {isVideo && (
-                <>
-                  <video
-                    src={url}
-                    preload="metadata"
-                    muted
-                    playsInline
-                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                  />
+  <>
+    {posterUrls.get(file) ? (
+      <img
+        src={posterUrls.get(file)}
+        alt=""
+        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+      />
+    ) : (
+      <div style={{ width: "100%", height: "100%", backgroundColor: "#0D0D18" }} />
+    )}
                   {/* Play icon overlay */}
                   <div style={{
                     position: "absolute", inset: 0,

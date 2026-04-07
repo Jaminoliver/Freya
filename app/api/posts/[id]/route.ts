@@ -95,7 +95,8 @@ export async function GET(
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    let canAccess = post.is_free;
+    // FIX: PPV posts are never free — always require unlock check
+    let canAccess = post.is_free && !post.is_ppv;
 
     if (user && !canAccess) {
       // Creator always has access
@@ -118,7 +119,7 @@ export async function GET(
           const { data: ppvPurchase } = await service
             .from("ppv_unlocks")
             .select("id")
-            .eq("fan_id", user.id) 
+            .eq("fan_id", user.id)
             .eq("post_id", postId)
             .maybeSingle();
 
@@ -175,7 +176,7 @@ export async function GET(
         };
       });
 
-    let pollData: {
+  let pollData: {
       id: number;
       question: string;
       total_votes: number;
@@ -272,6 +273,8 @@ export async function PATCH(
 
     if ("is_ppv" in body) {
       updates.is_ppv = !!body.is_ppv;
+      // FIX: making a post PPV means it's no longer freely accessible
+      if (updates.is_ppv) updates.is_free = false;
     }
 
     if ("ppv_price" in body) {

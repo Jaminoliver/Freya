@@ -44,6 +44,7 @@ interface VideoPlayerProps {
   aspectRatio?:      string | null;
   hideInternalBlur?: boolean;
   blurHash?:         string | null;
+  objectFit?:        "contain" | "cover";
 }
 
 export default function VideoPlayer({
@@ -55,6 +56,7 @@ export default function VideoPlayer({
   aspectRatio: externalRatio = null,
   hideInternalBlur = false,
   blurHash,
+  objectFit = "contain",
 }: VideoPlayerProps) {
   const videoRef       = React.useRef<HTMLVideoElement>(null);
   const containerRef   = React.useRef<HTMLDivElement>(null);
@@ -218,7 +220,7 @@ export default function VideoPlayer({
     display:  "block",
     width:    "100%",
     height:   "100%",
-    objectFit: "contain",
+    objectFit: objectFit,
   };
 
   if (!bunnyVideoId) {
@@ -267,7 +269,7 @@ export default function VideoPlayer({
               fetchPriority="high"
               onLoad={handlePosterLoad}
               onError={() => setPosterError(true)}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
             />
             <div style={{ position: "relative", zIndex: 2, width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.55)", border: "2px solid rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
               <div style={{ width: 0, height: 0, borderTop: "10px solid transparent", borderBottom: "10px solid transparent", borderLeft: "18px solid rgba(255,255,255,0.95)", marginLeft: "4px" }} />

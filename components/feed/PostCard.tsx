@@ -421,13 +421,14 @@ export function PostCard({
 
       {!isTextPost && !isPollPost && (
         <PostMediaViewer
-          media={normalizedMedia} isLocked={post.isLocked} price={post.price}
-          onDoubleTap={handleDoubleTapLike}
-          onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
-          onUnlock={() => onUnlock?.(post.id)}
-          initialSlide={initialSlide}
-          onSlideChange={(index) => onSlideChange?.(post.id, index)}
-        />
+  media={normalizedMedia} isLocked={post.isLocked} price={post.price}
+  isUnlockedPPV={post.is_ppv && !post.isLocked}
+  onDoubleTap={handleDoubleTapLike}
+  onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
+  onUnlock={() => onUnlock?.(post.id)}
+  initialSlide={initialSlide}
+  onSlideChange={(index) => onSlideChange?.(post.id, index)}
+/>
       )}
 
       {post.taggedCreators && post.taggedCreators.length > 0 && (
