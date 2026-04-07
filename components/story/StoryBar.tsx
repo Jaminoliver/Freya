@@ -2,12 +2,13 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Plus, AlertCircle, X } from "lucide-react";
-import * as tus from "tus-js-client";
 import { useAppStore } from "@/lib/store/appStore";
-import StoryUploadModal, { type UploadJob } from "@/components/story/StoryUploadModal";
-import { compressVideoIfNeeded } from "@/lib/utils/compressVideo";
+import StoryUploadModal from "@/components/story/StoryUploadModal";
+import { useStoryUpload } from "@/lib/context/StoryUploadContext";
+import type { UploadJob } from "@/lib/context/StoryUploadContext";
 import { prewarmHls } from "@/components/story/StoryViewer";
 import { createClient } from "@/lib/supabase/client";
+import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 
 export interface StoryItem {
   id:           number;
@@ -64,11 +65,10 @@ const GLOW        = "0 0 12px rgba(139,92,246,0.55), 0 0 24px rgba(236,72,153,0.
 const VIEWED_RING = "#2A2A3D";
 const VIEWED_KEY  = "sb_viewed_story_ids";
 
-// Card dimensions
-const CARD_W = 135;
-const CARD_H = 175;
+const CARD_W      = 135;
+const CARD_H      = 175;
 const CARD_RADIUS = 14;
-const BORDER = 2.5;
+const BORDER      = 2.5;
 
 function getLocalViewed(): Set<number> {
   try { return new Set(JSON.parse(sessionStorage.getItem(VIEWED_KEY) ?? "[]")); } catch { return new Set(); }
@@ -88,7 +88,6 @@ function applyLocalViewed(groups: CreatorStoryGroup[]): CreatorStoryGroup[] {
     return { ...g, items, hasUnviewed };
   });
 }
-
 function allProcessing(group: CreatorStoryGroup): boolean {
   return group.items.length > 0 && group.items.every((s) => s.isProcessing);
 }
@@ -96,49 +95,51 @@ function allProcessing(group: CreatorStoryGroup): boolean {
 export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { viewer: globalViewer, storyUpload, setStoryUpload, resetStoryUpload } = useAppStore();
-  const { phase: uploadPhase, uploadPct, error: uploadError, storyId: currentStoryId } = storyUpload;
+  const { viewer: globalViewer } = useAppStore();
+
+  const {
+    phase:       uploadPhase,
+    uploadPct,
+    compressPct,
+    error:       uploadError,
+    storyId:     currentStoryId,
+    startUpload,
+    cancelUpload,
+    clearError,
+    markProcessingComplete,
+  } = useStoryUpload();
 
   const [orderedGroups, setOrderedGroups] = useState<CreatorStoryGroup[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [uploadOpen,    setUploadOpen]    = useState(false);
 
-  const cancelledRef    = useRef(false);
-  const isCancellingRef = useRef(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const uploadPhaseRef = useRef(uploadPhase);
+  useEffect(() => { uploadPhaseRef.current = uploadPhase; }, [uploadPhase]);
 
   const [displayPctState, setDisplayPctState] = useState(0);
-  const displayPctRef  = useRef(0);
-  const targetPctRef   = useRef(0);
-  const rafRef         = useRef<number | null>(null);
-  const { compressPct } = storyUpload;
+  const displayPctRef = useRef(0);
+  const targetPctRef  = useRef(0);
+  const rafRef        = useRef<number | null>(null);
 
   useEffect(() => {
     if (uploadPhase === "idle" || uploadPhase === "done") {
       if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
       displayPctRef.current = uploadPhase === "done" ? 100 : 0;
       setDisplayPctState(displayPctRef.current);
-      targetPctRef.current = displayPctRef.current;
+      targetPctRef.current  = displayPctRef.current;
       return;
     }
-
     if      (uploadPhase === "compressing") targetPctRef.current = 20;
     else if (uploadPhase === "uploading")   targetPctRef.current = 55;
     else if (uploadPhase === "processing")  targetPctRef.current = 99;
-
     const tick = () => {
       const current = displayPctRef.current;
       const target  = targetPctRef.current;
       const diff    = target - current;
-      if (Math.abs(diff) < 0.2) {
-        displayPctRef.current = target;
-      } else {
-        displayPctRef.current = current + diff * 0.04;
-      }
+      displayPctRef.current = Math.abs(diff) < 0.2 ? target : current + diff * 0.04;
       setDisplayPctState(Math.round(displayPctRef.current));
       rafRef.current = requestAnimationFrame(tick);
     };
-
     if (!rafRef.current) rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; } };
   }, [uploadPhase]);
@@ -165,7 +166,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       if (res.ok && data.groups) {
         const fetchedGroups: CreatorStoryGroup[] = applyLocalViewed(data.groups);
         setOrderedGroups(sortGroups(fetchedGroups));
-
         for (const g of fetchedGroups) {
           if (g.latestThumbnail) { const img = new Image(); img.src = g.latestThumbnail; }
           if (g.avatarUrl)       { const img = new Image(); img.src = g.avatarUrl; }
@@ -174,13 +174,11 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
             if (s.thumbnailUrl) { const t = new Image(); t.src = s.thumbnailUrl; }
           }
         }
-
         const videoUrls = fetchedGroups
           .flatMap((g) => g.items)
           .filter((s) => s.mediaType === "video" && s.mediaUrl && !s.isProcessing)
           .map((s) => s.mediaUrl)
           .slice(0, 3);
-
         if (videoUrls.length > 0) prewarmHls(videoUrls);
       }
     } catch (err) {
@@ -192,19 +190,27 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
 
   useEffect(() => { fetchStories(); }, [fetchStories]);
 
+  const prevPhaseRef = useRef(uploadPhase);
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = uploadPhase;
+    if (prev !== uploadPhase && (uploadPhase === "processing" || uploadPhase === "done")) {
+      fetchStories();
+    }
+  }, [uploadPhase, fetchStories]);
+
   useEffect(() => {
     if (!externalGroups || externalGroups.length === 0) return;
     setOrderedGroups((prev) => {
       const externalIds = new Set(externalGroups.map((g) => g.creatorId));
-      const kept   = prev.filter((g) => !externalIds.has(g.creatorId));
-      const active = externalGroups.filter((g) => g.items.length > 0);
+      const kept        = prev.filter((g) => !externalIds.has(g.creatorId));
+      const active      = externalGroups.filter((g) => g.items.length > 0);
       return sortGroups([...kept, ...active]);
     });
   }, [externalGroups, sortGroups]);
 
   useEffect(() => {
     if (!isCreator || !globalViewer?.id) return;
-
     const supabase = createClient();
     const channel  = supabase
       .channel(`story-bar-${globalViewer.id}`)
@@ -217,19 +223,16 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         (payload: { new: Record<string, any>; old: Record<string, any> }) => {
           fetchStories();
           if (payload.new?.is_processing === false && payload.old?.is_processing === true) {
-            const currentPhase = useAppStore.getState().storyUpload.phase;
-            if (currentPhase === "processing") {
+            if (uploadPhaseRef.current === "processing") {
               targetPctRef.current = 100;
-              setStoryUpload({ phase: "done" });
-              setTimeout(() => resetStoryUpload(), 2000);
+              markProcessingComplete();
             }
           }
         },
       )
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
-  }, [isCreator, globalViewer?.id, fetchStories, setStoryUpload, resetStoryUpload]);
+  }, [isCreator, globalViewer?.id, fetchStories, markProcessingComplete]);
 
   useEffect(() => {
     if (uploadPhase !== "processing" || !currentStoryId) return;
@@ -241,141 +244,23 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
           clearInterval(interval);
           await fetchStories();
           targetPctRef.current = 100;
-          setStoryUpload({ phase: "done" });
-          setTimeout(() => resetStoryUpload(), 2000);
+          markProcessingComplete();
         }
       } catch {}
     }, 3000);
     return () => clearInterval(interval);
-  }, [uploadPhase, currentStoryId, fetchStories, setStoryUpload, resetStoryUpload]);
+  }, [uploadPhase, currentStoryId, fetchStories, markProcessingComplete]);
 
-  const cancelUpload = useCallback(async () => {
-    if (isCancellingRef.current) return;
-    isCancellingRef.current = true;
-    cancelledRef.current    = true;
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-    resetStoryUpload();
-    isCancellingRef.current = false;
-  }, [resetStoryUpload]);
+  const openUpload = useCallback(() => {
+    if (isUploading) return;
+    clearError();
+    setUploadOpen(true);
+  }, [isUploading, clearError]);
 
-  const startUpload = useCallback(async (job: UploadJob) => {
-    cancelledRef.current = false;
-    resetStoryUpload();
-
-    try {
-      let fileToUpload = job.file;
-
-      if (job.mediaType === "video") {
-        setStoryUpload({ phase: "compressing" });
-        fileToUpload = await compressVideoIfNeeded(job.file, (p) => {
-          setStoryUpload({ compressPct: p.percent });
-        });
-        if (cancelledRef.current) return;
-      }
-
-      setStoryUpload({ phase: "uploading", uploadPct: 0 });
-
-      if (job.mediaType === "photo") {
-        const formData = new FormData();
-        formData.append("file",      fileToUpload);
-        formData.append("mediaType", "photo");
-        if (job.caption) formData.append("caption", job.caption);
-
-        setStoryUpload({ uploadPct: 30 });
-
-        const controller = new AbortController();
-        abortControllerRef.current = controller;
-        const timer = setTimeout(() => controller.abort(), 120000);
-
-        let initRes: Response;
-        try {
-          initRes = await fetch("/api/stories/init", {
-            method: "POST",
-            body:   formData,
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(timer);
-          abortControllerRef.current = null;
-        }
-
-        if (cancelledRef.current) return;
-
-        const initData = await initRes.json();
-        if (!initRes.ok) throw new Error(initData.error ?? "Upload failed");
-
-        setStoryUpload({ phase: "done", uploadPct: 100 });
-        await fetchStories();
-        setTimeout(() => resetStoryUpload(), 2000);
-        return;
-      }
-
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      const timer = setTimeout(() => controller.abort(), 30000);
-
-      let initRes: Response;
-      try {
-        initRes = await fetch("/api/stories/init", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({
-            mediaType: "video",
-            caption:   job.caption,
-            clipStart: job.clipStart,
-            clipEnd:   job.clipEnd,
-          }),
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timer);
-        abortControllerRef.current = null;
-      }
-
-      if (cancelledRef.current) return;
-
-      const initData = await initRes.json();
-      if (!initRes.ok) throw new Error(initData.error ?? "Upload failed");
-
-      const { storyId, videoId, tusEndpoint, expireTime, signature, libraryId } = initData;
-
-      await new Promise<void>((resolve, reject) => {
-        const upload = new tus.Upload(fileToUpload, {
-          endpoint:    tusEndpoint,
-          chunkSize:   5 * 1024 * 1024,
-          retryDelays: [0, 3000, 5000, 10000, 20000],
-          storeFingerprintForResuming: false,
-          headers: {
-            AuthorizationSignature: signature,
-            AuthorizationExpire:    String(expireTime),
-            VideoId:                videoId,
-            LibraryId:              libraryId,
-          },
-          metadata: { filetype: fileToUpload.type, title: `story-${videoId}` },
-          onProgress(bytesUploaded, bytesTotal) {
-            const pct = Math.round((bytesUploaded / bytesTotal) * 75) + 20;
-            setStoryUpload({ uploadPct: pct });
-          },
-          onSuccess() { resolve(); },
-          onError(err)  { reject(new Error(`TUS upload failed: ${err.message}`)); },
-        });
-        upload.start();
-      });
-
-      if (cancelledRef.current) return;
-
-      setStoryUpload({ phase: "processing", storyId, uploadPct: 100 });
-      await fetchStories();
-
-    } catch (err: any) {
-      if (cancelledRef.current) return;
-      const msg = err?.name === "AbortError"
-        ? "Upload timed out — please try again"
-        : (err.message ?? "Upload failed");
-      setStoryUpload({ phase: "idle", error: msg });
-    }
-  }, [fetchStories, setStoryUpload, resetStoryUpload]);
+  const handleUploadStart = useCallback((job: UploadJob) => {
+    setUploadOpen(false);
+    startUpload(job);
+  }, [startUpload]);
 
   const scroll = (dir: "left" | "right") => {
     scrollRef.current?.scrollBy({ left: dir === "right" ? 260 : -260, behavior: "smooth" });
@@ -385,11 +270,9 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     ? orderedGroups.find((g) => g.creatorId === globalViewer.id) ?? null
     : null;
 
-  const otherGroups = orderedGroups.filter(
+  const displayGroups = orderedGroups.filter(
     (g) => g.creatorId !== globalViewer?.id && !allProcessing(g)
   );
-
-  const displayGroups: CreatorStoryGroup[] = otherGroups;
 
   const handleOpenOwnStories = useCallback(() => {
     if (!ownGroup || isUploading) return;
@@ -401,26 +284,15 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const handleOpenStory = useCallback((groupIndex: number) => {
     const clickedCreatorId = displayGroups[groupIndex]?.creatorId;
     if (!clickedCreatorId) return;
-
     const viewableGroups = displayGroups
       .map((g) => ({ ...g, items: g.items.filter((s) => !s.isProcessing) }))
       .filter((g) => g.items.length > 0);
-
     const viewableIndex = viewableGroups.findIndex((g) => g.creatorId === clickedCreatorId);
-    if (viewableIndex === -1) return;
-    if (viewableGroups[viewableIndex].items.length === 0) return;
-
+    if (viewableIndex === -1 || viewableGroups[viewableIndex].items.length === 0) return;
     onOpenViewer?.(viewableGroups, viewableIndex);
   }, [displayGroups, onOpenViewer]);
 
-  const openUpload = useCallback(() => {
-    if (isUploading) return;
-    setStoryUpload({ error: null });
-    setUploadOpen(true);
-  }, [isUploading, setStoryUpload]);
-
-  const displayPct = displayPctState;
-
+  const displayPct    = displayPctState;
   const ownThumbnail  = ownGroup?.latestThumbnail ?? null;
   const hasOwnStories = (ownGroup?.items.filter((s) => !s.isProcessing).length ?? 0) > 0;
 
@@ -439,14 +311,14 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
           50%      { box-shadow:0 0 20px rgba(139,92,246,0.8),0 0 40px rgba(236,72,153,0.5); }
         }
         @keyframes sb-spin { to { transform:rotate(360deg); } }
-        @keyframes sb-dash-march {
-          to { stroke-dashoffset: -20; }
-        }
 
         .sb-card {
           cursor: pointer;
           transition: transform 0.18s ease, opacity 0.18s ease;
           flex-shrink: 0;
+          -webkit-tap-highlight-color: rgba(0,0,0,0);
+          tap-highlight-color: rgba(0,0,0,0);
+          user-select: none;
         }
         .sb-card:hover { transform: scale(1.04); opacity: 0.92; }
         .sb-card:active { transform: scale(0.97); }
@@ -455,6 +327,9 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
           cursor: pointer;
           transition: transform 0.18s ease, opacity 0.18s ease;
           flex-shrink: 0;
+          -webkit-tap-highlight-color: rgba(0,0,0,0);
+          tap-highlight-color: rgba(0,0,0,0);
+          user-select: none;
         }
         .sb-add-card:hover { transform: scale(1.04); opacity: 0.92; }
         .sb-add-card:active { transform: scale(0.97); }
@@ -468,13 +343,12 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       {uploadOpen && (
         <StoryUploadModal
           onClose={() => setUploadOpen(false)}
-          onUploadStart={(job) => { setUploadOpen(false); startUpload(job); }}
+          onUploadStart={handleUploadStart}
         />
       )}
 
       <div style={{ position: "relative", padding: "14px 0 10px" }}>
 
-        {/* Left arrow */}
         <button
           className="sb-arrow"
           onClick={() => scroll("left")}
@@ -494,39 +368,21 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
           {isCreator && globalViewer && (
             <div className="sb-add-card" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
               <div style={{ position:"relative", width:CARD_W, height:CARD_H }}>
-
-                {/* Gradient border wrapper */}
                 <div style={{
                   position:     "absolute",
                   inset:        0,
                   borderRadius: CARD_RADIUS,
                   padding:      BORDER,
-                  background:   isUploading
-                    ? "transparent"
-                    : hasOwnStories
-                      ? GRADIENT
-                      : "transparent",
+                  background:   isUploading ? "transparent" : hasOwnStories ? GRADIENT : "transparent",
                   border:       !isUploading && !hasOwnStories ? `${BORDER}px solid #6D6D8A` : "none",
                   boxSizing:    "border-box",
                   boxShadow:    !isUploading && hasOwnStories ? GLOW : "none",
                   animation:    !isUploading && hasOwnStories ? "sb-pulse 3s ease-in-out infinite" : "none",
                 }}>
-                  {/* Inner card */}
                   <div
                     onClick={!isUploading && hasOwnStories ? handleOpenOwnStories : undefined}
-                    style={{
-                      width:           "100%",
-                      height:          "100%",
-                      borderRadius:    CARD_RADIUS - BORDER,
-                      backgroundColor: "#0D0D18",
-                      overflow:        "hidden",
-                      position:        "relative",
-                      display:         "flex",
-                      alignItems:      "center",
-                      justifyContent:  "center",
-                    }}
+                    style={{ width:"100%", height:"100%", borderRadius:CARD_RADIUS - BORDER, backgroundColor:"#0D0D18", overflow:"hidden", position:"relative", display:"flex", alignItems:"center", justifyContent:"center" }}
                   >
-                    {/* Background: thumbnail or avatar */}
                     {hasOwnStories && ownThumbnail ? (
                       <ThumbnailWithFallback
                         src={ownThumbnail}
@@ -536,15 +392,10 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                       />
                     ) : (
                       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-                        <Avatar
-                          src={globalViewer.avatar_url ?? null}
-                          name={globalViewer.display_name || globalViewer.username || "?"}
-                          size={52}
-                        />
+                        <Avatar src={globalViewer.avatar_url ?? null} name={globalViewer.display_name || globalViewer.username || "?"} size={52} />
                       </div>
                     )}
 
-                    {/* Upload overlay */}
                     {isUploading && (
                       <div
                         className="sb-upload-overlay"
@@ -560,7 +411,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                       </div>
                     )}
 
-                    {/* Bottom username label */}
                     {!isUploading && (
                       <div style={{ position:"absolute", bottom:0, left:0, right:0, background:"linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 100%)", padding:"18px 6px 7px", borderBottomLeftRadius:CARD_RADIUS - BORDER, borderBottomRightRadius:CARD_RADIUS - BORDER }}>
                         <span style={{ color:"#fff", fontSize:11, fontWeight:700, fontFamily:"'Inter',sans-serif", display:"block", textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -571,14 +421,12 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                   </div>
                 </div>
 
-                {/* Circular upload spinner — centered, does not wrap the card */}
                 {isUploading && (
                   <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", pointerEvents:"none", zIndex:6 }}>
                     <div style={{ width:36, height:36, borderRadius:"50%", border:"3px solid rgba(139,92,246,0.25)", borderTop:"3px solid #8B5CF6", borderRight:"3px solid #EC4899", animation:"sb-spin 0.9s linear infinite" }} />
                   </div>
                 )}
 
-                {/* Plus button */}
                 {!isUploading && (
                   <button
                     onClick={(e) => { e.stopPropagation(); openUpload(); }}
@@ -588,11 +436,10 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                   </button>
                 )}
 
-                {/* Error button */}
                 {uploadError && !isUploading && (
                   <button
                     title={uploadError}
-                    onClick={(e) => { e.stopPropagation(); setStoryUpload({ error: null }); setUploadOpen(true); }}
+                    onClick={(e) => { e.stopPropagation(); clearError(); setUploadOpen(true); }}
                     style={{ position:"absolute", top:8, right:8, width:22, height:22, borderRadius:"50%", background:"#EF4444", border:"2px solid #0A0A0F", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0, zIndex:4 }}
                   >
                     <AlertCircle size={11} color="#fff" />
@@ -600,7 +447,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                 )}
               </div>
 
-              {/* Cancel / Add to story label */}
               <button
                 onClick={isUploading ? cancelUpload : openUpload}
                 style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 4px", fontSize:11, fontWeight:700, color: isUploading ? "#EF4444" : uploadError ? "#EF4444" : "#C084FC", maxWidth:CARD_W, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", fontFamily:"'Inter',sans-serif" }}
@@ -625,49 +471,42 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                     key={group.creatorId}
                     className="sb-card"
                     onClick={() => handleOpenStory(idx)}
-                    style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}
+                    style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, WebkitTapHighlightColor:"rgba(0,0,0,0)" }}
                   >
                     <div style={{ position:"relative", width:CARD_W, height:CARD_H }}>
-                      {/* Border wrapper */}
                       <div style={{
                         position:     "absolute",
                         inset:        0,
                         borderRadius: CARD_RADIUS,
                         padding:      BORDER,
-                        background:   isViewed ? VIEWED_RING : GRADIENT,
+                        background:   VIEWED_RING,
                         boxSizing:    "border-box",
-                        boxShadow:    isViewed ? "none" : GLOW,
-                        animation:    isViewed ? "none" : "sb-pulse 3s ease-in-out infinite",
+                        boxShadow:    "none",
+                        animation:    "none",
                         transition:   "all 0.4s ease",
                       }}>
-                        {/* Inner card */}
-                        <div style={{
-                          width:           "100%",
-                          height:          "100%",
-                          borderRadius:    CARD_RADIUS - BORDER,
-                          backgroundColor: "#0D0D18",
-                          overflow:        "hidden",
-                          position:        "relative",
-                        }}>
-                          {/* Thumbnail or avatar fill */}
+                        <div style={{ width:"100%", height:"100%", borderRadius:CARD_RADIUS - BORDER, backgroundColor:"#0D0D18", overflow:"hidden", position:"relative" }}>
                           {group.latestThumbnail ? (
-                            <ThumbnailWithFallback
-                              src={group.latestThumbnail}
-                              name={group.displayName}
-                              avatarUrl={group.avatarUrl}
-                              fill
-                            />
+                            <ThumbnailWithFallback src={group.latestThumbnail} name={group.displayName} avatarUrl={group.avatarUrl} fill />
                           ) : (
                             <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center" }}>
                               <Avatar src={group.avatarUrl} name={group.displayName} size={52} />
                             </div>
                           )}
 
-                          <div style={{ position:"absolute", top:8, right:8, width:60, height:60, borderRadius:"50%", border:"2.5px solid #8B5CF6", overflow:"hidden", zIndex:3 }}>
-  <Avatar src={group.avatarUrl} name={group.displayName} size={60} />
-</div>
+                          {/* ── FIXED: use AvatarWithStoryRing instead of plain Avatar ── */}
+                          <div style={{ position:"absolute", top:6, right:6, zIndex:3 }}>
+                            <AvatarWithStoryRing
+                              src={group.avatarUrl}
+                              alt={group.displayName}
+                              size={44}
+                              hasStory
+                              hasUnviewed={!isViewed}
+                              onClick={(e) => e.stopPropagation()}
+                              borderColor="#0D0D18"
+                            />
+                          </div>
 
-                          {/* Username — bottom gradient */}
                           <div style={{ position:"absolute", bottom:0, left:0, right:0, background:"linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)", padding:"20px 6px 7px", borderBottomLeftRadius:CARD_RADIUS - BORDER, borderBottomRightRadius:CARD_RADIUS - BORDER }}>
                             <span style={{ color:"#fff", fontSize:11, fontWeight:700, fontFamily:"'Inter',sans-serif", display:"block", textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", opacity: isViewed ? 0.6 : 1, transition:"opacity 0.4s ease" }}>
                               {group.username}
@@ -682,7 +521,6 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
           }
         </div>
 
-        {/* Right arrow */}
         <button
           className="sb-arrow"
           onClick={() => scroll("right")}
@@ -703,7 +541,6 @@ function ThumbnailWithFallback({
   src: string; name: string; avatarUrl: string | null; size?: number; fill?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
-
   if (fill) {
     if (failed) {
       return (
@@ -713,15 +550,11 @@ function ThumbnailWithFallback({
       );
     }
     return (
-      <img
-        src={src}
-        alt={name}
-        onError={() => setFailed(true)}
+      <img src={src} alt={name} onError={() => setFailed(true)}
         style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", display:"block" }}
       />
     );
   }
-
   if (failed) return <Avatar src={avatarUrl} name={name} size={size ?? 80} />;
   return (
     <div style={{ position:"relative", width:size, height:size, borderRadius:"50%", overflow:"hidden" }}>
@@ -732,5 +565,4 @@ function ThumbnailWithFallback({
   );
 }
 
-export type { };
-export { type StoryBarProps };
+export type { StoryBarProps };

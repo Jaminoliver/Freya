@@ -68,7 +68,16 @@ export default function VideoPlayer({
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
 
   const aspectRatio = fillParent ? null : (externalRatio ?? internalRatio);
-  const isPortrait  = aspectRatio === "9/16" || (aspectRatio != null && parseFloat(aspectRatio) < 1);
+  const isPortrait  = (() => {
+    if (!aspectRatio) return false;
+    // Handle "9/16" format
+    if (aspectRatio.includes("/")) {
+      const parts = aspectRatio.split("/");
+      return Number(parts[0]) < Number(parts[1]);
+    }
+    // Handle decimal format like "0.5625"
+    return parseFloat(aspectRatio) < 1;
+  })();
 
   const useRawFallback = processingStatus !== "completed" && !!rawVideoUrl;
   const posterSrc      = (!posterError && thumbnailUrl) ? thumbnailUrl : bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "";
@@ -200,7 +209,7 @@ export default function VideoPlayer({
     alignItems:      "center",
     justifyContent:  "center",
     aspectRatio:     aspectRatio ?? "16/9",
-    maxHeight:       isPortrait ? "min(75svh, 520px)" : "520px",
+    maxHeight:       isPortrait ? "80svh" : "80svh",
   };
 
   const videoStyle: React.CSSProperties = {
@@ -216,7 +225,7 @@ export default function VideoPlayer({
     return (
       <>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div style={{ width: "100%", aspectRatio: "16/9", backgroundColor: "#000", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px" }}>
+        <div style={{ width: "100%", aspectRatio: aspectRatio ?? "16/9", backgroundColor: "#000", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px" }}>
           <div style={{ width: "36px", height: "36px", borderRadius: "50%", border: "3px solid #2A2A3D", borderTop: "3px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
           <span style={{ fontSize: "13px", color: "#8A8AA0", fontFamily: "'Inter', sans-serif" }}>Video processing — check back shortly</span>
         </div>
@@ -233,8 +242,8 @@ export default function VideoPlayer({
 
       <div ref={containerRef} style={containerStyle}>
 
-        {/* Blurred thumbnail fills entire background — replaces black bars */}
-        {posterSrc && (
+        {/* Blurred thumbnail background — skipped when carousel handles blur bars */}
+        {!hideInternalBlur && posterSrc && (
           <img
             src={posterSrc}
             alt=""

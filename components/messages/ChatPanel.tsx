@@ -17,6 +17,7 @@ import { MessageInput } from "@/components/messages/MessageInput";
 import { ReportModal } from "@/components/messages/ReportModal";
 import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
 import StoryViewer from "@/components/story/StoryViewer";
+import { ChatSkeleton } from "@/components/loadscreen/ChatSkeleton";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import type { Conversation, Message } from "@/lib/types/messages";
 
@@ -66,15 +67,13 @@ export function ChatPanel({
   const [sending,           setSending]           = useState(false);
   const [replyTo,           setReplyTo]           = useState<Message | null>(null);
 
-  // Story viewer state (opened when tapping a story reply bubble)
   const [storyViewerGroups,     setStoryViewerGroups]     = useState<CreatorStoryGroup[]>([]);
   const [storyViewerStartIndex, setStoryViewerStartIndex] = useState(0);
   const [storyViewerStoryId,    setStoryViewerStoryId]    = useState<number | undefined>(undefined);
   const [storyViewerOpen,       setStoryViewerOpen]       = useState(false);
 
-  // Select mode state
-  const [selectMode,   setSelectMode]   = useState(false);
-  const [selectedIds,  setSelectedIds]  = useState<Set<number>>(new Set());
+  const [selectMode,  setSelectMode]  = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const {
     isBlocked, isRestricted,
@@ -128,29 +127,20 @@ export function ChatPanel({
     } catch {}
   }, [selectedIds, conversation.id, setMessages]);
 
-  // ── Story reply click — fetch stories and open viewer ──────────────────
   const handleStoryReplyClick = useCallback(async (storyId: number) => {
     try {
       const res  = await fetch("/api/stories");
       const data = await res.json();
       const allGroups: CreatorStoryGroup[] = data.groups ?? [];
-
       const groupIdx = allGroups.findIndex((g) => g.items.some((s) => s.id === storyId));
-      if (groupIdx === -1) {
-        // Story has expired — do nothing (could show a toast here)
-        return;
-      }
-
+      if (groupIdx === -1) return;
       setStoryViewerGroups(allGroups);
       setStoryViewerStartIndex(groupIdx);
       setStoryViewerStoryId(storyId);
       setStoryViewerOpen(true);
-    } catch {
-      // silently fail
-    }
+    } catch {}
   }, []);
 
-  // Sync in-progress uploads
   useEffect(() => {
     const inProgress = uploads.filter(
       (u) => u._isMessage && u._conversationId === conversation.id &&
@@ -322,11 +312,12 @@ export function ChatPanel({
     }
   }, [sending, conversation, currentUserId, replyTo, startMessageUpload, appendMessage, setMessages, realConversationIdRef]);
 
-  const handleMessagesUpdate = useCallback((updater: (msgs: Message[]) => Message[]) => { setMessages((prev) => updater(prev)); }, [setMessages]);
-  const handleBlockConfirm   = useCallback(async () => { await block();    handleBack(); }, [block]);
+  const handleMessagesUpdate  = useCallback((updater: (msgs: Message[]) => Message[]) => { setMessages((prev) => updater(prev)); }, [setMessages]);
+  const handleBlockConfirm    = useCallback(async () => { await block();    handleBack(); }, [block]);
   const handleRestrictConfirm = useCallback(async () => { await restrict(); handleBack(); }, [restrict]);
 
-  const showStatus = isTyping || participant.isOnline;
+  const showStatus   = isTyping || participant.isOnline;
+  const showSkeleton = loadingMessages && messages.length === 0;
 
   return (
     <>
@@ -369,7 +360,6 @@ export function ChatPanel({
         .select-bar-btn--danger:hover { color: #EF4444; background-color: rgba(239,68,68,0.1); }
       `}</style>
 
-      {/* Story Viewer — opened when tapping a story reply bubble */}
       {storyViewerOpen && storyViewerGroups.length > 0 && (
         <StoryViewer
           groups={storyViewerGroups}
@@ -379,7 +369,6 @@ export function ChatPanel({
         />
       )}
 
-      {/* Avatar lightbox */}
       {avatarOpen && (
         <div onClick={() => setAvatarOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 999, backgroundColor: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div className="avatar-lightbox-inner" onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
@@ -421,6 +410,7 @@ export function ChatPanel({
       <BlockConfirmModal isOpen={unrestrictConfirm} onClose={() => setUnrestrictConfirm(false)} onConfirm={unrestrict}            type="restrict" username={participant.username} />
 
       <div className="chat-panel-root">
+        {/* ── Headers always visible ── */}
         <ChatHeader
           conversation={conversation}
           onBack={onBack}
@@ -429,7 +419,6 @@ export function ChatPanel({
           onMessagesCleared={() => { clearCachedMessages(conversation.id); onClearMessages?.(); setMessages([]); }}
         />
 
-        {/* Desktop header */}
         <div
           className="chat-desktop-header"
           style={{ alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "56px", flexShrink: 0, backgroundColor: "#0D0D1A", borderBottom: "1px solid #1E1E2E", fontFamily: "'Inter', sans-serif", touchAction: "none", userSelect: "none" }}
@@ -474,46 +463,50 @@ export function ChatPanel({
           </div>
         </div>
 
-        <div className="chat-messages-wall">
-          {/*
-            NOTE: Thread `onStoryReplyClick={handleStoryReplyClick}` through
-            MessagesList → MessageBubble so clicking a story reply bubble
-            opens the StoryViewer from here.
-          */}
-          <MessagesList
-            messages={messages}
-            conversation={conversation}
-            currentUserId={currentUserId}
-            isTyping={isTyping}
-            onReply={(msg) => setReplyTo(msg)}
-            onDelete={handleDelete}
-            onLoadMore={onLoadMore}
-            hasMore={hasMore}
-            loadingMore={loadingMore}
-            loadingMessages={loadingMessages}
-            onMessagesUpdate={handleMessagesUpdate}
-            selectMode={selectMode}
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            onSelectMessage={handleSelectMessage}
-            onStoryReplyClick={handleStoryReplyClick}
-          />
-        </div>
-
-        {selectMode ? (
-          <div className="select-bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", backgroundColor: "#0D0D1A", borderTop: "1px solid #1E1E2E", flexShrink: 0, fontFamily: "'Inter', sans-serif", minHeight: "56px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <button className="select-bar-btn" onClick={handleExitSelectMode}><X size={20} strokeWidth={1.8} /></button>
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>{selectedIds.size} selected</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <button className="select-bar-btn select-bar-btn--danger" onClick={handleDeleteSelected} disabled={selectedIds.size === 0} style={{ opacity: selectedIds.size === 0 ? 0.35 : 1 }}>
-                <Trash2 size={20} strokeWidth={1.8} />
-              </button>
-            </div>
+        {/* ── Skeleton replaces only the messages wall + input ── */}
+        {showSkeleton ? (
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <ChatSkeleton />
           </div>
         ) : (
-          <MessageInput onSend={handleSend} onTyping={handleTyping} disabled={false} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
+          <>
+            <div className="chat-messages-wall">
+              <MessagesList
+                messages={messages}
+                conversation={conversation}
+                currentUserId={currentUserId}
+                isTyping={isTyping}
+                onReply={(msg) => setReplyTo(msg)}
+                onDelete={handleDelete}
+                onLoadMore={onLoadMore}
+                hasMore={hasMore}
+                loadingMore={loadingMore}
+                loadingMessages={loadingMessages}
+                onMessagesUpdate={handleMessagesUpdate}
+                selectMode={selectMode}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onSelectMessage={handleSelectMessage}
+                onStoryReplyClick={handleStoryReplyClick}
+              />
+            </div>
+
+            {selectMode ? (
+              <div className="select-bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", backgroundColor: "#0D0D1A", borderTop: "1px solid #1E1E2E", flexShrink: 0, fontFamily: "'Inter', sans-serif", minHeight: "56px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <button className="select-bar-btn" onClick={handleExitSelectMode}><X size={20} strokeWidth={1.8} /></button>
+                  <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>{selectedIds.size} selected</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  <button className="select-bar-btn select-bar-btn--danger" onClick={handleDeleteSelected} disabled={selectedIds.size === 0} style={{ opacity: selectedIds.size === 0 ? 0.35 : 1 }}>
+                    <Trash2 size={20} strokeWidth={1.8} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <MessageInput onSend={handleSend} onTyping={handleTyping} disabled={false} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
+            )}
+          </>
         )}
       </div>
     </>

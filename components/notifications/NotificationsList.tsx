@@ -1,41 +1,39 @@
 "use client";
 
 import { NotificationGroup } from "@/components/notifications/NotificationGroup";
+import { NotificationsSkeleton } from "@/components/loadscreen/NotificationsSkeleton";
 import type { NotificationItem, NotificationGroup as NotificationGroupType, NotificationFilterTab } from "@/lib/types/notifications";
 
 interface Props {
   notifications: NotificationItem[];
   filter:        NotificationFilterTab;
+  loading?:      boolean;
   onRefresh?:    () => Promise<void>;
   onSelect?:     (item: NotificationItem) => void;
 }
 
 const TYPE_TO_FILTER: Record<NotificationItem["type"], NotificationFilterTab> = {
-  // creator
-  like:                  "activity",
-  comment_liked:         "activity",
-  comment:               "activity",
-  subscription:          "subscriptions",
-  resubscription:        "subscriptions",
-  tip_received:          "earnings",
-  ppv_unlocked:          "earnings",
-  ppv_purchased:         "activity",
-  payout_completed:      "earnings",
-  payout_failed:         "earnings",
-  // fan
-  renewal_failed:        "subscriptions",
-  renewal_success:       "activity",
-  subscription_charged:  "activity",
-  subscription_activated:"subscriptions",
-  subscription_cancelled:"subscriptions", // default — overridden by role below
-  tip_sent:              "activity",
-  wallet_topup:          "activity",
-  // both
-  message:               "messages",
+  like:                   "activity",
+  comment_liked:          "activity",
+  comment:                "activity",
+  subscription:           "subscriptions",
+  resubscription:         "subscriptions",
+  tip_received:           "earnings",
+  ppv_unlocked:           "earnings",
+  ppv_purchased:          "activity",
+  payout_completed:       "earnings",
+  payout_failed:          "earnings",
+  renewal_failed:         "subscriptions",
+  renewal_success:        "activity",
+  subscription_charged:   "activity",
+  subscription_activated: "subscriptions",
+  subscription_cancelled: "subscriptions",
+  tip_sent:               "activity",
+  wallet_topup:           "activity",
+  message:                "messages",
 };
 
 function getFilter(n: NotificationItem): NotificationFilterTab {
-  // fan's own cancellation goes to Activity, creator's goes to Subscriptions
   if (n.type === "subscription_cancelled" && n.role === "fan") return "activity";
   return TYPE_TO_FILTER[n.type];
 }
@@ -61,7 +59,16 @@ function groupByDate(items: NotificationItem[]): NotificationGroupType[] {
     .map((label) => ({ label, items: groups[label] }));
 }
 
-export function NotificationsList({ notifications, filter, onSelect }: Props) {
+export function NotificationsList({ notifications, filter, loading = false, onSelect }: Props) {
+  // Show skeleton while loading
+  if (loading) {
+    return (
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        <NotificationsSkeleton count={12} />
+      </div>
+    );
+  }
+
   const filtered = filter === "all"
     ? notifications
     : notifications.filter((n) => getFilter(n) === filter);

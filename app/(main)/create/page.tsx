@@ -1,41 +1,41 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
-import { ArrowLeft, X, Image, Video, BarChart2, HelpCircle, Type } from "lucide-react";
+import React, { useState, Suspense, useCallback, useMemo } from "react";
+import { ArrowLeft, ImagePlus, BarChart2, HelpCircle, Lock, Calendar, ChevronDown } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { MediaUploader } from "@/components/create/MediaUploader";
 import { ThumbnailPicker } from "@/components/create/ThumbnailPicker";
 import { PollBuilder } from "@/components/create/PollBuilder";
-import { PostSettings } from "@/components/create/PostSettings";
 import { createClient } from "@/lib/supabase/client";
-import { useUpload } from "@/lib/context/UploadContext";
+import { usePostUpload } from "@/lib/context/PostUploadContext";
 import { useAppStore } from "@/lib/store/appStore";
 
-type PostType = "photo" | "video" | "poll" | "quiz" | "text";
+/* ── types ──────────────────────────────────────────────────────────────────── */
 
-const POST_TYPES: { key: PostType; label: string; icon: React.ReactNode }[] = [
-  { key: "photo", label: "Photo", icon: <Image     size={22} strokeWidth={1.6} /> },
-  { key: "video", label: "Video", icon: <Video     size={22} strokeWidth={1.6} /> },
-  { key: "poll",  label: "Poll",  icon: <BarChart2  size={22} strokeWidth={1.6} /> },
-  { key: "quiz",  label: "Quiz",  icon: <HelpCircle size={22} strokeWidth={1.6} /> },
-  { key: "text",  label: "Text",  icon: <Type       size={22} strokeWidth={1.6} /> },
-];
+type ActivePanel = "none" | "poll" | "quiz";
 
-function isValidPostType(val: string | null): val is PostType {
-  return ["photo", "video", "poll", "quiz", "text"].includes(val ?? "");
-}
+/* ── main content ──────────────────────────────────────────────────────────── */
 
 function CreatePostContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const typeParam    = searchParams.get("type");
-  const { startVideoUpload, startPhotoUpload, startMultiPhotoUpload, startTextPost, startPollPost } = useUpload();
+
+  const {
+    startVideoUpload,
+    startPhotoUpload,
+    startMultiPhotoUpload,
+    startTextPost,
+    startPollPost,
+  } = usePostUpload();
+
   const { clearProfile, clearContentFeed } = useAppStore();
 
-  const [postType,     setPostType]     = useState<PostType>(isValidPostType(typeParam) ? typeParam : "photo");
+  /* ── state ──────────────────────────────────────────────────────────────── */
+
   const [caption,      setCaption]      = useState("");
   const [files,        setFiles]        = useState<File[]>([]);
+  const [activePanel,  setActivePanel]  = useState<ActivePanel>("none");
   const [audience,     setAudience]     = useState<"subscribers" | "everyone">("subscribers");
   const [isPPV,        setIsPPV]        = useState(false);
   const [ppvPrice,     setPpvPrice]     = useState("");
@@ -50,8 +50,12 @@ function CreatePostContent() {
   const [thumbnailBlob,    setThumbnailBlob]    = useState<Blob | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
 
-  const [currentUser, setCurrentUser] = useState<{ name: string; username: string; avatar_url: string }>({ name: "", username: "", avatar_url: "" });
-  const [userLoaded,  setUserLoaded]  = useState(false);
+  /* ── user ───────────────────────────────────────────────────────────────── */
+
+  const [currentUser, setCurrentUser] = useState<{ name: string; username: string; avatar_url: string }>({
+    name: "", username: "", avatar_url: "",
+  });
+  const [userLoaded, setUserLoaded] = useState(false);
   const usernameRef = React.useRef<string>("");
 
   React.useEffect(() => {
@@ -59,39 +63,62 @@ function CreatePostContent() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from("profiles").select("display_name, username, avatar_url").eq("id", user.id).single();
+      const { data } = await supabase
+        .from("profiles")
+        .select("display_name, username, avatar_url")
+        .eq("id", user.id)
+        .single();
       if (data) {
         const username = data.username || "";
         usernameRef.current = username;
-        setCurrentUser({ name: data.display_name || username || "", username, avatar_url: data.avatar_url || "" });
+        setCurrentUser({
+          name:       data.display_name || username || "",
+          username,
+          avatar_url: data.avatar_url || "",
+        });
       }
       setUserLoaded(true);
     };
     loadUser();
   }, []);
 
+  /* reset thumbnail when files change */
   React.useEffect(() => {
     setThumbnailBlob(null);
     setThumbnailPreview(null);
   }, [files]);
 
-  const pollValid = pollOptions.filter((o) => o.trim().length > 0).length >= 2;
+  /* ── derived state ─────────────────────────────────────────────────────── */
+
+  const hasVideo    = files.some((f) => f.type.startsWith("video/"));
+  const hasImages   = files.some((f) => f.type.startsWith("image/"));
+  const videoFile   = hasVideo ? files.find((f) => f.type.startsWith("video/")) ?? null : null;
+  const hasPoll     = activePanel === "poll" || activePanel === "quiz";
+  const pollValid   = pollOptions.filter((o) => o.trim().length > 0).length >= 2;
+
+  /* auto-detect post type for API */
+  const resolvedPostType = useMemo(() => {
+    if (hasPoll) return activePanel as "poll" | "quiz";
+    if (hasVideo) return "video" as const;
+    if (files.length > 0) return "photo" as const;
+    return "text" as const;
+  }, [hasPoll, activePanel, hasVideo, files.length]);
 
   const canPost = (() => {
-    if (postType === "text")              return caption.trim().length > 0;
-    if (postType === "poll" || postType === "quiz") return caption.trim().length > 0 && pollValid;
-    return caption.trim().length > 0 || files.length > 0;
+    if (hasPoll) return caption.trim().length > 0 && pollValid;
+    if (files.length > 0) return true; // media post — caption optional
+    return caption.trim().length > 0; // text post needs caption
   })();
 
-  const handleClear = () => {
-    setCaption(""); setFiles([]); setPollOptions(["", ""]);
-    setIsPPV(false); setPpvPrice(""); setIsScheduled(false);
-    setSchedDate(""); setSchedTime(""); setError(null);
-    setThumbnailBlob(null); setThumbnailPreview(null);
-  };
+  /* ── handlers ──────────────────────────────────────────────────────────── */
+
+  const togglePanel = useCallback((panel: "poll" | "quiz") => {
+    setActivePanel((prev) => prev === panel ? "none" : panel);
+    setPollOptions(["", ""]);
+  }, []);
 
   const createPost = async (mediaIds: number[]) => {
-    const apiContentType = postType === "quiz" ? "poll" : postType;
+    const apiContentType = resolvedPostType === "quiz" ? "poll" : resolvedPostType;
 
     let scheduled_for: string | null = null;
     if (isScheduled && schedDate && schedTime) {
@@ -101,14 +128,14 @@ function CreatePostContent() {
     const body: Record<string, unknown> = {
       content_type:  apiContentType,
       caption:       caption || null,
-      audience:      audience,
+      audience,
       is_ppv:        isPPV,
       ppv_price:     isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null,
       media_ids:     mediaIds,
       scheduled_for,
     };
 
-    if (postType === "poll" || postType === "quiz") {
+    if (hasPoll) {
       body.poll_options  = pollOptions.filter((o) => o.trim().length > 0);
       body.poll_duration = pollDuration;
     }
@@ -125,10 +152,7 @@ function CreatePostContent() {
 
   const invalidateProfileCache = () => {
     const username = usernameRef.current;
-    if (username) {
-      clearProfile(username);
-      clearContentFeed(username);
-    }
+    if (username) { clearProfile(username); clearContentFeed(username); }
   };
 
   const handlePost = async () => {
@@ -137,22 +161,79 @@ function CreatePostContent() {
     setError(null);
 
     try {
-      const firstFile = files[0];
-      const isVideo   = firstFile?.type.startsWith("video/");
+      const photoFiles = files.filter((f) => f.type.startsWith("image/"));
+      const videoFile  = files.find((f) => f.type.startsWith("video/"));
 
-      // ── Video ─────────────────────────────────────────────────────────
-      if (firstFile && isVideo) {
+      // ── Mixed: photos + video ───────────────────────────────────────
+      if (photoFiles.length > 0 && videoFile) {
+        let photoMediaIds: number[] = [];
+        let videoMediaId: number | null = null;
+        let photosDone = false;
+        let videoDone  = false;
+
+        const tryCreatePost = async () => {
+          if (!photosDone || !videoDone) return;
+          try {
+            const allIds = [...photoMediaIds, ...(videoMediaId != null ? [videoMediaId] : [])];
+            await createPost(allIds);
+            invalidateProfileCache();
+          } catch (err) {
+            console.error("[CreatePost] mixed post create error:", err);
+          }
+        };
+
+        // Start photo upload
+        if (photoFiles.length === 1) {
+          startPhotoUpload({
+            file: photoFiles[0],
+            onMediaId: async (mediaId) => {
+              photoMediaIds = [mediaId];
+              photosDone = true;
+              await tryCreatePost();
+            },
+            onError: (err) => console.error("[CreatePost] mixed photo error:", err),
+          });
+        } else {
+          startMultiPhotoUpload({
+            files: photoFiles,
+            onMediaIds: async (ids) => {
+              photoMediaIds = ids;
+              photosDone = true;
+              await tryCreatePost();
+            },
+            onError: (err) => console.error("[CreatePost] mixed photos error:", err),
+          });
+        }
+
+        // Start video upload
         startVideoUpload({
-          file:          firstFile,
-          title:         caption || firstFile.name,
+          file:          videoFile,
+          title:         caption || videoFile.name,
           thumbnailBlob: thumbnailBlob ?? undefined,
           onMediaId: async (mediaId) => {
-            try {
-              await createPost([mediaId]);
-              invalidateProfileCache();
-            } catch (err) { console.error("[CreatePost] Post create error:", err); }
+            videoMediaId = mediaId;
+            videoDone = true;
+            await tryCreatePost();
           },
-          onError: (err) => console.error("[CreatePost] Upload error:", err),
+          onError: (err) => console.error("[CreatePost] mixed video error:", err),
+        });
+
+        invalidateProfileCache();
+        router.push(`/${currentUser.username}`);
+        return;
+      }
+
+      // ── Video only ────────────────────────────────────────────────────
+      if (videoFile) {
+        startVideoUpload({
+          file:          videoFile,
+          title:         caption || videoFile.name,
+          thumbnailBlob: thumbnailBlob ?? undefined,
+          onMediaId: async (mediaId) => {
+            try { await createPost([mediaId]); invalidateProfileCache(); }
+            catch (err) { console.error("[CreatePost] video post error:", err); }
+          },
+          onError: (err) => console.error("[CreatePost] video upload error:", err),
         });
         invalidateProfileCache();
         router.push(`/${currentUser.username}`);
@@ -160,16 +241,14 @@ function CreatePostContent() {
       }
 
       // ── Single photo ──────────────────────────────────────────────────
-      if (files.length === 1 && !isVideo) {
+      if (photoFiles.length === 1) {
         startPhotoUpload({
-          file: firstFile,
+          file: photoFiles[0],
           onMediaId: async (mediaId) => {
-            try {
-              await createPost([mediaId]);
-              invalidateProfileCache();
-            } catch (err) { console.error("[CreatePost] Photo post create error:", err); }
+            try { await createPost([mediaId]); invalidateProfileCache(); }
+            catch (err) { console.error("[CreatePost] photo post error:", err); }
           },
-          onError: (err) => console.error("[CreatePost] Photo upload error:", err),
+          onError: (err) => console.error("[CreatePost] photo upload error:", err),
         });
         invalidateProfileCache();
         router.push(`/${currentUser.username}`);
@@ -177,16 +256,14 @@ function CreatePostContent() {
       }
 
       // ── Multiple photos ───────────────────────────────────────────────
-      if (files.length > 1 && !isVideo) {
+      if (photoFiles.length > 1) {
         startMultiPhotoUpload({
-          files,
+          files: photoFiles,
           onMediaIds: async (mediaIds) => {
-            try {
-              await createPost(mediaIds);
-              invalidateProfileCache();
-            } catch (err) { console.error("[CreatePost] Multi photo post create error:", err); }
+            try { await createPost(mediaIds); invalidateProfileCache(); }
+            catch (err) { console.error("[CreatePost] multi photo error:", err); }
           },
-          onError: (err) => console.error("[CreatePost] Multi photo upload error:", err),
+          onError: (err) => console.error("[CreatePost] multi photo upload error:", err),
         });
         invalidateProfileCache();
         router.push(`/${currentUser.username}`);
@@ -194,26 +271,26 @@ function CreatePostContent() {
       }
 
       // ── Text post ─────────────────────────────────────────────────────
-      if (postType === "text") {
+      if (resolvedPostType === "text") {
         await createPost([]);
         invalidateProfileCache();
         startTextPost({
-          label: caption.slice(0, 40) || "Text post",
-          onDone: async () => {},
-          onError: (err) => console.error("[CreatePost] Text post error:", err),
+          label:   caption.slice(0, 40) || "Text post",
+          onDone:  async () => {},
+          onError: (err) => console.error("[CreatePost] text post error:", err),
         });
         router.push(`/${currentUser.username}`);
         return;
       }
 
       // ── Poll / Quiz ───────────────────────────────────────────────────
-      if (postType === "poll" || postType === "quiz") {
+      if (hasPoll) {
         await createPost([]);
         invalidateProfileCache();
         startPollPost({
-          label: caption.slice(0, 40) || "Poll",
-          onDone: async () => {},
-          onError: (err) => console.error("[CreatePost] Poll post error:", err),
+          label:   caption.slice(0, 40) || "Poll",
+          onDone:  async () => {},
+          onError: (err) => console.error("[CreatePost] poll error:", err),
         });
         router.push(`/${currentUser.username}`);
         return;
@@ -225,141 +302,385 @@ function CreatePostContent() {
     }
   };
 
-  const videoFile = postType === "video" && files.length > 0 ? files[0] : null;
+  /* ── render ─────────────────────────────────────────────────────────────── */
 
   return (
-    <div style={{ maxWidth: "680px", margin: "0 auto", fontFamily: "'Inter', sans-serif", minHeight: "100vh" }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 20, backgroundColor: "rgba(10,10,15,0.9)", backdropFilter: "blur(12px)", borderBottom: "1px solid #2A2A3D", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button onClick={() => router.back()} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: 0 }}><ArrowLeft size={20} /></button>
-          <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>NEW POST</span>
-        </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          {files.length > 1 && (
-            <span style={{ fontSize: "12px", color: "#8B5CF6", fontWeight: 600 }}>
-              {files.length} photos
-            </span>
-          )}
-          <button onClick={handleClear} style={{ padding: "7px 18px", borderRadius: "20px", border: "1.5px solid #8B5CF6", backgroundColor: "transparent", color: "#8B5CF6", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>CLEAR</button>
-          <button
-            onClick={handlePost}
-            disabled={!canPost || posting || !userLoaded}
-            style={{ padding: "7px 18px", borderRadius: "20px", border: "none", backgroundColor: canPost && !posting && userLoaded ? "#8B5CF6" : "#2A2A3D", color: canPost && !posting && userLoaded ? "#fff" : "#6B6B8A", fontSize: "13px", fontWeight: 600, cursor: canPost && !posting && userLoaded ? "pointer" : "default", fontFamily: "'Inter', sans-serif", transition: "all 0.2s", minWidth: "64px" }}
-          >
-            {posting ? "Posting…" : "POST"}
-          </button>
-        </div>
+    <div style={{
+      maxWidth: "680px", margin: "0 auto",
+      fontFamily: "'Inter', sans-serif",
+      minHeight: "100dvh",
+      display: "flex", flexDirection: "column",
+      backgroundColor: "#0A0A0F",
+    }}>
+
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 20,
+        backgroundColor: "rgba(10,10,15,0.9)",
+        backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+        padding: "12px 16px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        borderBottom: "1px solid #1F1F2A",
+      }}>
+        <button
+          onClick={() => router.back()}
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: "#A3A3C2", display: "flex", alignItems: "center",
+            padding: "4px",
+          }}
+        >
+          <ArrowLeft size={22} strokeWidth={1.8} />
+        </button>
+
+        <span style={{
+          fontSize: "16px", fontWeight: 700, color: "#fff",
+          letterSpacing: "-0.01em",
+        }}>
+          Create
+        </span>
+
+        <button
+          onClick={handlePost}
+          disabled={!canPost || posting || !userLoaded}
+          style={{
+            padding: "7px 20px", borderRadius: "20px",
+            border: "none",
+            backgroundColor: canPost && !posting && userLoaded ? "#8B5CF6" : "#2A2A3D",
+            color: canPost && !posting && userLoaded ? "#fff" : "#6B6B8A",
+            fontSize: "14px", fontWeight: 600,
+            cursor: canPost && !posting && userLoaded ? "pointer" : "default",
+            fontFamily: "inherit",
+            transition: "all 0.2s",
+          }}
+        >
+          {posting ? "Posting…" : "Post"}
+        </button>
       </div>
 
-      <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+      {/* ── Content area ────────────────────────────────────────────────── */}
+      <div style={{
+        flex: 1, padding: "16px",
+        display: "flex", flexDirection: "column", gap: "16px",
+      }}>
+
+        {/* Error */}
         {error && (
-          <div style={{ padding: "12px 14px", borderRadius: "10px", backgroundColor: "rgba(239,68,68,0.08)", border: "1.5px solid rgba(239,68,68,0.2)", color: "#EF4444", fontSize: "13px" }}>
+          <div style={{
+            padding: "12px 14px", borderRadius: "12px",
+            backgroundColor: "rgba(239,68,68,0.06)",
+            color: "#EF4444", fontSize: "13px",
+          }}>
             {error}
           </div>
         )}
 
-        <div style={{ backgroundColor: "#0D0D18", border: "1.5px solid #2A2A3D", borderRadius: "14px", overflow: "hidden" }}>
-          {(postType === "poll" || postType === "quiz") && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", backgroundColor: "#1C1C2E", borderBottom: "1px solid #2A2A3D" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                {postType === "poll" ? <BarChart2 size={18} color="#8B5CF6" /> : <HelpCircle size={18} color="#8B5CF6" />}
-                <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>{postType === "poll" ? "Poll" : "Quiz"}</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <select value={pollDuration} onChange={(e) => setPollDuration(e.target.value)} style={{ backgroundColor: "transparent", border: "none", color: "#A3A3C2", fontSize: "13px", cursor: "pointer", outline: "none", fontFamily: "'Inter', sans-serif" }}>
-                  {["1 day", "3 days", "7 days", "14 days"].map((d) => <option key={d} value={d} style={{ backgroundColor: "#1C1C2E" }}>{d}</option>)}
-                </select>
-                <button onClick={() => setPostType("photo")} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex" }}><X size={18} /></button>
-              </div>
-            </div>
-          )}
-
-          <div style={{ padding: "14px 16px 10px" }}>
-            <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
-              <Avatar src={currentUser.avatar_url} alt={currentUser.name} size="md" showRing />
-              <div style={{ flex: 1 }}>
-                <div style={{ marginBottom: "2px" }}><span style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{currentUser.name}</span></div>
-                <span style={{ fontSize: "12px", color: "#8A8AA0" }}>@{currentUser.username}</span>
-              </div>
-            </div>
-            <textarea
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              placeholder={
-                postType === "poll" || postType === "quiz"
-                  ? "Ask a question…"
-                  : postType === "text"
-                  ? "What's on your mind?"
-                  : "Write a caption…"
-              }
-              style={{ width: "100%", minHeight: postType === "text" ? "120px" : "70px", backgroundColor: "transparent", border: "none", outline: "none", color: "#E2E8F0", fontSize: "15px", lineHeight: 1.6, resize: "none", fontFamily: "'Inter', sans-serif", marginTop: "12px", boxSizing: "border-box" }}
-            />
+        {/* ── Compose area ────────────────────────────────────────────── */}
+        <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+          <div style={{ paddingTop: "2px", flexShrink: 0 }}>
+            <Avatar src={currentUser.avatar_url} alt={currentUser.name} size="sm" showRing={false} />
           </div>
-
-          {(postType === "poll" || postType === "quiz") && (
-            <div style={{ borderTop: "1px solid #2A2A3D" }}>
-              <PollBuilder type={postType} options={pollOptions} onChange={setPollOptions} />
-            </div>
-          )}
-
-          {(postType === "photo" || postType === "video") && (
-            <div style={{ padding: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "14px" }}>
-              <MediaUploader type={postType} files={files} onChange={setFiles} />
-              {videoFile && (
-                <div style={{ marginTop: "12px", padding: "12px 14px", borderRadius: "10px", backgroundColor: "#0A0A14", border: "1px solid #2A2A3D" }}>
-                  <ThumbnailPicker
-                    file={videoFile}
-                    onPicked={(blob, previewUrl) => {
-                      setThumbnailBlob(blob);
-                      setThumbnailPreview(previewUrl);
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {postType === "text" && (
-            <div style={{ margin: "0 16px 14px", borderTop: "1px solid #2A2A3D", paddingTop: "10px" }}>
-              <p style={{ fontSize: "12px", color: "#4A4A6A", margin: 0 }}>Text-only post — write your message above and hit Post.</p>
-            </div>
-          )}
-
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", padding: "8px 12px", borderTop: "1px solid #2A2A3D" }}>
-            {POST_TYPES.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setPostType(t.key)}
-                aria-label={t.label}
-                style={{ width: "44px", height: "44px", borderRadius: "8px", border: "none", backgroundColor: postType === t.key ? "rgba(139,92,246,0.15)" : "transparent", color: postType === t.key ? "#8B5CF6" : "#B0B0C8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}
-                onMouseEnter={(e) => { if (postType !== t.key) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1F1F2A"; } }}
-                onMouseLeave={(e) => { if (postType !== t.key) { e.currentTarget.style.color = "#B0B0C8"; e.currentTarget.style.backgroundColor = "transparent"; } }}
-              >
-                {t.icon}
-              </button>
-            ))}
-          </div>
+          <textarea
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            placeholder={hasPoll ? "Ask a question…" : "What's on your mind?"}
+            rows={3}
+            style={{
+              flex: 1,
+              backgroundColor: "transparent",
+              border: "none", outline: "none",
+              color: "#E2E8F0",
+              fontSize: "15px", lineHeight: 1.6,
+              resize: "none",
+              fontFamily: "inherit",
+              padding: 0,
+              minHeight: "72px",
+            }}
+          />
         </div>
 
-        <PostSettings
-          audience={audience}
-          onAudienceChange={setAudience}
-          isPPV={isPPV}
-          onPPVChange={setIsPPV}
-          ppvPrice={ppvPrice}
-          onPPVPriceChange={setPpvPrice}
-          isScheduled={isScheduled}
-          onScheduledChange={setIsScheduled}
-          schedDate={schedDate}
-          onSchedDateChange={setSchedDate}
-          schedTime={schedTime}
-          onSchedTimeChange={setSchedTime}
-          onCancel={() => router.back()}
-        />
+        {/* ── Poll / Quiz ─────────────────────────────────────────────── */}
+        {hasPoll && (
+          <div>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              marginBottom: "10px",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {activePanel === "poll"
+                  ? <BarChart2 size={15} color="#8B5CF6" />
+                  : <HelpCircle size={15} color="#8B5CF6" />
+                }
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "#A3A3C2" }}>
+                  {activePanel === "poll" ? "Poll" : "Quiz"}
+                </span>
+              </div>
+              <select
+                value={pollDuration}
+                onChange={(e) => setPollDuration(e.target.value)}
+                style={{
+                  backgroundColor: "transparent", border: "none",
+                  color: "#8A8AA0", fontSize: "12px",
+                  cursor: "pointer", outline: "none", fontFamily: "inherit",
+                }}
+              >
+                {["1 day", "3 days", "7 days", "14 days"].map((d) => (
+                  <option key={d} value={d} style={{ backgroundColor: "#1C1C2E" }}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <PollBuilder type={activePanel as "poll" | "quiz"} options={pollOptions} onChange={setPollOptions} />
+          </div>
+        )}
+
+        {/* ── Media section ───────────────────────────────────────────── */}
+        {!hasPoll && (
+          <MediaUploader files={files} onChange={setFiles} />
+        )}
+
+        {/* ── Thumbnail picker (video only) ───────────────────────────── */}
+        {videoFile && !hasPoll && (
+          <div style={{
+            borderRadius: "14px",
+            backgroundColor: "#0D0D18",
+            padding: "14px",
+          }}>
+            <ThumbnailPicker
+              file={videoFile}
+              onPicked={(blob, previewUrl) => {
+                setThumbnailBlob(blob);
+                setThumbnailPreview(previewUrl);
+              }}
+            />
+          </div>
+        )}
+
+        {/* ── Divider ─────────────────────────────────────────────────── */}
+        <div style={{ height: "1px", backgroundColor: "#1F1F2A" }} />
+
+        {/* ── Toolbar ─────────────────────────────────────────────────── */}
+        <div style={{
+          display: "flex", alignItems: "center",
+          gap: "6px",
+        }}>
+          {/* Media button */}
+          {!hasPoll && (
+            <ToolbarButton
+              icon={<ImagePlus size={19} strokeWidth={1.6} />}
+              active={files.length > 0}
+              label={files.length > 0 ? `${files.length}` : undefined}
+              onClick={() => {
+                /* scroll to media uploader or open file picker if files exist */
+                const input = document.querySelector('input[type="file"][accept]') as HTMLInputElement;
+                input?.click();
+              }}
+            />
+          )}
+
+          {/* Poll */}
+          <ToolbarButton
+            icon={<BarChart2 size={19} strokeWidth={1.6} />}
+            active={activePanel === "poll"}
+            onClick={() => togglePanel("poll")}
+          />
+
+          {/* Quiz */}
+          <ToolbarButton
+            icon={<HelpCircle size={19} strokeWidth={1.6} />}
+            active={activePanel === "quiz"}
+            onClick={() => togglePanel("quiz")}
+          />
+
+          <div style={{ flex: 1 }} />
+
+          {/* Audience */}
+          <button
+            onClick={() => setAudience((a) => a === "subscribers" ? "everyone" : "subscribers")}
+            style={{
+              display: "flex", alignItems: "center", gap: "5px",
+              padding: "6px 12px", borderRadius: "20px",
+              border: "none",
+              backgroundColor: "#1A1A2E",
+              color: "#A3A3C2",
+              fontSize: "12px", fontWeight: 600,
+              cursor: "pointer", fontFamily: "inherit",
+              transition: "background-color 0.15s",
+            }}
+          >
+            {audience === "subscribers" ? "Subscribers" : "Everyone"}
+            <ChevronDown size={13} strokeWidth={2} />
+          </button>
+        </div>
+
+        {/* ── Settings (PPV + Schedule) ───────────────────────────────── */}
+        <div style={{
+          display: "flex", flexDirection: "column", gap: "0",
+          borderRadius: "14px",
+          backgroundColor: "#0D0D18",
+          overflow: "hidden",
+        }}>
+          {/* PPV toggle */}
+          <div style={{
+            padding: "14px 16px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            borderBottom: "1px solid #2A2A3D",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <Lock size={16} color="#6B6B8A" strokeWidth={1.5} />
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: 500, color: "#C4C4D4" }}>Pay-Per-View</div>
+                <div style={{ fontSize: "11px", color: "#4A4A6A", marginTop: "1px" }}>Fans pay to unlock</div>
+              </div>
+            </div>
+            <Toggle on={isPPV} onToggle={() => setIsPPV(!isPPV)} />
+          </div>
+
+          {/* PPV price input */}
+          {isPPV && (
+            <div style={{
+              padding: "0 16px 14px",
+              display: "flex", alignItems: "center", gap: "10px",
+            }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                flex: 1,
+                backgroundColor: "#1A1A2E",
+                borderRadius: "10px",
+                padding: "10px 14px",
+              }}>
+                <span style={{ color: "#6B6B8A", fontSize: "14px", fontWeight: 600 }}>₦</span>
+                <input
+                  type="number"
+                  min="100"
+                  max="50000"
+                  value={ppvPrice}
+                  onChange={(e) => setPpvPrice(e.target.value)}
+                  placeholder="Price"
+                  style={{
+                    flex: 1, backgroundColor: "transparent",
+                    border: "none", outline: "none",
+                    color: "#E2E8F0", fontSize: "14px",
+                    fontFamily: "inherit", caretColor: "#8B5CF6",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Schedule toggle */}
+          <div style={{
+            padding: "14px 16px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <Calendar size={16} color="#6B6B8A" strokeWidth={1.5} />
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: 500, color: "#C4C4D4" }}>Schedule</div>
+                <div style={{ fontSize: "11px", color: "#4A4A6A", marginTop: "1px" }}>Publish later</div>
+              </div>
+            </div>
+            <Toggle on={isScheduled} onToggle={() => setIsScheduled(!isScheduled)} />
+          </div>
+
+          {/* Schedule inputs */}
+          {isScheduled && (
+            <div style={{ padding: "0 16px 14px", display: "flex", gap: "8px" }}>
+              <input
+                type="date"
+                value={schedDate}
+                onChange={(e) => setSchedDate(e.target.value)}
+                style={{
+                  flex: 1, backgroundColor: "#1A1A2E",
+                  border: "none", borderRadius: "10px",
+                  padding: "10px 14px", color: "#E2E8F0",
+                  fontSize: "13px", fontFamily: "inherit",
+                  outline: "none", colorScheme: "dark",
+                }}
+              />
+              <input
+                type="time"
+                value={schedTime}
+                onChange={(e) => setSchedTime(e.target.value)}
+                style={{
+                  flex: 1, backgroundColor: "#1A1A2E",
+                  border: "none", borderRadius: "10px",
+                  padding: "10px 14px", color: "#E2E8F0",
+                  fontSize: "13px", fontFamily: "inherit",
+                  outline: "none", colorScheme: "dark",
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Bottom spacing */}
+        <div style={{ height: "24px" }} />
       </div>
     </div>
   );
 }
+
+/* ── Toggle component ──────────────────────────────────────────────────────── */
+
+function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <div
+      onClick={onToggle}
+      style={{
+        width: "44px", height: "26px",
+        borderRadius: "13px",
+        backgroundColor: on ? "#8B5CF6" : "#2A2A3D",
+        cursor: "pointer",
+        position: "relative",
+        transition: "background-color 0.2s",
+        flexShrink: 0,
+      }}
+    >
+      <div style={{
+        position: "absolute",
+        top: "3px",
+        left: on ? "21px" : "3px",
+        width: "20px", height: "20px",
+        borderRadius: "50%",
+        backgroundColor: "#fff",
+        transition: "left 0.2s",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+      }} />
+    </div>
+  );
+}
+
+/* ── Toolbar button ────────────────────────────────────────────────────────── */
+
+function ToolbarButton({
+  icon, active, label, onClick,
+}: {
+  icon: React.ReactNode; active: boolean; label?: string; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: "4px",
+        padding: "8px 12px",
+        borderRadius: "10px",
+        border: "none",
+        backgroundColor: active ? "rgba(139,92,246,0.12)" : "transparent",
+        color: active ? "#8B5CF6" : "#6B6B8A",
+        cursor: "pointer",
+        transition: "all 0.15s",
+        fontFamily: "inherit",
+        fontSize: "12px",
+        fontWeight: 600,
+      }}
+    >
+      {icon}
+      {label && <span>{label}</span>}
+    </button>
+  );
+}
+
+/* ── Page wrapper ──────────────────────────────────────────────────────────── */
 
 export default function CreatePostPage() {
   return (

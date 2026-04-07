@@ -591,17 +591,16 @@ export function useConversations() {
   const [error,   setError]   = useState<string | null>(null);
 
   useEffect(() => {
-    listeners.add(setConversationsState);
-    startGlobalRealtime();
-    ensureConversationsFetched();
-    return () => { listeners.delete(setConversationsState); };
-  }, []);
-
-  useEffect(() => {
-    if (cachedConversations !== null) {
-      setLoading(false);
-    }
-  }, []);
+  const handler = (convs: Conversation[]) => {
+    setConversationsState(convs);
+    setLoading(false);
+  };
+  listeners.add(handler);
+  startGlobalRealtime();
+  ensureConversationsFetched();
+  if (cachedConversations !== null) setLoading(false);
+  return () => { listeners.delete(handler); };
+}, []);
 
   const setConversations = useCallback(updateConversations, []);
   return { conversations, setConversations, loading, error };

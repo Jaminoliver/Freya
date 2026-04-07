@@ -1,7 +1,8 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
+export type AvatarSize      = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
+export type AvatarRingColor = "gradient" | "white" | "gray" | "none";
 
 export interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
   src?: string;
@@ -12,6 +13,7 @@ export interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
   showEditButton?: boolean;
   onEditClick?: () => void;
   showRing?: boolean;
+  ringColor?: AvatarRingColor;
 }
 
 const sizeConfig = {
@@ -25,6 +27,15 @@ const sizeConfig = {
 
 const GRADIENT = "linear-gradient(to right, #8B5CF6, #EC4899)";
 
+function getRingBackground(ringColor: AvatarRingColor): string {
+  switch (ringColor) {
+    case "gradient": return GRADIENT;
+    case "white":    return "#FFFFFF";
+    case "gray":     return "#2A2A3D";
+    case "none":     return "transparent";
+  }
+}
+
 export function Avatar({
   src,
   alt,
@@ -34,10 +45,13 @@ export function Avatar({
   showEditButton = false,
   onEditClick,
   showRing = true,
+  ringColor = "white",
   className,
   ...props
 }: AvatarProps) {
-  const config = sizeConfig[size];
+  const config    = sizeConfig[size];
+  const totalSize = config.px + (showRing ? config.ringPad * 2 + 4 : 0);
+  const ringBg    = showRing ? getRingBackground(ringColor) : "transparent";
 
   const getInitials = (name: string) => {
     const names = name.split(" ");
@@ -45,29 +59,27 @@ export function Avatar({
     return name.slice(0, 2).toUpperCase();
   };
 
-  const totalSize = config.px + (showRing ? config.ringPad * 2 + 4 : 0);
-
   return (
     <div
       className={cn("relative inline-block flex-shrink-0", className)}
       style={{ width: totalSize, height: totalSize }}
       {...props}
     >
-      {/* Gradient ring */}
+      {/* Ring */}
       <div style={{
         width: "100%", height: "100%", borderRadius: "50%",
-        background: showRing ? GRADIENT : "transparent",
+        background: ringBg,
         padding: showRing ? `${config.ringPad}px` : 0,
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
-        {/* Inner gap (card bg color) */}
+        {/* Inner gap */}
         <div style={{
           width: "100%", height: "100%", borderRadius: "50%",
           background: showRing ? "#1C1C2E" : "transparent",
           padding: showRing ? "2px" : 0,
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          {/* Actual avatar */}
+          {/* Avatar image */}
           <div style={{
             width: config.px, height: config.px,
             borderRadius: "50%", overflow: "hidden",
@@ -77,11 +89,7 @@ export function Avatar({
           }}>
             {src ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={src}
-                alt={alt}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
+              <img src={src} alt={alt} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             ) : (
               <span style={{ color: "#fff", fontWeight: 600, fontSize: config.px * 0.35 }}>
                 {getInitials(alt)}

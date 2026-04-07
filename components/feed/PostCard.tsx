@@ -20,6 +20,10 @@ import { PollDisplay } from "@/components/feed/PollDisplay";
 import type { PollData } from "@/components/feed/PollDisplay";
 import type { User } from "@/lib/types/profile";
 import { useNav } from "@/lib/hooks/useNav";
+import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import StoryViewer from "@/components/story/StoryViewer";
+import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 
 interface MediaItem {
   type:              "image" | "video";
@@ -131,6 +135,9 @@ export function PostCard({
   const router  = useRouter();
   const viewer  = useViewer();
 
+  const { group: storyGroup, hasUnviewed, refresh } = useCreatorStory(post.creator.id);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+
   const [commentOpen,       setCommentOpen]       = useState(false);
   const [sheetOpen,         setSheetOpen]         = useState(false);
   const [tipOpen,           setTipOpen]           = useState(false);
@@ -138,12 +145,14 @@ export function PostCard({
   const [likeCount,         setLikeCount]         = useState(post.likes);
   const [commentCount,      setCommentCount]      = useState(post.comments);
   const [comments,          setComments]          = useState<any[]>([]);
-  const [commentsLoading,   setCommentsLoading]   = useState(true);
+  const [commentsLoading,   setCommentsLoading]   = useState(false);
+  const [commentsFetched,   setCommentsFetched]   = useState(false);
   const [lightboxOpen,      setLightboxOpen]      = useState(false);
   const [lightboxMediaIdx,  setLightboxMediaIdx]  = useState(0);
   const [pollData,          setPollData]          = useState<PollData | null>(post.poll ?? null);
   const [savedPost,         setSavedPost]         = useState(false);
   const [savedCreator,      setSavedCreator]      = useState(false);
+  const [sheetDataFetched,  setSheetDataFetched]  = useState(false);
   const [timestamp,         setTimestamp]         = useState("");
   const [reportOpen,        setReportOpen]        = useState(false);
   const [blockConfirm,      setBlockConfirm]      = useState(false);
@@ -156,6 +165,39 @@ export function PostCard({
     block, unblock, restrict, unrestrict,
     fetchStatus,
   } = useBlockRestrict({ userId: post.creator.id });
+
+  // ── Eager: fetch saved state on mount (fire-and-forget, non-blocking) ──
+  useEffect(() => {
+    fetch(`/api/saved/posts?post_id=${post.id}`)
+      .then((r) => r.json()).then((d) => setSavedPost(d.saved ?? false)).catch(() => {});
+    fetch(`/api/saved/creators?creator_id=${post.creator.id}`)
+      .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {});
+  }, [post.id, post.creator.id]);
+
+  // ── Lazy: fetch block/restrict only when sheet opens ──
+  const handleOpenSheet = useCallback(async () => {
+    setSheetOpen(true);
+    if (sheetDataFetched) return;
+    setSheetDataFetched(true);
+    await fetchStatus();
+  }, [sheetDataFetched, fetchStatus]);
+
+  // ── Lazy: fetch comments only when comment section opens ──
+  const handleToggleComment = useCallback(async () => {
+    setCommentOpen((prev) => {
+      const next = !prev;
+      if (next && !commentsFetched) {
+        setCommentsLoading(true);
+        setCommentsFetched(true);
+        fetch(`/api/posts/${post.id}/comments`)
+          .then((r) => r.json())
+          .then((d) => { if (d.comments) setComments(d.comments); })
+          .catch(() => {})
+          .finally(() => setCommentsLoading(false));
+      }
+      return next;
+    });
+  }, [commentsFetched, post.id]);
 
   useEffect(() => {
     function getRelativeTime(dateStr: string): string {
@@ -186,28 +228,6 @@ export function PostCard({
       setPollData(post.poll ?? null);
     }
   }, [post.id, post.liked, post.likes, post.comments, post.poll]);
-
-  useEffect(() => {
-    fetch(`/api/posts/${post.id}/comments`)
-      .then((r) => r.json())
-      .then((d) => { if (d.comments) setComments(d.comments); })
-      .catch(() => {})
-      .finally(() => setCommentsLoading(false));
-  }, [post.id]);
-
-  const savedFetched = useRef(false);
-  const handleOpenSheet = useCallback(async () => {
-    setSheetOpen(true);
-    if (savedFetched.current) return;
-    savedFetched.current = true;
-    await Promise.all([
-      fetchStatus(),
-      fetch(`/api/saved/posts?post_id=${post.id}`)
-        .then((r) => r.json()).then((d) => setSavedPost(d.saved ?? false)).catch(() => {}),
-      fetch(`/api/saved/creators?creator_id=${post.creator.id}`)
-        .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {}),
-    ]);
-  }, [post.id, post.creator.id, fetchStatus]);
 
   const handleLike = async () => {
     if (isLiking.current) return;
@@ -276,6 +296,19 @@ export function PostCard({
     } catch { setSavedCreator(!next); }
   }, [savedCreator, post.creator.id]);
 
+  const handleAvatarClick = useCallback(() => {
+    if (hasUnviewed && storyGroup) {
+      setStoryViewerOpen(true);
+    } else {
+      navigate(`/${post.creator.username}`);
+    }
+  }, [hasUnviewed, storyGroup, navigate, post.creator.username]);
+
+  const handleStoryViewerClose = useCallback((updatedGroups: CreatorStoryGroup[]) => {
+    setStoryViewerOpen(false);
+    refresh();
+  }, [refresh]);
+
   const creatorAsUser: User = {
     id: post.creator.id, username: post.creator.username,
     display_name: post.creator.name, avatar_url: post.creator.avatar_url, role: "creator",
@@ -296,7 +329,14 @@ export function PostCard({
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
 
-      {/* Pass post.id as postId so the thumbnail shows in tip notifications */}
+      {storyViewerOpen && storyGroup && (
+        <StoryViewer
+          groups={[storyGroup]}
+          startGroupIndex={0}
+          onClose={handleStoryViewerClose}
+        />
+      )}
+
       <CheckoutModal
         isOpen={tipOpen}
         onClose={() => setTipOpen(false)}
@@ -342,9 +382,16 @@ export function PostCard({
       />
 
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }} onClick={() => navigate(`/${post.creator.username}`)}>
-          <img src={post.creator.avatar_url || ""} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
-          <div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <AvatarWithStoryRing
+            src={post.creator.avatar_url || ""}
+            alt={post.creator.name}
+            size={48}
+            hasStory={!!storyGroup}
+            hasUnviewed={hasUnviewed}
+            onClick={handleAvatarClick}
+          />
+          <div style={{ cursor: "pointer" }} onClick={() => navigate(`/${post.creator.username}`)}>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <span style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
               {post.creator.isVerified && <BadgeCheck size={14} color="#8B5CF6" />}
@@ -392,7 +439,7 @@ export function PostCard({
       )}
 
       <div style={{ padding: "0 16px" }}>
-        <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={true} isOwnProfile={false} onLike={handleLike} onComment={() => setCommentOpen((p) => !p)} onTip={() => { console.log("[PostCard] tip postId:", post.id, "as number:", Number(post.id)); setTipOpen(true); }} onBookmark={handleSavePost} />
+        <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={true} isOwnProfile={false} onLike={handleLike} onComment={handleToggleComment} onTip={() => setTipOpen(true)} onBookmark={handleSavePost} />
         <CommentSection postId={post.id} comments={comments} viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null} viewerUserId={viewer?.id} isOpen={commentOpen} onAddComment={handleAddComment} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} />
       </div>
     </div>

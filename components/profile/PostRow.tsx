@@ -12,6 +12,10 @@ import CreatorPostOptionsSheet from "@/components/profile/PostOptionsSheet";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { PollDisplay } from "@/components/feed/PollDisplay";
 import type { PollData } from "@/components/feed/PollDisplay";
+import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import StoryViewer from "@/components/story/StoryViewer";
+import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 
 export interface ApiPost {
   id:            number;
@@ -82,25 +86,14 @@ function EditCaptionModal({ caption, onSave, onClose }: {
   };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.7)", padding: "16px" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.7)", padding: "16px" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ width: "100%", maxWidth: "480px", backgroundColor: "#13131F", border: "1px solid #2A2A3D", borderRadius: "14px", overflow: "hidden" }}>
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #1E1E2E", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>Edit caption</span>
           <button onClick={onClose} style={{ width: "28px", height: "28px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", lineHeight: 1 }}>×</button>
         </div>
         <div style={{ padding: "16px 20px" }}>
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            rows={5}
-            style={{ width: "100%", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", color: "#E2E8F0", fontSize: "14px", lineHeight: 1.6, padding: "12px", resize: "vertical", outline: "none", fontFamily: "'Inter', sans-serif", caretColor: "#8B5CF6", boxSizing: "border-box" }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-            onBlur={(e)  => (e.currentTarget.style.borderColor = "#2A2A3D")}
-          />
+          <textarea ref={textareaRef} value={value} onChange={(e) => setValue(e.target.value)} rows={5} style={{ width: "100%", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", color: "#E2E8F0", fontSize: "14px", lineHeight: 1.6, padding: "12px", resize: "vertical", outline: "none", fontFamily: "'Inter', sans-serif", caretColor: "#8B5CF6", boxSizing: "border-box" }} onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           {error && <p style={{ margin: "6px 0 0", fontSize: "12px", color: "#EF4444", fontFamily: "'Inter', sans-serif" }}>{error}</p>}
         </div>
         <div style={{ padding: "0 20px 16px", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
@@ -120,17 +113,17 @@ function EditPPVModal({ currentPrice, onSave, onRemove, onClose }: {
   onClose:      () => void;
 }) {
   const formatComma = (n: number) => n.toLocaleString("en-NG");
-  const [display,   setDisplay]   = React.useState(currentPrice != null ? formatComma(currentPrice) : "");
-  const [rawValue,  setRawValue]  = React.useState<number | null>(currentPrice);
-  const [saving,    setSaving]    = React.useState(false);
-  const [removing,  setRemoving]  = React.useState(false);
-  const [error,     setError]     = React.useState<string | null>(null);
-  const inputRef                  = React.useRef<HTMLInputElement>(null);
+  const [display,  setDisplay]  = React.useState(currentPrice != null ? formatComma(currentPrice) : "");
+  const [rawValue, setRawValue] = React.useState<number | null>(currentPrice);
+  const [saving,   setSaving]   = React.useState(false);
+  const [removing, setRemoving] = React.useState(false);
+  const [error,    setError]    = React.useState<string | null>(null);
+  const inputRef                = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => { inputRef.current?.focus(); }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw    = e.target.value.replace(/,/g, "");
+    const raw = e.target.value.replace(/,/g, "");
     const parsed = parseInt(raw, 10);
     if (raw === "") { setDisplay(""); setRawValue(null); return; }
     if (isNaN(parsed)) return;
@@ -141,77 +134,40 @@ function EditPPVModal({ currentPrice, onSave, onRemove, onClose }: {
   const handleSave = async () => {
     if (!rawValue || rawValue <= 0) { setError("Enter a valid price in ₦."); return; }
     if (saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave(Math.round(rawValue * 100));
-      onClose();
-    } catch {
-      setError("Failed to save. Try again.");
-      setSaving(false);
-    }
+    setSaving(true); setError(null);
+    try { await onSave(Math.round(rawValue * 100)); onClose(); }
+    catch { setError("Failed to save. Try again."); setSaving(false); }
   };
 
   const handleRemove = async () => {
     if (!onRemove || removing) return;
-    setRemoving(true);
-    setError(null);
-    try {
-      await onRemove();
-      onClose();
-    } catch {
-      setError("Failed to remove. Try again.");
-      setRemoving(false);
-    }
+    setRemoving(true); setError(null);
+    try { await onRemove(); onClose(); }
+    catch { setError("Failed to remove. Try again."); setRemoving(false); }
   };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.7)", padding: "16px" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.7)", padding: "16px" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ width: "100%", maxWidth: "480px", backgroundColor: "#13131F", border: "1px solid #2A2A3D", borderRadius: "14px", overflow: "hidden" }}>
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #1E1E2E", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>
-            {currentPrice ? "Edit PPV price" : "Lock post & set price"}
-          </span>
+          <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>{currentPrice ? "Edit PPV price" : "Lock post & set price"}</span>
           <button onClick={onClose} style={{ width: "28px", height: "28px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", lineHeight: 1 }}>×</button>
         </div>
         <div style={{ padding: "16px 20px" }}>
-          <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>
-            {currentPrice ? "Update the price fans pay to unlock this post." : "Set a price to lock this post as pay-per-view."}
-          </p>
+          <p style={{ margin: "0 0 12px", fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>{currentPrice ? "Update the price fans pay to unlock this post." : "Set a price to lock this post as pay-per-view."}</p>
           <div style={{ position: "relative" }}>
             <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", color: "#8B5CF6", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>₦</span>
-            <input
-              ref={inputRef}
-              type="text"
-              inputMode="numeric"
-              placeholder="e.g. 10,000"
-              value={display}
-              onChange={handleChange}
-              style={{ width: "100%", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", color: "#E2E8F0", fontSize: "14px", padding: "12px 12px 12px 28px", outline: "none", fontFamily: "'Inter', sans-serif", caretColor: "#8B5CF6", boxSizing: "border-box" }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-              onBlur={(e)  => (e.currentTarget.style.borderColor = "#2A2A3D")}
-            />
+            <input ref={inputRef} type="text" inputMode="numeric" placeholder="e.g. 10,000" value={display} onChange={handleChange} style={{ width: "100%", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", color: "#E2E8F0", fontSize: "14px", padding: "12px 12px 12px 28px", outline: "none", fontFamily: "'Inter', sans-serif", caretColor: "#8B5CF6", boxSizing: "border-box" }} onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
           </div>
           {error && <p style={{ margin: "6px 0 0", fontSize: "12px", color: "#EF4444", fontFamily: "'Inter', sans-serif" }}>{error}</p>}
         </div>
         <div style={{ padding: "0 20px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
           {currentPrice && onRemove ? (
-            <button
-              onClick={handleRemove}
-              disabled={removing}
-              style={{ padding: "9px 18px", borderRadius: "8px", border: "1px solid #EF4444", backgroundColor: "transparent", color: "#EF4444", fontSize: "13px", fontWeight: 600, cursor: removing ? "not-allowed" : "pointer", fontFamily: "'Inter', sans-serif", opacity: removing ? 0.7 : 1 }}
-            >
-              {removing ? "Removing..." : "Make free"}
-            </button>
+            <button onClick={handleRemove} disabled={removing} style={{ padding: "9px 18px", borderRadius: "8px", border: "1px solid #EF4444", backgroundColor: "transparent", color: "#EF4444", fontSize: "13px", fontWeight: 600, cursor: removing ? "not-allowed" : "pointer", fontFamily: "'Inter', sans-serif", opacity: removing ? 0.7 : 1 }}>{removing ? "Removing..." : "Make free"}</button>
           ) : <div />}
           <div style={{ display: "flex", gap: "8px" }}>
             <button onClick={onClose} style={{ padding: "9px 18px", borderRadius: "8px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#94A3B8", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>Cancel</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", borderRadius: "8px", border: "none", backgroundColor: saving ? "#6D4BB0" : "#8B5CF6", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'Inter', sans-serif", opacity: saving ? 0.7 : 1 }}>
-              {saving ? "Saving..." : currentPrice ? "Update price" : "Lock post"}
-            </button>
+            <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", borderRadius: "8px", border: "none", backgroundColor: saving ? "#6D4BB0" : "#8B5CF6", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontFamily: "'Inter', sans-serif", opacity: saving ? 0.7 : 1 }}>{saving ? "Saving..." : currentPrice ? "Update price" : "Lock post"}</button>
           </div>
         </div>
       </div>
@@ -221,17 +177,9 @@ function EditPPVModal({ currentPrice, onSave, onRemove, onClose }: {
 
 // ── Main PostRow ──────────────────────────────────────────────────────────────
 export default function PostRow({
-  post,
-  isOwnProfile,
-  isSubscribed,
-  onLike,
-  onComment,
-  onTip,
-  onUnlock,
-  viewer,
-  onDelete,
-  onImageClick,
-  onPPVUpdated,
+  post, isOwnProfile, isSubscribed,
+  onLike, onComment, onTip, onUnlock,
+  viewer, onDelete, onImageClick, onPPVUpdated,
 }: {
   post:          ApiPost;
   isOwnProfile?: boolean;
@@ -240,12 +188,17 @@ export default function PostRow({
   onComment?:    (id: string) => void;
   onTip?:        (id: string) => void;
   onUnlock?:     (id: string) => void;
-  viewer:          { id: string; username: string; display_name: string; avatar_url: string } | null;
-  onDelete?:       (id: string) => void;
-  onImageClick?:   (post: LightboxPost, index: number) => void;
-  onPPVUpdated?:   (id: string, priceKobo: number) => void;
+  viewer:        { id: string; username: string; display_name: string; avatar_url: string } | null;
+  onDelete?:     (id: string) => void;
+  onImageClick?: (post: LightboxPost, index: number) => void;
+  onPPVUpdated?: (id: string, priceKobo: number) => void;
 }) {
   const router = useRouter();
+
+  const { group: storyGroup, hasStory, hasUnviewed, refresh } = useCreatorStory(
+    isOwnProfile ? undefined : post.profiles?.id
+  );
+  const [storyViewerOpen, setStoryViewerOpen] = React.useState(false);
 
   const [commentOpen,      setCommentOpen]      = React.useState(false);
   const [sheetOpen,        setSheetOpen]        = React.useState(false);
@@ -264,55 +217,40 @@ export default function PostRow({
   const [ppvPrice,         setPpvPrice]         = React.useState<number | null>(post.ppv_price);
   const [isPPV,            setIsPPV]            = React.useState(post.is_ppv);
 
+  React.useEffect(() => { setPpvPrice(post.ppv_price); setIsPPV(post.is_ppv); }, [post.ppv_price, post.is_ppv]);
+
+  // Fetch saved state on mount so UI is correct immediately on page load
   React.useEffect(() => {
-    setPpvPrice(post.ppv_price);
-    setIsPPV(post.is_ppv);
-  }, [post.ppv_price, post.is_ppv]);
+    if (isOwnProfile) return;
+    Promise.all([
+      fetch(`/api/saved/posts?post_id=${post.id}`)
+        .then((r) => r.json()).then((d) => setSavedPost(d.saved ?? false)).catch(() => {}),
+      fetch(`/api/saved/creators?creator_id=${post.profiles.id}`)
+        .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {}),
+    ]);
+  }, [post.id, post.profiles.id, isOwnProfile]);
 
-  const isLiking = React.useRef(false);
+  const handleOpenFanSheet = React.useCallback(() => {
+    setSheetOpen(true);
+  }, []);
 
+  const isLiking   = React.useRef(false);
   const firstMedia = post.media?.[0];
-
   const isFreePost = post.audience === "everyone";
 
   const viewerMedia = React.useMemo(() => {
     if (!post.media?.length) return [];
     return post.media.map((m) => ({
-      type:             m.media_type as "video" | "image",
-      url:              m.file_url ?? null,
-      bunnyVideoId:     m.bunny_video_id ?? null,
-      thumbnailUrl:     m.thumbnail_url ?? null,
-      processingStatus: m.processing_status ?? null,
-      rawVideoUrl:      m.raw_video_url ?? null,
-      blurHash:         m.blur_hash ?? null,
-      width:            m.width ?? null,
-      height:           m.height ?? null,
-      aspectRatio:      m.aspect_ratio ?? null,
+      type: m.media_type as "video" | "image", url: m.file_url ?? null,
+      bunnyVideoId: m.bunny_video_id ?? null, thumbnailUrl: m.thumbnail_url ?? null,
+      processingStatus: m.processing_status ?? null, rawVideoUrl: m.raw_video_url ?? null,
+      blurHash: m.blur_hash ?? null, width: m.width ?? null, height: m.height ?? null, aspectRatio: m.aspect_ratio ?? null,
     }));
   }, [post.media]);
 
-  const savedFetched = React.useRef(false);
-  const handleOpenFanSheet = React.useCallback(async () => {
-    setSheetOpen(true);
-    if (savedFetched.current) return;
-    savedFetched.current = true;
-    try {
-      const [postRes, creatorRes] = await Promise.all([
-        fetch(`/api/saved/posts?post_id=${post.id}`),
-        fetch(`/api/saved/creators?creator_id=${post.profiles.id}`),
-      ]);
-      const [postData, creatorData] = await Promise.all([postRes.json(), creatorRes.json()]);
-      if (postRes.ok)    setSavedPost(postData.saved ?? false);
-      if (creatorRes.ok) setSavedCreator(creatorData.saved ?? false);
-    } catch {}
-  }, [post.id, post.profiles.id]);
-
   React.useEffect(() => {
-    setLiked(post.liked);
-    setLikeCount(post.like_count);
-    setCommentCount(post.comment_count);
-    setPollData(post.poll ?? null);
-    setCaption(post.caption);
+    setLiked(post.liked); setLikeCount(post.like_count); setCommentCount(post.comment_count);
+    setPollData(post.poll ?? null); setCaption(post.caption);
   }, [post.liked, post.like_count, post.comment_count, post.poll, post.caption]);
 
   React.useEffect(() => {
@@ -330,8 +268,7 @@ export default function PostRow({
     reply_to_id?: string | number | null
   ) => {
     await fetch(`/api/posts/${id}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: text, gif_url: gif_url ?? null, parent_comment_id: parent_comment_id ?? null, reply_to_username: reply_to_username ?? null, reply_to_id: reply_to_id ?? null }),
     });
     setCommentCount((c) => c + 1);
@@ -356,8 +293,7 @@ export default function PostRow({
   const handleDoubleTapLike = async () => {
     if (liked || isLiking.current) return;
     isLiking.current = true;
-    setLiked(true);
-    setLikeCount((c) => c + 1);
+    setLiked(true); setLikeCount((c) => c + 1);
     const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
     const data = await res.json();
     if (res.ok) { setLiked(data.liked); setLikeCount(data.like_count); onLike?.(String(post.id)); }
@@ -370,33 +306,22 @@ export default function PostRow({
   };
 
   const handleSaveCaption = async (newCaption: string) => {
-    const res = await fetch(`/api/posts/${post.id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caption: newCaption }),
-    });
+    const res = await fetch(`/api/posts/${post.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caption: newCaption }) });
     if (!res.ok) throw new Error("Failed");
     setCaption(newCaption || null);
   };
 
   const handleSavePPV = async (priceKobo: number) => {
-    const res = await fetch(`/api/posts/${post.id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_ppv: true, ppv_price: priceKobo }),
-    });
+    const res = await fetch(`/api/posts/${post.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_ppv: true, ppv_price: priceKobo }) });
     if (!res.ok) throw new Error("Failed");
-    setPpvPrice(priceKobo);
-    setIsPPV(true);
+    setPpvPrice(priceKobo); setIsPPV(true);
     onPPVUpdated?.(String(post.id), priceKobo);
   };
 
   const handleRemovePPV = async () => {
-    const res = await fetch(`/api/posts/${post.id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_ppv: false, ppv_price: null }),
-    });
+    const res = await fetch(`/api/posts/${post.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_ppv: false, ppv_price: null }) });
     if (!res.ok) throw new Error("Failed");
-    setPpvPrice(null);
-    setIsPPV(false);
+    setPpvPrice(null); setIsPPV(false);
     onPPVUpdated?.(String(post.id), 0);
   };
 
@@ -405,58 +330,40 @@ export default function PostRow({
   };
 
   const handleSavePost = React.useCallback(async () => {
-    const next = !savedPost;
-    setSavedPost(next);
-    try {
-      await fetch("/api/saved/posts", {
-        method:  next ? "POST" : "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ post_id: post.id }),
-      });
-    } catch {
-      setSavedPost(!next);
-    }
+    const next = !savedPost; setSavedPost(next);
+    try { await fetch("/api/saved/posts", { method: next ? "POST" : "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ post_id: post.id }) }); }
+    catch { setSavedPost(!next); }
   }, [savedPost, post.id]);
 
   const handleSaveCreator = React.useCallback(async () => {
-    const next = !savedCreator;
-    setSavedCreator(next);
-    try {
-      await fetch("/api/saved/creators", {
-        method:  next ? "POST" : "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ creator_id: post.profiles.id }),
-      });
-    } catch {
-      setSavedCreator(!next);
-    }
+    const next = !savedCreator; setSavedCreator(next);
+    try { await fetch("/api/saved/creators", { method: next ? "POST" : "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creator_id: post.profiles.id }) }); }
+    catch { setSavedCreator(!next); }
   }, [savedCreator, post.profiles.id]);
 
-  const handleBookmark = React.useCallback(() => {
-    handleSavePost();
-  }, [handleSavePost]);
+  const handleAvatarClick = React.useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isOwnProfile && hasUnviewed && storyGroup) {
+      setStoryViewerOpen(true);
+    }
+  }, [isOwnProfile, hasUnviewed, storyGroup]);
 
   const isTextPost = post.content_type === "text";
   const isPollPost = post.content_type === "poll";
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E" }}>
-      {editOpen && (
-        <EditCaptionModal
-          caption={caption ?? ""}
-          onSave={handleSaveCaption}
-          onClose={() => setEditOpen(false)}
+
+      {storyViewerOpen && storyGroup && (
+        <StoryViewer
+          groups={[storyGroup]}
+          startGroupIndex={0}
+          onClose={() => { setStoryViewerOpen(false); refresh(); }}
         />
       )}
 
-      {ppvEditOpen && (
-        <EditPPVModal
-          currentPrice={ppvPrice != null ? ppvPrice / 100 : null}
-          onSave={handleSavePPV}
-          onRemove={isPPV ? handleRemovePPV : undefined}
-          onClose={() => setPpvEditOpen(false)}
-        />
-      )}
+      {editOpen && <EditCaptionModal caption={caption ?? ""} onSave={handleSaveCaption} onClose={() => setEditOpen(false)} />}
+      {ppvEditOpen && <EditPPVModal currentPrice={ppvPrice != null ? ppvPrice / 100 : null} onSave={handleSavePPV} onRemove={isPPV ? handleRemovePPV : undefined} onClose={() => setPpvEditOpen(false)} />}
 
       {!isOwnProfile && (
         <PostOptionsSheet
@@ -485,16 +392,14 @@ export default function PostRow({
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {post.profiles?.avatar_url
-            ? <img src={post.profiles.avatar_url} alt="" loading="lazy" style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }} />
-            : (
-              <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <span style={{ fontSize: "16px", fontWeight: 700, color: "#8B5CF6" }}>
-                  {(post.profiles?.display_name || post.profiles?.username || "?").charAt(0).toUpperCase()}
-                </span>
-              </div>
-            )
-          }
+          <AvatarWithStoryRing
+            src={post.profiles?.avatar_url ?? null}
+            alt={post.profiles?.display_name || post.profiles?.username || ""}
+            size={48}
+            hasStory={!isOwnProfile && hasStory}
+            hasUnviewed={!isOwnProfile && hasUnviewed}
+            onClick={handleAvatarClick}
+          />
           <div>
             <div style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{post.profiles?.display_name || post.profiles?.username}</div>
             <div style={{ fontSize: "12px", color: "#6B6B8A" }}>@{post.profiles?.username}</div>
@@ -531,45 +436,16 @@ export default function PostRow({
       )}
 
       {viewerMedia.length > 0 && (
-        <PostMediaViewer
-          media={viewerMedia}
-          isLocked={post.locked}
-          price={ppvPrice}
-          onDoubleTap={handleDoubleTapLike}
-          onSingleTap={handleSingleTap}
-          onUnlock={() => onUnlock?.(String(post.id))}
-        />
+        <PostMediaViewer media={viewerMedia} isLocked={post.locked} price={ppvPrice} onDoubleTap={handleDoubleTapLike} onSingleTap={handleSingleTap} onUnlock={() => onUnlock?.(String(post.id))} />
       )}
 
       {!post.locked && (
         <div style={{ padding: "0 16px" }}>
-          <PostActions
-            likes={likeCount}
-            comments={commentCount}
-            liked={liked}
-            bookmarked={savedPost}
-            isSubscribed={isSubscribed}
-            isFree={isFreePost}
-            isOwnProfile={isOwnProfile}
-            onLike={handleLike}
-            onComment={() => setCommentOpen((p) => !p)}
-            onTip={() => onTip?.(String(post.id))}
-            onBookmark={handleBookmark}
-          />
+          <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={isSubscribed} isFree={isFreePost} isOwnProfile={isOwnProfile} onLike={handleLike} onComment={() => setCommentOpen((p) => !p)} onTip={() => onTip?.(String(post.id))} onBookmark={handleSavePost} />
         </div>
       )}
 
-      <CommentSection
-        postId={String(post.id)}
-        comments={comments}
-        viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : { username: "", display_name: "", avatar_url: "" }}
-        viewerUserId={viewer?.id}
-        isOpen={commentOpen}
-        onAddComment={handleAddComment}
-        isLoading={commentsLoading}
-        totalCommentCount={commentCount}
-        onClose={() => setCommentOpen(false)}
-      />
+      <CommentSection postId={String(post.id)} comments={comments} viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : { username: "", display_name: "", avatar_url: "" }} viewerUserId={viewer?.id} isOpen={commentOpen} onAddComment={handleAddComment} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} />
     </div>
   );
 }

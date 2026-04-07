@@ -90,7 +90,7 @@ export default function CreatorViewingDualRole({
   userId={profile.id} username={profile.username}
 />
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
-        <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} isOnline={false} />
+        <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} creatorId={profile.id} isOnline={false} />
         <div style={{ paddingBottom: "12px" }}>
           <ProfileActions
             viewContext="fanViewingCreator"

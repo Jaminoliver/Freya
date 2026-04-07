@@ -4,6 +4,7 @@ import { use, useEffect, useState, useCallback, useRef } from "react";
 import { getBrowserClient } from "@/lib/supabase/browserClient";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatPanel } from "@/components/messages/ChatPanel";
+import { ChatSkeleton } from "@/components/loadscreen/ChatSkeleton";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useMessageStore } from "@/lib/store/messageStore";
 import {
@@ -164,15 +165,10 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   }, [clearMessages]);
 
   const handleConversationCreated = useCallback((realId: number) => {
-    // Update conversation state with real ID
     setConversation((prev) => prev ? { ...prev, id: realId } : prev);
-
-    // Activate in store + global so everything works immediately
     setActiveConversationId(realId);
     setActiveConversation(realId);
     setStoreConversationId(realId);
-
-    // Silently update URL without remounting the page
     window.history.replaceState(null, "", `/messages/${realId}`);
   }, [setActiveConversationId]);
 
@@ -184,8 +180,13 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  if (!conversation || !currentUserId) {
-    return <div style={{ height: "100%", backgroundColor: "#0A0A0F" }} />;
+  // Show skeleton while loading or waiting for auth
+  if (!loaded || !currentUserId) {
+    return <ChatSkeleton />;
+  }
+
+  if (!conversation) {
+    return <ChatSkeleton />;
   }
 
   return (

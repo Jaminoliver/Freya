@@ -4,13 +4,8 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, ImagePlus, Video, Send, Music, Crop, Smile, Type, Pen, Volume2 } from "lucide-react";
 
-export interface UploadJob {
-  file:      File;
-  caption:   string;
-  mediaType: "photo" | "video";
-  clipStart: number;
-  clipEnd:   number;
-}
+// UploadJob is defined in StoryUploadContext — import from there, not here
+import type { UploadJob } from "@/lib/context/StoryUploadContext";
 
 interface StoryUploadModalProps {
   onClose:       () => void;
@@ -54,7 +49,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
   const [thumbsLoading, setThumbsLoading] = useState(false);
   const [fileSizeStr,   setFileSizeStr]   = useState("");
 
-  // Lock scroll and hide mobile nav/header while modal is open
+  // Lock scroll while modal is open
   useEffect(() => {
     document.body.classList.add("story-modal-open");
     document.body.style.overflow = "hidden";
@@ -85,15 +80,15 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
       setClipStart((prev) => Math.max(0, Math.min(videoDuration - CLIP_DURATION, dragStartClip.current + dSec)));
     };
     const onUp = () => { isDragging.current = false; };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup",   onUp);
-    window.addEventListener("touchmove", onTouchMove, { passive: true });
-    window.addEventListener("touchend",  onUp);
+    window.addEventListener("mousemove",  onMouseMove);
+    window.addEventListener("mouseup",    onUp);
+    window.addEventListener("touchmove",  onTouchMove, { passive: true });
+    window.addEventListener("touchend",   onUp);
     return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup",   onUp);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("touchend",  onUp);
+      window.removeEventListener("mousemove",  onMouseMove);
+      window.removeEventListener("mouseup",    onUp);
+      window.removeEventListener("touchmove",  onTouchMove);
+      window.removeEventListener("touchend",   onUp);
     };
   }, [videoDuration]);
 
@@ -135,7 +130,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
     const isVideo = f.type.startsWith("video/");
     const isImage = f.type.startsWith("image/");
     if (!isVideo && !isImage) { setError("Only images and videos are supported."); return; }
-    if (isImage && f.size > 20 * 1024 * 1024) { setError("Image must be under 20MB."); return; }
+    if (isImage && f.size > 20 * 1024 * 1024) { setError("Image must be under 20 MB."); return; }
     setError(null);
     setFile(f);
     setMType(isVideo ? "video" : "photo");
@@ -219,13 +214,12 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
         @media (min-width: 768px) { .sum-post-btn { display:flex !important; } }
       `}</style>
 
-      {/* z-index 9998 — sits above tab bar and all page chrome, just below StoryViewer (9999) */}
       <div
         onClick={phase === "pick" ? onClose : undefined}
         style={{ position:"fixed", inset:0, zIndex:9998, background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}
       >
 
-        {/* ── PICK ────────────────────────────────────────────────────────── */}
+        {/* ── PICK ──────────────────────────────────────────────────────────── */}
         {phase === "pick" && (
           <div
             className="sum-wrap"
@@ -234,7 +228,6 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
             onDrop={handleDrop}
             style={{ position:"relative", width:"100%", height:"100dvh", maxWidth:480, backgroundColor:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:32, padding:24 }}
           >
-            {/* Close — top left */}
             <button
               onClick={onClose}
               style={{ position:"fixed", top:20, left:20, background:"rgba(255,255,255,0.1)", border:"none", borderRadius:"50%", width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#fff" }}
@@ -242,14 +235,12 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
               <X size={18} />
             </button>
 
-            {/* Post Story — top right, desktop only */}
             <button
               className="sum-post-btn"
               onClick={() => imageInputRef.current?.click()}
               style={{ position:"fixed", top:20, right:20, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", border:"none", borderRadius:24, padding:"10px 20px", display:"none", alignItems:"center", gap:8, cursor:"pointer", color:"#fff", fontSize:13, fontWeight:700, fontFamily:"'Inter',sans-serif", boxShadow:"0 4px 16px rgba(139,92,246,0.4)" }}
             >
-              <ImagePlus size={15} />
-              Post Story
+              <ImagePlus size={15} /> Post Story
             </button>
 
             <p style={{ margin:0, fontSize:13, color:"rgba(255,255,255,0.4)", fontFamily:"'Inter',sans-serif", letterSpacing:"0.04em", textTransform:"uppercase" }}>
@@ -291,7 +282,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
           </div>
         )}
 
-        {/* ── CLIP ────────────────────────────────────────────────────────── */}
+        {/* ── CLIP ──────────────────────────────────────────────────────────── */}
         {phase === "clip" && previewUrl && (
           <div
             className="sum-wrap"
@@ -395,14 +386,13 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
           </div>
         )}
 
-        {/* ── PREVIEW ─────────────────────────────────────────────────────── */}
+        {/* ── PREVIEW ───────────────────────────────────────────────────────── */}
         {phase === "preview" && previewUrl && (
           <div
             className="sum-wrap"
             onClick={(e) => e.stopPropagation()}
             style={{ position:"relative", width:"100%", height:"100dvh", maxWidth:480, backgroundColor:"#000", display:"flex", flexDirection:"column" }}
           >
-            {/* Close button */}
             <div style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 16px)", left:16, zIndex:2 }}>
               <button
                 onClick={reset}
@@ -412,7 +402,6 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
               </button>
             </div>
 
-            {/* Media — fills remaining space above caption bar */}
             <div style={{ flex:1, position:"relative", overflow:"hidden", minHeight:0 }}>
               {mediaType === "video" ? (
                 <video src={previewUrl} autoPlay muted loop playsInline style={{ width:"100%", height:"100%", objectFit:"contain", display:"block" }} />
@@ -426,7 +415,6 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
               )}
             </div>
 
-            {/* Caption bar — solid, always visible, never overlapped by media */}
             <div style={{ flexShrink:0, backgroundColor:"#0D0D18", borderTop:"1px solid #1A1A2E", display:"flex", alignItems:"center", gap:12, padding:"12px 16px", paddingBottom:"calc(env(safe-area-inset-bottom) + 12px)" }}>
               <div style={{ flex:1, background: captionFocus ? "#1C1C2E" : "#13131F", borderRadius:24, padding:"10px 16px", border: captionFocus ? "1px solid #8B5CF6" : "1px solid #2A2A3D", transition:"all 0.2s" }}>
                 <input

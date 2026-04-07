@@ -1,248 +1,454 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Upload, X, ImageIcon, Film } from "lucide-react";
+import { Plus, X, Play, GripVertical } from "lucide-react";
 
-type MediaType = "photo" | "video";
+/* ── constants ──────────────────────────────────────────────────────────────── */
+
+const MAX_FILES      = 10;
+const MAX_SIZE_BYTES = 3 * 1024 * 1024 * 1024; // 3 GB
+
+const ACCEPTED_TYPES = [
+  "image/jpeg", "image/png", "image/webp", "image/gif",
+  "video/mp4", "video/quicktime", "video/webm",
+];
+const ACCEPT_STRING = ACCEPTED_TYPES.join(",");
+
+/* ── props ──────────────────────────────────────────────────────────────────── */
 
 interface MediaUploaderProps {
-  type:     MediaType;
   files:    File[];
   onChange: (files: File[]) => void;
 }
 
-const MAX_SIZE_BYTES = 3 * 1024 * 1024 * 1024; // 3GB
+/* ── helpers ────────────────────────────────────────────────────────────────── */
 
-const CONFIG: Record<MediaType, {
-  accept:    string;
-  mimeTypes: string[];
-  label:     string;
-  hint:      string;
-  icon:      React.ReactNode;
-}> = {
-  photo: {
-    accept:    "image/jpeg,image/png,image/webp,image/gif",
-    mimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
-    label:     "Drag & drop your photos here",
-    hint:      "Supported: JPG, PNG, WEBP, GIF · Max 3GB",
-    icon:      <ImageIcon size={28} strokeWidth={1.5} />,
-  },
-  video: {
-    accept:    "video/mp4,video/quicktime,video/webm",
-    mimeTypes: ["video/mp4", "video/quicktime", "video/webm"],
-    label:     "Drag & drop your video here",
-    hint:      "Supported: MP4, MOV, WEBM · Max 3GB",
-    icon:      <Film size={28} strokeWidth={1.5} />,
-  },
-};
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
-export function MediaUploader({ type, files, onChange }: MediaUploaderProps) {
-  const inputRef               = useRef<HTMLInputElement>(null);
+/* ── component ─────────────────────────────────────────────────────────────── */
+
+export function MediaUploader({ files, onChange }: MediaUploaderProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  /* blob URLs — track for cleanup */
+  const blobUrlsRef = useRef<Map<File, string>>(new Map());
+
+  /* video durations cache */
+  const [durations, setDurations] = useState<Map<File, number>>(new Map());
+
+  /* drag state */
+  const [dragIdx, setDragIdx]     = useState<number | null>(null);
+  const [overIdx, setOverIdx]     = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const config                 = CONFIG[type];
 
-  // FIX: Track blob URLs so we can revoke them on unmount — prevents RAM leak
-  const blobUrlsRef = useRef<string[]>([]);
+  /* drop zone drag-over (for empty state) */
+  const [dropHover, setDropHover] = useState(false);
 
+  /* validation */
+  const [error, setError] = useState<string | null>(null);
+
+  /* cleanup blob URLs on unmount */
   useEffect(() => {
     return () => {
       blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
+  /* get or create blob URL for a file */
+  const getBlobUrl = useCallback((file: File): string => {
+    const existing = blobUrlsRef.current.get(file);
+    if (existing) return existing;
+    const url = URL.createObjectURL(file);
+    blobUrlsRef.current.set(file, url);
+    return url;
+  }, []);
+
+  /* extract video duration */
+  const loadDuration = useCallback((file: File) => {
+    if (durations.has(file) || !file.type.startsWith("video/")) return;
+    const url   = getBlobUrl(file);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.src     = url;
+    video.onloadedmetadata = () => {
+      setDurations((prev) => new Map(prev).set(file, video.duration));
+    };
+  }, [durations, getBlobUrl]);
+
+  /* load durations for all video files */
+  useEffect(() => {
+    files.forEach((f) => { if (f.type.startsWith("video/")) loadDuration(f); });
+  }, [files, loadDuration]);
+
+  /* ── add files ──────────────────────────────────────────────────────────── */
+
   const addFiles = useCallback((incoming: FileList | null) => {
     if (!incoming) return;
-    setValidationError(null);
+    setError(null);
 
-    const incomingArr = Array.from(incoming);
+    const arr = Array.from(incoming);
 
-    // FIX: Validate format and size before accepting
-    for (const f of incomingArr) {
-      if (!config.mimeTypes.includes(f.type)) {
-        setValidationError(`"${f.name}" is not a supported format.`);
+    for (const f of arr) {
+      if (!ACCEPTED_TYPES.includes(f.type)) {
+        setError(`"${f.name}" is not a supported format.`);
         return;
       }
       if (f.size > MAX_SIZE_BYTES) {
-        setValidationError(`"${f.name}" exceeds the 3GB limit.`);
+        setError(`"${f.name}" exceeds the 3 GB limit.`);
         return;
       }
     }
 
-    onChange([...files, ...incomingArr]);
-  }, [files, onChange, config.mimeTypes]);
-
-  const removeFile = (index: number) => {
-    // Revoke the blob URL for the removed file
-    const url = blobUrlsRef.current[index];
-    if (url) URL.revokeObjectURL(url);
-    blobUrlsRef.current.splice(index, 1);
-    onChange(files.filter((_, i) => i !== index));
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    addFiles(e.dataTransfer.files);
-  };
-
-  // FIX: Create blob URLs once and track them for cleanup
-  const previews = files.map((f, i) => {
-    if (!blobUrlsRef.current[i]) {
-      blobUrlsRef.current[i] = URL.createObjectURL(f);
+    const total = files.length + arr.length;
+    if (total > MAX_FILES) {
+      setError(`You can add up to ${MAX_FILES} files.`);
+      return;
     }
-    return {
-      name:    f.name,
-      url:     blobUrlsRef.current[i],
-      isImage: f.type.startsWith("image/"),
-      isVideo: f.type.startsWith("video/"),
-      size:    (f.size / (1024 * 1024)).toFixed(1) + " MB",
-    };
-  });
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+    /* max 1 video — TUS only handles one at a time */
+    const existingVideos = files.filter((f) => f.type.startsWith("video/")).length;
+    const incomingVideos = arr.filter((f) => f.type.startsWith("video/")).length;
+    if (existingVideos + incomingVideos > 1) {
+      setError("You can add up to 1 video per post.");
+      return;
+    }
 
-      {/* Validation error */}
-      {validationError && (
-        <div style={{
-          padding:         "10px 14px",
-          borderRadius:    "10px",
-          backgroundColor: "rgba(239,68,68,0.08)",
-          border:          "1.5px solid rgba(239,68,68,0.2)",
-          color:           "#EF4444",
-          fontSize:        "13px",
-        }}>
-          {validationError}
-        </div>
-      )}
+    onChange([...files, ...arr]);
+  }, [files, onChange]);
 
-      {/* Drop zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={onDrop}
-        onClick={() => inputRef.current?.click()}
-        style={{
-          backgroundColor: isDragging ? "rgba(139,92,246,0.08)" : "#0D0D18",
-          border:          `1.5px dashed ${isDragging ? "#8B5CF6" : "#2A2A3D"}`,
-          borderRadius:    "14px",
-          padding:         "36px 20px",
-          display:         "flex",
-          flexDirection:   "column",
-          alignItems:      "center",
-          gap:             "10px",
-          cursor:          "pointer",
-          transition:      "all 0.2s",
-        }}
-      >
-        <div style={{ color: isDragging ? "#8B5CF6" : "#6B6B8A", transition: "color 0.2s" }}>
-          {files.length === 0 ? config.icon : <Upload size={28} strokeWidth={1.5} />}
-        </div>
+  /* ── remove file ────────────────────────────────────────────────────────── */
 
-        <span style={{ fontSize: "14px", color: isDragging ? "#8B5CF6" : "#A3A3C2", fontWeight: 500, transition: "color 0.2s" }}>
-          {files.length === 0 ? config.label : "Add more files"}
-        </span>
+  const removeFile = useCallback((index: number) => {
+    const file = files[index];
+    const url  = blobUrlsRef.current.get(file);
+    if (url) { URL.revokeObjectURL(url); blobUrlsRef.current.delete(file); }
+    onChange(files.filter((_, i) => i !== index));
+  }, [files, onChange]);
 
-        <span style={{ fontSize: "12px", color: "#4A4A6A" }}>{config.hint}</span>
+  /* ── drag to reorder ────────────────────────────────────────────────────── */
 
-        <button
-          onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
+  const handleDragStart = useCallback((idx: number) => {
+    setDragIdx(idx);
+    setIsDragging(true);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    setOverIdx(idx);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (dragIdx === null || dragIdx === dropIndex) {
+      setDragIdx(null);
+      setOverIdx(null);
+      setIsDragging(false);
+      return;
+    }
+    const reordered = [...files];
+    const [moved]   = reordered.splice(dragIdx, 1);
+    reordered.splice(dropIndex, 0, moved);
+    onChange(reordered);
+    setDragIdx(null);
+    setOverIdx(null);
+    setIsDragging(false);
+  }, [dragIdx, files, onChange]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragIdx(null);
+    setOverIdx(null);
+    setIsDragging(false);
+  }, []);
+
+  /* ── drop zone handlers (empty state) ───────────────────────────────────── */
+
+  const onZoneDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDropHover(true);
+  }, []);
+
+  const onZoneDragLeave = useCallback(() => setDropHover(false), []);
+
+  const onZoneDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDropHover(false);
+    addFiles(e.dataTransfer.files);
+  }, [addFiles]);
+
+  /* ── render: empty state ────────────────────────────────────────────────── */
+
+  if (files.length === 0) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {error && (
+          <div style={{
+            padding: "10px 14px", borderRadius: "10px",
+            backgroundColor: "rgba(239,68,68,0.06)", color: "#EF4444",
+            fontSize: "13px", lineHeight: 1.5,
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div
+          onClick={() => inputRef.current?.click()}
+          onDragOver={onZoneDragOver}
+          onDragLeave={onZoneDragLeave}
+          onDrop={onZoneDrop}
           style={{
-            marginTop:       "4px",
-            padding:         "8px 22px",
-            borderRadius:    "20px",
-            border:          "1.5px solid #8B5CF6",
-            backgroundColor: "transparent",
-            color:           "#8B5CF6",
-            fontSize:        "13px",
-            fontWeight:      600,
-            cursor:          "pointer",
-            fontFamily:      "'Inter', sans-serif",
-            transition:      "all 0.2s",
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            gap: "12px",
+            padding: "48px 20px",
+            borderRadius: "16px",
+            backgroundColor: dropHover ? "rgba(139,92,246,0.06)" : "#0D0D18",
+            cursor: "pointer",
+            transition: "background-color 0.2s",
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(139,92,246,0.12)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
         >
-          Browse files
-        </button>
+          {/* Icon circle */}
+          <div style={{
+            width: "56px", height: "56px", borderRadius: "50%",
+            backgroundColor: dropHover ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.04)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "background-color 0.2s",
+          }}>
+            <Plus
+              size={24}
+              strokeWidth={1.8}
+              color={dropHover ? "#8B5CF6" : "#6B6B8A"}
+              style={{ transition: "color 0.2s" }}
+            />
+          </div>
+
+          <div style={{ textAlign: "center" }}>
+            <div style={{
+              fontSize: "15px", fontWeight: 600,
+              color: dropHover ? "#8B5CF6" : "#C4C4D4",
+              transition: "color 0.2s",
+            }}>
+              Add photos or videos
+            </div>
+            <div style={{
+              fontSize: "12px", color: "#4A4A6A", marginTop: "4px",
+            }}>
+              JPG, PNG, GIF, MP4, MOV · Up to {MAX_FILES} files
+            </div>
+          </div>
+        </div>
 
         <input
           ref={inputRef}
           type="file"
-          multiple={type === "photo"}
-          accept={config.accept}
+          multiple
+          accept={ACCEPT_STRING}
           style={{ display: "none" }}
-          onChange={(e) => addFiles(e.target.files)}
+          onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
         />
       </div>
+    );
+  }
 
-      {/* File previews */}
-      {previews.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {previews.map((p, i) => (
-            <div
-              key={i}
-              style={{
-                display:         "flex",
-                alignItems:      "center",
-                gap:             "12px",
-                backgroundColor: "#0D0D18",
-                border:          "1px solid #2A2A3D",
-                borderRadius:    "10px",
-                padding:         "10px 12px",
-              }}
-            >
-              {/* Thumbnail */}
-              <div style={{
-                width: "44px", height: "44px",
-                borderRadius:    "8px",
-                overflow:        "hidden",
-                backgroundColor: "#1C1C2E",
-                flexShrink:      0,
-                display:         "flex",
-                alignItems:      "center",
-                justifyContent:  "center",
-              }}>
-                {p.isImage ? (
-                  <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                ) : p.isVideo ? (
-                  // FIX: preload="metadata" ensures first frame renders on mobile
-                  <video src={p.url} preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} muted playsInline />
-                ) : null}
-              </div>
+  /* ── render: grid with files ────────────────────────────────────────────── */
 
-              {/* Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "13px", fontWeight: 500, color: "#E2E8F0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {p.name}
-                </div>
-                <div style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "2px" }}>{p.size}</div>
-              </div>
-
-              {/* Remove */}
-              <button
-                onClick={() => removeFile(i)}
-                style={{
-                  background:  "none",
-                  border:      "none",
-                  cursor:      "pointer",
-                  color:       "#6B6B8A",
-                  display:     "flex",
-                  padding:     "4px",
-                  borderRadius:"6px",
-                  transition:  "color 0.15s",
-                  flexShrink:  0,
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#F87171"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#6B6B8A"; }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-          ))}
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      {error && (
+        <div style={{
+          padding: "10px 14px", borderRadius: "10px",
+          backgroundColor: "rgba(239,68,68,0.06)", color: "#EF4444",
+          fontSize: "13px", lineHeight: 1.5,
+        }}>
+          {error}
         </div>
       )}
+
+      {/* Counter */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <span style={{ fontSize: "13px", color: "#8A8AA0", fontWeight: 500 }}>
+          {files.length}/{MAX_FILES} files
+        </span>
+        {files.length > 1 && (
+          <span style={{ fontSize: "11px", color: "#4A4A6A" }}>
+            Drag to reorder · first is cover
+          </span>
+        )}
+      </div>
+
+      {/* Thumbnail grid */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        gap: "4px",
+      }}>
+        {files.map((file, i) => {
+          const url       = getBlobUrl(file);
+          const isImage   = file.type.startsWith("image/");
+          const isVideo   = file.type.startsWith("video/");
+          const duration  = durations.get(file);
+          const isBeingDragged = dragIdx === i;
+          const isDropTarget   = overIdx === i && dragIdx !== i;
+
+          return (
+            <div
+              key={`${file.name}-${file.lastModified}-${i}`}
+              draggable
+              onDragStart={() => handleDragStart(i)}
+              onDragOver={(e) => handleDragOver(e, i)}
+              onDrop={(e) => handleDrop(e, i)}
+              onDragEnd={handleDragEnd}
+              style={{
+                position: "relative",
+                aspectRatio: "1",
+                borderRadius: "10px",
+                overflow: "hidden",
+                backgroundColor: "#0D0D18",
+                cursor: isDragging ? "grabbing" : "grab",
+                opacity: isBeingDragged ? 0.4 : 1,
+                transform: isDropTarget ? "scale(1.03)" : "scale(1)",
+                outline: isDropTarget ? "2px solid #8B5CF6" : "none",
+                outlineOffset: "-2px",
+                transition: "transform 0.15s, opacity 0.15s, outline 0.15s",
+              }}
+            >
+              {/* Media preview */}
+              {isImage && (
+                <img
+                  src={url}
+                  alt=""
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
+              )}
+              {isVideo && (
+                <>
+                  <video
+                    src={url}
+                    preload="metadata"
+                    muted
+                    playsInline
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                  {/* Play icon overlay */}
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    pointerEvents: "none",
+                  }}>
+                    <div style={{
+                      width: "32px", height: "32px", borderRadius: "50%",
+                      backgroundColor: "rgba(0,0,0,0.5)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      backdropFilter: "blur(4px)",
+                    }}>
+                      <Play size={14} color="#fff" fill="#fff" style={{ marginLeft: "2px" }} />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Cover badge — first item */}
+              {i === 0 && files.length > 1 && (
+                <div style={{
+                  position: "absolute", top: "6px", left: "6px",
+                  backgroundColor: "rgba(0,0,0,0.65)",
+                  backdropFilter: "blur(6px)",
+                  borderRadius: "4px",
+                  padding: "2px 6px",
+                  fontSize: "10px", fontWeight: 700,
+                  color: "#fff",
+                  letterSpacing: "0.03em",
+                  textTransform: "uppercase",
+                }}>
+                  Cover
+                </div>
+              )}
+
+              {/* Duration badge — videos */}
+              {isVideo && duration != null && (
+                <div style={{
+                  position: "absolute", bottom: "6px", right: "6px",
+                  backgroundColor: "rgba(0,0,0,0.65)",
+                  backdropFilter: "blur(6px)",
+                  borderRadius: "4px",
+                  padding: "2px 6px",
+                  fontSize: "10px", fontWeight: 600,
+                  color: "#fff",
+                }}>
+                  {formatDuration(duration)}
+                </div>
+              )}
+
+              {/* Remove button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                style={{
+                  position: "absolute", top: "6px", right: "6px",
+                  width: "24px", height: "24px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(0,0,0,0.6)",
+                  backdropFilter: "blur(6px)",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: 0,
+                  transition: "background-color 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(239,68,68,0.8)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.6)";
+                }}
+              >
+                <X size={13} color="#fff" strokeWidth={2.5} />
+              </button>
+            </div>
+          );
+        })}
+
+        {/* Add more button — last cell in grid */}
+        {files.length < MAX_FILES && (
+          <div
+            onClick={() => inputRef.current?.click()}
+            style={{
+              aspectRatio: "1",
+              borderRadius: "10px",
+              backgroundColor: "#0D0D18",
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              gap: "6px",
+              cursor: "pointer",
+              transition: "background-color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLDivElement).style.backgroundColor = "#1C1C2E";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLDivElement).style.backgroundColor = "#0D0D18";
+            }}
+          >
+            <Plus size={22} color="#6B6B8A" strokeWidth={1.8} />
+            <span style={{ fontSize: "11px", color: "#4A4A6A", fontWeight: 500 }}>
+              Add
+            </span>
+          </div>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept={ACCEPT_STRING}
+        style={{ display: "none" }}
+        onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+      />
     </div>
   );
 }

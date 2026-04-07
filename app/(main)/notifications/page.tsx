@@ -7,6 +7,7 @@ import { NotificationsHeader }               from "@/components/notifications/No
 import { NotificationFilterTabs }            from "@/components/notifications/NotificationFilterTabs";
 import { NotificationsList }                 from "@/components/notifications/NotificationsList";
 import { NotificationsSettingsModal }        from "@/components/notifications/NotificationsSettingsModal";
+import { NotificationsSkeleton }             from "@/components/loadscreen/NotificationsSkeleton";
 import { subscribeToNotifications }          from "@/lib/notifications/realtime";
 import { getAuthenticatedBrowserClient }     from "@/lib/supabase/browserClient";
 import { decrementUnreadCount, resetUnreadCount, initNotificationStore } from "@/lib/notifications/store";
@@ -217,9 +218,7 @@ export default function NotificationsPage() {
           minHeight: 0,
         }}>
           {loading ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px 0" }}>
-              <div style={{ width: "28px", height: "28px", border: "3px solid #2A2A3D", borderTopColor: "#8B5CF6", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-            </div>
+            <NotificationsSkeleton count={10} />
           ) : (
             <NotificationsList
               notifications={notifications}

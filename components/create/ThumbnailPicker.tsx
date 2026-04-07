@@ -74,7 +74,10 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontFamily: "'Inter', sans-serif" }}>
+    <div style={{
+      display: "flex", flexDirection: "column", gap: "12px",
+      fontFamily: "'Inter', sans-serif",
+    }}>
       {/* Hidden video + canvas */}
       <video
         ref={videoRef}
@@ -87,18 +90,12 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
           const v = videoRef.current;
           if (!v) return;
           setDuration(v.duration);
-
-          // Auto-detect orientation and set exact aspect ratio
           const w = v.videoWidth;
           const h = v.videoHeight;
-          const portrait = h > w;
-          setIsPortrait(portrait);
-
-          // Reduce to a clean ratio string
+          setIsPortrait(h > w);
           const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
           const d   = gcd(w, h);
           setAspectRatio(`${w / d}/${h / d}`);
-
           v.currentTime = 0;
         }}
         onSeeked={handleSeeked}
@@ -109,30 +106,29 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <Film size={14} color="#8B5CF6" />
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "#A3A3C2" }}>Thumbnail</span>
+          <span style={{ fontSize: "13px", fontWeight: 600, color: "#8A8AA0" }}>Cover frame</span>
         </div>
         {picked && (
-          <span style={{ fontSize: "12px", color: "#22C55E", display: "flex", alignItems: "center", gap: "4px" }}>
+          <span style={{
+            fontSize: "12px", color: "#22C55E",
+            display: "flex", alignItems: "center", gap: "4px",
+          }}>
             <Check size={12} /> Applied
           </span>
         )}
       </div>
 
-      {/* Preview — constrained so portrait videos don't overflow */}
-      <div style={{
-        width: "100%",
-        display: "flex",
-        justifyContent: "center",
-      }}>
+      {/* Preview */}
+      <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
         <div style={{
-          // Portrait: cap width so it doesn't stretch across the full container
-          width:        isPortrait ? "min(100%, 220px)" : "100%",
+          width:        isPortrait ? "min(100%, 200px)" : "100%",
           aspectRatio,
-          borderRadius: "10px",
+          borderRadius: "12px",
           overflow:     "hidden",
-          backgroundColor: "#0A0A14",
-          border:       picked ? "2px solid #8B5CF6" : "1.5px solid #2A2A3D",
-          transition:   "border-color 0.2s",
+          backgroundColor: "#0D0D18",
+          outline:      picked ? "2px solid #8B5CF6" : "none",
+          outlineOffset: "-2px",
+          transition:   "outline 0.2s",
           position:     "relative",
         }}>
           {preview ? (
@@ -142,9 +138,13 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
               style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
             />
           ) : (
-            <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-              <Film size={24} color="#2A2A3D" />
-              <span style={{ fontSize: "12px", color: "#4A4A6A" }}>Scrub to preview a frame</span>
+            <div style={{
+              width: "100%", height: "100%",
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: "6px",
+            }}>
+              <Film size={22} color="#2A2A3D" />
+              <span style={{ fontSize: "12px", color: "#4A4A6A" }}>Scrub to preview</span>
             </div>
           )}
 
@@ -152,9 +152,11 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
           {duration > 0 && (
             <div style={{
               position: "absolute", bottom: "8px", right: "8px",
-              backgroundColor: "rgba(0,0,0,0.7)", borderRadius: "6px",
-              padding: "2px 7px", fontSize: "11px", color: "#fff", fontWeight: 600,
-              backdropFilter: "blur(4px)",
+              backgroundColor: "rgba(0,0,0,0.65)",
+              backdropFilter: "blur(6px)",
+              borderRadius: "4px",
+              padding: "2px 7px",
+              fontSize: "11px", color: "#fff", fontWeight: 600,
             }}>
               {formatTime(currentTime)}
             </div>
@@ -162,9 +164,9 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
         </div>
       </div>
 
-      {/* Scrubber + button */}
+      {/* Scrubber */}
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-        <div style={{ position: "relative" }}>
+        <div>
           <input
             type="range"
             min={0}
@@ -172,7 +174,10 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
             step={0.01}
             value={currentTime}
             onChange={handleScrub}
-            style={{ width: "100%", accentColor: "#8B5CF6", cursor: "pointer", height: "4px" }}
+            style={{
+              width: "100%", accentColor: "#8B5CF6",
+              cursor: "pointer", height: "4px",
+            }}
           />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: "2px" }}>
             <span style={{ fontSize: "10px", color: "#4A4A6A" }}>0:00</span>
@@ -185,16 +190,15 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
           disabled={!preview}
           style={{
             width: "100%",
-            padding: "9px",
-            borderRadius: "8px",
-            border: "1.5px solid",
-            borderColor: picked ? "#22C55E" : "#8B5CF6",
+            padding: "10px",
+            borderRadius: "10px",
+            border: "none",
             backgroundColor: picked ? "rgba(34,197,94,0.1)" : "rgba(139,92,246,0.1)",
             color: picked ? "#22C55E" : "#8B5CF6",
             fontSize: "13px",
             fontWeight: 600,
             cursor: preview ? "pointer" : "default",
-            fontFamily: "'Inter', sans-serif",
+            fontFamily: "inherit",
             transition: "all 0.15s",
             display: "flex",
             alignItems: "center",
@@ -203,7 +207,7 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
             opacity: preview ? 1 : 0.4,
           }}
         >
-          {picked ? <><Check size={14} /> Using this frame</> : "Set as thumbnail"}
+          {picked ? <><Check size={14} /> Using this frame</> : "Set as cover"}
         </button>
       </div>
     </div>

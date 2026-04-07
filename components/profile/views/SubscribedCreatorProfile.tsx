@@ -66,6 +66,7 @@ export default function SubscribedCreatorProfile({
         <ProfileAvatar
           avatarUrl={profile.avatar_url || undefined}
           displayName={profile.display_name || profile.username}
+          creatorId={profile.id}
           isOnline={false}
         />
         <div style={{ paddingBottom: "12px" }}>

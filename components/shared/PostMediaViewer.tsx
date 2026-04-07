@@ -336,14 +336,14 @@ export default function PostMediaViewer({
   if (isMultiImg) {
     const carouselMedia = media.map((m, i) => ({
       id:                i,
-      media_type:        "image" as const,
+      media_type:        m.type,
       file_url:          m.url,
       thumbnail_url:     m.thumbnailUrl ?? null,
-      raw_video_url:     null,
+      raw_video_url:     m.rawVideoUrl ?? null,
       locked:            false,
       display_order:     i,
-      processing_status: null,
-      bunny_video_id:    null,
+      processing_status: m.processingStatus ?? null,
+      bunny_video_id:    m.bunnyVideoId ?? null,
       blur_hash:         m.blurHash ?? null,
       width:             m.width ?? null,
       height:            m.height ?? null,

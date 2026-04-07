@@ -89,6 +89,18 @@ export function MessageActionModal({
         }
         .ma-sheet button { -webkit-tap-highlight-color: transparent !important; }
         .ma-sheet button:active { background-color: transparent !important; opacity: 1 !important; }
+        .ma-sheet::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: 20px 20px 0 0;
+          background: rgba(8, 8, 18, 0.88);
+          -webkit-backdrop-filter: blur(32px);
+          backdrop-filter: blur(32px);
+          z-index: -1;
+        }
+        .ma-item:hover  { background-color: rgba(255,255,255,0.05) !important; }
+        .ma-item:active { background-color: rgba(255,255,255,0.08) !important; }
       `}</style>
 
       {/* Backdrop */}
@@ -114,8 +126,11 @@ export function MessageActionModal({
           transform:       "translateX(-50%)",
           width:           "100%",
           maxWidth:        "520px",
-          backgroundColor: "#1A1A28",
+          backgroundColor: "transparent",
           borderRadius:    "20px 20px 0 0",
+          border:          "1px solid rgba(255,255,255,0.08)",
+          borderBottom:    "none",
+          boxShadow:       "0 -12px 40px rgba(0,0,0,0.5)",
           zIndex:          501,
           fontFamily:      "'Inter', sans-serif",
           animation:       closing ? "_maSheetDown 0.28s cubic-bezier(0.32,0.72,0,1) forwards" : "_maSheetUp 0.32s cubic-bezier(0.32,0.72,0,1)",
@@ -126,55 +141,58 @@ export function MessageActionModal({
       >
         {!ready && <div style={{ position: "absolute", inset: 0, zIndex: 999 }} />}
 
-        <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#3A3A52", margin: "12px auto 0" }} />
+        {/* Drag handle */}
+        <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.12)", margin: "12px auto 0" }} />
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "16px 20px 14px", borderBottom: "1px solid #252538" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "16px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <p style={{
-            margin: 0, fontSize: "14px", color: "#A3A3C2",
+            margin: 0, fontSize: "14px", color: "rgba(255,255,255,0.45)",
             fontFamily: "'Inter', sans-serif",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            flex: 1,
+            flex: 1, letterSpacing: "0.01em",
           }}>
             {message.text ?? "Media"}
           </p>
           <button
             onClick={triggerClose}
-            style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "#2A2A3D", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+            style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
           >
-            <X size={16} color="#A3A3C2" strokeWidth={2} />
+            <X size={16} color="rgba(255,255,255,0.45)" strokeWidth={2} />
           </button>
         </div>
 
-        <div style={{ padding: "8px 0", pointerEvents: ready ? "auto" : "none" }}>
+        {/* Menu items */}
+        <div style={{ padding: "6px 0", pointerEvents: ready ? "auto" : "none" }}>
           {menuItems.map((item, i) => (
             <div key={item.label}>
               {i === dangerStart && (
-                <div style={{ height: "1px", backgroundColor: "#252538", margin: "6px 0" }} />
+                <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
               )}
               <button
+                className="ma-item"
                 onClick={item.action}
+                onTouchStart={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.08)")}
+                onTouchEnd={(e)   => { e.currentTarget.style.backgroundColor = "transparent"; item.action(); }}
                 style={{
                   display:        "flex",
                   alignItems:     "center",
                   justifyContent: "space-between",
                   width:          "100%",
-                  padding:        "15px 20px",
+                  padding:        "14px 20px",
                   background:     "none",
                   border:         "none",
                   cursor:         "pointer",
-                  color:          item.danger ? "#EF4444" : "#FFFFFF",
+                  color:          item.danger ? "#EF4444" : "rgba(255,255,255,0.85)",
                   fontSize:       "15px",
                   fontFamily:     "'Inter', sans-serif",
                   textAlign:      "left",
                   transition:     "background-color 0.12s ease",
+                  letterSpacing:  "0.01em",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#252538")}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                onTouchStart={(e) => (e.currentTarget.style.backgroundColor = "#252538")}
-                onTouchEnd={(e)   => (e.currentTarget.style.backgroundColor = "transparent")}
               >
                 <span>{item.label}</span>
-                <span style={{ color: item.danger ? "#EF4444" : "#6B6B8A" }}>{item.icon}</span>
+                <span style={{ color: item.danger ? "#EF4444" : "rgba(255,255,255,0.25)", display: "flex" }}>{item.icon}</span>
               </button>
             </div>
           ))}

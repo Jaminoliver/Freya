@@ -5,15 +5,16 @@ import { useRef, useState, useEffect, Suspense } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { RightPanel } from "@/components/layout/RightPanel";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
-import { UploadProvider } from "@/lib/context/UploadContext";
+import { PostUploadProvider } from "@/lib/context/PostUploadContext";
+import { StoryUploadProvider } from "@/lib/context/StoryUploadContext";
 import UploadProgressBar from "@/components/layout/UploadProgressBar";
 import { AppStoreProvider } from "@/lib/providers/AppStoreProvider";
 import PageLoader from "@/components/ui/PageLoader";
 import { useAppStore } from "@/lib/store/appStore";
 
 function NavigationWatcher() {
-  const pathname     = usePathname();
-  const searchParams = useSearchParams();
+  const pathname      = usePathname();
+  const searchParams  = useSearchParams();
   const setNavigating = useAppStore((s) => s.setNavigating);
 
   useEffect(() => {
@@ -26,7 +27,6 @@ function NavigationWatcher() {
 function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // Mark all messages as delivered when user enters the site
   useEffect(() => {
     fetch("/api/conversations/deliver-all", { method: "PATCH" }).catch(() => {});
   }, []);
@@ -64,7 +64,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
           setHeaderVisible(true);
         }
         lastScrollY.current = current;
-        ticking.current = false;
+        ticking.current     = false;
       });
     };
 
@@ -84,14 +84,14 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
         ref={mainRef}
         className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}${isMessages ? " messages" : ""}`}
         style={{
-          flex: 1,
-          minWidth: 0,
-          maxWidth: isSettings || isMessages || isNotifications ? "100%" : "720px",
-          height: isMessages || isNotifications ? "100dvh" : "100vh",
-          boxSizing: "border-box",
+          flex:       1,
+          minWidth:   0,
+          maxWidth:   isSettings || isMessages || isNotifications ? "100%" : "720px",
+          height:     isMessages || isNotifications ? "100dvh" : "100vh",
+          boxSizing:  "border-box",
           borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
-          overflowY: isMessages || isNotifications ? "hidden" : "auto",
-          overflowX: "hidden",
+          overflowY:   isMessages || isNotifications ? "hidden" : "auto",
+          overflowX:   "hidden",
           paddingBottom: isMessages || isNotifications ? "0" : "72px",
           scrollbarWidth: "none",
           msOverflowStyle: "none",
@@ -104,7 +104,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
           @media (max-width: 767px) {
             .main-scroll { padding-top: 56px; }
             .main-scroll.no-topbar { padding-top: 0 !important; }
-            .main-scroll.messages { padding-top: env(safe-area-inset-top, 0px) !important; }
+            .main-scroll.messages  { padding-top: env(safe-area-inset-top, 0px) !important; }
           }
         `}</style>
         {children}
@@ -124,10 +124,12 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <UploadProvider>
-      <AppStoreProvider>
-        <MainLayoutInner>{children}</MainLayoutInner>
-      </AppStoreProvider>
-    </UploadProvider>
+    <PostUploadProvider>
+      <StoryUploadProvider>
+        <AppStoreProvider>
+          <MainLayoutInner>{children}</MainLayoutInner>
+        </AppStoreProvider>
+      </StoryUploadProvider>
+    </PostUploadProvider>
   );
 }

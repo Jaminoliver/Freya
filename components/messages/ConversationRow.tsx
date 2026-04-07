@@ -19,10 +19,10 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
   const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia, isPinned, isMuted } = conversation;
   const router = useRouter();
 
-  const [hovered,     setHovered]     = useState(false);
-  const [modalOpen,   setModalOpen]   = useState(false);
-  const [menuPos,     setMenuPos]     = useState({ x: 0, y: 0 });
-  const [imgBroken,   setImgBroken]   = useState(false);
+  const [hovered,   setHovered]   = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [menuPos,   setMenuPos]   = useState({ x: 0, y: 0 });
+  const [imgBroken, setImgBroken] = useState(false);
 
   const rowRef         = useRef<HTMLDivElement>(null);
   const touchStartY    = useRef<number>(0);
@@ -113,7 +113,12 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   })();
 
-  const bg = isActive ? "#1C1C2E" : hovered ? "#14141F" : "transparent";
+  // ── Colors matched to notification page ──────────────────────────────────
+  const bg = isActive
+    ? "#111120"
+    : hovered
+    ? "#0D0D1A"
+    : "transparent";
 
   const showInitial = !participant.avatarUrl || imgBroken;
 
@@ -127,7 +132,7 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
           -webkit-touch-callout: none !important;
         }
         .conv-row { touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
-        .conv-row:not(.conv-row--active):active { background-color: #14141F !important; }
+        .conv-row:not(.conv-row--active):active { background-color: #0D0D1A !important; }
       `}</style>
 
       {modalOpen && (
@@ -157,18 +162,26 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
           display:                 "flex",
           alignItems:              "center",
           gap:                     "12px",
-          padding:                 "14px 16px",
+          padding:                 "14px 20px",
           cursor:                  "pointer",
           backgroundColor:         bg,
-          borderBottom:            "1px solid #1E1E2E",
+          borderBottom:            "1px solid #1A1A2A",
           transition:              "background-color 0.15s ease",
           position:                "relative",
           fontFamily:              "'Inter', sans-serif",
           WebkitTapHighlightColor: "transparent",
         }}
       >
+        {/* Unread left bar — matching notification page */}
+        {unreadCount > 0 && (
+          <div style={{
+            position: "absolute", left: 0, top: 0, bottom: 0,
+            width: "3px", backgroundColor: "#8B5CF6", borderRadius: "0 2px 2px 0",
+          }} />
+        )}
+
         <div style={{ position: "relative", flexShrink: 0 }}>
-          <div style={{ width: "48px", height: "48px", borderRadius: "50%", overflow: "hidden", backgroundColor: "#2A2A3D" }}>
+          <div style={{ width: "48px", height: "48px", borderRadius: "50%", overflow: "hidden", backgroundColor: "#1E1E2E" }}>
             {showInitial ? (
               <div style={{ width: "100%", height: "100%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", fontSize: "18px", fontWeight: 700 }}>
                 {participant.name[0].toUpperCase()}
@@ -183,7 +196,7 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
             )}
           </div>
           {participant.isOnline && (
-            <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "12px", height: "12px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0D0D1A" }} />
+            <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "12px", height: "12px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0A0A0F" }} />
           )}
         </div>
 
@@ -199,8 +212,8 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
             {isFavourited && <Star size={12} color="#F59E0B" fill="#F59E0B" strokeWidth={0} style={{ flexShrink: 0 }} />}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            {!isTyping && hasMedia && <ImageIcon size={12} color="#A3A3C2" strokeWidth={1.8} />}
-            <span style={{ fontSize: "13px", color: isTyping ? "#8B5CF6" : "#A3A3C2", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "180px", fontStyle: isTyping ? "italic" : "normal", fontWeight: unreadCount > 0 ? 600 : 400 }}>
+            {!isTyping && hasMedia && <ImageIcon size={12} color="#6B6B8A" strokeWidth={1.8} />}
+            <span style={{ fontSize: "13px", color: isTyping ? "#8B5CF6" : "#6B6B8A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "180px", fontStyle: isTyping ? "italic" : "normal", fontWeight: unreadCount > 0 ? 600 : 400 }}>
               {isTyping ? "typing..." : lastMessage}
             </span>
           </div>
@@ -209,7 +222,7 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             {isPinned && <Pin size={11} color="#4A4A6A" strokeWidth={1.8} style={{ transform: "rotate(45deg)" }} />}
-            <span style={{ fontSize: "12px", color: unreadCount > 0 ? "#8B5CF6" : "#9090A8", fontWeight: unreadCount > 0 ? 500 : 400 }}>
+            <span style={{ fontSize: "12px", color: unreadCount > 0 ? "#8B5CF6" : "#4A4A6A", fontWeight: unreadCount > 0 ? 500 : 400 }}>
               {formattedTime}
             </span>
           </div>
@@ -227,12 +240,12 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
           <button
             onClick={(e) => { e.stopPropagation(); openMenu(e.clientX, e.clientY); }}
             style={{ position: "absolute", top: "10px", right: "12px", background: "none", border: "none", cursor: "pointer", color: "#4A4A6A", display: "flex", alignItems: "center", padding: "2px", transition: "color 0.15s ease" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#A3A3C2")}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#6B6B8A")}
             onMouseLeave={(e) => (e.currentTarget.style.color = "#4A4A6A")}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="2" r="1.2" fill="currentColor"/>
-              <circle cx="7" cy="7" r="1.2" fill="currentColor"/>
+              <circle cx="7" cy="2"  r="1.2" fill="currentColor"/>
+              <circle cx="7" cy="7"  r="1.2" fill="currentColor"/>
               <circle cx="7" cy="12" r="1.2" fill="currentColor"/>
             </svg>
           </button>

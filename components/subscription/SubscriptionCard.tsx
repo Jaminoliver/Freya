@@ -4,6 +4,10 @@ import { useState, useMemo } from "react";
 import { MoreHorizontal, BadgeCheck, Star, MessageCircle } from "lucide-react";
 import Image from "next/image";
 import { useNav } from "@/lib/hooks/useNav";
+import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import StoryViewer from "@/components/story/StoryViewer";
+import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 
 type SubscriptionStatus = "active" | "expired" | "attention";
 
@@ -83,8 +87,23 @@ export function SubscriptionCard({
   onCancelled?: () => void;
 }) {
   const { navigate } = useNav();
-  const [menuOpen,   setMenuOpen]   = useState(false);
-  const [cancelling, setCancelling] = useState(false);
+  const [menuOpen,        setMenuOpen]        = useState(false);
+  const [cancelling,      setCancelling]      = useState(false);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+
+  const { group: storyGroup, hasStory, hasUnviewed, refresh } = useCreatorStory(s.creatorId);
+
+  const handleAvatarClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hasUnviewed && storyGroup) {
+      setStoryViewerOpen(true);
+    } else if (hasStory && storyGroup) {
+      setStoryViewerOpen(true);
+    } else {
+      navigate(`/${s.username}`);
+    }
+  };
 
   const handleCancel = async () => {
     if (!confirm("Cancel subscription? You'll keep access until the period ends.")) return;
@@ -118,7 +137,15 @@ export function SubscriptionCard({
   return (
     <div style={{ backgroundColor: "transparent", borderRadius: "12px", overflow: "hidden", fontFamily: "'Inter', sans-serif", position: "relative" }}>
 
-      {/* Banner — click navigates to creator */}
+      {storyViewerOpen && storyGroup && (
+        <StoryViewer
+          groups={[storyGroup]}
+          startGroupIndex={0}
+          onClose={() => { setStoryViewerOpen(false); refresh(); }}
+        />
+      )}
+
+      {/* Banner */}
       <div
         onClick={() => navigate(`/${s.username}`)}
         style={{ display: "block", position: "relative", height: "160px", cursor: "pointer" }}
@@ -168,17 +195,17 @@ export function SubscriptionCard({
           </div>
         </div>
 
-        {/* Avatar + name */}
+        {/* Avatar with story ring + name */}
         <div style={{ position: "absolute", bottom: "12px", left: "12px", display: "flex", alignItems: "center", gap: "10px", zIndex: 2 }}>
-          <div style={{ position: "relative", width: "72px", height: "72px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.9)", overflow: "hidden", flexShrink: 0, backgroundColor: "#2A2A3D" }}>
-            {s.avatar_url ? (
-              <Image src={s.avatar_url} alt={s.creatorName} fill sizes="72px" style={{ objectFit: "cover" }} />
-            ) : (
-              <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", fontWeight: 700, color: "#8B5CF6" }}>
-                {s.creatorName.charAt(0).toUpperCase()}
-              </div>
-            )}
-          </div>
+          <AvatarWithStoryRing
+            src={s.avatar_url}
+            alt={s.creatorName}
+            size={64}
+            hasStory={hasStory}
+            hasUnviewed={hasUnviewed}
+            onClick={handleAvatarClick}
+            borderColor="#0D0D18"
+          />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <span style={{ fontSize: "15px", fontWeight: 700, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>{s.creatorName}</span>
@@ -217,8 +244,7 @@ export function SubscriptionCard({
             </>
           ) : (
             <>
-              <button
-                onClick={() => navigate(`/${s.username}`)}
+              <button onClick={() => navigate(`/${s.username}`)}
                 style={{ flex: 1, padding: "8px 4px", borderRadius: "7px", border: "none", backgroundColor: "#8B5CF6", color: "#fff", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
                 Resubscribe
               </button>

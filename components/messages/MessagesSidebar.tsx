@@ -8,6 +8,8 @@ import { FilterTabs } from "@/components/messages/FilterTabs";
 import { ConversationList } from "@/components/messages/ConversationList";
 import { WelcomeMessageModal } from "@/components/messages/WelcomeMessageModal";
 import { ConversationSearch, filterConversationsBySearch } from "@/components/messages/ConversationSearch";
+import { MessagesSkeleton } from "@/components/loadscreen/MessagesSkeleton";
+import { useConversations } from "@/app/(main)/messages/page";
 import { useAppStore } from "@/lib/store/appStore";
 import type { Conversation, FilterTab } from "@/lib/types/messages";
 
@@ -23,6 +25,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
   const router   = useRouter();
   const pathname = usePathname();
   const { viewer } = useAppStore();
+  const { loading } = useConversations();
   const isCreator  = viewer?.role === "creator";
 
   const [filter,           setFilter]           = useState<FilterTab>("all");
@@ -35,55 +38,35 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
   const [archivedCount,    setArchivedCount]    = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch favourited conversation IDs (single call + refresh on changes)
   useEffect(() => {
     const fetchFavourites = async () => {
       try {
-        const res = await fetch("/api/favourites/chatlists/all-items");
+        const res  = await fetch("/api/favourites/chatlists/all-items");
         const data = await res.json();
-        if (data.conversationIds) {
-          setFavouritedIds(new Set(data.conversationIds));
-        }
+        if (data.conversationIds) setFavouritedIds(new Set(data.conversationIds));
       } catch {}
     };
-
     fetchFavourites();
-
-    const handleUpdate = () => fetchFavourites();
-    window.addEventListener("favourites-updated", handleUpdate);
-    return () => window.removeEventListener("favourites-updated", handleUpdate);
+    window.addEventListener("favourites-updated", fetchFavourites);
+    return () => window.removeEventListener("favourites-updated", fetchFavourites);
   }, []);
 
-  // Fetch archived count
   useEffect(() => {
     const fetchArchivedCount = async () => {
       try {
-        const res = await fetch("/api/conversations?archived=true");
+        const res  = await fetch("/api/conversations?archived=true");
         const data = await res.json();
         setArchivedCount(data.conversations?.length ?? 0);
       } catch {}
     };
     fetchArchivedCount();
-
-    const handleUpdate = () => fetchArchivedCount();
-    window.addEventListener("conversations-updated", handleUpdate);
-    return () => window.removeEventListener("conversations-updated", handleUpdate);
+    window.addEventListener("conversations-updated", fetchArchivedCount);
+    return () => window.removeEventListener("conversations-updated", fetchArchivedCount);
   }, []);
-
-  const openDesktopSearch = () => {
-    setSearchOpen(true);
-  };
-
-  const closeDesktopSearch = () => {
-    setSearchOpen(false);
-    setSearchQuery("");
-  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -95,17 +78,12 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
 
   const unreadCount    = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
   const favouriteCount = favouritedIds.size;
-
   const searchMatchIds = filterConversationsBySearch(conversations, searchQuery);
 
   const filtered = conversations.filter((c) => {
-    // Tab filter
-    if (filter === "unread" && c.unreadCount <= 0) return false;
-    if (filter === "favourites" && !favouritedIds.has(c.id)) return false;
-
-    // Search filter
-    if (searchMatchIds !== null && !searchMatchIds.has(c.id)) return false;
-
+    if (filter === "unread"     && c.unreadCount <= 0)         return false;
+    if (filter === "favourites" && !favouritedIds.has(c.id))   return false;
+    if (searchMatchIds !== null && !searchMatchIds.has(c.id))  return false;
     return true;
   });
 
@@ -146,45 +124,21 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           padding: 0 16px;
         }
         .sb-normal.hidden { opacity: 0; transform: translateX(-20px); pointer-events: none; }
-        .archived-row:hover { background-color: #14141F !important; }
-        .archived-row:active { background-color: #1C1C2E !important; }
+        .archived-row:hover  { background-color: #0D0D1A !important; }
+        .archived-row:active { background-color: #111120 !important; }
       `}</style>
 
-      {/* Toast */}
       {showToast && (
-        <div
-          style={{
-            position: "fixed",
-            top: "24px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 10000,
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            padding: "12px 20px",
-            borderRadius: "12px",
-            backgroundColor: "#1C1C2E",
-            border: "1px solid #22C55E",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-            animation: "toastSlideIn 0.25s ease forwards",
-            fontFamily: "'Inter', sans-serif",
-          }}
-        >
+        <div style={{ position: "fixed", top: "24px", left: "50%", transform: "translateX(-50%)", zIndex: 10000, display: "flex", alignItems: "center", gap: "10px", padding: "12px 20px", borderRadius: "12px", backgroundColor: "#111120", border: "1px solid #22C55E", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", animation: "toastSlideIn 0.25s ease forwards", fontFamily: "'Inter', sans-serif" }}>
           <CheckCircle size={18} color="#22C55E" strokeWidth={2} />
-          <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>
-            Welcome message saved
-          </span>
+          <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>Welcome message saved</span>
         </div>
       )}
 
       {welcomeModalOpen && (
         <WelcomeMessageModal
           onClose={() => setWelcomeModalOpen(false)}
-          onSave={() => {
-            setShowToast(true);
-            setTimeout(() => setShowToast(false), 2500);
-          }}
+          onSave={() => { setShowToast(true); setTimeout(() => setShowToast(false), 2500); }}
         />
       )}
 
@@ -192,8 +146,8 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
         style={{
           width:           "100%",
           height:          "100vh",
-          backgroundColor: "#0D0D1A",
-          borderRight:     "1px solid #1E1E2E",
+          backgroundColor: "#0A0A0F",   // ← matched to notification page
+          borderRight:     "1px solid #1A1A2A",
           display:         "flex",
           flexDirection:   "column",
           overflow:        "hidden",
@@ -203,26 +157,21 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
 
         {/* Mobile spacer for fixed header */}
         <div className="mobile-header-spacer" style={{ height: "56px", flexShrink: 0 }} />
+        <style>{`@media (min-width: 768px) { .mobile-header-spacer { display: none !important; } }`}</style>
 
-        <style>{`
-          @media (min-width: 768px) {
-            .mobile-header-spacer { display: none !important; }
-          }
-        `}</style>
-
+        {/* Desktop header */}
         <div
           className="sidebar-desktop-header"
           style={{
             position:        "relative",
             height:          "56px",
             flexShrink:      0,
-            backgroundColor: "#13131F",
-            borderBottom:    "1px solid #1F1F2A",
+            backgroundColor: "#0A0A0F",   // ← matched
+            borderBottom:    "1px solid #1A1A2A",
             fontFamily:      "'Inter', sans-serif",
             zIndex:          50,
           }}
         >
-          {/* Normal header */}
           <div className={`sb-normal${searchOpen ? " hidden" : ""}`}>
             <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>
               Messages
@@ -230,18 +179,18 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
 
             <div style={{ display: "flex", alignItems: "center", gap: "4px", position: "relative" }}>
               <button
-                onClick={openDesktopSearch}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "transparent"; }}
+                onClick={() => setSearchOpen(true)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#111120"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "#6B6B8A"; e.currentTarget.style.backgroundColor = "transparent"; }}
               >
                 <Search size={22} strokeWidth={1.8} />
               </button>
 
               <button
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "transparent"; }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#111120"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "#6B6B8A"; e.currentTarget.style.backgroundColor = "transparent"; }}
               >
                 <Plus size={22} strokeWidth={1.8} />
               </button>
@@ -250,20 +199,9 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
                 <div ref={dropdownRef} style={{ position: "relative" }}>
                   <button
                     onClick={() => setDropdownOpen((o) => !o)}
-                    style={{
-                      background:      "none",
-                      border:          "none",
-                      cursor:          "pointer",
-                      color:           dropdownOpen ? "#8B5CF6" : "#A3A3C2",
-                      display:         "flex",
-                      alignItems:      "center",
-                      padding:         "8px",
-                      borderRadius:    "8px",
-                      transition:      "all 0.15s ease",
-                      backgroundColor: dropdownOpen ? "rgba(139,92,246,0.1)" : "transparent",
-                    }}
-                    onMouseEnter={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#1C1C2E"; }}}
-                    onMouseLeave={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#A3A3C2"; e.currentTarget.style.backgroundColor = "transparent"; }}}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: dropdownOpen ? "#8B5CF6" : "#6B6B8A", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease", backgroundColor: dropdownOpen ? "rgba(139,92,246,0.1)" : "transparent" }}
+                    onMouseEnter={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#111120"; }}}
+                    onMouseLeave={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#6B6B8A";  e.currentTarget.style.backgroundColor = "transparent"; }}}
                   >
                     <Settings size={22} strokeWidth={1.8} />
                   </button>
@@ -271,43 +209,17 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
                   {dropdownOpen && (
                     <div
                       className="gear-dropdown"
-                      style={{
-                        position:        "absolute",
-                        top:             "calc(100% + 6px)",
-                        right:           0,
-                        backgroundColor: "#1C1C2E",
-                        border:          "1px solid #2A2A3D",
-                        borderRadius:    "12px",
-                        padding:         "6px",
-                        minWidth:        "180px",
-                        zIndex:          100,
-                        boxShadow:       "0 8px 24px rgba(0,0,0,0.4)",
-                      }}
+                      style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, backgroundColor: "#111120", border: "1px solid #1A1A2A", borderRadius: "12px", padding: "6px", minWidth: "180px", zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}
                     >
                       {menuItems.map(({ icon: Icon, label, action, danger }) => (
                         <button
                           key={label}
                           onClick={action}
-                          style={{
-                            display:         "flex",
-                            alignItems:      "center",
-                            gap:             "10px",
-                            width:           "100%",
-                            padding:         "10px 12px",
-                            borderRadius:    "8px",
-                            border:          "none",
-                            cursor:          "pointer",
-                            backgroundColor: "transparent",
-                            color:           danger ? "#EF4444" : "#FFFFFF",
-                            fontSize:        "14px",
-                            fontFamily:      "'Inter', sans-serif",
-                            textAlign:       "left",
-                            transition:      "background-color 0.15s ease",
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
+                          style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "10px 12px", borderRadius: "8px", border: "none", cursor: "pointer", backgroundColor: "transparent", color: danger ? "#EF4444" : "#FFFFFF", fontSize: "14px", fontFamily: "'Inter', sans-serif", textAlign: "left", transition: "background-color 0.15s ease" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1A1A2A")}
                           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                         >
-                          <Icon size={15} color={danger ? "#EF4444" : "#A3A3C2"} strokeWidth={1.8} />
+                          <Icon size={15} color={danger ? "#EF4444" : "#6B6B8A"} strokeWidth={1.8} />
                           {label}
                         </button>
                       ))}
@@ -318,11 +230,10 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
             </div>
           </div>
 
-          {/* Search header */}
           <ConversationSearch
             query={searchQuery}
             onChange={setSearchQuery}
-            onClose={closeDesktopSearch}
+            onClose={() => { setSearchOpen(false); setSearchQuery(""); }}
             isOpen={searchOpen}
           />
         </div>
@@ -339,22 +250,9 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           <button
             className="archived-row"
             onClick={() => router.push("/messages/archived")}
-            style={{
-              display:         "flex",
-              alignItems:      "center",
-              gap:             "12px",
-              width:           "100%",
-              padding:         "14px 16px",
-              background:      "none",
-              border:          "none",
-              borderBottom:    "1px solid #1E1E2E",
-              cursor:          "pointer",
-              fontFamily:      "'Inter', sans-serif",
-              transition:      "background-color 0.15s ease",
-              flexShrink:      0,
-            }}
+            style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%", padding: "14px 16px", background: "none", border: "none", borderBottom: "1px solid #1A1A2A", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "background-color 0.15s ease", flexShrink: 0 }}
           >
-            <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "#1C1C2E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "#111120", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Archive size={20} color="#8B5CF6" strokeWidth={1.6} />
             </div>
             <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF", flex: 1, textAlign: "left" }}>Archived</span>
@@ -362,14 +260,19 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           </button>
         )}
 
+        {/* Conversation list or skeleton */}
         <div style={{ flex: 1, overflowY: "auto" }}>
-          <ConversationList
-            conversations={filtered}
-            activeId={urlActiveId}
-            onSelect={handleSelect}
-            typingConversations={typingConversations}
-            favouritedIds={favouritedIds}
-          />
+          {loading ? (
+            <MessagesSkeleton count={12} />
+          ) : (
+            <ConversationList
+              conversations={filtered}
+              activeId={urlActiveId}
+              onSelect={handleSelect}
+              typingConversations={typingConversations}
+              favouritedIds={favouritedIds}
+            />
+          )}
         </div>
       </div>
     </>

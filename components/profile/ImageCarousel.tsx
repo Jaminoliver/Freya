@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { decode } from "blurhash";
+import VideoPlayer, { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 
 export interface MediaItem {
   id: number;
@@ -15,6 +16,9 @@ export interface MediaItem {
   processing_status: string | null;
   bunny_video_id: string | null;
   blur_hash?: string | null;
+  width?: number | null;
+  height?: number | null;
+  aspect_ratio?: number | null;
 }
 
 const W = 128, H = 128;
@@ -34,13 +38,12 @@ function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProper
   return <canvas ref={canvasRef} width={W} height={H} style={{ ...style, imageRendering: "auto" }} />;
 }
 
-function ProgressiveImage({ src, placeholder, blurHash, style, eager, onHeightChange }: {
+function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
   src?:            string | null;
   placeholder?:    string | null;
   blurHash?:       string | null;
   style?:          React.CSSProperties;
   eager?:          boolean;
-  onHeightChange?: (h: number) => void;
 }) {
   const [loaded, setLoaded] = React.useState(false);
   const imgRef = React.useRef<HTMLImageElement>(null);
@@ -49,11 +52,6 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager, onHeightCh
     setLoaded(false);
     if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) setLoaded(true);
   }, [src]);
-
-  const handleLoad = () => {
-    setLoaded(true);
-    if (imgRef.current) onHeightChange?.(imgRef.current.offsetHeight);
-  };
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -69,11 +67,17 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager, onHeightCh
         alt=""
         draggable={false}
         loading={eager ? "eager" : "lazy"}
-        onLoad={handleLoad}
+        onLoad={() => setLoaded(true)}
         style={{ ...style, opacity: loaded ? 1 : 0, transition: "opacity 0.25s ease", position: "relative", zIndex: 2 }}
       />
     </div>
   );
+}
+
+function getVideoRatio(item: MediaItem): string {
+  if (item.aspect_ratio && item.aspect_ratio > 0) return String(item.aspect_ratio);
+  if (item.width && item.height && item.width > 0 && item.height > 0) return `${item.width}/${item.height}`;
+  return "9/16";
 }
 
 export default function ImageCarousel({ media, onImageClick, initialIndex = 0, onSlideChange }: {
@@ -82,10 +86,16 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
   initialIndex?: number;
   onSlideChange?: (index: number) => void;
 }) {
-  const [activeIndex, setActiveIndex]     = React.useState(initialIndex);
+  const [activeIndex, setActiveIndex]         = React.useState(initialIndex);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
-  const [isDesktop, setIsDesktop]         = React.useState(false);
-  const [activeHeight, setActiveHeight]   = React.useState<number | null>(null);
+  const [isDesktop, setIsDesktop]             = React.useState(false);
+
+  // Track each slide's rendered height; container locks to the max
+  const [slideHeights, setSlideHeights] = React.useState<Record<number, number>>({});
+  const maxHeight = Math.max(0, ...Object.values(slideHeights));
+
+  // Keep one ResizeObserver per slide index so we don't leak
+  const slideObservers = React.useRef<Record<number, ResizeObserver>>({});
 
   const startXRef         = React.useRef<number | null>(null);
   const startYRef         = React.useRef<number | null>(null);
@@ -103,8 +113,12 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  // Reset height when active slide changes so it remeasures
-  React.useEffect(() => { setActiveHeight(null); }, [activeIndex]);
+  // Cleanup all observers on unmount
+  React.useEffect(() => {
+    return () => {
+      Object.values(slideObservers.current).forEach((ro) => ro.disconnect());
+    };
+  }, []);
 
   React.useEffect(() => {
     const el = stripRef.current;
@@ -203,6 +217,27 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     }
   };
 
+  // Callback ref — attaches a ResizeObserver to every slide and records its height
+  const slideRefCallback = React.useCallback((el: HTMLDivElement | null, index: number) => {
+    // Disconnect any previous observer for this slot
+    slideObservers.current[index]?.disconnect();
+    if (!el) return;
+
+    const measure = (h: number) => {
+      if (h > 0) setSlideHeights((prev) => {
+        if (prev[index] === Math.round(h)) return prev;
+        return { ...prev, [index]: Math.round(h) };
+      });
+    };
+
+    // Immediate read
+    measure(el.offsetHeight);
+
+    const ro = new ResizeObserver(([entry]) => measure(entry.contentRect.height));
+    ro.observe(el);
+    slideObservers.current[index] = ro;
+  }, []);
+
   const arrowStyle = (side: "left" | "right"): React.CSSProperties => ({
     position: "absolute", [side]: "10px", top: "50%", transform: "translateY(-50%)",
     zIndex: 10, width: "32px", height: "32px", borderRadius: "50%",
@@ -219,8 +254,8 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
       style={{
         position: "relative", width: "100%", backgroundColor: "#000",
         userSelect: "none", overflow: "hidden",
-        // Clamp outer height to active slide's height — prevents adjacent slides from stretching container
-        height: activeHeight ? `${activeHeight}px` : undefined,
+        // Lock to the tallest slide — never shrinks when navigating to a shorter one
+        height: maxHeight > 0 ? `${maxHeight}px` : undefined,
       }}
       onMouseLeave={handleMouseLeave}
     >
@@ -233,23 +268,31 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         style={{
-          display: "flex", width: "100%",
+          display: "flex", width: "100%", height: "100%",
           transform: `translateX(${translateX})`,
           transition: liveOffset === 0 ? "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)" : "none",
           cursor: isDesktop ? (media.length > 1 ? "grab" : "pointer") : "default",
           willChange: "transform",
           touchAction: "pan-y",
-          alignItems: "flex-start",
+          // Center shorter slides (e.g. landscape video) within the locked height
+          alignItems: "center",
         }}
       >
         {media.map((item, i) => {
           const isActive   = i === activeIndex;
           const isAdjacent = Math.abs(i - activeIndex) === 1;
           const shouldLoad = isActive || isAdjacent;
-          const blurBarSrc = item.thumbnail_url ?? undefined;
+          const isVideo    = item.media_type === "video";
+          const blurBarSrc = isVideo && item.bunny_video_id
+            ? getBunnyThumbnail(item.bunny_video_id)
+            : (item.thumbnail_url ?? undefined);
 
           return (
-            <div key={i} style={{ flexShrink: 0, width: "100%", position: "relative", backgroundColor: "#000" }}>
+            <div
+              key={i}
+              ref={(el) => slideRefCallback(el, i)}
+              style={{ flexShrink: 0, width: "100%", position: "relative", backgroundColor: "#000" }}
+            >
               {blurBarSrc && shouldLoad && (
                 <>
                   <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "80px", backgroundImage: `url(${blurBarSrc})`, backgroundSize: "cover", backgroundPosition: "left center", filter: "blur(16px) brightness(0.7)", transform: "scaleX(1.3)", opacity: 0.9, pointerEvents: "none", zIndex: 0 }} />
@@ -257,19 +300,37 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
                 </>
               )}
               <div style={{ position: "relative", zIndex: 1 }}>
-                {shouldLoad ? (
-                  <ProgressiveImage
-                    src={item.file_url}
-                    placeholder={item.thumbnail_url}
-                    blurHash={item.blur_hash}
-                    eager={isActive}
-                    onHeightChange={isActive ? (h) => setActiveHeight(h) : undefined}
-                    style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block", pointerEvents: "none" }}
-                  />
+                {isVideo ? (
+                  shouldLoad ? (
+                    <VideoPlayer
+                      bunnyVideoId={item.bunny_video_id}
+                      thumbnailUrl={item.thumbnail_url}
+                      processingStatus={item.processing_status}
+                      rawVideoUrl={item.raw_video_url}
+                      fillParent={false}
+                      aspectRatio={getVideoRatio(item)}
+                      hideInternalBlur={true}
+                      blurHash={item.blur_hash}
+                    />
+                  ) : (
+                    <div style={{ width: "100%", aspectRatio: getVideoRatio(item), backgroundColor: "#0A0A14" }}>
+                      {item.blur_hash && <BlurHashCanvas hash={item.blur_hash} style={{ width: "100%", height: "100%" }} />}
+                    </div>
+                  )
                 ) : (
-                  <div style={{ width: "100%", aspectRatio: "4/3", backgroundColor: "#0A0A14" }}>
-                    {item.blur_hash && <BlurHashCanvas hash={item.blur_hash} style={{ width: "100%", height: "100%" }} />}
-                  </div>
+                  shouldLoad ? (
+                    <ProgressiveImage
+                      src={item.file_url}
+                      placeholder={item.thumbnail_url}
+                      blurHash={item.blur_hash}
+                      eager={isActive}
+                      style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block", pointerEvents: "none" }}
+                    />
+                  ) : (
+                    <div style={{ width: "100%", aspectRatio: "4/3", backgroundColor: "#0A0A14" }}>
+                      {item.blur_hash && <BlurHashCanvas hash={item.blur_hash} style={{ width: "100%", height: "100%" }} />}
+                    </div>
+                  )
                 )}
               </div>
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Home, MessageCircle, CreditCard, MoreHorizontal, Plus } from "lucide-react";
+import { Home, MessageCircle, CreditCard, MoreHorizontal, Search } from "lucide-react";
 import { useState } from "react";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useNav } from "@/lib/hooks/useNav";
@@ -72,10 +72,11 @@ export function MobileBottomNav() {
           <span style={{ fontSize: "10px", lineHeight: 1 }}>Messages</span>
         </button>
 
-        <button onClick={() => navigate("/create")}
-          style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#8B5CF6", border: "none", cursor: "pointer", flexShrink: 0 }}
+        <button onClick={() => navigate("/explore")}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", height: "64px", minWidth: "48px", color: pathname === "/explore" ? "#8B5CF6" : "#6B6B8A", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: 0 }}
         >
-          <Plus size={22} color="#fff" />
+          <Search size={22} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
+          <span style={{ fontSize: "10px", lineHeight: 1 }}>Explore</span>
         </button>
 
         <button onClick={() => navigate("/subscriptions")}
