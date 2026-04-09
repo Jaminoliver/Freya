@@ -215,7 +215,8 @@ export default function CheckoutModal({
           const data = await res.json();
 
           if (!res.ok) {
-            setError(data.message ?? "Failed to generate bank account");
+            // ✅ Show the server error message directly — no redirect fallback
+            setError(data.message ?? "Failed to generate bank account. Please try again.");
             return;
           }
 
@@ -228,8 +229,9 @@ export default function CheckoutModal({
               amount: data.amount,
               reference: data.reference,
             });
-          } else if (data.checkoutUrl) {
-            window.location.href = data.checkoutUrl;
+          } else {
+            // ✅ accountNumber missing but response was 200 — surface error, never redirect
+            setError("Bank account details unavailable. Please try again.");
           }
         } catch (err) {
           console.error("[Checkout] Bank transfer init error:", err);

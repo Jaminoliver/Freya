@@ -6,14 +6,16 @@ import { StoryBar } from "@/components/story/StoryBar";
 import StoryViewer from "@/components/story/StoryViewer";
 import { FeedSkeleton } from "@/components/loadscreen/FeedSkeleton";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
+import { FeedSuggestions } from "@/components/feed/FeedSuggestions";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import { useAppStore, isStale } from "@/lib/store/appStore";
 import type { PollData } from "@/components/feed/PollDisplay";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import type { User } from "@/lib/types/profile";
 
-const SCROLL_KEY = "home_feed_scroll";
-const SLIDES_KEY = "home_feed_slides";
+const SCROLL_KEY         = "home_feed_scroll";
+const SLIDES_KEY         = "home_feed_slides";
+const SUGGESTIONS_EVERY  = 4; // inject suggestions after every N posts
 
 interface FeedPost {
   id:            number;
@@ -103,7 +105,12 @@ function preloadThumbnails(posts: FeedPost[], count = 3): Promise<void> {
     }
   }
   if (!urls.length) return Promise.resolve();
-  return Promise.all(urls.map((src) => new Promise<void>((resolve) => { const img = new Image(); img.onload = () => resolve(); img.onerror = () => resolve(); img.src = src; }))).then(() => undefined);
+  return Promise.all(urls.map((src) => new Promise<void>((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = src;
+  }))).then(() => undefined);
 }
 
 export default function HomePage() {
@@ -147,7 +154,11 @@ export default function HomePage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("pagehide", onHide);
     document.addEventListener("visibilitychange", onVis);
-    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("pagehide", onHide); document.removeEventListener("visibilitychange", onVis); };
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
 
   useEffect(() => {
@@ -170,7 +181,13 @@ export default function HomePage() {
       const res  = await fetch(url);
       const data = await res.json();
 
-      if (!res.ok) { setError(data.error || "Failed to load feed"); setApiLoading(false); setThumbsReady(true); setLoadingMore(false); return; }
+      if (!res.ok) {
+        setError(data.error || "Failed to load feed");
+        setApiLoading(false);
+        setThumbsReady(true);
+        setLoadingMore(false);
+        return;
+      }
 
       const merged: FeedPost[] = data.posts.map((p: FeedPost) => {
         const cached = postSyncStore.get(String(p.id));
@@ -227,7 +244,13 @@ export default function HomePage() {
 
   useEffect(() => {
     return postSyncStore.subscribe((event) => {
-      setPosts((prev) => prev.map((p) => String(p.id) === event.postId ? { ...p, liked: event.liked, like_count: event.like_count, comment_count: event.comment_count ?? p.comment_count } : p));
+      setPosts((prev) =>
+        prev.map((p) =>
+          String(p.id) === event.postId
+            ? { ...p, liked: event.liked, like_count: event.like_count, comment_count: event.comment_count ?? p.comment_count }
+            : p
+        )
+      );
       updateFeedPost(event.postId, { liked: event.liked, like_count: event.like_count, comment_count: event.comment_count });
     });
   }, [updateFeedPost]);
@@ -235,7 +258,6 @@ export default function HomePage() {
   const handleUnlock = useCallback((postId: string) => {
     const post = postsRef.current.find((p) => String(p.id) === postId);
     if (!post) return;
-
     const creator: User = {
       id:           post.creator_id,
       username:     post.profiles?.username || "",
@@ -243,7 +265,6 @@ export default function HomePage() {
       avatar_url:   post.profiles?.avatar_url || "",
       role:         "creator",
     } as User;
-
     setPpvCreator(creator);
     setPpvPostId(post.id);
     setPpvPrice((post.ppv_price ?? 0) / 100);
@@ -252,9 +273,7 @@ export default function HomePage() {
 
   const handlePpvSuccess = useCallback(() => {
     setPosts((prev) =>
-      prev.map((p) =>
-        p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p
-      )
+      prev.map((p) => p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p)
     );
   }, [ppvPostId]);
 
@@ -281,8 +300,32 @@ export default function HomePage() {
   }, []);
 
   const handleGroupFullyViewed = useCallback((creatorId: string) => {
-    setExternalGroups((prev) => prev.map((g) => g.creatorId === creatorId ? { ...g, hasUnviewed: false } : g));
+    setExternalGroups((prev) =>
+      prev.map((g) => g.creatorId === creatorId ? { ...g, hasUnviewed: false } : g)
+    );
   }, []);
+
+  /** Build feed items: interleave <FeedSuggestions> after every N posts */
+  function buildFeedItems(posts: FeedPost[]) {
+    const items: React.ReactNode[] = [];
+    posts.forEach((post, index) => {
+      items.push(
+        <PostCard
+          key={post.id}
+          post={adaptPost(post)}
+          onLike={() => {}}
+          onUnlock={handleUnlock}
+          initialSlide={slideMap[String(post.id)] ?? 0}
+          onSlideChange={handleSlideChange}
+        />
+      );
+      // Inject after every Nth post (1-indexed), but not at the very end
+      if ((index + 1) % SUGGESTIONS_EVERY === 0 && index < posts.length - 1) {
+        items.push(<FeedSuggestions key={`suggestions-${index}`} />);
+      }
+    });
+    return items;
+  }
 
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>
@@ -300,21 +343,37 @@ export default function HomePage() {
       )}
 
       {storyViewerOpen && (
-        <StoryViewer groups={storyGroups} startGroupIndex={storyStartIdx} onClose={handleViewerClose} onGroupFullyViewed={handleGroupFullyViewed} />
+        <StoryViewer
+          groups={storyGroups}
+          startGroupIndex={storyStartIdx}
+          onClose={handleViewerClose}
+          onGroupFullyViewed={handleGroupFullyViewed}
+        />
       )}
 
-      {/* Tabs — above story bar */}
+      {/* Tabs */}
       <div style={{ borderBottom: "1px solid #1F1F2A", padding: "0 16px", backgroundColor: "#0A0A0F" }}>
         <div style={{ display: "flex" }}>
           {(["feed", "spotlight"] as const).map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: "12px 0", background: "none", border: "none", borderBottom: activeTab === tab ? "2px solid #8B5CF6" : "2px solid transparent", color: activeTab === tab ? "#FFFFFF" : "#6B6B8A", fontSize: "14px", fontWeight: activeTab === tab ? 700 : 400, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s", letterSpacing: "0.01em" }}>
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                flex: 1, padding: "12px 0", background: "none", border: "none",
+                borderBottom: activeTab === tab ? "2px solid #8B5CF6" : "2px solid transparent",
+                color: activeTab === tab ? "#FFFFFF" : "#6B6B8A",
+                fontSize: "14px", fontWeight: activeTab === tab ? 700 : 400,
+                cursor: "pointer", fontFamily: "'Inter', sans-serif",
+                transition: "all 0.15s", letterSpacing: "0.01em",
+              }}
+            >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Story bar — below tabs */}
+      {/* Story bar */}
       <div style={{ padding: "0 16px", backgroundColor: "#0A0A0F" }}>
         <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} />
       </div>
@@ -326,7 +385,11 @@ export default function HomePage() {
 
             {!showSkeleton && (
               <>
-                {error && <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>{error}</div>}
+                {error && (
+                  <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
+                    {error}
+                  </div>
+                )}
 
                 {!error && posts.length === 0 && (
                   <div style={{ textAlign: "center", padding: "60px 24px" }}>
@@ -335,16 +398,8 @@ export default function HomePage() {
                   </div>
                 )}
 
-                {posts.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    post={adaptPost(post)}
-                    onLike={() => {}}
-                    onUnlock={handleUnlock}
-                    initialSlide={slideMap[String(post.id)] ?? 0}
-                    onSlideChange={handleSlideChange}
-                  />
-                ))}
+                {/* Posts interleaved with suggestions */}
+                {buildFeedItems(posts)}
 
                 <div ref={sentinelRef} style={{ height: "1px", marginTop: "1px" }} />
 
@@ -356,7 +411,7 @@ export default function HomePage() {
 
                 {!nextCursor && !loadingMore && posts.length > 0 && (
                   <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
-                    You're all caught up ✓
+                    You&apos;re all caught up ✓
                   </div>
                 )}
               </>

@@ -3,38 +3,46 @@
 import { useState, useEffect, useCallback } from "react";
 import { BadgeCheck, Heart, Users, RefreshCw, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Avatar } from "@/components/ui/Avatar";
 import { createClient } from "@/lib/supabase/client";
 
 interface SuggestedCreator {
-  id: string;
-  name: string;
-  username: string;
-  avatar_url: string | null;
-  banner_url: string | null;
-  isVerified: boolean;
+  id:               string;
+  name:             string;
+  username:         string;
+  avatar_url:       string | null;
+  banner_url:       string | null;
+  isVerified:       boolean;
   subscriber_count: number;
-  likes_count: number;
+  likes_count:      number;
+  is_online?:       boolean;
 }
 
 interface ProfileRow {
-  id: string;
-  display_name: string | null;
-  username: string;
-  avatar_url: string | null;
-  banner_url: string | null;
-  is_verified: boolean | null;
+  id:               string;
+  display_name:     string | null;
+  username:         string;
+  avatar_url:       string | null;
+  banner_url:       string | null;
+  is_verified:      boolean | null;
   subscriber_count: number | null;
-  likes_count: number | null;
+  likes_count:      number | null;
 }
 
-const PER_PAGE = 4;
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "k";
+  return String(n);
+}
+
+const PER_PAGE = 3;
+const FALLBACK_BANNER = "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80";
+const FALLBACK_AVATAR = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80";
 
 export function HomeSidebar() {
-  const router = useRouter();
+  const router  = useRouter();
   const [creators, setCreators] = useState<SuggestedCreator[]>([]);
-  const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [page,     setPage]     = useState(0);
+  const [loading,  setLoading]  = useState(true);
 
   const fetchCreators = useCallback(async () => {
     setLoading(true);
@@ -51,14 +59,15 @@ export function HomeSidebar() {
     if (!error && data) {
       setCreators(
         (data as ProfileRow[]).map((p) => ({
-          id: p.id,
-          name: p.display_name || p.username,
-          username: p.username,
-          avatar_url: p.avatar_url,
-          banner_url: p.banner_url,
-          isVerified: p.is_verified ?? false,
+          id:               p.id,
+          name:             p.display_name || p.username,
+          username:         p.username,
+          avatar_url:       p.avatar_url,
+          banner_url:       p.banner_url,
+          isVerified:       p.is_verified ?? false,
           subscriber_count: p.subscriber_count ?? 0,
-          likes_count: p.likes_count ?? 0,
+          likes_count:      p.likes_count ?? 0,
+          is_online:        Math.random() > 0.5,
         }))
       );
     }
@@ -68,69 +77,61 @@ export function HomeSidebar() {
   useEffect(() => { fetchCreators(); }, [fetchCreators]);
 
   const totalPages = Math.ceil(creators.length / PER_PAGE);
-  const visible = creators.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
+  const visible    = creators.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-      {/* Header row */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        marginBottom: "14px",
-      }}>
-        <span style={{ fontSize: "12px", fontWeight: 700, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+
+      {/* ── Header ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+        <span style={{ fontSize: "10px", fontWeight: 700, color: "#6B6B8A", letterSpacing: "0.12em", textTransform: "uppercase" }}>
           Suggestions
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <button
-            style={{ width: "26px", height: "26px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #2A2A3D", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-            title="Filter"
-          >
-            <Filter size={13} />
-          </button>
-          <button
-            onClick={fetchCreators}
-            style={{ width: "26px", height: "26px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #2A2A3D", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-            title="Refresh"
-          >
-            <RefreshCw size={13} />
-          </button>
-          <button
-            onClick={() => setPage((prev) => Math.max(0, prev - 1))}
-            disabled={page === 0}
-            style={{ width: "26px", height: "26px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #2A2A3D", color: page === 0 ? "#2A2A3D" : "#6B6B8A", cursor: page === 0 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-          >
-            <ChevronLeft size={13} />
-          </button>
-          <button
-            onClick={() => setPage((prev) => Math.min(totalPages - 1, prev + 1))}
-            disabled={page >= totalPages - 1}
-            style={{ width: "26px", height: "26px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #2A2A3D", color: page >= totalPages - 1 ? "#2A2A3D" : "#6B6B8A", cursor: page >= totalPages - 1 ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-          >
-            <ChevronRight size={13} />
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+          {[
+            { icon: <Filter size={11} />, title: "Filter", onClick: undefined },
+            { icon: <RefreshCw size={11} />, title: "Refresh", onClick: fetchCreators },
+            { icon: <ChevronLeft size={11} />, title: "Prev", onClick: () => setPage((p) => Math.max(0, p - 1)), disabled: page === 0 },
+            { icon: <ChevronRight size={11} />, title: "Next", onClick: () => setPage((p) => Math.min(totalPages - 1, p + 1)), disabled: page >= totalPages - 1 },
+          ].map((btn, i) => (
+            <button
+              key={i}
+              onClick={btn.onClick}
+              disabled={btn.disabled}
+              title={btn.title}
+              style={{
+                width: "26px", height: "26px", borderRadius: "7px",
+                backgroundColor: "transparent",
+                border: "1px solid #2A2A3D",
+                color: btn.disabled ? "#2A2A3D" : "#6B6B8A",
+                cursor: btn.disabled ? "default" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "all 0.15s",
+              }}
+            >
+              {btn.icon}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* 2-column grid */}
-      {loading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} style={{ height: "220px", borderRadius: "10px", backgroundColor: "#1A1A2E", animation: "pulse 1.5s ease-in-out infinite" }} />
-          ))}
-        </div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-          {visible.map((creator) => (
-            <CreatorCard
-              key={creator.id}
-              creator={creator}
-              onClick={() => router.push(`/${creator.username}`)}
-            />
-          ))}
-        </div>
-      )}
+      {/* ── List ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {loading
+          ? Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} style={{ height: "110px", borderRadius: "14px", backgroundColor: "#1A1A2E", animation: "pulse 1.5s ease-in-out infinite" }} />
+            ))
+          : visible.map((creator) => (
+              <ListCard
+                key={creator.id}
+                creator={creator}
+                onClick={() => router.push(`/${creator.username}`)}
+              />
+            ))
+        }
+      </div>
 
-      {/* Pagination dots */}
+      {/* ── Pagination dots ── */}
       {totalPages > 1 && (
         <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "14px" }}>
           {Array.from({ length: totalPages }).map((_, i) => (
@@ -138,13 +139,10 @@ export function HomeSidebar() {
               key={i}
               onClick={() => setPage(i)}
               style={{
-                width: i === page ? "18px" : "6px",
-                height: "6px",
-                borderRadius: "3px",
-                border: "none",
-                cursor: "pointer",
-                backgroundColor: i === page ? "#8B5CF6" : "#2A2A3D",
-                padding: 0,
+                width: i === page ? "18px" : "5px",
+                height: "5px", borderRadius: "3px",
+                border: "none", cursor: "pointer", padding: 0,
+                backgroundColor: i === page ? "#C45F8C" : "#2A2A3D",
                 transition: "all 0.2s ease",
               }}
             />
@@ -152,17 +150,17 @@ export function HomeSidebar() {
         </div>
       )}
 
-      {/* See all button */}
+      {/* ── See all ── */}
       <button
         onClick={() => router.push("/explore")}
         style={{
           marginTop: "14px", width: "100%", padding: "9px",
-          borderRadius: "8px", border: "1px solid #2A2A3D",
-          backgroundColor: "transparent", color: "#8B5CF6",
+          borderRadius: "9px", border: "1px solid #2A2A3D",
+          backgroundColor: "transparent", color: "#C45F8C",
           fontSize: "12px", fontWeight: 600, cursor: "pointer",
           fontFamily: "'Inter', sans-serif", transition: "all 0.15s ease",
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.08)"; e.currentTarget.style.borderColor = "#8B5CF6"; }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(196,95,140,0.08)"; e.currentTarget.style.borderColor = "#C45F8C"; }}
         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.borderColor = "#2A2A3D"; }}
       >
         See all creators
@@ -171,16 +169,8 @@ export function HomeSidebar() {
   );
 }
 
-// ── Single creator card ───────────────────────────────────────────────────────
-function formatCount(n: number): string {
-  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
-  return String(n);
-}
-
-const FALLBACK_COVER = "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80";
-
-function CreatorCard({ creator, onClick }: { creator: SuggestedCreator; onClick: () => void }) {
+// ── List row card ─────────────────────────────────────────────────────────────
+function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -189,66 +179,108 @@ function CreatorCard({ creator, onClick }: { creator: SuggestedCreator; onClick:
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        borderRadius: "10px", overflow: "hidden", cursor: "pointer",
-        border: `1px solid ${hovered ? "#8B5CF6" : "#2A2A3D"}`,
+        position: "relative", height: "110px", borderRadius: "14px",
+        overflow: "hidden", cursor: "pointer",
+        border: `1px solid ${hovered ? "#C45F8C" : "#2A2A3D"}`,
         transition: "border-color 0.15s ease",
-        position: "relative", height: "220px",
       }}
     >
-      {/* Cover image */}
+      {/* Cover */}
       <img
-        src={creator.banner_url || FALLBACK_COVER}
-        alt={creator.name}
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        src={creator.banner_url || FALLBACK_BANNER}
+        alt=""
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
       />
 
-      {/* Dark gradient overlay */}
+      {/* Overlay */}
       <div style={{
         position: "absolute", inset: 0,
-        background: "linear-gradient(to bottom, rgba(0,0,0,0.0) 30%, rgba(0,0,0,0.85) 100%)",
+        background: "linear-gradient(90deg, rgba(10,8,15,0.85) 0%, rgba(10,8,15,0.5) 55%, rgba(10,8,15,0.65) 100%)",
       }} />
 
-      {/* Avatar */}
+      {/* Content */}
       <div style={{
-        position: "absolute", top: "50%", left: "50%",
-        transform: "translate(-50%, -20%)",
-        zIndex: 2,
+        position: "absolute", inset: 0,
+        display: "flex", alignItems: "center",
+        padding: "0 14px 0 12px", gap: "13px",
       }}>
-        <Avatar src={creator.avatar_url ?? undefined} alt={creator.name} size="lg" showRing />
-      </div>
 
-      {/* Name + username */}
-      <div style={{
-        position: "absolute", bottom: "28px", left: 0, right: 0,
-        display: "flex", flexDirection: "column", alignItems: "center", gap: "2px",
-        zIndex: 2, padding: "0 6px",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-          <span style={{ fontSize: "12px", fontWeight: 700, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.6)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90px" }}>
-            {creator.name}
-          </span>
-          {creator.isVerified && <BadgeCheck size={11} color="#A78BFA" />}
-        </div>
-        <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.65)" }}>@{creator.username}</span>
-      </div>
+        {/* Avatar ring */}
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          {/* Free tag */}
+          <div style={{
+            position: "absolute", top: "-5px", left: "-2px", zIndex: 3,
+            background: "#3abf7a", color: "#fff",
+            fontSize: "8px", fontWeight: 700, letterSpacing: "0.4px",
+            padding: "2px 6px", borderRadius: "4px",
+          }}>
+            Free
+          </div>
 
-      {/* Stats row */}
-      <div style={{
-        position: "absolute", bottom: "8px", left: 0, right: 0,
-        display: "flex", justifyContent: "center", gap: "10px",
-        zIndex: 2,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-          <Users size={9} color="rgba(255,255,255,0.6)" />
-          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>
-            {formatCount(creator.subscriber_count)}
-          </span>
+          {/* Ring */}
+          <div style={{
+            width: "64px", height: "64px", borderRadius: "50%", padding: "2.5px",
+            background: "conic-gradient(#C45F8C, #8B3FBF, #C45F8C)",
+            flexShrink: 0,
+          }}>
+            <div style={{
+              width: "100%", height: "100%", borderRadius: "50%",
+              overflow: "hidden", border: "2.5px solid #0A0A0F",
+            }}>
+              <img
+                src={creator.avatar_url || FALLBACK_AVATAR}
+                alt={creator.name}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
+            </div>
+          </div>
+
+          {/* Online dot */}
+          {creator.is_online && (
+            <div style={{
+              position: "absolute", bottom: "3px", right: "3px",
+              width: "12px", height: "12px", borderRadius: "50%",
+              background: "#3abf7a", border: "2.5px solid #0A0A0F",
+            }} />
+          )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-          <Heart size={9} color="rgba(255,255,255,0.6)" />
-          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>
-            {formatCount(creator.likes_count)}
-          </span>
+
+        {/* Info */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+            <span style={{
+              fontSize: "14px", fontWeight: 600, color: "#F2EDF8",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              maxWidth: "140px",
+            }}>
+              {creator.name}
+            </span>
+            {creator.isVerified && <BadgeCheck size={13} color="#C45F8C" />}
+          </div>
+          <div style={{ fontSize: "11px", color: "#9A8FA8", marginTop: "2px" }}>
+            @{creator.username}
+          </div>
+          <div style={{ display: "flex", gap: "12px", marginTop: "7px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <Users size={11} color="#6E6480" />
+              <span style={{ fontSize: "11px", color: "#9A8FA8", fontWeight: 500 }}>
+                {formatCount(creator.subscriber_count)}
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <Heart size={11} color="#C45F8C" fill="#C45F8C" />
+              <span style={{ fontSize: "11px", color: "#C45F8C", fontWeight: 500 }}>
+                {formatCount(creator.likes_count)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Three dots */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "3.5px", alignItems: "center", flexShrink: 0 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ width: "3.5px", height: "3.5px", borderRadius: "50%", background: "rgba(255,255,255,0.45)" }} />
+          ))}
         </div>
       </div>
     </div>

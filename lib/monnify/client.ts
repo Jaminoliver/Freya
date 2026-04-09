@@ -13,9 +13,9 @@ let tokenExpiresAt: number = 0;
 
 /**
  * Get Monnify access token (cached until expiry)
- * Monnify uses Basic Auth (base64 of apiKey:secretKey) to get a Bearer token
+ * Exported so other server modules can reuse the same cached token
  */
-async function getAccessToken(): Promise<string> {
+export async function getMonnifyAccessToken(): Promise<string> {
   // Return cached token if still valid (with 60s buffer)
   const now = Date.now();
   if (cachedToken && tokenExpiresAt > now + 60000) {
@@ -66,7 +66,7 @@ async function monnifyRequest<T = any>(
   } = {}
 ): Promise<T> {
   const { method = "GET", body } = options;
-  const token = await getAccessToken();
+  const token = await getMonnifyAccessToken();
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
@@ -271,7 +271,7 @@ export async function initiateTransfer(params: {
       destinationAccountNumber: params.accountNumber,
       destinationAccountName: params.accountName,
       currency: params.currency || "NGN",
-      sourceAccountNumber: process.env.MONNIFY_WALLET_ACCOUNT_NUMBER || "", // Merchant wallet account number
+      sourceAccountNumber: process.env.MONNIFY_WALLET_ACCOUNT_NUMBER || "",
     },
   });
 

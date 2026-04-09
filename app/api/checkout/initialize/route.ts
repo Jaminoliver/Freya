@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
-import { initializeTransaction } from "@/lib/monnify/client";
+import { initializeTransaction, getMonnifyAccessToken } from "@/lib/monnify/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -127,12 +127,15 @@ export async function POST(req: NextRequest) {
     // For bank transfer — fetch the account details from Monnify
     if (paymentMethod === "BANK_TRANSFER") {
       try {
+        // ✅ Reuse the shared cached token from client.ts (avoids auth race conditions)
+        const accessToken = await getMonnifyAccessToken();
+
         const bankDetailsRes = await fetch(
           `${process.env.MONNIFY_BASE_URL}/api/v1/merchant/bank-transfer/init-payment`,
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${await getAccessToken()}`,
+              Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
@@ -142,6 +145,8 @@ export async function POST(req: NextRequest) {
         );
 
         const bankData = await bankDetailsRes.json();
+
+        console.log("[Checkout Initialize] Bank transfer raw response:", JSON.stringify(bankData, null, 2));
 
         if (bankData.requestSuccessful && bankData.responseBody) {
           const bd = bankData.responseBody;
@@ -157,19 +162,20 @@ export async function POST(req: NextRequest) {
             currency: "NGN",
           });
         }
+
+        // ✅ Return a clear error instead of falling back to redirect
+        console.error("[Checkout Initialize] Bank transfer init failed:", bankData.responseMessage);
+        return NextResponse.json(
+          { message: bankData.responseMessage || "Failed to generate bank account. Please try again." },
+          { status: 502 }
+        );
       } catch (bankErr) {
         console.error("[Checkout Initialize] Bank transfer init error:", bankErr);
+        return NextResponse.json(
+          { message: "Could not generate a bank account. Please try again." },
+          { status: 502 }
+        );
       }
-
-      // Fallback: return checkout URL if bank details fetch fails
-      return NextResponse.json({
-        paymentMethod: "BANK_TRANSFER",
-        reference,
-        transactionReference: result.transactionReference,
-        checkoutUrl: result.checkoutUrl,
-        amount,
-        currency: "NGN",
-      });
     }
 
     // Card payment — return checkout URL for redirect
@@ -185,22 +191,4 @@ export async function POST(req: NextRequest) {
     console.error("[Checkout Initialize Error]", error);
     return NextResponse.json({ message: "Something went wrong" }, { status: 500 });
   }
-}
-
-// Helper to get Monnify access token for bank transfer init
-async function getAccessToken(): Promise<string> {
-  const credentials = Buffer.from(
-    `${process.env.MONNIFY_API_KEY}:${process.env.MONNIFY_SECRET_KEY}`
-  ).toString("base64");
-
-  const response = await fetch(`${process.env.MONNIFY_BASE_URL}/api/v1/auth/login`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/json",
-    },
-  });
-
-  const data = await response.json();
-  return data.responseBody.accessToken;
 }
