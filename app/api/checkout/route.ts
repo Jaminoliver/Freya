@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
           amountKobo,
           fanCategory: "SUBSCRIPTION_PAYMENT",
           creatorCategory: "CREATOR_EARNING",
-          referenceId: subId,
+          referenceId: `sub_${subId}`,
         });
       }
 
@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
         amountKobo,
         fanCategory:     "TIP",
         creatorCategory: "CREATOR_EARNING",
-        referenceId:     String(tip.id),
+        referenceId:     `tip_${tip.id}`,
       });
 
       return NextResponse.json({ message: "Tip sent", tipId: tip.id });
@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: "Failed to unlock content" }, { status: 500 });
       }
 
-      const unlockRefId = String(unlock.id);
+      const unlockRefId = `ppv_${unlock.id}`;
 
       await debitFanCreditCreator({
         fanId:           user.id,

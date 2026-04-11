@@ -95,11 +95,9 @@ export async function GET(
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    // FIX: PPV posts are never free — always require unlock check
     let canAccess = post.is_free && !post.is_ppv;
 
     if (user && !canAccess) {
-      // Creator always has access
       if (user.id === post.creator_id) {
         canAccess = true;
       } else {
@@ -111,10 +109,8 @@ export async function GET(
           .in("status", ["active", "ACTIVE"])
           .maybeSingle();
 
-        // Subscribers get access to non-PPV posts
         if (sub && !post.is_ppv) canAccess = true;
 
-        // PPV: check if user has purchased this specific post
         if (!canAccess && post.is_ppv) {
           const { data: ppvPurchase } = await service
             .from("ppv_unlocks")
@@ -273,7 +269,6 @@ export async function PATCH(
 
     if ("is_ppv" in body) {
       updates.is_ppv = !!body.is_ppv;
-      // FIX: making a post PPV means it's no longer freely accessible
       if (updates.is_ppv) updates.is_free = false;
     }
 
@@ -296,46 +291,6 @@ export async function PATCH(
 
   } catch (err) {
     console.error("[PATCH Post] Error:", err);
-    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
-  }
-}
-
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id }   = await params;
-    const postId   = Number(id);
-    if (isNaN(postId)) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
-
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const service = createServiceSupabaseClient();
-
-    const { data: post } = await service
-      .from("posts")
-      .select("creator_id")
-      .eq("id", postId)
-      .single();
-
-    if (!post || post.creator_id !== user.id) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    await service
-      .from("posts")
-      .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-      .eq("id", postId);
-
-    await service.rpc("decrement_post_count", { user_id: user.id });
-
-    return NextResponse.json({ success: true });
-
-  } catch (err) {
-    console.error("[Delete Post] Error:", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

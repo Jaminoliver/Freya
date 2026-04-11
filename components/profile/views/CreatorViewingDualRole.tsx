@@ -53,8 +53,8 @@ export default function CreatorViewingDualRole({
   };
 
   const bannerStats = {
-    posts:       profile.post_count ?? 0,
-    media:       0,
+    posts:       apiPosts.length,
+    followers:   profile.follower_count ?? 0,
     likes:       totalLikes,
     subscribers: profile.subscriber_count ?? 0,
   };
@@ -84,17 +84,18 @@ export default function CreatorViewingDualRole({
         </button>
       )}
       <ProfileBanner
-  bannerUrl={profile.banner_url || undefined}
-  displayName={profile.display_name || profile.username}
-  isEditable={false} isCreator={true} stats={bannerStats}
-  userId={profile.id} username={profile.username}
-/>
+        bannerUrl={profile.banner_url || undefined}
+        displayName={profile.display_name || profile.username}
+        isEditable={false} isCreator={true} stats={bannerStats}
+        userId={profile.id} username={profile.username}
+      />
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
         <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} creatorId={profile.id} isOnline={false} />
         <div style={{ paddingBottom: "12px" }}>
           <ProfileActions
             viewContext="fanViewingCreator"
-            onMessage={isSubscribed ? onMessage : undefined}
+            isSubscribed={isSubscribed}
+            onMessage={onMessage}
             onTip={onTip}
             onFollow={onFollow}
             isFollowing={isFollowing}

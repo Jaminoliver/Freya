@@ -32,7 +32,7 @@ export default function CreatorViewingFan({
 
   const bannerStats = {
     posts:       profile.post_count ?? 0,
-    media:       0,
+    followers:   profile.follower_count ?? 0,
     likes:       totalLikes,
     subscribers: profile.subscriber_count ?? 0,
   };
@@ -62,11 +62,11 @@ export default function CreatorViewingFan({
         </button>
       )}
       <ProfileBanner
-  bannerUrl={profile.banner_url || undefined}
-  displayName={profile.display_name || profile.username}
-  isEditable={false} isCreator={false} stats={bannerStats}
-  userId={profile.id} username={profile.username}
-/>
+        bannerUrl={profile.banner_url || undefined}
+        displayName={profile.display_name || profile.username}
+        isEditable={false} isCreator={false} stats={bannerStats}
+        userId={profile.id} username={profile.username}
+      />
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
         <ProfileAvatar
           avatarUrl={profile.avatar_url || undefined}

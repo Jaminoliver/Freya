@@ -31,7 +31,7 @@ export default function OwnFanProfile({
 }: Props) {
   const bannerStats = {
     posts:       profile.post_count ?? 0,
-    media:       0,
+    followers:   profile.follower_count ?? 0,
     likes:       totalLikes,
     subscribers: profile.subscriber_count ?? 0,
   };

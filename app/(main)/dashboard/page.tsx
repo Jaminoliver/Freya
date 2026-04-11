@@ -14,8 +14,9 @@ import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import type { User } from "@/lib/types/profile";
 
 const SCROLL_KEY         = "home_feed_scroll";
+const SPOTLIGHT_SCROLL_KEY = "home_spotlight_scroll";
 const SLIDES_KEY         = "home_feed_slides";
-const SUGGESTIONS_EVERY  = 4; // inject suggestions after every N posts
+const SUGGESTIONS_EVERY  = 4;
 
 interface FeedPost {
   id:            number;
@@ -91,8 +92,8 @@ function adaptPost(p: FeedPost) {
   };
 }
 
-function saveScroll(y: number) { try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {} }
-function loadScroll(): number  { try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; } }
+function saveScroll(key: string, y: number) { try { sessionStorage.setItem(key, String(y)); } catch {} }
+function loadScroll(key: string): number  { try { return Number(sessionStorage.getItem(key) ?? 0); } catch { return 0; } }
 function saveSlides(map: Record<string, number>) { try { sessionStorage.setItem(SLIDES_KEY, JSON.stringify(map)); } catch {} }
 function loadSlides(): Record<string, number>    { try { return JSON.parse(sessionStorage.getItem(SLIDES_KEY) ?? "{}"); } catch { return {}; } }
 
@@ -117,6 +118,7 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<"feed" | "spotlight">("feed");
   const { feed, setFeed, updateFeedPost } = useAppStore();
 
+  // ── Feed state ─────────────────────────────────────────────────────────
   const [posts,       setPosts]       = useState<FeedPost[]>([]);
   const [apiLoading,  setApiLoading]  = useState(true);
   const [thumbsReady, setThumbsReady] = useState(false);
@@ -125,6 +127,16 @@ export default function HomePage() {
   const [error,       setError]       = useState<string | null>(null);
   const [slideMap,    setSlideMap]    = useState<Record<string, number>>({});
 
+  // ── Spotlight state ────────────────────────────────────────────────────
+  const [spotPosts,       setSpotPosts]       = useState<FeedPost[]>([]);
+  const [spotLoading,     setSpotLoading]     = useState(true);
+  const [spotThumbsReady, setSpotThumbsReady] = useState(false);
+  const [spotNextPage,    setSpotNextPage]    = useState<number | null>(null);
+  const [spotLoadingMore, setSpotLoadingMore] = useState(false);
+  const [spotError,       setSpotError]       = useState<string | null>(null);
+  const [spotFetched,     setSpotFetched]     = useState(false);
+
+  // ── Shared state ───────────────────────────────────────────────────────
   const [ppvOpen,    setPpvOpen]    = useState(false);
   const [ppvPrice,   setPpvPrice]   = useState(0);
   const [ppvPostId,  setPpvPostId]  = useState<number | undefined>(undefined);
@@ -137,20 +149,30 @@ export default function HomePage() {
 
   useEffect(() => { setSlideMap(loadSlides()); }, []);
 
-  const showSkeleton = apiLoading || !thumbsReady;
+  const showSkeleton     = apiLoading || !thumbsReady;
+  const showSpotSkeleton = spotLoading || !spotThumbsReady;
 
-  const scrollRestoredRef = useRef(false);
-  const sentinelRef       = useRef<HTMLDivElement>(null);
-  const nextCursorRef     = useRef<string | null>(null);
-  const loadingMoreRef    = useRef(false);
+  const scrollRestoredRef     = useRef(false);
+  const spotScrollRestoredRef = useRef(false);
+  const sentinelRef           = useRef<HTMLDivElement>(null);
+  const spotSentinelRef       = useRef<HTMLDivElement>(null);
+  const nextCursorRef         = useRef<string | null>(null);
+  const loadingMoreRef        = useRef(false);
+  const spotNextPageRef       = useRef<number | null>(null);
+  const spotLoadingMoreRef    = useRef(false);
 
   useEffect(() => { nextCursorRef.current = nextCursor; }, [nextCursor]);
   useEffect(() => { loadingMoreRef.current = loadingMore; }, [loadingMore]);
+  useEffect(() => { spotNextPageRef.current = spotNextPage; }, [spotNextPage]);
+  useEffect(() => { spotLoadingMoreRef.current = spotLoadingMore; }, [spotLoadingMore]);
+
+  // ── Scroll persistence ────────────────────────────────────────────────
+  const scrollKey = activeTab === "feed" ? SCROLL_KEY : SPOTLIGHT_SCROLL_KEY;
 
   useEffect(() => {
-    const onScroll = () => saveScroll(window.scrollY);
-    const onHide   = () => saveScroll(window.scrollY);
-    const onVis    = () => { if (document.visibilityState === "hidden") saveScroll(window.scrollY); };
+    const onScroll = () => saveScroll(scrollKey, window.scrollY);
+    const onHide   = () => saveScroll(scrollKey, window.scrollY);
+    const onVis    = () => { if (document.visibilityState === "hidden") saveScroll(scrollKey, window.scrollY); };
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("pagehide", onHide);
     document.addEventListener("visibilitychange", onVis);
@@ -159,22 +181,34 @@ export default function HomePage() {
       window.removeEventListener("pagehide", onHide);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, []);
+  }, [scrollKey]);
 
+  // Restore feed scroll
   useEffect(() => {
-    if (showSkeleton || scrollRestoredRef.current) return;
+    if (activeTab !== "feed" || showSkeleton || scrollRestoredRef.current) return;
     scrollRestoredRef.current = true;
-    const saved = loadScroll();
+    const saved = loadScroll(SCROLL_KEY);
     if (saved > 0) setTimeout(() => window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior }), 80);
-  }, [showSkeleton]);
+  }, [showSkeleton, activeTab]);
+
+  // Restore spotlight scroll
+  useEffect(() => {
+    if (activeTab !== "spotlight" || showSpotSkeleton || spotScrollRestoredRef.current) return;
+    spotScrollRestoredRef.current = true;
+    const saved = loadScroll(SPOTLIGHT_SCROLL_KEY);
+    if (saved > 0) setTimeout(() => window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior }), 80);
+  }, [showSpotSkeleton, activeTab]);
 
   const handleSlideChange = useCallback((postId: string, index: number) => {
     setSlideMap((prev) => { const next = { ...prev, [postId]: index }; saveSlides(next); return next; });
   }, []);
 
-  const postsRef = useRef<FeedPost[]>(posts);
+  const postsRef     = useRef<FeedPost[]>(posts);
+  const spotPostsRef = useRef<FeedPost[]>(spotPosts);
   useEffect(() => { postsRef.current = posts; }, [posts]);
+  useEffect(() => { spotPostsRef.current = spotPosts; }, [spotPosts]);
 
+  // ── Feed fetch ─────────────────────────────────────────────────────────
   const fetchFeed = useCallback(async (cursor?: string) => {
     try {
       const url  = cursor ? `/api/posts/feed?cursor=${encodeURIComponent(cursor)}` : "/api/posts/feed";
@@ -228,7 +262,9 @@ export default function HomePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Feed infinite scroll
   useEffect(() => {
+    if (activeTab !== "feed") return;
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver((entries) => {
@@ -240,23 +276,91 @@ export default function HomePage() {
     }, { rootMargin: "600px" });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [fetchFeed, showSkeleton]);
+  }, [fetchFeed, showSkeleton, activeTab]);
 
+  // ── Spotlight fetch ────────────────────────────────────────────────────
+  const fetchSpotlight = useCallback(async (page?: number) => {
+    try {
+      const url  = page ? `/api/posts/spotlight?page=${page}` : "/api/posts/spotlight";
+      const res  = await fetch(url);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSpotError(data.error || "Failed to load spotlight");
+        setSpotLoading(false);
+        setSpotThumbsReady(true);
+        setSpotLoadingMore(false);
+        return;
+      }
+
+      const merged: FeedPost[] = data.posts.map((p: FeedPost) => {
+        const cached = postSyncStore.get(String(p.id));
+        if (!cached) return p;
+        return { ...p, liked: cached.liked, like_count: cached.like_count };
+      });
+
+      if (page && page > 1) {
+        const updated = [...spotPostsRef.current, ...merged];
+        setSpotPosts(updated);
+        setSpotNextPage(data.nextPage ?? null);
+        setSpotLoadingMore(false);
+      } else {
+        setSpotPosts(merged);
+        setSpotNextPage(data.nextPage ?? null);
+        setSpotLoading(false);
+        preloadThumbnails(merged, 5).then(() => setSpotThumbsReady(true));
+      }
+    } catch {
+      setSpotError("Failed to load spotlight");
+      setSpotLoading(false);
+      setSpotThumbsReady(true);
+      setSpotLoadingMore(false);
+    }
+  }, []);
+
+  // Fetch spotlight on first tab switch
+  useEffect(() => {
+    if (activeTab === "spotlight" && !spotFetched) {
+      setSpotFetched(true);
+      fetchSpotlight();
+    }
+  }, [activeTab, spotFetched, fetchSpotlight]);
+
+  // Spotlight infinite scroll
+  useEffect(() => {
+    if (activeTab !== "spotlight") return;
+    const sentinel = spotSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && spotNextPageRef.current && !spotLoadingMoreRef.current) {
+        spotLoadingMoreRef.current = true;
+        setSpotLoadingMore(true);
+        fetchSpotlight(spotNextPageRef.current);
+      }
+    }, { rootMargin: "600px" });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchSpotlight, showSpotSkeleton, activeTab]);
+
+  // ── Post sync ──────────────────────────────────────────────────────────
   useEffect(() => {
     return postSyncStore.subscribe((event) => {
-      setPosts((prev) =>
+      const update = (prev: FeedPost[]) =>
         prev.map((p) =>
           String(p.id) === event.postId
             ? { ...p, liked: event.liked, like_count: event.like_count, comment_count: event.comment_count ?? p.comment_count }
             : p
-        )
-      );
+        );
+      setPosts(update);
+      setSpotPosts(update);
       updateFeedPost(event.postId, { liked: event.liked, like_count: event.like_count, comment_count: event.comment_count });
     });
   }, [updateFeedPost]);
 
+  // ── PPV unlock ─────────────────────────────────────────────────────────
   const handleUnlock = useCallback((postId: string) => {
-    const post = postsRef.current.find((p) => String(p.id) === postId);
+    const allPosts = [...postsRef.current, ...spotPostsRef.current];
+    const post = allPosts.find((p) => String(p.id) === postId);
     if (!post) return;
     const creator: User = {
       id:           post.creator_id,
@@ -272,11 +376,13 @@ export default function HomePage() {
   }, []);
 
   const handlePpvSuccess = useCallback(() => {
-    setPosts((prev) =>
-      prev.map((p) => p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p)
-    );
+    const unlockPost = (prev: FeedPost[]) =>
+      prev.map((p) => p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p);
+    setPosts(unlockPost);
+    setSpotPosts(unlockPost);
   }, [ppvPostId]);
 
+  // ── Stories ────────────────────────────────────────────────────────────
   const handleOpenViewer = useCallback((groups: CreatorStoryGroup[], startIndex: number) => {
     setStoryGroups(groups);
     setStoryStartIdx(startIndex);
@@ -305,10 +411,31 @@ export default function HomePage() {
     );
   }, []);
 
+  // ── Tab switch: save scroll, scroll to top ─────────────────────────────
+  const handleTabSwitch = useCallback((tab: "feed" | "spotlight") => {
+    if (tab === activeTab) return;
+    // Save current scroll position before switching
+    saveScroll(activeTab === "feed" ? SCROLL_KEY : SPOTLIGHT_SCROLL_KEY, window.scrollY);
+    setActiveTab(tab);
+    // Reset scroll restore flag for the target tab so it restores on render
+    if (tab === "feed") {
+      scrollRestoredRef.current = false;
+    } else {
+      spotScrollRestoredRef.current = false;
+    }
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [activeTab]);
+
+  // ── Handle subscription from Spotlight banner ───────────────────────
+  const handleSubscribed = useCallback((creatorId: string) => {
+    // Remove all posts by this creator from Spotlight (they'll appear in Feed on refresh)
+    setSpotPosts((prev) => prev.filter((p) => p.creator_id !== creatorId));
+  }, []);
+
   /** Build feed items: interleave <FeedSuggestions> after every N posts */
-  function buildFeedItems(posts: FeedPost[]) {
+  function buildFeedItems(feedPosts: FeedPost[], isSpotlight = false) {
     const items: React.ReactNode[] = [];
-    posts.forEach((post, index) => {
+    feedPosts.forEach((post, index) => {
       items.push(
         <PostCard
           key={post.id}
@@ -317,10 +444,11 @@ export default function HomePage() {
           onUnlock={handleUnlock}
           initialSlide={slideMap[String(post.id)] ?? 0}
           onSlideChange={handleSlideChange}
+          showSubscribeBanner={isSpotlight}
+          onSubscribed={isSpotlight ? handleSubscribed : undefined}
         />
       );
-      // Inject after every Nth post (1-indexed), but not at the very end
-      if ((index + 1) % SUGGESTIONS_EVERY === 0 && index < posts.length - 1) {
+      if ((index + 1) % SUGGESTIONS_EVERY === 0 && index < feedPosts.length - 1) {
         items.push(<FeedSuggestions key={`suggestions-${index}`} />);
       }
     });
@@ -357,7 +485,7 @@ export default function HomePage() {
           {(["feed", "spotlight"] as const).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabSwitch(tab)}
               style={{
                 flex: 1, padding: "12px 0", background: "none", border: "none",
                 borderBottom: activeTab === tab ? "2px solid #8B5CF6" : "2px solid transparent",
@@ -373,14 +501,22 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Story bar */}
+      {/* Story bar — always visible */}
       <div style={{ padding: "0 16px", backgroundColor: "#0A0A0F" }}>
         <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} />
       </div>
 
-      <div style={{ padding: "0 0 40px" }}>
-        {activeTab === "feed" ? (
-          <>
+      <div style={{ overflow: "hidden", padding: "0 0 40px" }}>
+        <div
+          style={{
+            display: "flex",
+            width: "200%",
+            transform: activeTab === "feed" ? "translateX(0)" : "translateX(-50%)",
+            transition: "transform 0.3s ease",
+          }}
+        >
+          {/* ── Feed Tab ─────────────────────────────────────────────── */}
+          <div style={{ width: "50%", minHeight: "200px", flexShrink: 0 }}>
             {showSkeleton && <FeedSkeleton count={5} />}
 
             {!showSkeleton && (
@@ -398,7 +534,6 @@ export default function HomePage() {
                   </div>
                 )}
 
-                {/* Posts interleaved with suggestions */}
                 {buildFeedItems(posts)}
 
                 <div ref={sentinelRef} style={{ height: "1px", marginTop: "1px" }} />
@@ -416,12 +551,46 @@ export default function HomePage() {
                 )}
               </>
             )}
-          </>
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px 20px", color: "#4A4A6A", fontSize: "14px" }}>
-            Spotlight coming soon ✨
           </div>
-        )}
+
+          {/* ── Spotlight Tab ────────────────────────────────────────── */}
+          <div style={{ width: "50%", minHeight: "200px", flexShrink: 0 }}>
+            {showSpotSkeleton && <FeedSkeleton count={5} />}
+
+            {!showSpotSkeleton && (
+              <>
+                {spotError && (
+                  <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
+                    {spotError}
+                  </div>
+                )}
+
+                {!spotError && spotPosts.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "60px 24px" }}>
+                    <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>No posts in Spotlight yet</p>
+                    <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Check back soon for new content from creators</p>
+                  </div>
+                )}
+
+                {buildFeedItems(spotPosts, true)}
+
+                <div ref={spotSentinelRef} style={{ height: "1px", marginTop: "1px" }} />
+
+                {spotLoadingMore && (
+                  <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
+                    <div className="feed-spinner" />
+                  </div>
+                )}
+
+                {!spotNextPage && !spotLoadingMore && spotPosts.length > 0 && (
+                  <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
+                    You&apos;ve seen everything ✓
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

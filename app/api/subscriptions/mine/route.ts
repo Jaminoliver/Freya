@@ -10,13 +10,10 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // DISTINCT ON (creator_id) — dedup in DB, not JS
-    // Also pulls newPosts count via a subquery
     const { data, error } = await supabase.rpc("get_latest_subscriptions", {
       p_fan_id: user.id,
     });
 
-    // Fallback: plain query if RPC not set up yet
     let rows = data;
     if (error || !data) {
       const { data: fallback, error: fallbackError } = await supabase
@@ -44,7 +41,6 @@ export async function GET() {
 
       if (fallbackError) throw fallbackError;
 
-      // Dedup in JS as last resort — one pass with a Set (no double new Date())
       const seen = new Set<string>();
       rows = (fallback ?? []).filter((s) => {
         const creatorId = (Array.isArray(s.creator) ? s.creator[0] : s.creator)?.id;
@@ -85,7 +81,7 @@ export async function GET() {
         price: s.price_paid,
         autoRenew: s.auto_renew,
         expiresAt,
-        newPosts: s.new_posts_count ?? 0, // populated by RPC, 0 fallback
+        newPosts: s.new_posts_count ?? 0,
       };
     });
 
@@ -93,8 +89,7 @@ export async function GET() {
       { subscriptions },
       {
         headers: {
-          // Fresh for 60s, stale-while-revalidate for 5min
-          "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+          "Cache-Control": "no-store",
         },
       }
     );

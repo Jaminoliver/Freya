@@ -16,6 +16,7 @@ import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
 import StoryViewer from "@/components/story/StoryViewer";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
+import { postSyncStore } from "@/lib/store/postSyncStore";
 
 export interface ApiPost {
   id:            number;
@@ -219,7 +220,6 @@ export default function PostRow({
 
   React.useEffect(() => { setPpvPrice(post.ppv_price); setIsPPV(post.is_ppv); }, [post.ppv_price, post.is_ppv]);
 
-  // Fetch saved state on mount so UI is correct immediately on page load
   React.useEffect(() => {
     if (isOwnProfile) return;
     Promise.all([
@@ -229,6 +229,17 @@ export default function PostRow({
         .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {}),
     ]);
   }, [post.id, post.profiles.id, isOwnProfile]);
+
+  // ✅ Listen to postSyncStore — sync likes from PostCard or other PostRows
+  React.useEffect(() => {
+    const unsub = postSyncStore.subscribe((event) => {
+      if (String(event.postId) !== String(post.id)) return;
+      console.log("[PostRow] postSyncStore event received for post", post.id, event);
+      setLiked(event.liked);
+      setLikeCount(event.like_count);
+    });
+    return unsub;
+  }, [post.id]);
 
   const handleOpenFanSheet = React.useCallback(() => {
     setSheetOpen(true);
@@ -248,10 +259,11 @@ export default function PostRow({
     }));
   }, [post.media]);
 
+  // Sync caption and poll from props only (not liked/likeCount — managed by handleLike + postSyncStore)
   React.useEffect(() => {
-    setLiked(post.liked); setLikeCount(post.like_count); setCommentCount(post.comment_count);
-    setPollData(post.poll ?? null); setCaption(post.caption);
-  }, [post.liked, post.like_count, post.comment_count, post.poll, post.caption]);
+    setPollData(post.poll ?? null);
+    setCaption(post.caption);
+  }, [post.poll, post.caption]);
 
   React.useEffect(() => {
     fetch(`/api/posts/${post.id}/comments`)
@@ -280,13 +292,33 @@ export default function PostRow({
 
   const handleLike = async () => {
     if (isLiking.current) return;
+    console.log("[PostRow] handleLike called for post", post.id);
     isLiking.current = true;
     const newLiked = !liked;
     setLiked(newLiked);
     setLikeCount((c) => newLiked ? c + 1 : Math.max(0, c - 1));
-    const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
-    const data = await res.json();
-    if (res.ok) { setLiked(data.liked); setLikeCount(data.like_count); onLike?.(String(post.id)); }
+    try {
+      const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+      const data = await res.json();
+      console.log("[PostRow] like API response:", data);
+      if (res.ok) {
+        setLiked(data.liked);
+        setLikeCount(data.like_count);
+        // ✅ Emit to postSyncStore so PostCard and other PostRows stay in sync
+        postSyncStore.emit({ postId: String(post.id), liked: data.liked, like_count: data.like_count, comment_count: commentCount });
+        onLike?.(String(post.id));
+      } else {
+        console.error("[PostRow] like API error:", data);
+        // Revert optimistic update
+        setLiked(liked);
+        setLikeCount(likeCount);
+      }
+    } catch (err) {
+      console.error("[PostRow] handleLike fetch failed:", err);
+      // Revert optimistic update
+      setLiked(liked);
+      setLikeCount(likeCount);
+    }
     isLiking.current = false;
   };
 
@@ -294,14 +326,23 @@ export default function PostRow({
     if (liked || isLiking.current) return;
     isLiking.current = true;
     setLiked(true); setLikeCount((c) => c + 1);
-    const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
-    const data = await res.json();
-    if (res.ok) { setLiked(data.liked); setLikeCount(data.like_count); onLike?.(String(post.id)); }
+    try {
+      const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setLiked(data.liked);
+        setLikeCount(data.like_count);
+        postSyncStore.emit({ postId: String(post.id), liked: data.liked, like_count: data.like_count, comment_count: commentCount });
+        onLike?.(String(post.id));
+      }
+    } catch (err) {
+      console.error("[PostRow] handleDoubleTapLike failed:", err);
+    }
     isLiking.current = false;
   };
 
   const handleDelete = async () => {
-    const res = await fetch(`/api/posts/${post.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/posts/${post.id}/delete`, { method: "POST" });
     if (res.ok) onDelete?.(String(post.id));
   };
 
@@ -407,10 +448,10 @@ export default function PostRow({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {isOwnProfile && isPPV && ppvPrice ? (
-  <span style={{ fontSize: "11px", fontWeight: 700, color: "#fff", backgroundColor: "#8B5CF6", borderRadius: "6px", padding: "2px 7px", fontFamily: "'Inter', sans-serif", letterSpacing: "0.02em" }}>
-    PPV · ₦{(ppvPrice / 100).toLocaleString("en-NG")}
-  </span>
-) : null}
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#fff", backgroundColor: "#8B5CF6", borderRadius: "6px", padding: "2px 7px", fontFamily: "'Inter', sans-serif", letterSpacing: "0.02em" }}>
+              PPV · ₦{(ppvPrice / 100).toLocaleString("en-NG")}
+            </span>
+          ) : null}
           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{getRelativeTime(post.published_at)}</span>
           <button
             onClick={() => isOwnProfile ? setCreatorSheetOpen(true) : handleOpenFanSheet()}

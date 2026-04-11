@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Heart, MessageCircle, Bookmark, DollarSign } from "lucide-react";
+import { Heart, MessageCircle, Bookmark } from "lucide-react";
 
 interface PostActionsProps {
   likes: number;
@@ -96,18 +96,24 @@ export default function PostActions({
           <button
             onClick={onTip}
             style={{
-              display: "flex", alignItems: "center", gap: "6px",
-              padding: "8px 14px", borderRadius: "10px",
-              border: "1px solid #2A2A3D", background: "transparent",
-              color: "#8B5CF6", fontSize: "13px", fontWeight: 700,
-              cursor: "pointer", transition: "all 0.15s",
+              display: "flex", alignItems: "center", gap: "7px",
+              padding: "8px 16px", borderRadius: "999px",
+              background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
+              border: "none", cursor: "pointer",
               fontFamily: "'Inter', sans-serif",
+              transition: "opacity 0.15s",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.1)")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
-            <DollarSign size={16} strokeWidth={2} />
-            SEND TIP
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 12 20 22 4 22 4 12"/>
+              <rect x="2" y="7" width="20" height="5"/>
+              <line x1="12" y1="22" x2="12" y2="7"/>
+              <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+              <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+            </svg>
+            <span style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>Send Tip</span>
           </button>
         )}
 

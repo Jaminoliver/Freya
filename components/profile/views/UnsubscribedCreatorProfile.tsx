@@ -33,8 +33,8 @@ export default function UnsubscribedCreatorProfile({
   onLike, onComment, onUnlock,
 }: Props) {
   const bannerStats = {
-    posts:       profile.post_count ?? 0,
-    media:       0,
+    posts:       apiPosts.length,
+    followers:   profile.follower_count ?? 0,
     likes:       totalLikes,
     subscribers: profile.subscriber_count ?? 0,
   };
@@ -68,6 +68,7 @@ export default function UnsubscribedCreatorProfile({
         <div style={{ paddingBottom: "12px" }}>
           <ProfileActions
             viewContext="fanViewingCreator"
+            isSubscribed={false}
             onTip={onTip}
             onFollow={onFollow}
             isFollowing={isFollowing}

@@ -8,11 +8,12 @@ import { followCreator, unfollowCreator, checkIsFollowing } from "@/lib/utils/fo
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import { ProfileSkeleton } from "@/components/loadscreen/ProfileSkeleton";
 import type { ProfileSkeletonContext } from "@/components/loadscreen/ProfileSkeleton";
-import type { User, Subscription, Post } from "@/lib/types/profile";
+import type { User, Subscription } from "@/lib/types/profile";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 import type { ApiPost } from "@/components/profile/PostRow";
 import { useAppStore, isStale } from "@/lib/store/appStore";
 import { useUpload } from "@/lib/context/UploadContext";
+import { postSyncStore } from "@/lib/store/postSyncStore";
 
 import OwnCreatorProfile from "@/components/profile/views/OwnCreatorProfile";
 import OwnFanProfile from "@/components/profile/views/OwnFanProfile";
@@ -201,7 +202,11 @@ function ProfilePageInner() {
     if (fresh) {
       if (cached.viewer)  { setViewer(cached.viewer);   viewerIdRef.current  = cached.viewer.id; }
       if (cached.profile) { setProfile(cached.profile); profileIdRef.current = cached.profile.id; }
-      setApiPosts(cached.apiPosts ?? []);
+      setApiPosts((cached.apiPosts ?? []).map((p) => {
+          const synced = postSyncStore.get(String(p.id));
+          if (!synced) return p;
+          return { ...p, liked: synced.liked, like_count: synced.like_count };
+        }));
       setIsSubscribed(cached.isSubscribed ?? false);
       setSubscriptionPeriodEnd(cached.subscriptionPeriodEnd ?? null);
       setIsFollowing(cached.isFollowing ?? false);
@@ -287,7 +292,11 @@ function ProfilePageInner() {
             }
             if (postsRes.status === "fulfilled" && postsRes.value instanceof Response && postsRes.value.ok) {
               const data = await postsRes.value.json();
-              fetchedPosts = data.posts || [];
+              fetchedPosts = (data.posts || []).map((p: any) => {
+                const synced = postSyncStore.get(String(p.id));
+                if (!synced) return p;
+                return { ...p, liked: synced.liked, like_count: synced.like_count };
+              });
               setApiPosts(fetchedPosts);
             }
             if (fanSubRes.status === "fulfilled" && fanSubRes.value instanceof Response && fanSubRes.value.ok) {
@@ -320,13 +329,13 @@ function ProfilePageInner() {
         }
 
         setStoreProfile(username, {
-  viewer: viewerData, profile: enriched, totalLikes: likesCount,
-  tierId: undefined,
-  isFollowing: followingVal,
-  isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
-  apiPosts: fetchedPosts, fetchedAt: Date.now(),
-  fanSubscription: fanSubData ?? undefined,
-});
+          viewer: viewerData, profile: enriched, totalLikes: likesCount,
+          tierId: undefined,
+          isFollowing: followingVal,
+          isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
+          apiPosts: fetchedPosts, fetchedAt: Date.now(),
+          fanSubscription: fanSubData ?? undefined,
+        });
       } catch (err) {
         console.error("[ProfilePage] fetchData UNCAUGHT ERROR:", err);
         setFetchError(true);
@@ -340,19 +349,18 @@ function ProfilePageInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, viewerReady, globalViewer]);
 
+  React.useEffect(() => {
+    if (!profile || !viewer || viewer.id !== profile.id) return;
+    let shouldRefresh = false;
+    for (const u of uploads) {
+      const prev = prevUploadPhases.current[u.id];
+      if (u.phase === "done" && prev !== "done") shouldRefresh = true;
+      prevUploadPhases.current[u.id] = u.phase;
+    }
+    if (shouldRefresh) refreshPosts(profile.username);
+  }, [uploads, profile, viewer, refreshPosts]);
+
   const prevUploadPhases = React.useRef<Record<string, string>>({});
-React.useEffect(() => {
-  if (!profile || !viewer || viewer.id !== profile.id) return;
-  let shouldRefresh = false;
-  for (const u of uploads) {
-    const prev = prevUploadPhases.current[u.id];
-    // Fire if: we've seen this upload before and it just hit "done"
-    // OR it mounted already in "done" state (prev undefined = fresh mount)
-    if (u.phase === "done" && prev !== "done") shouldRefresh = true;
-    prevUploadPhases.current[u.id] = u.phase;
-  }
-  if (shouldRefresh) refreshPosts(profile.username);
-}, [uploads, profile, viewer, refreshPosts]);
 
   React.useEffect(() => {
     if (!profileIdRef.current || !viewerIdRef.current) return;
@@ -390,6 +398,7 @@ React.useEffect(() => {
           ? { ...prev, subscriber_count: updated.subscriber_count, likes_count: updated.likes_count }
           : prev
         );
+        // ✅ Single source of truth — totalLikes only updates from DB via realtime
         setTotalLikes(updated.likes_count ?? 0);
       })
       .subscribe();
@@ -444,7 +453,41 @@ React.useEffect(() => {
 
   const handlePost     = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
-  const handleLike     = (_postId: string) => {};
+
+  // ✅ Sync likes from feed/PostCard into profile apiPosts
+  // postSyncStore.get() merge on load handles cache persistence
+  React.useEffect(() => {
+    const unsub = postSyncStore.subscribe((event) => {
+      setApiPosts((prev) =>
+        prev.map((p) =>
+          String(p.id) === event.postId
+            ? { ...p, liked: event.liked, like_count: event.like_count }
+            : p
+        )
+      );
+    });
+    return unsub;
+  }, []);
+
+  // ✅ No manual setTotalLikes here — realtime profileChannel is the only updater
+  const handleLike = async (postId: string) => {
+    try {
+      const res  = await fetch(`/api/posts/${postId}/like`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) return;
+      setApiPosts((prev) =>
+        prev.map((p) =>
+          String(p.id) === postId
+            ? { ...p, liked: data.liked, like_count: data.like_count }
+            : p
+        )
+      );
+      // totalLikes is updated automatically by the realtime profileChannel
+    } catch (err) {
+      console.error("[handleLike] failed:", err);
+    }
+  };
+
   const handleComment  = (id: string) => console.log("Comment:", id);
   const handleTip      = (_id: string) => openTip();
 

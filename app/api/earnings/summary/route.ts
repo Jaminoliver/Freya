@@ -2,6 +2,17 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
+// Derive earning type from prefixed reference_id (wallet payments)
+function categoryFromPrefix(refId: string | null): string | null {
+  if (!refId) return null;
+  if (refId.startsWith("sub_")) return "SUBSCRIPTION_PAYMENT";
+  if (refId.startsWith("autosub_")) return "AUTO_SUBSCRIPTION";
+  if (refId.startsWith("tip_")) return "TIP";
+  if (refId.startsWith("ppv_")) return "PPV_PURCHASE";
+  if (refId.startsWith("msg_")) return "PPV_MESSAGE";
+  return null; // No prefix — Monnify or legacy entry, needs fallback lookup
+}
+
 export async function GET() {
   try {
     const supabase = await createServerSupabaseClient();
@@ -37,18 +48,28 @@ export async function GET() {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const thisMonthEntries = (earnings ?? []).filter((e) => e.created_at >= startOfMonth);
 
-    const refIds = thisMonthEntries.map((e) => e.reference_id).filter(Boolean) as string[];
-
+    // Build category map — try prefix first, fallback to fan DEBIT / transactions lookup
     let txCategoryMap: Record<string, string> = {};
+    const fallbackRefIds: string[] = [];
 
-    if (refIds.length > 0) {
-      // Use service client to bypass RLS when reading other users' ledger rows
+    thisMonthEntries.forEach((e) => {
+      if (!e.reference_id) return;
+      const prefixCategory = categoryFromPrefix(e.reference_id);
+      if (prefixCategory) {
+        txCategoryMap[e.reference_id] = prefixCategory;
+      } else {
+        fallbackRefIds.push(e.reference_id);
+      }
+    });
+
+    // Fallback for Monnify / legacy entries without prefix
+    if (fallbackRefIds.length > 0) {
       const serviceSupabase = createServiceSupabaseClient();
 
       const { data: fanEntries } = await serviceSupabase
         .from("ledger")
         .select("reference_id, category")
-        .in("reference_id", refIds)
+        .in("reference_id", fallbackRefIds)
         .eq("type", "DEBIT")
         .in("category", ["SUBSCRIPTION_PAYMENT", "AUTO_SUBSCRIPTION", "TIP", "PPV_PURCHASE", "PPV_MESSAGE"]);
 
@@ -61,12 +82,12 @@ export async function GET() {
       }
 
       // Fallback: ref_ids still unmatched → check transactions table (bank transfer subs)
-      const missingRefIds = refIds.filter((r) => !txCategoryMap[r]);
-      if (missingRefIds.length > 0) {
+      const stillMissing = fallbackRefIds.filter((r) => !txCategoryMap[r]);
+      if (stillMissing.length > 0) {
         const { data: txFans } = await serviceSupabase
           .from("transactions")
           .select("provider_txn_id, purpose")
-          .in("provider_txn_id", missingRefIds);
+          .in("provider_txn_id", stillMissing);
 
         const PURPOSE_TO_CATEGORY: Record<string, string> = {
           SUBSCRIPTION: "SUBSCRIPTION_PAYMENT",

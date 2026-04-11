@@ -124,12 +124,16 @@ export function PostCard({
   onUnlock,
   initialSlide = 0,
   onSlideChange,
+  showSubscribeBanner = false,
+  onSubscribed,
 }: {
-  post:           Post;
-  onLike?:        (postId: string) => void;
-  onUnlock?:      (postId: string) => void;
-  initialSlide?:  number;
-  onSlideChange?: (postId: string, index: number) => void;
+  post:                 Post;
+  onLike?:              (postId: string) => void;
+  onUnlock?:            (postId: string) => void;
+  initialSlide?:        number;
+  onSlideChange?:       (postId: string, index: number) => void;
+  showSubscribeBanner?: boolean;
+  onSubscribed?:        (creatorId: string) => void;
 }) {
   const { navigate } = useNav();
   const router  = useRouter();
@@ -141,6 +145,12 @@ export function PostCard({
   const [commentOpen,       setCommentOpen]       = useState(false);
   const [sheetOpen,         setSheetOpen]         = useState(false);
   const [tipOpen,           setTipOpen]           = useState(false);
+  const [subOpen,           setSubOpen]           = useState(false);
+  const [subMonthly,        setSubMonthly]        = useState(0);
+  const [subThreeMonth,     setSubThreeMonth]     = useState<number | undefined>(undefined);
+  const [subSixMonth,       setSubSixMonth]       = useState<number | undefined>(undefined);
+  const [subLoading,        setSubLoading]        = useState(false);
+  const [subscribed,        setSubscribed]        = useState(false);
   const [liked,             setLiked]             = useState(post.liked);
   const [likeCount,         setLikeCount]         = useState(post.likes);
   const [commentCount,      setCommentCount]      = useState(post.comments);
@@ -166,7 +176,6 @@ export function PostCard({
     fetchStatus,
   } = useBlockRestrict({ userId: post.creator.id });
 
-  // ── Eager: fetch saved state on mount (fire-and-forget, non-blocking) ──
   useEffect(() => {
     fetch(`/api/saved/posts?post_id=${post.id}`)
       .then((r) => r.json()).then((d) => setSavedPost(d.saved ?? false)).catch(() => {});
@@ -174,7 +183,6 @@ export function PostCard({
       .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {});
   }, [post.id, post.creator.id]);
 
-  // ── Lazy: fetch block/restrict only when sheet opens ──
   const handleOpenSheet = useCallback(async () => {
     setSheetOpen(true);
     if (sheetDataFetched) return;
@@ -182,7 +190,6 @@ export function PostCard({
     await fetchStatus();
   }, [sheetDataFetched, fetchStatus]);
 
-  // ── Lazy: fetch comments only when comment section opens ──
   const handleToggleComment = useCallback(async () => {
     setCommentOpen((prev) => {
       const next = !prev;
@@ -309,6 +316,47 @@ export function PostCard({
     refresh();
   }, [refresh]);
 
+const handleSubscribeBannerClick = useCallback(async () => {
+  if (subscribed) {
+    navigate(`/${post.creator.username}`);
+    return;
+  }
+  setSubLoading(true);
+  try {
+    const supabase = createClient();
+    console.log("[PostCard] Fetching profile for creator:", post.creator.id);
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("subscription_price, bundle_price_3_months, bundle_price_6_months")
+      .eq("id", post.creator.id)
+      .single();
+
+    console.log("[PostCard] Profile result:", profile, "Error:", error);
+
+    if (profile) {
+      console.log("[PostCard] Prices — monthly:", profile.subscription_price, "3mo:", profile.bundle_price_3_months, "6mo:", profile.bundle_price_6_months);
+      setSubMonthly(profile.subscription_price ?? 0);
+      setSubThreeMonth(profile.bundle_price_3_months ?? undefined);
+      setSubSixMonth(profile.bundle_price_6_months ?? undefined);
+    } else {
+      console.log("[PostCard] No profile found, defaulting to 0");
+      setSubMonthly(0);
+      setSubThreeMonth(undefined);
+      setSubSixMonth(undefined);
+    }
+    setSubOpen(true);
+  } catch (err) {
+    console.error("[PostCard] handleSubscribeBannerClick error:", err);
+    navigate(`/${post.creator.username}`);
+  } finally {
+    setSubLoading(false);
+  }
+}, [subscribed, post.creator.id, post.creator.username, navigate]);
+
+  const handleSubscriptionSuccess = useCallback(() => {
+  setSubscribed(true);
+}, []);
+
   const creatorAsUser: User = {
     id: post.creator.id, username: post.creator.username,
     display_name: post.creator.name, avatar_url: post.creator.avatar_url, role: "creator",
@@ -344,6 +392,23 @@ export function PostCard({
         creator={creatorAsUser}
         postId={Number(post.id)}
       />
+
+      <CheckoutModal
+  isOpen={subOpen}
+  onClose={() => {
+  setSubOpen(false);
+  onSubscribed?.(post.creator.id);
+}}
+  type="subscription"
+  creator={creatorAsUser}
+  monthlyPrice={subMonthly}
+  threeMonthPrice={subThreeMonth}
+  sixMonthPrice={subSixMonth}
+  onSuccess={handleSubscriptionSuccess}
+  onSubscriptionSuccess={handleSubscriptionSuccess}
+  onViewContent={() => { setSubOpen(false); navigate(`/${post.creator.username}`); }}
+  onGoToSubscriptions={() => { setSubOpen(false); navigate("/subscriptions"); }}
+/>
 
       {lightboxOpen && lightboxPost.media.length > 0 && (
         <Lightbox post={lightboxPost} allPosts={[lightboxPost]} initialMediaIndex={lightboxMediaIdx} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
@@ -411,6 +476,63 @@ export function PostCard({
         <p style={{ fontSize: isTextPost ? "15px" : "14px", color: "#C4C4D4", lineHeight: isTextPost ? 1.7 : 1.6, margin: "0", padding: isTextPost ? "0 16px 14px" : "0 16px 10px", whiteSpace: "pre-wrap" }}>
           {post.caption}
         </p>
+      )}
+
+      {/* Subscribe banner for Spotlight posts */}
+      {showSubscribeBanner && (
+        <div
+          onClick={handleSubscribeBannerClick}
+          style={{
+            margin: "0 0 10px",
+            padding: "12px 16px",
+            background: subscribed
+              ? "linear-gradient(135deg, #22C55E, #16A34A)"
+              : "linear-gradient(135deg, #8B5CF6, #EC4899)",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            cursor: subLoading ? "wait" : "pointer",
+            transition: "opacity 0.15s",
+            opacity: subLoading ? 0.7 : 1,
+          }}
+          onMouseEnter={(e) => { if (!subLoading) e.currentTarget.style.opacity = "0.9"; }}
+          onMouseLeave={(e) => { if (!subLoading) e.currentTarget.style.opacity = "1"; }}
+        >
+          <img
+            src={post.creator.avatar_url || ""}
+            alt={post.creator.name}
+            style={{
+              width: "44px",
+              height: "44px",
+              borderRadius: "50%",
+              objectFit: "cover",
+              border: "2px solid rgba(255,255,255,0.3)",
+              flexShrink: 0,
+            }}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <span style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
+              {post.creator.isVerified && <BadgeCheck size={14} color="#FFFFFF" />}
+            </div>
+            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>@{post.creator.username}</span>
+          </div>
+          <div
+            style={{
+              padding: "8px 20px",
+              borderRadius: "8px",
+              backgroundColor: "#FFFFFF",
+              fontSize: "14px",
+              fontWeight: 700,
+              color: subscribed ? "#16A34A" : "#8B5CF6",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              fontFamily: "'Inter', sans-serif",
+            }}
+          >
+            {subscribed ? "Subscribed ✓" : "Subscribe"}
+          </div>
+        </div>
       )}
 
       {isTextPost && <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />}

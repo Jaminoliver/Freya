@@ -34,8 +34,8 @@ export default function OwnCreatorProfile({
   onPost, onSchedule, onLike, onComment, onTip, onUnlock,
 }: Props) {
   const bannerStats = {
-    posts:       profile.post_count ?? 0,
-    media:       0,
+    posts:       apiPosts.length,
+    followers:   profile.follower_count ?? 0,
     likes:       totalLikes,
     subscribers: profile.subscriber_count ?? 0,
   };

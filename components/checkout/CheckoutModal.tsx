@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import type { User } from "@/lib/types/profile";
 import type {
   CheckoutType, CheckoutScreen, Currency, PaymentMethodId, SubscriptionTier, VirtualAccountDisplay,
@@ -55,8 +56,12 @@ export default function CheckoutModal({
   const [virtualAccount, setVirtualAccount] = React.useState<VirtualAccountDisplay | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [mounted, setMounted] = React.useState(false);
 
   const successRef = React.useRef(false);
+
+  // Required for SSR — portal target only exists in browser
+  React.useEffect(() => { setMounted(true); }, []);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -158,7 +163,6 @@ export default function CheckoutModal({
     if (screen === "payment") {
       setError(null);
 
-      // ── DEBUG — remove after confirming postId reaches API ──
       console.log("[CheckoutModal] handleNext postId:", postId, "type:", type);
 
       if (selectedMethod === "freya_wallet") {
@@ -215,7 +219,6 @@ export default function CheckoutModal({
           const data = await res.json();
 
           if (!res.ok) {
-            // ✅ Show the server error message directly — no redirect fallback
             setError(data.message ?? "Failed to generate bank account. Please try again.");
             return;
           }
@@ -230,7 +233,6 @@ export default function CheckoutModal({
               reference: data.reference,
             });
           } else {
-            // ✅ accountNumber missing but response was 200 — surface error, never redirect
             setError("Bank account details unavailable. Please try again.");
           }
         } catch (err) {
@@ -294,8 +296,9 @@ export default function CheckoutModal({
   };
 
   if (!isOpen && !isClosing) return null;
+  if (!mounted) return null;
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -400,6 +403,7 @@ export default function CheckoutModal({
           />
         )}
       </div>
-    </>
+    </>,
+    document.body
   );
 }

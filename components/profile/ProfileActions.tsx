@@ -1,22 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { MessageCircle, Banknote, UserPlus, UserCheck } from "lucide-react";
+import { UserPlus, UserCheck } from "lucide-react";
 
 interface ProfileActionsProps {
-  viewContext: "ownFan" | "ownCreator" | "creatorViewingFan" | "fanViewingCreator";
-  targetUserId?: string;
+  viewContext:    "ownFan" | "ownCreator" | "creatorViewingFan" | "fanViewingCreator";
+  targetUserId?:  string;
+  isSubscribed?:  boolean;
   onEditProfile?: () => void;
-  onMessage?: () => void;
-  onTip?: (postId?: string) => void;
-  onShare?: () => void;
-  onFollow?: () => void;
-  isFollowing?: boolean;
+  onMessage?:     () => void;
+  onTip?:         (postId?: string) => void;
+  onShare?:       () => void;
+  onFollow?:      () => void;
+  isFollowing?:   boolean;
 }
 
 export default function ProfileActions({
   viewContext,
   targetUserId,
+  isSubscribed = false,
   onEditProfile,
   onMessage,
   onTip,
@@ -30,96 +32,118 @@ export default function ProfileActions({
     onEditProfile?.();
   };
 
-  const handleMessage = () => {
-    onMessage?.();
-  };
-
-  if (viewContext === "ownFan") {
+  if (viewContext === "ownFan" || viewContext === "ownCreator") {
     return (
-      <button onClick={handleEditProfile} style={{ padding: "5px 12px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #8B5CF6", color: "#8B5CF6", fontSize: "12px", fontWeight: 600, fontFamily: "'Inter', sans-serif", cursor: "pointer", transition: "background-color 0.2s ease, color 0.2s ease" }}
+      <button
+        onClick={handleEditProfile}
+        style={{
+          padding: "5px 12px", borderRadius: "6px",
+          backgroundColor: "transparent", border: "1px solid #8B5CF6",
+          color: "#8B5CF6", fontSize: "12px", fontWeight: 600,
+          fontFamily: "'Inter', sans-serif", cursor: "pointer",
+          transition: "background-color 0.2s ease, color 0.2s ease",
+        }}
         onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#8B5CF6"; e.currentTarget.style.color = "#FFFFFF"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#8B5CF6"; }}>
-        Edit Profile
-      </button>
-    );
-  }
-
-  if (viewContext === "ownCreator") {
-    return (
-      <button onClick={handleEditProfile} style={{ padding: "5px 12px", borderRadius: "6px", backgroundColor: "transparent", border: "1px solid #8B5CF6", color: "#8B5CF6", fontSize: "12px", fontWeight: 600, fontFamily: "'Inter', sans-serif", cursor: "pointer", transition: "background-color 0.2s ease, color 0.2s ease" }}
-        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#8B5CF6"; e.currentTarget.style.color = "#FFFFFF"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#8B5CF6"; }}>
+        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#8B5CF6"; }}
+      >
         Edit Profile
       </button>
     );
   }
 
   if (viewContext === "creatorViewingFan") {
-    const iconBtn: React.CSSProperties = {
-      display: "flex", alignItems: "center", justifyContent: "center",
-      width: "36px", height: "36px", borderRadius: "8px",
-      backgroundColor: "#1E1E2E", border: "1px solid #2A2A3D",
-      color: "#A3A3C2", cursor: "pointer", transition: "all 0.15s ease",
-    };
-
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
-        <button onClick={handleMessage} style={iconBtn} title="Message"
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.15)"; e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}>
-          <MessageCircle size={18} strokeWidth={1.8} />
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
+        <button
+          onClick={() => onMessage?.()}
+          style={{
+            display: "flex", alignItems: "center", gap: "7px",
+            padding: "9px 18px", borderRadius: "999px",
+            background: "transparent", border: "1px solid #3A3A4D",
+            cursor: "pointer", fontFamily: "'Inter', sans-serif",
+            transition: "border-color 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span style={{ fontSize: "13px", fontWeight: 600, color: "#C4C4D4" }}>Message</span>
         </button>
       </div>
     );
   }
 
   if (viewContext === "fanViewingCreator") {
-    const iconBtn: React.CSSProperties = {
-      display: "flex", alignItems: "center", justifyContent: "center",
-      width: "36px", height: "36px", borderRadius: "8px",
-      backgroundColor: "#1E1E2E", border: "1px solid #2A2A3D",
-      color: "#A3A3C2", cursor: "pointer", transition: "all 0.15s ease",
-    };
-
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
+
+        {/* Following/Follow pill */}
         <button
           onClick={onFollow}
           style={{
-            display: "flex", alignItems: "center", gap: "5px",
-            padding: "0 10px", height: "36px", borderRadius: "8px",
-            backgroundColor: isFollowing ? "#1E1E2E" : "#8B5CF6",
-            border: isFollowing ? "1px solid #8B5CF6" : "none",
-            color: isFollowing ? "#8B5CF6" : "#fff",
-            fontSize: "12px", fontWeight: 600,
-            fontFamily: "'Inter', sans-serif", cursor: "pointer",
-            transition: "all 0.15s ease",
+            display: "flex", alignItems: "center", gap: "7px",
+            padding: "9px 18px", borderRadius: "999px",
+            background: "transparent",
+            border: `1px solid ${isFollowing ? "#8B5CF6" : "#3A3A4D"}`,
+            cursor: "pointer", fontFamily: "'Inter', sans-serif",
+            transition: "all 0.15s",
           }}
-          onMouseEnter={(e) => {
-            if (isFollowing) { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.15)"; }
-            else { e.currentTarget.style.backgroundColor = "#7C3AED"; }
-          }}
-          onMouseLeave={(e) => {
-            if (isFollowing) { e.currentTarget.style.backgroundColor = "#1E1E2E"; }
-            else { e.currentTarget.style.backgroundColor = "#8B5CF6"; }
-          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = isFollowing ? "#8B5CF6" : "#3A3A4D"; }}
         >
-          {isFollowing ? <UserCheck size={15} strokeWidth={1.8} /> : <UserPlus size={15} strokeWidth={1.8} />}
-          {isFollowing ? "Following" : "Follow"}
+          {isFollowing
+            ? <UserCheck size={15} strokeWidth={1.8} color="#8B5CF6" />
+            : <UserPlus  size={15} strokeWidth={1.8} color="#C4C4D4" />
+          }
+          <span style={{ fontSize: "13px", fontWeight: 600, color: isFollowing ? "#8B5CF6" : "#C4C4D4" }}>
+            {isFollowing ? "Following" : "Follow"}
+          </span>
         </button>
 
-        <button onClick={handleMessage} style={iconBtn} title="Message"
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.15)"; e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}>
-          <MessageCircle size={18} strokeWidth={1.8} />
+        {/* Message — only when subscribed */}
+        {isSubscribed && (
+          <button
+            onClick={() => onMessage?.()}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: "40px", height: "40px", borderRadius: "999px",
+              background: "transparent", border: "1px solid #3A3A4D",
+              cursor: "pointer", transition: "border-color 0.15s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+        )}
+
+        {/* Tip pill */}
+        <button
+          onClick={() => onTip?.(undefined)}
+          style={{
+            display: "flex", alignItems: "center", gap: "7px",
+            padding: "9px 16px", borderRadius: "999px",
+            background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
+            border: "none", cursor: "pointer",
+            fontFamily: "'Inter', sans-serif", transition: "opacity 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 12 20 22 4 22 4 12"/>
+            <rect x="2" y="7" width="20" height="5"/>
+            <line x1="12" y1="22" x2="12" y2="7"/>
+            <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+            <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+          </svg>
+          <span style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>Tip</span>
         </button>
 
-        {/* No post_id on profile page — tip opens without a specific post */}
-        <button onClick={() => onTip?.(undefined)} style={iconBtn} title="Send Tip"
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(236,72,153,0.15)"; e.currentTarget.style.borderColor = "#EC4899"; e.currentTarget.style.color = "#EC4899"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1E1E2E"; e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#A3A3C2"; }}>
-          <Banknote size={18} strokeWidth={1.8} />
-        </button>
       </div>
     );
   }
