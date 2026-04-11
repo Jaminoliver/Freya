@@ -6,8 +6,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id }   = await params;
-    const postId   = Number(id);
+    const { id } = await params;
+    const postId = Number(id);
     if (isNaN(postId)) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 
     const supabase = await createServerSupabaseClient();
@@ -15,6 +15,17 @@ export async function POST(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const service = createServiceSupabaseClient();
+
+    // Get creator_id for this post
+    const { data: post, error: postErr } = await service
+      .from("posts")
+      .select("creator_id")
+      .eq("id", postId)
+      .single();
+
+    if (postErr || !post) {
+      return NextResponse.json({ error: "Post not found" }, { status: 404 });
+    }
 
     // Check for existing like
     const { data: existing } = await service
@@ -24,51 +35,42 @@ export async function POST(
       .eq("post_id", postId)
       .maybeSingle();
 
-    // Get post (for like_count + creator_id)
-    const { data: post } = await service
+    if (existing) {
+      // Unlike — delete row (trigger updates posts.like_count)
+      await service.from("likes").delete().eq("id", existing.id);
+
+      // Atomically decrement profiles.likes_count
+      if (post.creator_id) {
+        await service.rpc("decrement_profile_likes", { p_creator_id: post.creator_id });
+      }
+    } else {
+      // Like — insert row (trigger updates posts.like_count, notification trigger fires)
+      const { error: insertErr } = await service
+        .from("likes")
+        .insert({ user_id: user.id, post_id: postId });
+
+      if (insertErr) {
+        console.error("[Like Post] Insert error:", insertErr);
+        return NextResponse.json({ error: "Failed to like" }, { status: 500 });
+      }
+
+      // Atomically increment profiles.likes_count
+      if (post.creator_id) {
+        await service.rpc("increment_profile_likes", { p_creator_id: post.creator_id });
+      }
+    }
+
+    // Read like_count AFTER trigger has fired
+    const { data: updated } = await service
       .from("posts")
-      .select("like_count, creator_id")
+      .select("like_count")
       .eq("id", postId)
       .single();
 
-    const currentPostLikes = post?.like_count ?? 0;
-    const creatorId        = post?.creator_id ?? null;
-
-    // Get current profile likes_count
-    let currentProfileLikes = 0;
-    if (creatorId) {
-      const { data: profile } = await service
-        .from("profiles")
-        .select("likes_count")
-        .eq("id", creatorId)
-        .single();
-      currentProfileLikes = profile?.likes_count ?? 0;
-    }
-
-    if (existing) {
-      // Unlike
-      await service.from("likes").delete().eq("id", existing.id);
-      await service.from("posts").update({ like_count: Math.max(0, currentPostLikes - 1) }).eq("id", postId);
-      if (creatorId) {
-        await service.from("profiles").update({ likes_count: Math.max(0, currentProfileLikes - 1) }).eq("id", creatorId);
-      }
-    } else {
-      // Like
-      await service.from("likes").insert({ user_id: user.id, post_id: postId });
-      await service.from("posts").update({ like_count: currentPostLikes + 1 }).eq("id", postId);
-      if (creatorId) {
-        await service.from("profiles").update({ likes_count: currentProfileLikes + 1 }).eq("id", creatorId);
-      }
-      // Notification handled by DB trigger: handle_post_like_notification
-    }
-
-    const { data: updated } = await service.from("posts").select("like_count").eq("id", postId).single();
-
     return NextResponse.json({
-      liked:      !existing,
+      liked: !existing,
       like_count: updated?.like_count ?? 0,
     });
-
   } catch (err) {
     console.error("[Like Post] Error:", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });

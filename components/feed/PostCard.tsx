@@ -183,6 +183,17 @@ export function PostCard({
       .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {});
   }, [post.id, post.creator.id]);
 
+  // Subscribe to postSyncStore for cross-page sync
+  useEffect(() => {
+    const unsub = postSyncStore.subscribe((event) => {
+      if (event.postId !== post.id) return;
+      setLiked(event.liked);
+      setLikeCount(event.like_count);
+      if (event.comment_count !== undefined) setCommentCount(event.comment_count);
+    });
+    return unsub;
+  }, [post.id]);
+
   const handleOpenSheet = useCallback(async () => {
     setSheetOpen(true);
     if (sheetDataFetched) return;
@@ -239,33 +250,69 @@ export function PostCard({
   const handleLike = async () => {
     if (isLiking.current) return;
     isLiking.current = true;
-    const newLiked = !liked;
+
+    // Snapshot for rollback
+    const wasLiked = liked;
+    const oldCount = likeCount;
+    const newLiked = !wasLiked;
+    const newCount = newLiked ? oldCount + 1 : Math.max(0, oldCount - 1);
+
+    // Optimistic update
     setLiked(newLiked);
-    setLikeCount((c) => newLiked ? c + 1 : Math.max(0, c - 1));
-    const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
-    const data = await res.json();
-    if (res.ok) {
-      setLiked(data.liked);
-      setLikeCount(data.like_count);
-      postSyncStore.emit({ postId: post.id, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
-      onLike?.(post.id);
+    setLikeCount(newCount);
+    postSyncStore.emit({ postId: post.id, liked: newLiked, like_count: newCount, comment_count: commentCount });
+
+    try {
+      const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setLiked(data.liked);
+        setLikeCount(data.like_count);
+        postSyncStore.emit({ postId: post.id, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
+        onLike?.(post.id);
+      } else {
+        setLiked(wasLiked);
+        setLikeCount(oldCount);
+        postSyncStore.emit({ postId: post.id, liked: wasLiked, like_count: oldCount, comment_count: commentCount });
+      }
+    } catch {
+      setLiked(wasLiked);
+      setLikeCount(oldCount);
+      postSyncStore.emit({ postId: post.id, liked: wasLiked, like_count: oldCount, comment_count: commentCount });
     }
+
     isLiking.current = false;
   };
 
   const handleDoubleTapLike = async () => {
     if (liked || isLiking.current) return;
     isLiking.current = true;
+
+    const oldCount = likeCount;
+
     setLiked(true);
-    setLikeCount((c) => c + 1);
-    const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
-    const data = await res.json();
-    if (res.ok) {
-      setLiked(data.liked);
-      setLikeCount(data.like_count);
-      postSyncStore.emit({ postId: post.id, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
-      onLike?.(post.id);
+    setLikeCount(oldCount + 1);
+    postSyncStore.emit({ postId: post.id, liked: true, like_count: oldCount + 1, comment_count: commentCount });
+
+    try {
+      const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setLiked(data.liked);
+        setLikeCount(data.like_count);
+        postSyncStore.emit({ postId: post.id, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
+        onLike?.(post.id);
+      } else {
+        setLiked(false);
+        setLikeCount(oldCount);
+        postSyncStore.emit({ postId: post.id, liked: false, like_count: oldCount, comment_count: commentCount });
+      }
+    } catch {
+      setLiked(false);
+      setLikeCount(oldCount);
+      postSyncStore.emit({ postId: post.id, liked: false, like_count: oldCount, comment_count: commentCount });
     }
+
     isLiking.current = false;
   };
 
@@ -279,13 +326,16 @@ export function PostCard({
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: text, gif_url: gif_url ?? null, parent_comment_id: parent_comment_id ?? null, reply_to_username: reply_to_username ?? null, reply_to_id: reply_to_id ?? null }),
     });
-    setCommentCount((c) => c + 1);
-    postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: commentCount + 1 });
+    setCommentCount((c) => {
+      const newCount = c + 1;
+      postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: newCount });
+      return newCount;
+    });
     if (!parent_comment_id) {
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
       if (d.comments) setComments(d.comments);
     }
-  }, [liked, likeCount, commentCount]);
+  }, [liked, likeCount]);
 
   const handleSavePost = useCallback(async () => {
     const next = !savedPost;
@@ -324,22 +374,17 @@ const handleSubscribeBannerClick = useCallback(async () => {
   setSubLoading(true);
   try {
     const supabase = createClient();
-    console.log("[PostCard] Fetching profile for creator:", post.creator.id);
     const { data: profile, error } = await supabase
       .from("profiles")
       .select("subscription_price, bundle_price_3_months, bundle_price_6_months")
       .eq("id", post.creator.id)
       .single();
 
-    console.log("[PostCard] Profile result:", profile, "Error:", error);
-
     if (profile) {
-      console.log("[PostCard] Prices — monthly:", profile.subscription_price, "3mo:", profile.bundle_price_3_months, "6mo:", profile.bundle_price_6_months);
       setSubMonthly(profile.subscription_price ?? 0);
       setSubThreeMonth(profile.bundle_price_3_months ?? undefined);
       setSubSixMonth(profile.bundle_price_6_months ?? undefined);
     } else {
-      console.log("[PostCard] No profile found, defaulting to 0");
       setSubMonthly(0);
       setSubThreeMonth(undefined);
       setSubSixMonth(undefined);

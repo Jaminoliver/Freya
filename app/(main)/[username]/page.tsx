@@ -398,7 +398,6 @@ function ProfilePageInner() {
           ? { ...prev, subscriber_count: updated.subscriber_count, likes_count: updated.likes_count }
           : prev
         );
-        // ✅ Single source of truth — totalLikes only updates from DB via realtime
         setTotalLikes(updated.likes_count ?? 0);
       })
       .subscribe();
@@ -454,8 +453,7 @@ function ProfilePageInner() {
   const handlePost     = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
 
-  // ✅ Sync likes from feed/PostCard into profile apiPosts
-  // postSyncStore.get() merge on load handles cache persistence
+  // ── Sync likes from feed/PostCard into profile apiPosts
   React.useEffect(() => {
     const unsub = postSyncStore.subscribe((event) => {
       setApiPosts((prev) =>
@@ -469,24 +467,9 @@ function ProfilePageInner() {
     return unsub;
   }, []);
 
-  // ✅ No manual setTotalLikes here — realtime profileChannel is the only updater
-  const handleLike = async (postId: string) => {
-    try {
-      const res  = await fetch(`/api/posts/${postId}/like`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) return;
-      setApiPosts((prev) =>
-        prev.map((p) =>
-          String(p.id) === postId
-            ? { ...p, liked: data.liked, like_count: data.like_count }
-            : p
-        )
-      );
-      // totalLikes is updated automatically by the realtime profileChannel
-    } catch (err) {
-      console.error("[handleLike] failed:", err);
-    }
-  };
+  // PostRow handles the API call + postSyncStore emit internally.
+  // Profile page only needs the postSyncStore subscription (already wired above).
+  const handleLike = (_postId: string) => {};
 
   const handleComment  = (id: string) => console.log("Comment:", id);
   const handleTip      = (_id: string) => openTip();

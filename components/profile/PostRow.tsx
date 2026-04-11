@@ -230,13 +230,13 @@ export default function PostRow({
     ]);
   }, [post.id, post.profiles.id, isOwnProfile]);
 
-  // ✅ Listen to postSyncStore — sync likes from PostCard or other PostRows
+  // Listen to postSyncStore — sync likes from PostCard or other PostRows
   React.useEffect(() => {
     const unsub = postSyncStore.subscribe((event) => {
       if (String(event.postId) !== String(post.id)) return;
-      console.log("[PostRow] postSyncStore event received for post", post.id, event);
       setLiked(event.liked);
       setLikeCount(event.like_count);
+      if (event.comment_count !== undefined) setCommentCount(event.comment_count);
     });
     return unsub;
   }, [post.id]);
@@ -259,7 +259,7 @@ export default function PostRow({
     }));
   }, [post.media]);
 
-  // Sync caption and poll from props only (not liked/likeCount — managed by handleLike + postSyncStore)
+  // Sync caption and poll from props only
   React.useEffect(() => {
     setPollData(post.poll ?? null);
     setCaption(post.caption);
@@ -283,49 +283,67 @@ export default function PostRow({
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: text, gif_url: gif_url ?? null, parent_comment_id: parent_comment_id ?? null, reply_to_username: reply_to_username ?? null, reply_to_id: reply_to_id ?? null }),
     });
-    setCommentCount((c) => c + 1);
+    setCommentCount((c) => {
+      const newCount = c + 1;
+      postSyncStore.emit({ postId: String(post.id), liked, like_count: likeCount, comment_count: newCount });
+      return newCount;
+    });
     if (!parent_comment_id) {
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
       if (d.comments) setComments(d.comments);
     }
-  }, []);
+  }, [post.id, liked, likeCount]);
 
   const handleLike = async () => {
     if (isLiking.current) return;
-    console.log("[PostRow] handleLike called for post", post.id);
     isLiking.current = true;
-    const newLiked = !liked;
+
+    // Snapshot for rollback
+    const wasLiked = liked;
+    const oldCount = likeCount;
+    const newLiked = !wasLiked;
+    const newCount = newLiked ? oldCount + 1 : Math.max(0, oldCount - 1);
+
+    // Optimistic update
     setLiked(newLiked);
-    setLikeCount((c) => newLiked ? c + 1 : Math.max(0, c - 1));
+    setLikeCount(newCount);
+    postSyncStore.emit({ postId: String(post.id), liked: newLiked, like_count: newCount, comment_count: commentCount });
+
     try {
       const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
       const data = await res.json();
-      console.log("[PostRow] like API response:", data);
+
       if (res.ok) {
         setLiked(data.liked);
         setLikeCount(data.like_count);
-        // ✅ Emit to postSyncStore so PostCard and other PostRows stay in sync
         postSyncStore.emit({ postId: String(post.id), liked: data.liked, like_count: data.like_count, comment_count: commentCount });
         onLike?.(String(post.id));
       } else {
-        console.error("[PostRow] like API error:", data);
-        // Revert optimistic update
-        setLiked(liked);
-        setLikeCount(likeCount);
+        // Rollback
+        setLiked(wasLiked);
+        setLikeCount(oldCount);
+        postSyncStore.emit({ postId: String(post.id), liked: wasLiked, like_count: oldCount, comment_count: commentCount });
       }
-    } catch (err) {
-      console.error("[PostRow] handleLike fetch failed:", err);
-      // Revert optimistic update
-      setLiked(liked);
-      setLikeCount(likeCount);
+    } catch {
+      // Rollback
+      setLiked(wasLiked);
+      setLikeCount(oldCount);
+      postSyncStore.emit({ postId: String(post.id), liked: wasLiked, like_count: oldCount, comment_count: commentCount });
     }
+
     isLiking.current = false;
   };
 
   const handleDoubleTapLike = async () => {
     if (liked || isLiking.current) return;
     isLiking.current = true;
-    setLiked(true); setLikeCount((c) => c + 1);
+
+    const oldCount = likeCount;
+
+    setLiked(true);
+    setLikeCount(oldCount + 1);
+    postSyncStore.emit({ postId: String(post.id), liked: true, like_count: oldCount + 1, comment_count: commentCount });
+
     try {
       const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
       const data = await res.json();
@@ -334,10 +352,17 @@ export default function PostRow({
         setLikeCount(data.like_count);
         postSyncStore.emit({ postId: String(post.id), liked: data.liked, like_count: data.like_count, comment_count: commentCount });
         onLike?.(String(post.id));
+      } else {
+        setLiked(false);
+        setLikeCount(oldCount);
+        postSyncStore.emit({ postId: String(post.id), liked: false, like_count: oldCount, comment_count: commentCount });
       }
-    } catch (err) {
-      console.error("[PostRow] handleDoubleTapLike failed:", err);
+    } catch {
+      setLiked(false);
+      setLikeCount(oldCount);
+      postSyncStore.emit({ postId: String(post.id), liked: false, like_count: oldCount, comment_count: commentCount });
     }
+
     isLiking.current = false;
   };
 

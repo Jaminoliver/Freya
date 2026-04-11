@@ -19,19 +19,12 @@ interface PostActionsProps {
 }
 
 export default function PostActions({
-  likes, comments, tips = 0, liked: likedProp = false,
+  likes, comments, tips = 0, liked = false,
   bookmarked: bookmarkedProp = false,
   isSubscribed, isFree = false, isOwnProfile = false,
   onLike, onComment, onTip, onBookmark,
 }: PostActionsProps) {
-  const [liked,      setLiked]      = React.useState(likedProp);
   const [bookmarked, setBookmarked] = React.useState(bookmarkedProp);
-  const [likeCount,  setLikeCount]  = React.useState(likes);
-
-  React.useEffect(() => {
-    setLiked(likedProp);
-    setLikeCount(likes);
-  }, [likedProp, likes]);
 
   React.useEffect(() => {
     setBookmarked(bookmarkedProp);
@@ -41,9 +34,6 @@ export default function PostActions({
 
   const handleLike = () => {
     if (!canLike) return;
-    const next = liked ? likeCount - 1 : likeCount + 1;
-    setLiked(!liked);
-    setLikeCount(next);
     onLike?.();
   };
 
@@ -138,7 +128,7 @@ export default function PostActions({
       {/* ── Stats line ── */}
       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px", paddingLeft: "4px" }}>
         <span style={{ fontSize: "13px", fontWeight: 600, color: "#C4C4D4" }}>
-          {likeCount.toLocaleString()} likes
+          {likes.toLocaleString()} likes
         </span>
         <span style={{ fontSize: "13px", color: "#4A4A6A" }}>·</span>
         <span style={{ fontSize: "13px", fontWeight: 600, color: "#C4C4D4" }}>
