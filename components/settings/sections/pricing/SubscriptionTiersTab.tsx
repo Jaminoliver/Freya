@@ -4,48 +4,56 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Check } from "lucide-react";
 
-const MIN_PRICE = 10000;
+const MIN_PRICE    = 10000;
 const MAX_DISCOUNT = 50;
-const STEP = 5;
+const STEP         = 5;
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-const formatNaira = (n: number) => "₦" + n.toLocaleString("en-NG");
+const fmt = (n: number) => "₦" + n.toLocaleString("en-NG");
 
 export default function SubscriptionTiersTab({ username }: { username: string }) {
   const router = useRouter();
 
-  const [monthlyPrice, setMonthlyPrice] = useState(0);
-  const [monthlyInput, setMonthlyInput] = useState("");
+  const [monthlyPrice,       setMonthlyPrice]      = useState(0);
+  const [monthlyInput,       setMonthlyInput]       = useState("");
   const [threeMonthDiscount, setThreeMonthDiscount] = useState(0);
-  const [sixMonthDiscount, setSixMonthDiscount] = useState(0);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [focused, setFocused] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [sixMonthDiscount,   setSixMonthDiscount]   = useState(0);
+  const [saveState,          setSaveState]          = useState<SaveState>("idle");
+  const [errorMsg,           setErrorMsg]           = useState<string | null>(null);
+  const [focused,            setFocused]            = useState(false);
+  const [loading,            setLoading]            = useState(true);
+
+  const [savedThreeDisc, setSavedThreeDisc] = useState(0);
+  const [savedSixDisc,   setSavedSixDisc]   = useState(0);
+
   const isFirstRender = useRef(true);
 
-  const threeBase = monthlyPrice * 3;
-  const sixBase = monthlyPrice * 6;
+  const threeBase       = monthlyPrice * 3;
+  const sixBase         = monthlyPrice * 6;
   const threeMonthPrice = Math.round(threeBase * (1 - threeMonthDiscount / 100));
-  const sixMonthPrice = Math.round(sixBase * (1 - sixMonthDiscount / 100));
+  const sixMonthPrice   = Math.round(sixBase   * (1 - sixMonthDiscount   / 100));
 
   useEffect(() => {
     fetch("/api/settings/pricing")
       .then((r) => r.json())
       .then((json) => {
         const { pricing } = json;
-        if (pricing?.monthly_price !== undefined) {
-          const monthly = Number(pricing.monthly_price);
+        if (pricing?.price_monthly !== undefined) {
+          const monthly = Number(pricing.price_monthly);
           setMonthlyPrice(monthly);
           setMonthlyInput(monthly > 0 ? String(monthly) : "");
 
           if (pricing.three_month_price && monthly > 0) {
-            const discount = Math.round((1 - Number(pricing.three_month_price) / (monthly * 3)) * 100);
-            setThreeMonthDiscount(Math.max(0, discount));
+            const d = Math.round((1 - Number(pricing.three_month_price) / (monthly * 3)) * 100);
+            const clamped = Math.max(0, Math.min(MAX_DISCOUNT, d));
+            setThreeMonthDiscount(clamped);
+            setSavedThreeDisc(clamped);
           }
           if (pricing.six_month_price && monthly > 0) {
-            const discount = Math.round((1 - Number(pricing.six_month_price) / (monthly * 6)) * 100);
-            setSixMonthDiscount(Math.max(0, discount));
+            const d = Math.round((1 - Number(pricing.six_month_price) / (monthly * 6)) * 100);
+            const clamped = Math.max(0, Math.min(MAX_DISCOUNT, d));
+            setSixMonthDiscount(clamped);
+            setSavedSixDisc(clamped);
           }
         }
       })
@@ -62,8 +70,7 @@ export default function SubscriptionTiersTab({ username }: { username: string })
   const handleMonthlyChange = (val: string) => {
     setMonthlyInput(val);
     const num = parseInt(val.replace(/\D/g, ""), 10);
-    if (!isNaN(num) && num > 0) setMonthlyPrice(num);
-    else setMonthlyPrice(0);
+    setMonthlyPrice(!isNaN(num) && num > 0 ? num : 0);
   };
 
   const handleMonthlyBlur = () => {
@@ -78,35 +85,30 @@ export default function SubscriptionTiersTab({ username }: { username: string })
 
   const handleSave = async () => {
     setErrorMsg(null);
-
     if (monthlyPrice > 0 && monthlyPrice < MIN_PRICE) {
-      setErrorMsg(`Minimum subscription price is ${formatNaira(MIN_PRICE)}`);
+      setErrorMsg(`Minimum subscription price is ${fmt(MIN_PRICE)}`);
       return;
     }
-
     setSaveState("saving");
-
     const payload = {
-      monthly_price: monthlyPrice > 0 ? monthlyPrice : null,
+      monthly_price:     monthlyPrice > 0 ? monthlyPrice    : null,
       three_month_price: monthlyPrice > 0 ? threeMonthPrice : null,
-      six_month_price: monthlyPrice > 0 ? sixMonthPrice : null,
+      six_month_price:   monthlyPrice > 0 ? sixMonthPrice   : null,
     };
-
     try {
-      const res = await fetch("/api/settings/pricing", {
+      const res  = await fetch("/api/settings/pricing", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
       const data = await res.json();
-
       if (!res.ok) {
         setErrorMsg(data.message ?? "Failed to save");
         setSaveState("error");
         return;
       }
-
+      setSavedThreeDisc(threeMonthDiscount);
+      setSavedSixDisc(sixMonthDiscount);
       setSaveState("saved");
       setTimeout(() => router.push(`/${username}`), 900);
     } catch (err) {
@@ -116,140 +118,247 @@ export default function SubscriptionTiersTab({ username }: { username: string })
     }
   };
 
-  const stepBtn = (onClick: () => void, disabled: boolean, label: string) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        width: "26px", height: "26px",
-        borderRadius: "6px",
-        border: "1px solid #2A2A3D",
-        backgroundColor: "transparent",
-        color: disabled ? "#2A2A3D" : "#94A3B8",
-        cursor: disabled ? "not-allowed" : "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: "14px", fontWeight: 500,
-        flexShrink: 0, transition: "all 0.15s",
-        fontFamily: "'Inter', sans-serif",
-      }}
-    >
-      {label}
-    </button>
-  );
-
   if (loading) {
-    return <p style={{ fontSize: "12px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>Loading...</p>;
+    return (
+      <p style={{ fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>
+        Loading…
+      </p>
+    );
   }
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", fontFamily: "'Inter', sans-serif" }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  const bundles = [
+    { months: 3, discount: threeMonthDiscount, setDiscount: setThreeMonthDiscount, total: threeMonthPrice, base: threeBase },
+    { months: 6, discount: sixMonthDiscount,   setDiscount: setSixMonthDiscount,   total: sixMonthPrice,   base: sixBase   },
+  ] as const;
 
-      {/* Price per month */}
-      <div style={{ padding: "20px 0 24px", borderBottom: "1px solid #1E1E2E" }}>
-        <p style={{ fontSize: "11px", fontWeight: 500, color: "#94A3B8", margin: "0 0 4px", letterSpacing: "0.04em" }}>
-          Price per month
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0", fontFamily: "'Inter', sans-serif" }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .tier-step-btn:hover:not(:disabled) {
+          background: rgba(139,92,246,0.12) !important;
+          border-color: #8B5CF6 !important;
+        }
+      `}</style>
+
+
+
+      {/* ── Monthly price ── */}
+      <div style={{ marginBottom: "20px" }}>
+        <p style={{ fontSize: "12px", fontWeight: 600, color: "#C4C4D4", margin: "0 0 8px" }}>
+          Monthly price
         </p>
-        <p style={{ fontSize: "28px", fontWeight: 700, color: monthlyPrice > 0 ? "#F1F5F9" : "#22C55E", margin: "0 0 16px", letterSpacing: "-0.5px" }}>
-          {monthlyPrice > 0 ? formatNaira(monthlyPrice) : "Free"}
-        </p>
-        <input
-          type="text"
-          inputMode="numeric"
-          value={monthlyInput}
-          onChange={(e) => handleMonthlyChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={handleMonthlyBlur}
-          placeholder="Leave empty for free"
-          style={{
-            width: "100%", backgroundColor: "transparent", border: "none",
-            borderBottom: `1px solid ${focused ? "#8B5CF6" : "#2A2A3D"}`,
-            borderRadius: 0, padding: "8px 0", fontSize: "13px", color: "#F1F5F9",
-            outline: "none", boxSizing: "border-box", fontFamily: "'Inter', sans-serif",
-            transition: "border-color 0.2s", marginBottom: "8px",
-          }}
-        />
-        <p style={{ fontSize: "11px", color: "#94A3B8", margin: 0 }}>
-          Leave empty for free · Minimum ₦10,000
-          {monthlyPrice > 0 && ` · ~$${(monthlyPrice / 1600).toFixed(2)} USD`}
+        <div style={{
+          display: "flex", alignItems: "center",
+          background: "#0E0E20",
+          border: `1px solid ${focused ? "#8B5CF6" : "#1E1E35"}`,
+          borderRadius: "12px",
+          overflow: "hidden",
+          transition: "border-color 0.15s",
+        }}>
+          <div style={{
+            padding: "0 14px", alignSelf: "stretch",
+            display: "flex", alignItems: "center",
+            background: "#111126",
+            borderRight: "1px solid #1E1E35",
+          }}>
+            <span style={{ fontSize: "15px", fontWeight: 700, color: "#6B6B8A" }}>₦</span>
+          </div>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={monthlyInput}
+            onChange={(e) => handleMonthlyChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={handleMonthlyBlur}
+            placeholder="Leave empty for free"
+            style={{
+              flex: 1, background: "transparent", border: "none", outline: "none",
+              fontSize: "16px", fontWeight: 600, color: "#fff",
+              padding: "13px 14px", fontFamily: "'Inter', sans-serif",
+            }}
+          />
+          {monthlyPrice > 0 && (
+            <div style={{
+              padding: "0 14px", alignSelf: "stretch",
+              display: "flex", alignItems: "center",
+              background: "#111126",
+              borderLeft: "1px solid #1E1E35",
+            }}>
+              <span style={{ fontSize: "12px", color: "#6B6B8A", whiteSpace: "nowrap" }}>
+                ~${(monthlyPrice / 1600).toFixed(2)} USD
+              </span>
+            </div>
+          )}
+        </div>
+        <p style={{ fontSize: "12px", color: "#6B6B8A", margin: "8px 0 0" }}>
+          Minimum ₦10,000 · Leave empty for free
         </p>
       </div>
 
-      {/* Bundle Pricing */}
-      <div style={{ padding: "24px 0", borderBottom: "1px solid #1E1E2E" }}>
-        <p style={{ fontSize: "11px", fontWeight: 500, color: "#94A3B8", margin: "0 0 4px", letterSpacing: "0.04em" }}>
-          Bundle pricing
-        </p>
-        <p style={{ fontSize: "11px", color: "#64748B", margin: "0 0 20px" }}>
-          Discount for longer commitments. Max 50% off, steps of 5%.
-        </p>
-        <div style={{ display: "flex", gap: "24px" }}>
-          {/* 3 Months */}
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-              <p style={{ fontSize: "12px", color: "#CBD5E1", margin: 0 }}>3 months</p>
-              {threeMonthDiscount > 0 && <span style={{ fontSize: "11px", color: "#34D399" }}>{threeMonthDiscount}% off</span>}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              {stepBtn(() => setThreeMonthDiscount((d) => Math.min(d + STEP, MAX_DISCOUNT)), threeMonthDiscount >= MAX_DISCOUNT || monthlyPrice === 0, "−")}
-              <span style={{ flex: 1, textAlign: "center", fontSize: "13px", color: monthlyPrice > 0 ? "#F1F5F9" : "#64748B", fontWeight: 500 }}>
-                {monthlyPrice > 0 ? formatNaira(threeMonthPrice) : "—"}
-              </span>
-              {stepBtn(() => setThreeMonthDiscount((d) => Math.max(d - STEP, 0)), threeMonthDiscount === 0 || monthlyPrice === 0, "+")}
-            </div>
-            {monthlyPrice > 0 && threeMonthDiscount > 0 && (
-              <p style={{ fontSize: "11px", color: "#34D399", margin: "6px 0 0", textAlign: "center" }}>saves {formatNaira(threeBase - threeMonthPrice)}</p>
-            )}
-          </div>
+      {/* ── Divider ── */}
+      <div style={{ height: "1px", background: "#1A1A2E", marginBottom: "20px" }} />
 
-          <div style={{ width: "1px", backgroundColor: "#1E1E2E" }} />
+      {/* ── Bundle discounts ── */}
+      <div style={{ marginBottom: "20px" }}>
+        <p style={{ fontSize: "12px", fontWeight: 600, color: "#C4C4D4", margin: "0 0 4px" }}>
+          Bundle discounts
+        </p>
+        <p style={{ fontSize: "12px", color: "#6B6B8A", margin: "0 0 16px" }}>
+          Reward longer commitments. Steps of 5%, max 50% off.
+        </p>
 
-          {/* 6 Months */}
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-              <p style={{ fontSize: "12px", color: "#CBD5E1", margin: 0 }}>6 months</p>
-              {sixMonthDiscount > 0 && <span style={{ fontSize: "11px", color: "#34D399" }}>{sixMonthDiscount}% off</span>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+          {bundles.map(({ months, discount, setDiscount, total, base }) => (
+            <div key={months} style={{
+              background: "#0E0E20",
+              border: "1px solid #1E1E35",
+              borderRadius: "14px",
+              padding: "14px",
+              opacity: monthlyPrice === 0 ? 0.4 : 1,
+              transition: "opacity 0.2s",
+            }}>
+              {/* header: name + discount badge */}
+              <div style={{
+                display: "flex", alignItems: "center",
+                justifyContent: "space-between", marginBottom: "10px",
+              }}>
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>
+                  {months} months
+                </span>
+                {discount > 0 ? (
+                  <span style={{
+                    fontSize: "11px", fontWeight: 700, color: "#EC4899",
+                    background: "rgba(236,72,153,0.1)",
+                    border: "1px solid rgba(236,72,153,0.2)",
+                    padding: "2px 8px", borderRadius: "20px",
+                  }}>
+                    -{discount}%
+                  </span>
+                ) : (
+                  <span style={{ fontSize: "11px", color: "#2A2A40" }}>No discount</span>
+                )}
+              </div>
+
+              {/* price + savings */}
+              <div style={{ marginBottom: "12px" }}>
+                <div style={{ fontSize: "17px", fontWeight: 700, color: monthlyPrice > 0 ? "#fff" : "#2A2A40" }}>
+                  {monthlyPrice > 0 ? fmt(total) : "—"}
+                </div>
+                {monthlyPrice > 0 && discount > 0 && (
+                  <div style={{ fontSize: "11px", color: "#10B981", marginTop: "3px" }}>
+                    saves {fmt(base - total)}
+                  </div>
+                )}
+              </div>
+
+              {/* stepper: − | percentage | + */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                <button
+                  type="button"
+                  className="tier-step-btn"
+                  disabled={discount === 0 || monthlyPrice === 0}
+                  onClick={() => setDiscount((d) => Math.max(d - STEP, 0))}
+                  style={{
+                    width: "28px", height: "28px", borderRadius: "8px",
+                    border: "1px solid #2A2A40", background: "transparent",
+                    color: discount === 0 || monthlyPrice === 0 ? "#2A2A40" : "#C4B5FD",
+                    fontSize: "18px", lineHeight: "1",
+                    cursor: discount === 0 || monthlyPrice === 0 ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    transition: "background 0.15s, border-color 0.15s",
+                  }}
+                >
+                  −
+                </button>
+
+                <span style={{
+                  flex: 1, textAlign: "center",
+                  fontSize: "13px", fontWeight: 700,
+                  color: discount > 0 ? "#C4B5FD" : "#2A2A40",
+                }}>
+                  {discount}%
+                </span>
+
+                <button
+                  type="button"
+                  className="tier-step-btn"
+                  disabled={discount >= MAX_DISCOUNT || monthlyPrice === 0}
+                  onClick={() => setDiscount((d) => Math.min(d + STEP, MAX_DISCOUNT))}
+                  style={{
+                    width: "28px", height: "28px", borderRadius: "8px",
+                    border: "1px solid #2A2A40", background: "transparent",
+                    color: discount >= MAX_DISCOUNT || monthlyPrice === 0 ? "#2A2A40" : "#C4B5FD",
+                    fontSize: "18px", lineHeight: "1",
+                    cursor: discount >= MAX_DISCOUNT || monthlyPrice === 0 ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    transition: "background 0.15s, border-color 0.15s",
+                  }}
+                >
+                  +
+                </button>
+              </div>
+
+              {/* progress bar */}
+              <div style={{ height: "4px", background: "#1E1E35", borderRadius: "2px", overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", borderRadius: "2px",
+                  background: "linear-gradient(90deg, #8B5CF6, #EC4899)",
+                  width: `${(discount / MAX_DISCOUNT) * 100}%`,
+                  transition: "width 0.2s",
+                }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "5px" }}>
+                <span style={{ fontSize: "10px", color: "#2A2A40" }}>0%</span>
+                <span style={{ fontSize: "10px", color: "#2A2A40" }}>50% max</span>
+              </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              {stepBtn(() => setSixMonthDiscount((d) => Math.min(d + STEP, MAX_DISCOUNT)), sixMonthDiscount >= MAX_DISCOUNT || monthlyPrice === 0, "−")}
-              <span style={{ flex: 1, textAlign: "center", fontSize: "13px", color: monthlyPrice > 0 ? "#F1F5F9" : "#64748B", fontWeight: 500 }}>
-                {monthlyPrice > 0 ? formatNaira(sixMonthPrice) : "—"}
-              </span>
-              {stepBtn(() => setSixMonthDiscount((d) => Math.max(d - STEP, 0)), sixMonthDiscount === 0 || monthlyPrice === 0, "+")}
-            </div>
-            {monthlyPrice > 0 && sixMonthDiscount > 0 && (
-              <p style={{ fontSize: "11px", color: "#34D399", margin: "6px 0 0", textAlign: "center" }}>saves {formatNaira(sixBase - sixMonthPrice)}</p>
-            )}
-          </div>
+          ))}
         </div>
       </div>
 
+      {/* ── Error ── */}
       {errorMsg && (
-        <p style={{ fontSize: "12px", color: "#EF4444", margin: "16px 0 0" }}>{errorMsg}</p>
+        <p style={{ fontSize: "13px", color: "#EF4444", marginBottom: "12px" }}>
+          {errorMsg}
+        </p>
       )}
 
-      <div style={{ paddingTop: "24px" }}>
-        <button
-          onClick={handleSave}
-          disabled={saveState === "saving"}
-          style={{
-            width: "100%", padding: "11px", borderRadius: "8px", border: "none",
-            backgroundColor: saveState === "saved" ? "#059669" : saveState === "error" ? "#EF4444" : "#8B5CF6",
-            color: "#fff", fontSize: "13px", fontWeight: 600,
-            cursor: saveState === "saving" ? "not-allowed" : "pointer",
-            fontFamily: "'Inter', sans-serif",
-            transition: "opacity 0.15s, background-color 0.2s",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-          }}
-          onMouseEnter={(e) => { if (saveState === "idle") (e.currentTarget as HTMLButtonElement).style.opacity = "0.85"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
-        >
-          {saveState === "saving" && <Loader2 size={13} style={{ animation: "spin 0.9s linear infinite" }} />}
-          {saveState === "saved" && <Check size={13} />}
-          {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved — redirecting…" : saveState === "error" ? "Retry" : "Save pricing"}
-        </button>
-      </div>
+      {/* ── Save button ── */}
+      <button
+        onClick={handleSave}
+        disabled={saveState === "saving"}
+        style={{
+          width: "100%", padding: "13px",
+          borderRadius: "50px", border: "none",
+          background:
+            saveState === "saved" ? "#059669" :
+            saveState === "error" ? "#EF4444" :
+            "linear-gradient(135deg, #8B5CF6, #EC4899)",
+          color: "#fff", fontSize: "14px", fontWeight: 700,
+          cursor: saveState === "saving" ? "not-allowed" : "pointer",
+          fontFamily: "'Inter', sans-serif",
+          transition: "opacity 0.15s",
+          display: "flex", alignItems: "center",
+          justifyContent: "center", gap: "8px",
+        }}
+        onMouseEnter={(e) => {
+          if (saveState === "idle")
+            (e.currentTarget as HTMLButtonElement).style.opacity = "0.85";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.opacity = "1";
+        }}
+      >
+        {saveState === "saving" && (
+          <Loader2 size={14} style={{ animation: "spin 0.9s linear infinite" }} />
+        )}
+        {saveState === "saved" && <Check size={14} />}
+        {saveState === "saving" ? "Saving…"
+          : saveState === "saved"  ? "Saved"
+          : saveState === "error"  ? "Retry"
+          : "Save pricing"}
+      </button>
     </div>
   );
 }

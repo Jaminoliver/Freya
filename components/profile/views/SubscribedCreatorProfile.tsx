@@ -18,6 +18,8 @@ interface Props {
   isFollowing:           boolean;
   subscriptionPeriodEnd: string | null;
   subscriptionId:        number | undefined;
+  pricePaid?:            number;
+  selectedTier?:         string;
   onCancelled:           () => void;
   onFollow:              () => void;
   onTip:                 () => void;
@@ -29,9 +31,16 @@ interface Props {
 
 const padded: React.CSSProperties = { padding: "0 16px" };
 
+function tierToMonths(tier: string | undefined): number {
+  if (tier === "three_month") return 3;
+  if (tier === "six_month")   return 6;
+  return 1;
+}
+
 export default function SubscribedCreatorProfile({
   profile, apiPosts, feedRefreshKey, totalLikes,
   isFollowing, subscriptionPeriodEnd, subscriptionId,
+  pricePaid, selectedTier,
   onCancelled, onFollow, onTip, onMessage,
   onLike, onComment, onUnlock,
 }: Props) {
@@ -89,7 +98,16 @@ export default function SubscribedCreatorProfile({
             ? new Date(subscriptionPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
             : "—"}
           creatorId={profile.id}
+          creatorName={profile.display_name || profile.username}
+          avatarUrl={profile.avatar_url || undefined}
           subscriptionId={subscriptionId}
+          price={pricePaid != null ? Math.round(pricePaid / 100) : undefined}
+          planMonths={tierToMonths(selectedTier)}
+          memberSince={subscriptionPeriodEnd
+            ? new Date(new Date(subscriptionPeriodEnd).setMonth(
+                new Date(subscriptionPeriodEnd).getMonth() - tierToMonths(selectedTier)
+              )).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+            : undefined}
           onCancelled={onCancelled}
         />
       </div>

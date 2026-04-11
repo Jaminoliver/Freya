@@ -116,3 +116,19 @@ export interface ProfileViewContext {
   subscription?: Subscription;
   stats: ProfileStats;
 }
+
+// Subscription type
+export interface Subscription {
+  id: string;
+  subscriber_id: string;
+  creator_id: string;
+  status: SubscriptionStatus;
+  auto_renew: boolean;
+  subscribed_at: string;
+  expires_at: string;
+  total_spent: number;
+  tips?: number;
+  ppv_count?: number;
+  selected_tier?: string | null;
+  tier?: 'bronze' | 'silver' | 'gold' | 'platinum';
+}

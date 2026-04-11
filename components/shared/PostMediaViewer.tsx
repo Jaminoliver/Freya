@@ -35,6 +35,14 @@ interface PostMediaViewerProps {
 
 const thumbRatioCache = new Map<string, number>();
 
+const LOCK_STYLES = `
+  @keyframes pmv-sweep{0%{left:-80%}100%{left:130%}}
+  @keyframes pmv-pulse{
+    0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(139,92,246,0.45)}
+    50%{transform:scale(1.04);box-shadow:0 0 18px 6px rgba(236,72,153,0.25)}
+  }
+`;
+
 function useMediaRatio(
   item: NormalizedMedia | null,
   thumbSrc: string | undefined,
@@ -205,7 +213,8 @@ export default function PostMediaViewer({
 
     return (
       <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
-        <div style={{ position: "relative", width: "100%", aspectRatio: String(ratio), backgroundColor: "#0A0A0F", overflow: "hidden" }}>
+        <style>{LOCK_STYLES}</style>
+        <div style={{ position: "relative", width: "100%", aspectRatio: String(ratio), maxHeight: "85svh", backgroundColor: "#0A0A0F", overflow: "hidden" }}>
           {first.blurHash && (
             <BlurHashCanvas
               hash={first.blurHash}
@@ -273,32 +282,104 @@ export default function PostMediaViewer({
                 <button
                   onClick={onUnlock}
                   style={{
-                    padding: "11px 28px", borderRadius: "10px",
-                    background: "linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)",
-                    border: "none", color: "#fff", fontSize: "14px", fontWeight: 700,
-                    cursor: "pointer", fontFamily: "'Inter', sans-serif",
-                    boxShadow: "0 4px 16px rgba(139,92,246,0.45)", transition: "opacity 0.15s",
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    width: "100%", maxWidth: "260px",
+                    padding: "11px 16px", borderRadius: "50px",
+                    background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
+                    border: "none", cursor: "pointer",
+                    fontFamily: "'Inter', sans-serif",
+                    position: "relative", overflow: "hidden",
+                    animation: "pmv-pulse 2.2s ease-in-out infinite",
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.opacity = "0.88";
+                    e.currentTarget.style.animationPlayState = "paused";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.opacity = "1";
+                    e.currentTarget.style.animationPlayState = "running";
+                  }}
                 >
-                  Unlock for ₦{displayPrice.toLocaleString("en-NG")}
+                  <span style={{
+                    position: "absolute", top: 0, left: "-80%",
+                    width: "50%", height: "100%",
+                    background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
+                    transform: "skewX(-20deg)",
+                    animation: "pmv-sweep 2.5s ease-in-out infinite",
+                    pointerEvents: "none",
+                  }} />
+                  <span style={{
+                    fontSize: "13px", fontWeight: 700, color: "#fff",
+                    position: "relative", zIndex: 1,
+                    display: "flex", alignItems: "center", gap: "6px",
+                  }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Unlock content
+                  </span>
+                  <span style={{
+                    fontSize: "11px", fontWeight: 600,
+                    color: "rgba(255,255,255,0.8)",
+                    background: "rgba(255,255,255,0.15)",
+                    padding: "3px 10px", borderRadius: "20px",
+                    position: "relative", zIndex: 1,
+                  }}>
+                    ₦{displayPrice.toLocaleString("en-NG")}
+                  </span>
                 </button>
               </>
             ) : (
               <button
                 onClick={onUnlock}
                 style={{
-                  padding: "11px 28px", borderRadius: "10px",
-                  background: "linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)",
-                  border: "none", color: "#fff", fontSize: "14px", fontWeight: 700,
-                  cursor: "pointer", fontFamily: "'Inter', sans-serif",
-                  boxShadow: "0 4px 16px rgba(139,92,246,0.45)", transition: "opacity 0.15s",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  width: "100%", maxWidth: "260px",
+                  padding: "11px 16px", borderRadius: "50px",
+                  background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
+                  border: "none", cursor: "pointer",
+                  fontFamily: "'Inter', sans-serif",
+                  position: "relative", overflow: "hidden",
+                  animation: "pmv-pulse 2.2s ease-in-out infinite",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = "0.88";
+                  e.currentTarget.style.animationPlayState = "paused";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = "1";
+                  e.currentTarget.style.animationPlayState = "running";
+                }}
               >
-                Subscribe to unlock
+                <span style={{
+                  position: "absolute", top: 0, left: "-80%",
+                  width: "50%", height: "100%",
+                  background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
+                  transform: "skewX(-20deg)",
+                  animation: "pmv-sweep 2.5s ease-in-out infinite",
+                  pointerEvents: "none",
+                }} />
+                <span style={{
+                  fontSize: "13px", fontWeight: 700, color: "#fff",
+                  position: "relative", zIndex: 1,
+                  display: "flex", alignItems: "center", gap: "6px",
+                }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  Unlock content
+                </span>
+                <span style={{
+                  fontSize: "11px", fontWeight: 600,
+                  color: "rgba(255,255,255,0.8)",
+                  background: "rgba(255,255,255,0.15)",
+                  padding: "3px 10px", borderRadius: "20px",
+                  position: "relative", zIndex: 1,
+                }}>
+                  Free
+                </span>
               </button>
             )}
           </div>

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-// ─── GET /api/subscriptions/status?creatorId=xxx ─────────────────────────────
-
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -13,15 +11,13 @@ export async function GET(req: NextRequest) {
     }
 
     const creatorId = req.nextUrl.searchParams.get("creatorId");
-
     if (!creatorId) {
       return NextResponse.json({ active: false, pending: false }, { status: 400 });
     }
 
-    // Check for active subscription
     const { data: activeSub } = await supabase
       .from("subscriptions")
-      .select("id, status, current_period_end")
+      .select("id, status, current_period_end, price_paid, selected_tier")
       .eq("fan_id", user.id)
       .eq("creator_id", creatorId)
       .eq("status", "active")
@@ -35,10 +31,11 @@ export async function GET(req: NextRequest) {
         pending:          false,
         subscriptionId:   activeSub.id,
         currentPeriodEnd: activeSub.current_period_end,
+        pricePaid:        activeSub.price_paid,
+        selectedTier:     activeSub.selected_tier,
       });
     }
 
-    // Check for a pending payment (awaiting bank transfer confirmation)
     const { data: pendingTxn } = await supabase
       .from("transactions")
       .select("id, provider_txn_id, amount, created_at")
@@ -52,11 +49,11 @@ export async function GET(req: NextRequest) {
 
     if (pendingTxn) {
       return NextResponse.json({
-        active:        false,
-        pending:       true,
-        reference:     pendingTxn.provider_txn_id,
-        amount:        pendingTxn.amount,
-        createdAt:     pendingTxn.created_at,
+        active:    false,
+        pending:   true,
+        reference: pendingTxn.provider_txn_id,
+        amount:    pendingTxn.amount,
+        createdAt: pendingTxn.created_at,
       });
     }
 

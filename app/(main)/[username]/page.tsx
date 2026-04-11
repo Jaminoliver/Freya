@@ -45,6 +45,8 @@ function ProfilePageInner() {
   const [isSubscribed,          setIsSubscribed]          = React.useState(false);
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(null);
   const [subscriptionId,        setSubscriptionId]        = React.useState<number | undefined>(undefined);
+  const [pricePaid,             setPricePaid]             = React.useState<number | undefined>(undefined);
+  const [selectedTier,          setSelectedTier]          = React.useState<string | undefined>(undefined);
   const [apiPosts,              setApiPosts]              = React.useState<ApiPost[]>([]);
   const [apiLoading,            setApiLoading]            = React.useState(true);
   const [revealed,              setRevealed]              = React.useState(false);
@@ -133,6 +135,8 @@ function ProfilePageInner() {
       setIsSubscribed(!!data.active);
       setSubscriptionPeriodEnd(data.currentPeriodEnd ?? null);
       setSubscriptionId(data.subscriptionId ?? undefined);
+      setPricePaid(data.pricePaid ?? undefined);
+      setSelectedTier(data.selectedTier ?? undefined);
     } catch (err) {
       console.error("[Profile] Failed to fetch subscription status:", err);
     }
@@ -163,9 +167,18 @@ function ProfilePageInner() {
         const data = await subRes.value.json();
         const subscribedVal = !!data.active;
         const periodEndVal  = data.currentPeriodEnd ?? null;
+        const pricePaidVal  = data.pricePaid ?? undefined;
+        const selectedTierVal = data.selectedTier ?? undefined;
         setIsSubscribed(subscribedVal);
         setSubscriptionPeriodEnd(periodEndVal);
-        updateProfile(creatorUsername, { isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal });
+        setPricePaid(pricePaidVal);
+        setSelectedTier(selectedTierVal);
+        updateProfile(creatorUsername, {
+          isSubscribed: subscribedVal,
+          subscriptionPeriodEnd: periodEndVal,
+          pricePaid: pricePaidVal,       // FIX: persist to cache on revalidate
+          selectedTier: selectedTierVal, // FIX: persist to cache on revalidate
+        });
       }
       if (postsRes.status === "fulfilled" && postsRes.value.ok) {
         const data = await postsRes.value.json();
@@ -209,6 +222,8 @@ function ProfilePageInner() {
         }));
       setIsSubscribed(cached.isSubscribed ?? false);
       setSubscriptionPeriodEnd(cached.subscriptionPeriodEnd ?? null);
+      setPricePaid(cached.pricePaid ?? undefined);       // FIX: restore from cache
+      setSelectedTier(cached.selectedTier ?? undefined); // FIX: restore from cache
       setIsFollowing(cached.isFollowing ?? false);
       setTotalLikes(cached.totalLikes ?? 0);
       if (cached.fanSubscription) setFanSubscription(cached.fanSubscription);
@@ -244,6 +259,8 @@ function ProfilePageInner() {
         let followingVal                    = false;
         let subscribedVal                   = false;
         let periodEndVal: string | null     = null;
+        let pricePaidVal: number | undefined = undefined;
+        let selectedTierVal: string | undefined = undefined;
         let fetchedPosts: ApiPost[]         = [];
         let fanSubData: Subscription | null = null;
 
@@ -281,10 +298,14 @@ function ProfilePageInner() {
 
             if (subRes.status === "fulfilled" && subRes.value instanceof Response && subRes.value.ok) {
               const data = await subRes.value.json();
-              subscribedVal = !!data.active;
-              periodEndVal  = data.currentPeriodEnd ?? null;
+              subscribedVal    = !!data.active;
+              periodEndVal     = data.currentPeriodEnd ?? null;
+              pricePaidVal     = data.pricePaid ?? undefined;
+              selectedTierVal  = data.selectedTier ?? undefined;
               setIsSubscribed(subscribedVal);
               setSubscriptionPeriodEnd(periodEndVal);
+              setPricePaid(pricePaidVal);
+              setSelectedTier(selectedTierVal);
             }
             if (followRes.status === "fulfilled") {
               followingVal = followRes.value as boolean;
@@ -328,11 +349,14 @@ function ProfilePageInner() {
           }
         }
 
+        // FIX: pricePaid and selectedTier now saved to store
         setStoreProfile(username, {
           viewer: viewerData, profile: enriched, totalLikes: likesCount,
           tierId: undefined,
           isFollowing: followingVal,
           isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
+          pricePaid: pricePaidVal,
+          selectedTier: selectedTierVal,
           apiPosts: fetchedPosts, fetchedAt: Date.now(),
           fanSubscription: fanSubData ?? undefined,
         });
@@ -453,7 +477,30 @@ function ProfilePageInner() {
   const handlePost     = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
 
-  // ── Sync likes from feed/PostCard into profile apiPosts
+  // Dedicated effect: fetch price_paid + selected_tier directly from DB.
+  // Runs whenever isSubscribed flips true or profile changes.
+  // This is immune to clearProfile() wiping cache state mid-render.
+  React.useEffect(() => {
+    if (!isSubscribed || !profile || !viewer || viewer.id === profile.id) return;
+    const supabase = createClient();
+    supabase
+      .from("subscriptions")
+      .select("price_paid, selected_tier, id, current_period_end")
+      .eq("fan_id", viewer.id)
+      .eq("creator_id", profile.id)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }: { data: { price_paid: number | null; selected_tier: string | null; id: number | null; current_period_end: string | null } | null }) => {
+        if (!data) return;
+        setPricePaid(data.price_paid ?? undefined);
+        setSelectedTier(data.selected_tier ?? undefined);
+        if (data.id)                  setSubscriptionId(data.id);
+        if (data.current_period_end)  setSubscriptionPeriodEnd(data.current_period_end);
+      });
+  }, [isSubscribed, profile?.id, viewer?.id]);
+
   React.useEffect(() => {
     const unsub = postSyncStore.subscribe((event) => {
       setApiPosts((prev) =>
@@ -467,12 +514,9 @@ function ProfilePageInner() {
     return unsub;
   }, []);
 
-  // PostRow handles the API call + postSyncStore emit internally.
-  // Profile page only needs the postSyncStore subscription (already wired above).
-  const handleLike = (_postId: string) => {};
-
-  const handleComment  = (id: string) => console.log("Comment:", id);
-  const handleTip      = (_id: string) => openTip();
+  const handleLike    = (_postId: string) => {};
+  const handleComment = (id: string) => console.log("Comment:", id);
+  const handleTip     = (_id: string) => openTip();
 
   if (!apiLoading && fetchError) {
     return (
@@ -563,6 +607,8 @@ function ProfilePageInner() {
               isSubscribed={isSubscribed} isFollowing={isFollowing}
               subscriptionPeriodEnd={subscriptionPeriodEnd} subscriptionId={subscriptionId}
               fanSubscription={fanSubscription}
+              pricePaid={pricePaid}
+              selectedTier={selectedTier}
               onSubscribe={(tier) => openCheckout("subscription", tier)}
               onCancelled={handleCancelled} onFollow={handleFollow}
               onTip={openTip} onMessage={handleMessage}
@@ -578,6 +624,8 @@ function ProfilePageInner() {
               onCancelled={handleCancelled} onFollow={handleFollow}
               onTip={openTip} onMessage={handleMessage}
               onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
+              pricePaid={pricePaid}
+              selectedTier={selectedTier}
             />
           )}
 

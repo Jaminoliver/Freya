@@ -16,6 +16,7 @@ interface ProfileBannerProps {
   isEditable?:      boolean;
   isCreator?:       boolean;
   onEditBanner?:    () => void;
+  onBack?:          () => void;
   stats?: {
     posts:       number;
     likes:       number;
@@ -39,6 +40,7 @@ export default function ProfileBanner({
   isEditable = false,
   isCreator  = false,
   onEditBanner,
+  onBack,
   stats,
   userId,
   username,
@@ -97,6 +99,11 @@ export default function ProfileBanner({
 
   const handleBlockConfirm = async () => {
     await block();
+    router.back();
+  };
+
+  const handleBack = () => {
+    if (onBack) { onBack(); return; }
     router.back();
   };
 
@@ -229,7 +236,7 @@ export default function ProfileBanner({
         <div style={{ position: "absolute", top: "12px", left: "12px", zIndex: 2, display: "flex", alignItems: "center", gap: "8px" }}>
           {!isEditable && (
             <button
-              onClick={(e) => { e.stopPropagation(); router.back(); }}
+              onClick={(e) => { e.stopPropagation(); handleBack(); }}
               style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "rgba(20,20,32,0.75)", backdropFilter: "blur(8px)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">

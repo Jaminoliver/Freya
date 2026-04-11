@@ -25,6 +25,8 @@ interface Props {
   subscriptionPeriodEnd: string | null;
   subscriptionId:        number | undefined;
   fanSubscription:       Subscription | null;
+  pricePaid?:            number;
+  selectedTier?:         string;
   onSubscribe:           (tier: SubscriptionTier) => void;
   onCancelled:           () => void;
   onFollow:              () => void;
@@ -37,11 +39,43 @@ interface Props {
 
 const padded: React.CSSProperties = { padding: "0 16px" };
 
+function tierToMonths(tier: string | undefined): number {
+  if (tier === "three_month") return 3;
+  if (tier === "six_month")   return 6;
+  return 1;
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{
+      background: "rgba(139,92,246,0.06)",
+      border: "1px solid rgba(139,92,246,0.12)",
+      borderRadius: "10px",
+      padding: "10px 12px",
+      textAlign: "center",
+      flex: 1,
+    }}>
+      <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 3px", fontFamily: "'Inter', sans-serif" }}>{label}</p>
+      <p style={{ fontSize: "15px", fontWeight: 600, color: "#F1F5F9", margin: 0, fontFamily: "'Inter', sans-serif" }}>{value}</p>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0" }}>
+      <span style={{ fontSize: "12px", color: "#94A3B8", fontFamily: "'Inter', sans-serif" }}>{label}</span>
+      <span style={{ fontSize: "12px", fontWeight: 500, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>{value}</span>
+    </div>
+  );
+}
+
 export default function CreatorViewingDualRole({
   profile, apiPosts, feedRefreshKey, totalLikes,
   fromFanList, isSubscribed, isFollowing,
   subscriptionPeriodEnd, subscriptionId,
-  fanSubscription, onSubscribe, onCancelled,
+  fanSubscription, pricePaid, selectedTier,
+  onSubscribe, onCancelled,
   onFollow, onTip, onMessage, onLike, onComment, onUnlock,
 }: Props) {
   const { navigate } = useNav();
@@ -72,6 +106,45 @@ export default function CreatorViewingDualRole({
     isVerified:   profile.is_verified,
   };
 
+  const isActive    = fanSubscription?.status === "active";
+  const isCancelled = fanSubscription?.status === "cancelled";
+  const statusColor = isActive ? "#10B981" : isCancelled ? "#EF4444" : "#F59E0B";
+  const statusBg    = isActive ? "rgba(16,185,129,0.1)" : isCancelled ? "rgba(239,68,68,0.1)" : "rgba(245,158,11,0.1)";
+
+  const planLabel = (() => {
+    const tier = fanSubscription?.selected_tier;
+    if (!tier) return "1 Month";
+    if (tier === "three_month") return "3 Months";
+    if (tier === "six_month")   return "6 Months";
+    return "1 Month";
+  })();
+
+  const fanInfoContent = fanSubscription ? (
+    <>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+        <StatCard label="Total Spent" value={`₦${(fanSubscription.total_spent ?? 0).toLocaleString("en-NG")}`} />
+        <StatCard label="Tips"        value={`₦${(fanSubscription.tips ?? 0).toLocaleString("en-NG")}`} />
+        <StatCard label="PPV"         value={String(fanSubscription.ppv_count ?? 0)} />
+      </div>
+      <div style={{ background: "#120E1E", border: "1px solid rgba(139,92,246,0.18)", borderRadius: "12px", padding: "4px 14px" }}>
+        <Row
+          label="Status"
+          value={
+            <span style={{ fontSize: "11px", fontWeight: 600, color: statusColor, background: statusBg, padding: "2px 8px", borderRadius: "999px", textTransform: "capitalize" }}>
+              {fanSubscription.status}
+            </span>
+          }
+        />
+        <div style={{ height: "1px", background: "rgba(139,92,246,0.1)" }} />
+        <Row label="Fan since" value={new Date(fanSubscription.subscribed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} />
+        <div style={{ height: "1px", background: "rgba(139,92,246,0.1)" }} />
+        <Row label="Renews" value={fanSubscription.expires_at ? new Date(fanSubscription.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"} />
+        <div style={{ height: "1px", background: "rgba(139,92,246,0.1)" }} />
+        <Row label="Plan" value={planLabel} />
+      </div>
+    </>
+  ) : null;
+
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
       {fromFanList && (
@@ -83,27 +156,36 @@ export default function CreatorViewingDualRole({
           Back to Fans
         </button>
       )}
+
       <ProfileBanner
         bannerUrl={profile.banner_url || undefined}
         displayName={profile.display_name || profile.username}
         isEditable={false} isCreator={true} stats={bannerStats}
         userId={profile.id} username={profile.username}
       />
+
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
         <ProfileAvatar avatarUrl={profile.avatar_url || undefined} displayName={profile.display_name || profile.username} creatorId={profile.id} isOnline={false} />
         <div style={{ paddingBottom: "12px" }}>
           <ProfileActions
             viewContext="fanViewingCreator"
             isSubscribed={isSubscribed}
-            onMessage={onMessage}
-            onTip={onTip}
-            onFollow={onFollow}
-            isFollowing={isFollowing}
+            onMessage={onMessage} onTip={onTip} onFollow={onFollow} isFollowing={isFollowing}
           />
         </div>
       </div>
+
       <div style={{ padding: "8px 16px 0" }}>
-        <ProfileInfo {...profileInfoProps} mode="full" />
+        <ProfileInfo
+          {...profileInfoProps}
+          mode="full"
+          badge={fanSubscription ? {
+            label:  isCancelled ? "CANCELLED FAN" : "YOUR FAN",
+            color:  "#fff",
+            bg:     "linear-gradient(135deg, #8B5CF6, #EC4899)",
+            border: "transparent",
+          } : undefined}
+        />
       </div>
 
       {isSubscribed ? (
@@ -113,7 +195,16 @@ export default function CreatorViewingDualRole({
               ? new Date(subscriptionPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
               : "—"}
             creatorId={profile.id}
+            creatorName={profile.display_name || profile.username}
+            avatarUrl={profile.avatar_url || undefined}
             subscriptionId={subscriptionId}
+            price={pricePaid != null ? Math.round(pricePaid / 100) : undefined}
+            planMonths={tierToMonths(selectedTier)}
+            memberSince={subscriptionPeriodEnd
+              ? new Date(new Date(subscriptionPeriodEnd).setMonth(
+                  new Date(subscriptionPeriodEnd).getMonth() - tierToMonths(selectedTier)
+                )).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+              : undefined}
             onCancelled={onCancelled}
           />
         </div>
@@ -129,32 +220,12 @@ export default function CreatorViewingDualRole({
         </div>
       )}
 
-      {fanSubscription && (
-        <div style={{ padding: "0 16px 16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(139,92,246,0.06)" }}>
-            <span style={{ fontSize: "10px", fontWeight: 700, color: fanSubscription.status === "cancelled" ? "#EF4444" : "#8B5CF6", letterSpacing: "0.06em", fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>
-              {fanSubscription.status === "cancelled" ? "SUBSCRIPTION CANCELLED" : "YOUR FAN"}
-            </span>
-            <div style={{ width: "1px", height: "16px", backgroundColor: "#2A2A3D" }} />
-            <span style={{ fontSize: "12px", color: "#94A3B8", fontFamily: "'Inter', sans-serif" }}>
-              Since <span style={{ color: "#F1F5F9", fontWeight: 600 }}>{new Date(fanSubscription.subscribed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-            </span>
-            <div style={{ width: "1px", height: "16px", backgroundColor: "#2A2A3D" }} />
-            <span style={{ fontSize: "12px", color: "#94A3B8", fontFamily: "'Inter', sans-serif" }}>
-              Spent <span style={{ color: "#10B981", fontWeight: 600 }}>₦{(fanSubscription.total_spent ?? 0).toLocaleString("en-NG")}</span>
-            </span>
-            <div style={{ width: "1px", height: "16px", backgroundColor: "#2A2A3D" }} />
-            <span style={{ fontSize: "10px", fontWeight: 600, color: fanSubscription.status === "active" ? "#10B981" : "#F59E0B", backgroundColor: fanSubscription.status === "active" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)", borderRadius: "4px", padding: "2px 7px", textTransform: "capitalize", fontFamily: "'Inter', sans-serif" }}>
-              {fanSubscription.status}
-            </span>
-          </div>
-        </div>
-      )}
-
       <ContentFeed
         posts={[]} isSubscribed={isSubscribed} creatorUsername={profile.username}
         initialApiPosts={apiPosts} refreshKey={feedRefreshKey}
         onLike={onLike} onComment={onComment} onTip={() => onTip()} onUnlock={onUnlock}
+        extraTab={fanSubscription ? "FAN INFO" : undefined}
+        extraTabContent={fanInfoContent}
       />
     </div>
   );

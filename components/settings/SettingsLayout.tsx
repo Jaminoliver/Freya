@@ -54,7 +54,6 @@ function SettingsLayoutInner() {
   const router       = useRouter();
   const { viewer, settingsPanel, setSettingsPanel } = useAppStore();
 
-  // Read synchronously on first render — avoids flash to menu
   const [activeTab,  setActiveTab]  = useState<SettingsTab>(() => {
     const p = useAppStore.getState().settingsPanel;
     return panelToTab(p);
@@ -70,7 +69,6 @@ function SettingsLayoutInner() {
   const isCreator = viewer?.role === "creator";
   const tabs = allTabs.filter((t) => !t.creatorOnly || isCreator);
 
-  // React immediately to settingsPanel from Zustand (works even when layout never unmounts)
   useEffect(() => {
     if (!settingsPanel) return;
     setActiveTab(panelToTab(settingsPanel));
@@ -103,15 +101,15 @@ function SettingsLayoutInner() {
     const panel = searchParams.get("panel");
     if (panel === "menu") {
       setMobileView("menu");
-      router.replace("/settings");
+    } else if (panel === "fans") {
+      setActiveTab("fans");
+      setMobileView("content");
     } else if (panel === "pricing") {
       setActiveTab("pricing");
       setMobileView("content");
-      router.replace("/settings");
     } else if (panel === "subscriptions") {
       setActiveTab("account");
       setMobileView("content");
-      router.replace("/settings");
     }
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 

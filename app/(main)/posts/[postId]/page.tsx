@@ -87,7 +87,7 @@ function PostMenu({ isOwnPost, onDelete }: { isOwnPost: boolean; onDelete: () =>
     <div ref={ref} style={{ position: "relative" }}>
       <button
         onClick={() => setOpen(!open)}
-        style={{ background: "none", border: "none", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "32px", height: "32px", borderRadius: "8px" }}
+        style={{ background: "none", border: "none", color: "#E2E8F0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "32px", height: "32px", borderRadius: "8px" }}
         onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
       >
@@ -317,7 +317,6 @@ export default function SinglePostPage() {
   const openTip    = () => { setCheckoutType("tips");        setCheckoutOpen(true); };
   const openUnlock = () => { setCheckoutType("locked_post"); setCheckoutOpen(true); };
 
-  // Re-fetch post after PPV unlock so media and locked state update
   const handleViewContent = useCallback(async () => {
     setCheckoutOpen(false);
     await loadPost();
@@ -430,14 +429,14 @@ export default function SinglePostPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 24px", paddingTop: "calc(16px + env(safe-area-inset-top))", borderBottom: "1px solid #1E1E2E", position: "sticky", top: 0, backgroundColor: "#0D0D16", zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button onClick={() => router.back()} style={{ background: "none", border: "none", color: "#C4C4D4", cursor: "pointer", display: "flex", alignItems: "center", padding: "4px 0" }}>
+          <button onClick={() => router.back()} style={{ background: "none", border: "none", color: "#E2E8F0", cursor: "pointer", display: "flex", alignItems: "center", padding: "4px 0" }}>
             <ArrowLeft size={20} strokeWidth={2.5} />
           </button>
           <span style={{ fontSize: "17px", fontWeight: 800, color: "#F1F5F9", letterSpacing: "0.06em", textTransform: "uppercase" }}>Post</span>
         </div>
         <button
           onClick={() => console.log("share")}
-          style={{ background: "none", border: "none", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "8px" }}
+          style={{ background: "none", border: "none", color: "#E2E8F0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "8px" }}
           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
@@ -462,18 +461,18 @@ export default function SinglePostPage() {
               <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9" }}>{post.profiles?.display_name || post.profiles?.username}</span>
               {post.profiles?.is_verified && <span style={{ fontSize: "14px" }}>✓</span>}
               <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#8B5CF6", display: "inline-block", flexShrink: 0 }} />
-              <span style={{ fontSize: "13px", color: "#6B6B8A" }}>@{post.profiles?.username}</span>
+              <span style={{ fontSize: "13px", color: "#E2E8F0" }}>@{post.profiles?.username}</span>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-            <span style={{ fontSize: "12px", color: "#6B6B8A" }}>
+            <span style={{ fontSize: "12px", color: "#E2E8F0" }}>
               {new Date(post.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </span>
             <PostMenu isOwnPost={isOwnPost} onDelete={handleDelete} />
           </div>
         </div>
         {post.caption && (
-          <p style={{ margin: "14px 0 0", fontSize: "14px", color: "#C4C4D4", lineHeight: 1.7 }}>{post.caption}</p>
+          <p style={{ margin: "14px 0 0", fontSize: "14px", color: "#FFFFFF", lineHeight: 1.7 }}>{post.caption}</p>
         )}
       </div>
 
@@ -491,35 +490,39 @@ export default function SinglePostPage() {
       </div>
 
       {/* Actions */}
-      <div style={{ margin: "0 16px" }}>
-        <PostActions
-          likes={post.like_count}
-          comments={commentCount}
-          liked={post.liked}
-          bookmarked={savedPost}
-          isSubscribed={post.can_access}
-          isOwnProfile={isOwnPost}
-          onLike={handleLike}
-          onComment={handleComment}
-          onTip={openTip}
-          onBookmark={handleBookmark}
-        />
-      </div>
+      {!post.locked && (
+        <div style={{ margin: "0 16px" }}>
+          <PostActions
+            likes={post.like_count}
+            comments={commentCount}
+            liked={post.liked}
+            bookmarked={savedPost}
+            isSubscribed={post.can_access}
+            isOwnProfile={isOwnPost}
+            onLike={handleLike}
+            onComment={handleComment}
+            onTip={openTip}
+            onBookmark={handleBookmark}
+          />
+        </div>
+      )}
 
       {/* Comments */}
-      <div ref={commentRef} style={{ margin: "8px 16px 48px" }}>
-        <CommentSection
-          postId={String(post.id)}
-          comments={comments}
-          viewer={viewer || { username: "", display_name: "", avatar_url: "" }}
-          viewerUserId={viewerId || undefined}
-          isOpen={commentOpen}
-          isLoading={commentsLoading}
-          totalCommentCount={commentCount}
-          onClose={() => setCommentOpen(false)}
-          onAddComment={handleAddComment}
-        />
-      </div>
+      {!post.locked && (
+        <div ref={commentRef} style={{ margin: "8px 16px 48px" }}>
+          <CommentSection
+            postId={String(post.id)}
+            comments={comments}
+            viewer={viewer || { username: "", display_name: "", avatar_url: "" }}
+            viewerUserId={viewerId || undefined}
+            isOpen={commentOpen}
+            isLoading={commentsLoading}
+            totalCommentCount={commentCount}
+            onClose={() => setCommentOpen(false)}
+            onAddComment={handleAddComment}
+          />
+        </div>
+      )}
     </div>
   );
 }

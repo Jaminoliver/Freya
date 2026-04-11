@@ -16,6 +16,7 @@ interface ProfileInfoProps {
   isVerified?: boolean;
   isEditable?: boolean;
   mode?: "header" | "body" | "full";
+  badge?: { label: string; color: string; bg: string; border: string };
 }
 
 function shortenUrl(url: string): string {
@@ -30,7 +31,7 @@ function shortenUrl(url: string): string {
   }
 }
 
-const LINE_HEIGHT_PX = 22; // 14px font * 1.6 line-height ≈ 22px
+const LINE_HEIGHT_PX = 22;
 const MAX_LINES = 3;
 
 export default function ProfileInfo({
@@ -46,6 +47,7 @@ export default function ProfileInfo({
   isVerified = false,
   isEditable = false,
   mode = "full",
+  badge,
 }: ProfileInfoProps) {
   const [expanded, setExpanded] = React.useState(false);
   const [isOverflowing, setIsOverflowing] = React.useState(false);
@@ -54,25 +56,16 @@ export default function ProfileInfo({
   const showHeader = mode === "header" || mode === "full";
   const showBody   = mode === "body"   || mode === "full";
 
-  const displayBio      = bio;
-  const displayLocation = location;
-  const displayTwitter   = twitterUrl;
-  const displayInstagram = instagramUrl;
-  const displayTelegram  = telegramUrl;
-  const displayFacebook  = facebookUrl;
-
-  // Measure real rendered height to detect overflow (handles single-paragraph long bios)
   React.useEffect(() => {
     if (!bioRef.current) return;
     const el = bioRef.current;
-    // Temporarily remove clamp to measure full height
     el.style.maxHeight = "none";
     el.style.overflow  = "visible";
     const full = el.scrollHeight;
     el.style.maxHeight = `${LINE_HEIGHT_PX * MAX_LINES}px`;
     el.style.overflow  = "hidden";
     setIsOverflowing(full > LINE_HEIGHT_PX * MAX_LINES + 2);
-  }, [displayBio]);
+  }, [bio]);
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -90,14 +83,31 @@ export default function ProfileInfo({
               </div>
             )}
           </div>
-          <span style={{ fontSize: "14px", color: "#A3A3C2", fontWeight: 400 }}>@{username}</span>
+
+          {/* Username row with optional inline badge */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "14px", color: "#A3A3C2", fontWeight: 400 }}>@{username}</span>
+            {badge && (
+              <span style={{
+                fontSize: "10px", fontWeight: 700, letterSpacing: "0.07em",
+                color: badge.color,
+                background: badge.bg,
+                border: `1px solid ${badge.border}`,
+                borderRadius: "999px",
+                padding: "2px 8px",
+                fontFamily: "'Inter', sans-serif",
+                lineHeight: 1.4,
+              }}>
+                {badge.label}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
       {showBody && (
         <div style={{ marginTop: "8px" }}>
-          {/* Bio */}
-          {displayBio && (
+          {bio && (
             <div style={{ position: "relative" }}>
               <p
                 ref={bioRef}
@@ -112,16 +122,10 @@ export default function ProfileInfo({
                   transition: "max-height 0.2s ease",
                 }}
               >
-                {displayBio}
+                {bio}
               </p>
-
               {isOverflowing && !expanded && (
-                <div style={{
-                  position: "absolute", bottom: 0, left: 0, right: 0,
-                  height: "28px",
-                  background: "linear-gradient(to bottom, transparent, #0A0A0F)",
-                  pointerEvents: "none",
-                }} />
+                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "28px", background: "linear-gradient(to bottom, transparent, #0A0A0F)", pointerEvents: "none" }} />
               )}
             </div>
           )}
@@ -129,11 +133,7 @@ export default function ProfileInfo({
           {isOverflowing && (
             <button
               onClick={() => setExpanded(!expanded)}
-              style={{
-                background: "none", border: "none", color: "#8B5CF6",
-                fontSize: "13px", fontWeight: 500, cursor: "pointer",
-                padding: "6px 0 0", fontFamily: "'Inter', sans-serif", display: "block",
-              }}
+              style={{ background: "none", border: "none", color: "#8B5CF6", fontSize: "13px", fontWeight: 500, cursor: "pointer", padding: "6px 0 0", fontFamily: "'Inter', sans-serif", display: "block" }}
             >
               {expanded ? "Less info" : "More info"}
             </button>
@@ -141,7 +141,6 @@ export default function ProfileInfo({
 
           {(expanded || !isOverflowing) && (
             <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
-
               {websiteUrl && (
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <Globe size={15} color="#64748B" strokeWidth={1.8} />
@@ -155,40 +154,39 @@ export default function ProfileInfo({
                   </a>
                 </div>
               )}
-
               <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-                {displayLocation && (
+                {location && (
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <MapPin size={15} color="#64748B" strokeWidth={1.8} />
-                    <span style={{ fontSize: "13px", color: "#94A3B8" }}>{displayLocation}</span>
+                    <span style={{ fontSize: "13px", color: "#94A3B8" }}>{location}</span>
                   </div>
                 )}
-                {displayTwitter && (
-                  <a href={displayTwitter} target="_blank" rel="noopener noreferrer"
+                {twitterUrl && (
+                  <a href={twitterUrl} target="_blank" rel="noopener noreferrer"
                     style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = "#94A3B8"; }}>
                     <Twitter size={16} strokeWidth={1.8} />
                   </a>
                 )}
-                {displayInstagram && (
-                  <a href={displayInstagram} target="_blank" rel="noopener noreferrer"
+                {instagramUrl && (
+                  <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
                     style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = "#94A3B8"; }}>
                     <Instagram size={16} strokeWidth={1.8} />
                   </a>
                 )}
-                {displayFacebook && (
-                  <a href={displayFacebook} target="_blank" rel="noopener noreferrer"
+                {facebookUrl && (
+                  <a href={facebookUrl} target="_blank" rel="noopener noreferrer"
                     style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = "#94A3B8"; }}>
                     <Facebook size={16} strokeWidth={1.8} />
                   </a>
                 )}
-                {displayTelegram && (
-                  <a href={displayTelegram} target="_blank" rel="noopener noreferrer"
+                {telegramUrl && (
+                  <a href={telegramUrl} target="_blank" rel="noopener noreferrer"
                     style={{ display: "flex", alignItems: "center", color: "#94A3B8", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = "#94A3B8"; }}>

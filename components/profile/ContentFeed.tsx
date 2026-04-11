@@ -27,6 +27,8 @@ export interface ContentFeedProps {
   onSubscribe?: () => void;
   emptyState?: React.ReactNode;
   className?: string;
+  extraTab?: string;
+  extraTabContent?: React.ReactNode;
 }
 
 interface ApiMedia {
@@ -40,18 +42,35 @@ interface ApiMedia {
   bunny_video_id: string | null;
 }
 
-function TabBar({ postCount, mediaCount, active, onChange }: {
-  postCount: number; mediaCount: number; active: string; onChange: (key: string) => void;
+function TabBar({ postCount, mediaCount, active, onChange, extraTab }: {
+  postCount: number; mediaCount: number; active: string; onChange: (key: string) => void; extraTab?: string;
 }) {
+  const tabs = [
+    { key: "posts", label: "POSTS", count: postCount },
+    { key: "media", label: "MEDIA", count: mediaCount },
+    ...(extraTab ? [{ key: "extra", label: extraTab.toUpperCase(), count: null }] : []),
+  ];
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 20, display: "flex", width: "100%", backgroundColor: "#0A0A0F", borderBottom: "1px solid #1E1E2E" }}>
-      {[{ key: "posts", label: "POSTS", count: postCount }, { key: "media", label: "MEDIA", count: mediaCount }].map((tab) => (
+      {tabs.map((tab) => (
         <button
           key={tab.key}
           onClick={() => onChange(tab.key)}
-          style={{ flex: 1, padding: "14px 8px", fontSize: "14px", fontWeight: active === tab.key ? 700 : 400, fontFamily: "'Inter', sans-serif", background: "none", border: "none", cursor: "pointer", color: active === tab.key ? "#8B5CF6" : "#64748B", borderBottom: active === tab.key ? "2px solid #8B5CF6" : "2px solid transparent", marginBottom: "-1px", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px", textTransform: "uppercase", letterSpacing: "0.5px" }}
+          style={{
+            flex: 1, padding: "14px 4px",
+            fontSize: "12px",
+            fontWeight: active === tab.key ? 700 : 400,
+            fontFamily: "'Inter', sans-serif",
+            background: "none", border: "none", cursor: "pointer",
+            color: active === tab.key ? "#8B5CF6" : "#64748B",
+            borderBottom: active === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
+            marginBottom: "-1px", transition: "all 0.15s",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "4px",
+            textTransform: "uppercase", letterSpacing: "0.5px",
+            whiteSpace: "nowrap",
+          }}
         >
-          {tab.count} {tab.label}
+          {tab.count !== null ? `${tab.count} ${tab.label}` : tab.label}
         </button>
       ))}
     </div>
@@ -135,17 +154,7 @@ function SubscribeDivider({ onSubscribe }: { onSubscribe?: () => void }) {
       {onSubscribe && (
         <button
           onClick={onSubscribe}
-          style={{
-            padding: "10px 28px",
-            borderRadius: "10px",
-            background: "linear-gradient(135deg, #8B5CF6, #7C3AED)",
-            border: "none",
-            color: "#fff",
-            fontSize: "14px",
-            fontWeight: 700,
-            cursor: "pointer",
-            fontFamily: "'Inter', sans-serif",
-          }}
+          style={{ padding: "10px 28px", borderRadius: "10px", background: "linear-gradient(135deg, #8B5CF6, #7C3AED)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
           onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
           onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
         >
@@ -156,7 +165,6 @@ function SubscribeDivider({ onSubscribe }: { onSubscribe?: () => void }) {
   );
 }
 
-// Module-level cache
 const feedLayoutCache = new Map<string, { activeTab: string; isPostsGridView: boolean; isMediaGridView: boolean }>();
 const feedPostsCache  = new Map<string, { posts: ApiPost[]; media: ApiMedia[] }>();
 
@@ -170,13 +178,11 @@ function buildMediaFromPosts(fetchedPosts: ApiPost[]): ApiMedia[] {
   return allMedia;
 }
 
-// Merge incoming posts into existing state — only update changed fields, never replace wholesale
 function mergeApiPosts(existing: ApiPost[], incoming: ApiPost[]): ApiPost[] {
   const existingMap = new Map(existing.map((p) => [p.id, p]));
   return incoming.map((incomingPost) => {
     const existingPost = existingMap.get(incomingPost.id);
     if (!existingPost) return incomingPost;
-    // Preserve local locked/can_access state if it's already unlocked
     return {
       ...incomingPost,
       locked:     existingPost.locked === false ? false : incomingPost.locked,
@@ -190,24 +196,19 @@ export default function ContentFeed({
   creatorUsername, initialApiPosts,
   refreshKey,
   onLike, onComment, onTip, onUnlock, onSubscribe, emptyState, className,
+  extraTab, extraTabContent,
 }: ContentFeedProps) {
   const router = useRouter();
 
   const globalViewer = useAppStore((s) => s.viewer);
   const viewer = globalViewer
-    ? {
-        id:           globalViewer.id,
-        username:     globalViewer.username,
-        display_name: globalViewer.display_name,
-        avatar_url:   globalViewer.avatar_url ?? "",
-      }
+    ? { id: globalViewer.id, username: globalViewer.username, display_name: globalViewer.display_name, avatar_url: globalViewer.avatar_url ?? "" }
     : null;
 
   const cacheKey = creatorUsername ?? "default";
   const cached   = feedLayoutCache.get(cacheKey);
 
   const [activeTab,       setActiveTab]       = React.useState(cached?.activeTab ?? "posts");
-
   const cachedPosts = feedPostsCache.get(cacheKey);
   const seedPosts   = initialApiPosts ?? cachedPosts?.posts ?? [];
   const seedMedia   = cachedPosts?.media ?? (initialApiPosts ? buildMediaFromPosts(initialApiPosts) : []);
@@ -226,15 +227,11 @@ export default function ContentFeed({
   const prevRefreshKey = React.useRef<number | undefined>(undefined);
   React.useEffect(() => {
     if (refreshKey === undefined) return;
-    if (prevRefreshKey.current === undefined) {
-      prevRefreshKey.current = refreshKey;
-      return;
-    }
+    if (prevRefreshKey.current === undefined) { prevRefreshKey.current = refreshKey; return; }
     if (refreshKey !== prevRefreshKey.current) {
       prevRefreshKey.current = refreshKey;
       feedPostsCache.delete(cacheKey);
       if (initialApiPosts) {
-        // Merge to preserve any locally unlocked posts
         setApiPosts((prev) => mergeApiPosts(prev, initialApiPosts));
         const freshMedia = buildMediaFromPosts(initialApiPosts);
         setApiMedia(freshMedia);
@@ -245,10 +242,7 @@ export default function ContentFeed({
 
   React.useEffect(() => {
     if (initialApiPosts && !feedPostsCache.has(cacheKey)) {
-      feedPostsCache.set(cacheKey, {
-        posts: initialApiPosts,
-        media: buildMediaFromPosts(initialApiPosts),
-      });
+      feedPostsCache.set(cacheKey, { posts: initialApiPosts, media: buildMediaFromPosts(initialApiPosts) });
     }
   }, [cacheKey, initialApiPosts]);
 
@@ -257,7 +251,6 @@ export default function ContentFeed({
     if (!initialApiPosts) return;
     if (prevInitialPostsRef.current === initialApiPosts) return;
     prevInitialPostsRef.current = initialApiPosts;
-    // Merge instead of replace — preserves locally unlocked state
     setApiPosts((prev) => mergeApiPosts(prev, initialApiPosts));
     const freshMedia = buildMediaFromPosts(initialApiPosts);
     setApiMedia(freshMedia);
@@ -268,15 +261,8 @@ export default function ContentFeed({
     feedLayoutCache.set(cacheKey, { activeTab, isPostsGridView, isMediaGridView });
   }, [cacheKey, activeTab, isPostsGridView, isMediaGridView]);
 
-  const imagePosts = React.useMemo(
-    () => apiPosts.filter((p) => !p.locked && p.media?.[0]?.media_type !== "video"),
-    [apiPosts]
-  );
-
-  const postById = React.useMemo(
-    () => new Map(apiPosts.map((p) => [p.id, p])),
-    [apiPosts]
-  );
+  const imagePosts = React.useMemo(() => apiPosts.filter((p) => !p.locked && p.media?.[0]?.media_type !== "video"), [apiPosts]);
+  const postById   = React.useMemo(() => new Map(apiPosts.map((p) => [p.id, p])), [apiPosts]);
 
   const filteredPosts = React.useMemo(
     () => apiPosts.filter((p) => searchQuery ? p.caption?.toLowerCase().includes(searchQuery.toLowerCase()) : true),
@@ -284,12 +270,8 @@ export default function ContentFeed({
   );
 
   const { freePosts, lockedPosts } = React.useMemo(() => {
-    if (isSubscribed || isOwnProfile) {
-      return { freePosts: filteredPosts, lockedPosts: [] };
-    }
-    const free   = filteredPosts.filter((p) => !p.locked);
-    const locked = filteredPosts.filter((p) => p.locked);
-    return { freePosts: free, lockedPosts: locked };
+    if (isSubscribed || isOwnProfile) return { freePosts: filteredPosts, lockedPosts: [] };
+    return { freePosts: filteredPosts.filter((p) => !p.locked), lockedPosts: filteredPosts.filter((p) => p.locked) };
   }, [filteredPosts, isSubscribed, isOwnProfile]);
 
   const filteredMedia = React.useMemo(
@@ -332,9 +314,7 @@ export default function ContentFeed({
   const handlePPVUpdated = React.useCallback((id: string, priceKobo: number) => {
     setApiPosts((prev) => {
       const updated = prev.map((p) =>
-        String(p.id) === id
-          ? { ...p, is_ppv: priceKobo > 0, ppv_price: priceKobo > 0 ? priceKobo : null }
-          : p
+        String(p.id) === id ? { ...p, is_ppv: priceKobo > 0, ppv_price: priceKobo > 0 ? priceKobo : null } : p
       );
       const c = feedPostsCache.get(cacheKey);
       if (c) feedPostsCache.set(cacheKey, { ...c, posts: updated });
@@ -342,78 +322,47 @@ export default function ContentFeed({
     });
   }, [cacheKey]);
 
-  const openLightbox = (p: LightboxPost, index: number) => {
-    setLightboxMediaIndex(index);
-    setLightboxPost(p);
-  };
+  const openLightbox = (p: LightboxPost, index: number) => { setLightboxMediaIndex(index); setLightboxPost(p); };
 
   const renderPostRow = (post: ApiPost) => (
     <PostRow
-      key={post.id}
-      post={post}
-      isOwnProfile={isOwnProfile}
-      isSubscribed={isSubscribed}
-      viewer={viewer}
-      onLike={onLike}
-      onComment={onComment}
-      onTip={onTip}
-      onUnlock={onUnlock}
-      onDelete={handleDeletePost}
-      onImageClick={(p, index) => openLightbox(p, index)}
-      onPPVUpdated={handlePPVUpdated}
+      key={post.id} post={post} isOwnProfile={isOwnProfile} isSubscribed={isSubscribed}
+      viewer={viewer} onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
+      onDelete={handleDeletePost} onImageClick={(p, index) => openLightbox(p, index)} onPPVUpdated={handlePPVUpdated}
     />
   );
 
   const renderGridPost = (post: ApiPost) => {
     const m     = post.media?.[0];
-    const thumb = m
-      ? m.media_type === "video" && m.bunny_video_id
-        ? getBunnyThumbnail(m.bunny_video_id)
-        : (m.thumbnail_url || m.file_url || undefined)
-      : undefined;
+    const thumb = m ? m.media_type === "video" && m.bunny_video_id ? getBunnyThumbnail(m.bunny_video_id) : (m.thumbnail_url || m.file_url || undefined) : undefined;
     return (
       <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
         {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
-        {post.locked && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}>
-            <Lock size={16} color="#fff" />
-          </div>
-        )}
+        {post.locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}><Lock size={16} color="#fff" /></div>}
         {!post.locked && (post.media?.length ?? 0) > 1 && (
-          <div style={{ position: "absolute", top: "5px", right: "5px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "4px", padding: "2px 6px", fontSize: "10px", fontWeight: 700, color: "#fff" }}>
-            1/{post.media.length}
-          </div>
+          <div style={{ position: "absolute", top: "5px", right: "5px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "4px", padding: "2px 6px", fontSize: "10px", fontWeight: 700, color: "#fff" }}>1/{post.media.length}</div>
         )}
         <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
-          {m?.media_type === "video"
-            ? <Film size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
-            : <ImageIcon size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
-          }
+          {m?.media_type === "video" ? <Film size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} /> : <ImageIcon size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />}
         </div>
       </div>
     );
   };
 
-  if (loading) {
-    return <ContentFeedSkeleton tab={activeTab as "posts" | "media"} />;
-  }
+  if (loading) return <ContentFeedSkeleton tab={activeTab as "posts" | "media"} />;
 
   return (
     <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
       {lightboxPost && (
-        <Lightbox
-          post={lightboxPost}
-          allPosts={imagePosts}
-          initialMediaIndex={lightboxMediaIndex}
+        <Lightbox post={lightboxPost} allPosts={imagePosts} initialMediaIndex={lightboxMediaIndex}
           onClose={() => setLightboxPost(null)}
           onNavigate={(p, mediaIndex) => { setLightboxMediaIndex(mediaIndex ?? 0); setLightboxPost(p); }}
         />
       )}
 
       <TabBar
-        postCount={apiPosts.length}
-        mediaCount={apiMedia.length}
-        active={activeTab}
+        postCount={apiPosts.length} mediaCount={apiMedia.length}
+        active={activeTab} extraTab={extraTab}
         onChange={(key) => { setActiveTab(key); setShowSearch(false); setSearchQuery(""); }}
       />
 
@@ -432,64 +381,34 @@ export default function ContentFeed({
             {showSearch && (
               <div style={{ marginBottom: "8px", position: "relative" }}>
                 <Search size={13} style={{ position: "absolute", left: "11px", top: "50%", transform: "translateY(-50%)", color: "#6B6B8A" }} />
-                <input
-                  type="text"
-                  placeholder="Search posts..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                <input type="text" placeholder="Search posts..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                   style={{ width: "100%", padding: "8px 12px 8px 32px", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "8px", color: "#E2E8F0", fontSize: "13px", outline: "none", fontFamily: "'Inter', sans-serif", boxSizing: "border-box", caretColor: "#8B5CF6" }}
                 />
               </div>
             )}
           </div>
 
-          {filteredPosts.length === 0 && (emptyState || (
-            <div style={{ textAlign: "center", padding: "40px 0", color: "#4A4A6A", fontSize: "14px" }}>No posts yet</div>
-          ))}
+          {filteredPosts.length === 0 && (emptyState || <div style={{ textAlign: "center", padding: "40px 0", color: "#4A4A6A", fontSize: "14px" }}>No posts yet</div>)}
 
           {(isSubscribed || isOwnProfile) && (
-            isPostsGridView ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
-                {filteredPosts.map(renderGridPost)}
-              </div>
-            ) : (
-              filteredPosts.map(renderPostRow)
-            )
+            isPostsGridView
+              ? <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>{filteredPosts.map(renderGridPost)}</div>
+              : filteredPosts.map(renderPostRow)
           )}
 
           {!isSubscribed && !isOwnProfile && (
             <>
               {isPostsGridView ? (
                 <>
-                  {freePosts.length > 0 && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
-                      {freePosts.map(renderGridPost)}
-                    </div>
-                  )}
-                  {lockedPosts.length > 0 && (
-                    <>
-                      <SubscribeDivider onSubscribe={onSubscribe} />
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
-                        {lockedPosts.map(renderGridPost)}
-                      </div>
-                    </>
-                  )}
-                  {lockedPosts.length === 0 && freePosts.length > 0 && (
-                    <SubscribeDivider onSubscribe={onSubscribe} />
-                  )}
+                  {freePosts.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>{freePosts.map(renderGridPost)}</div>}
+                  {lockedPosts.length > 0 && (<><SubscribeDivider onSubscribe={onSubscribe} /><div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>{lockedPosts.map(renderGridPost)}</div></>)}
+                  {lockedPosts.length === 0 && freePosts.length > 0 && <SubscribeDivider onSubscribe={onSubscribe} />}
                 </>
               ) : (
                 <>
                   {freePosts.map(renderPostRow)}
-                  {lockedPosts.length > 0 && (
-                    <>
-                      <SubscribeDivider onSubscribe={onSubscribe} />
-                      {lockedPosts.map(renderPostRow)}
-                    </>
-                  )}
-                  {lockedPosts.length === 0 && freePosts.length > 0 && (
-                    <SubscribeDivider onSubscribe={onSubscribe} />
-                  )}
+                  {lockedPosts.length > 0 && (<><SubscribeDivider onSubscribe={onSubscribe} />{lockedPosts.map(renderPostRow)}</>)}
+                  {lockedPosts.length === 0 && freePosts.length > 0 && <SubscribeDivider onSubscribe={onSubscribe} />}
                 </>
               )}
             </>
@@ -500,34 +419,21 @@ export default function ContentFeed({
       {/* Media tab */}
       {activeTab === "media" && (
         <>
-          <MediaToolbar
-            apiMediaCount={apiMedia.length}
-            photoCount={photoCount}
-            videoCount={videoCount}
-            mediaFilter={mediaFilter}
-            setMediaFilter={setMediaFilter}
-            showSearch={showSearch}
-            setShowSearch={setShowSearch}
-            isMediaGridView={isMediaGridView}
-            setIsMediaGridView={setIsMediaGridView}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
+          <MediaToolbar apiMediaCount={apiMedia.length} photoCount={photoCount} videoCount={videoCount}
+            mediaFilter={mediaFilter} setMediaFilter={setMediaFilter} showSearch={showSearch}
+            setShowSearch={setShowSearch} isMediaGridView={isMediaGridView} setIsMediaGridView={setIsMediaGridView}
+            searchQuery={searchQuery} setSearchQuery={setSearchQuery}
           />
           {isMediaGridView ? (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
               {filteredMedia.map((item) => {
-                const thumb = item.media_type === "video" && item.bunny_video_id
-                  ? getBunnyThumbnail(item.bunny_video_id)
-                  : (item.thumbnail_url || item.file_url || undefined);
+                const thumb = item.media_type === "video" && item.bunny_video_id ? getBunnyThumbnail(item.bunny_video_id) : (item.thumbnail_url || item.file_url || undefined);
                 const parentPost = postById.get(item.post_id);
                 return (
                   <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
                     {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
                     <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
-                      {item.media_type === "video"
-                        ? <Film size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
-                        : <ImageIcon size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
-                      }
+                      {item.media_type === "video" ? <Film size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} /> : <ImageIcon size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />}
                     </div>
                   </div>
                 );
@@ -536,9 +442,7 @@ export default function ContentFeed({
           ) : (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {filteredMedia.map((item) => {
-                const thumb = item.media_type === "video" && item.bunny_video_id
-                  ? getBunnyThumbnail(item.bunny_video_id)
-                  : (item.thumbnail_url || item.file_url || undefined);
+                const thumb = item.media_type === "video" && item.bunny_video_id ? getBunnyThumbnail(item.bunny_video_id) : (item.thumbnail_url || item.file_url || undefined);
                 const parentPost = postById.get(item.post_id);
                 return (
                   <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ borderBottom: "1px solid #1A1A2E", cursor: "pointer" }}>
@@ -555,10 +459,15 @@ export default function ContentFeed({
               })}
             </div>
           )}
-          {filteredMedia.length === 0 && (
-            <div style={{ textAlign: "center", padding: "40px 0", color: "#4A4A6A", fontSize: "14px" }}>No media yet</div>
-          )}
+          {filteredMedia.length === 0 && <div style={{ textAlign: "center", padding: "40px 0", color: "#4A4A6A", fontSize: "14px" }}>No media yet</div>}
         </>
+      )}
+
+      {/* Extra tab */}
+      {activeTab === "extra" && extraTabContent && (
+        <div style={{ padding: "16px" }}>
+          {extraTabContent}
+        </div>
       )}
     </div>
   );

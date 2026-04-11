@@ -59,6 +59,8 @@ export interface ProfileEntry {
   isFollowing: boolean;
   isSubscribed: boolean;
   subscriptionPeriodEnd: string | null;
+  pricePaid?: number;      // FIX: was missing, caused price to be dropped on cache save
+  selectedTier?: string;   // FIX: was missing, caused tier to be dropped on cache save
   apiPosts: ApiPost[];
   fetchedAt: number;
   fanSubscription?: any | null;

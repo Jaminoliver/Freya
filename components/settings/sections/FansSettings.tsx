@@ -64,6 +64,8 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
+  const goToFan = (username: string) => navigate(`/${username}?from=fans`);
+
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
 
@@ -125,15 +127,14 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
                 borderBottom: i < fans.length - 1 ? "1px solid #1A1A2E" : "none",
               }}
             >
-              {/* Avatar — clickable */}
+              {/* Avatar */}
               <button
-                onClick={() => navigate(`/${fan.username}`)}
+                onClick={() => goToFan(fan.username)}
                 style={{
                   width: "40px", height: "40px", borderRadius: "50%",
                   flexShrink: 0, overflow: "hidden", border: "none",
                   cursor: "pointer", padding: 0, background: "none",
                 }}
-                title={`View @${fan.username}'s profile`}
               >
                 {fan.avatar_url ? (
                   <img
@@ -155,7 +156,7 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <button
-                  onClick={() => navigate(`/${fan.username}`)}
+                  onClick={() => goToFan(fan.username)}
                   style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
                 >
                   <p style={{
@@ -167,9 +168,8 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
                   </p>
                 </button>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                  {/* @username in app purple */}
                   <button
-                    onClick={() => navigate(`/${fan.username}`)}
+                    onClick={() => goToFan(fan.username)}
                     style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
                   >
                     <span style={{ fontSize: "11px", color: "#8B5CF6", fontWeight: 500 }}>@{fan.username}</span>

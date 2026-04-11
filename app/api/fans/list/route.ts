@@ -17,6 +17,8 @@ export async function GET(req: NextRequest) {
       status,
       created_at,
       current_period_end,
+      selected_tier,
+      price_paid,
       fan:profiles!fan_id (
         id,
         username,
@@ -34,33 +36,71 @@ export async function GET(req: NextRequest) {
   const { data, error: fetchError } = await query;
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
 
-  // Fetch total spent per fan from transactions table
-  const fanIds = (data ?? []).map((row: any) => row.fan?.id).filter(Boolean);
+  const seen = new Set<string>();
+  const deduped = (data ?? []).filter((row: any) => {
+    const fid = row.fan?.id;
+    if (!fid || seen.has(fid)) return false;
+    seen.add(fid);
+    return true;
+  });
 
-  let spentMap: Record<string, number> = {};
+  const fanIds = deduped.map((row: any) => row.fan?.id).filter(Boolean);
+
+  const tipsMap: Record<string, number> = {};
+  const ppvMap:  Record<string, number> = {};
+  const subMap:  Record<string, number> = {};
 
   if (fanIds.length > 0) {
-    const { data: transactions } = await supabase
-      .from("transactions")
-      .select("fan_id, amount")
-      .eq("creator_id", user.id)
-      .in("fan_id", fanIds);
+    const [tipsRes, ppvRes, subRes] = await Promise.allSettled([
+      supabase
+        .from("tips")
+        .select("tipper_id, amount")
+        .eq("recipient_id", user.id)
+        .in("tipper_id", fanIds),
+      supabase
+        .from("ppv_unlocks")
+        .select("fan_id, amount_paid")
+        .eq("creator_id", user.id)
+        .in("fan_id", fanIds),
+      supabase
+        .from("subscriptions")
+        .select("fan_id, price_paid")
+        .eq("creator_id", user.id)
+        .in("fan_id", fanIds),
+    ]);
 
-    (transactions ?? []).forEach((t: any) => {
-      spentMap[t.fan_id] = (spentMap[t.fan_id] ?? 0) + (t.amount ?? 0);
-    });
+    if (tipsRes.status === "fulfilled") {
+      (tipsRes.value.data ?? []).forEach((t: any) => {
+        tipsMap[t.tipper_id] = (tipsMap[t.tipper_id] ?? 0) + ((t.amount ?? 0) / 100);
+      });
+    }
+    if (ppvRes.status === "fulfilled") {
+      (ppvRes.value.data ?? []).forEach((t: any) => {
+        ppvMap[t.fan_id] = (ppvMap[t.fan_id] ?? 0) + ((t.amount_paid ?? 0) / 100);
+      });
+    }
+    if (subRes.status === "fulfilled") {
+      (subRes.value.data ?? []).forEach((t: any) => {
+        subMap[t.fan_id] = (subMap[t.fan_id] ?? 0) + ((t.price_paid ?? 0) / 100);
+      });
+    }
   }
 
-  const fans = (data ?? []).map((row: any) => ({
-    id:            row.fan?.id,
-    username:      row.fan?.username,
-    display_name:  row.fan?.display_name,
-    avatar_url:    row.fan?.avatar_url ?? null,
-    subscribed_at: row.created_at,
-    expires_at:    row.current_period_end ?? null,
-    status:        row.status,
-    total_spent:   spentMap[row.fan?.id] ?? 0,
-  }));
+  const fans = deduped.map((row: any) => {
+    const fid        = row.fan?.id;
+    const totalSpent = (tipsMap[fid] ?? 0) + (ppvMap[fid] ?? 0) + (subMap[fid] ?? 0);
+    return {
+      id:            fid,
+      username:      row.fan?.username,
+      display_name:  row.fan?.display_name,
+      avatar_url:    row.fan?.avatar_url ?? null,
+      subscribed_at: row.created_at,
+      expires_at:    row.current_period_end ?? null,
+      status:        row.status,
+      selected_tier: row.selected_tier ?? null,
+      total_spent:   totalSpent,
+    };
+  });
 
   return NextResponse.json({ fans });
 }

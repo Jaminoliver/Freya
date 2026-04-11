@@ -506,12 +506,12 @@ const handleSubscribeBannerClick = useCallback(async () => {
               <span style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
               {post.creator.isVerified && <BadgeCheck size={14} color="#8B5CF6" />}
             </div>
-            <span style={{ fontSize: "12px", color: "#6B6B8A" }}>@{post.creator.username}</span>
+            <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{timestamp}</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{timestamp}</span>
-          <button onClick={handleOpenSheet} style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
+          <button onClick={handleOpenSheet} style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#C4C4D4", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
           </button>
         </div>
@@ -525,34 +525,24 @@ const handleSubscribeBannerClick = useCallback(async () => {
 
       {/* Subscribe banner for Spotlight posts */}
       {showSubscribeBanner && (
-        <>
-          <style>{`
-            @keyframes bannerGradientSweep {
-              0%   { background-position: 0% 50%; }
-              50%  { background-position: 100% 50%; }
-              100% { background-position: 0% 50%; }
-            }
-          `}</style>
-          <div
-            onClick={handleSubscribeBannerClick}
-            style={{
-              margin: "0 0 10px",
-              padding: "12px 16px",
-              background: subscribed
-                ? "linear-gradient(135deg, #22C55E, #16A34A)"
-                : "linear-gradient(135deg, #8B5CF6, #A855F7, #EC4899, #8B5CF6)",
-              backgroundSize: subscribed ? "100% 100%" : "300% 100%",
-              animation: subscribed ? "none" : "bannerGradientSweep 4s ease infinite",
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              cursor: subLoading ? "wait" : "pointer",
-              transition: "opacity 0.15s",
-              opacity: subLoading ? 0.7 : 1,
-            }}
-            onMouseEnter={(e) => { if (!subLoading) e.currentTarget.style.opacity = "0.9"; }}
-            onMouseLeave={(e) => { if (!subLoading) e.currentTarget.style.opacity = "1"; }}
-          >
+        <div
+          onClick={handleSubscribeBannerClick}
+          style={{
+            margin: "0 0 10px",
+            padding: "12px 16px",
+            background: subscribed
+              ? "linear-gradient(135deg, #22C55E, #16A34A)"
+              : "linear-gradient(135deg, #8B5CF6, #EC4899)",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            cursor: subLoading ? "wait" : "pointer",
+            transition: "opacity 0.15s",
+            opacity: subLoading ? 0.7 : 1,
+          }}
+          onMouseEnter={(e) => { if (!subLoading) e.currentTarget.style.opacity = "0.9"; }}
+          onMouseLeave={(e) => { if (!subLoading) e.currentTarget.style.opacity = "1"; }}
+        >
           <img
             src={post.creator.avatar_url || ""}
             alt={post.creator.name}
@@ -572,23 +562,31 @@ const handleSubscribeBannerClick = useCallback(async () => {
             </div>
             <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>@{post.creator.username}</span>
           </div>
-          <div
-            style={{
-              padding: "8px 20px",
-              borderRadius: "8px",
-              backgroundColor: "#FFFFFF",
-              fontSize: "14px",
-              fontWeight: 700,
-              color: subscribed ? "#16A34A" : "#8B5CF6",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-              fontFamily: "'Inter', sans-serif",
-            }}
-          >
-            {subscribed ? "Subscribed ✓" : "Subscribe"}
-          </div>
+          <>
+  <style>{`
+    @keyframes subscribePulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
+      50%       { transform: scale(1.08); box-shadow: 0 0 12px 4px rgba(139,92,246,0.3); }
+    }
+  `}</style>
+  <div
+    style={{
+      padding: "8px 20px",
+      borderRadius: "8px",
+      backgroundColor: "#FFFFFF",
+      fontSize: "14px",
+      fontWeight: 700,
+      color: subscribed ? "#16A34A" : "#8B5CF6",
+      whiteSpace: "nowrap",
+      flexShrink: 0,
+      fontFamily: "'Inter', sans-serif",
+      animation: subscribed ? "none" : "subscribePulse 2s ease-in-out infinite",
+    }}
+  >
+    {subscribed ? "Subscribed ✓" : "Subscribe"}
+  </div>
+</>
         </div>
-        </>
       )}
 
       {isTextPost && <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />}
@@ -617,10 +615,12 @@ const handleSubscribeBannerClick = useCallback(async () => {
         </div>
       )}
 
-      <div style={{ padding: "0 16px" }}>
-        <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={true} isOwnProfile={false} onLike={handleLike} onComment={handleToggleComment} onTip={() => setTipOpen(true)} onBookmark={handleSavePost} />
-        <CommentSection postId={post.id} comments={comments} viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null} viewerUserId={viewer?.id} isOpen={commentOpen} onAddComment={handleAddComment} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} />
-      </div>
+      {!post.isLocked && (
+        <div style={{ padding: "0 16px" }}>
+          <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={true} isOwnProfile={false} onLike={handleLike} onComment={handleToggleComment} onTip={() => setTipOpen(true)} onBookmark={handleSavePost} />
+          <CommentSection postId={post.id} comments={comments} viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null} viewerUserId={viewer?.id} isOpen={commentOpen} onAddComment={handleAddComment} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} />
+        </div>
+      )}
     </div>
   );
 }

@@ -56,7 +56,7 @@ export default function PostActions({
             display: "flex", alignItems: "center", justifyContent: "center",
             width: "38px", height: "38px", borderRadius: "10px", border: "none",
             background: liked ? "rgba(239,68,68,0.1)" : "transparent",
-            color: liked ? "#EF4444" : "#6B6B8A",
+            color: liked ? "#EF4444" : "#E2E8F0",
             cursor: canLike ? "pointer" : "not-allowed",
             transition: "all 0.15s",
           }}
@@ -72,7 +72,7 @@ export default function PostActions({
           style={{
             display: "flex", alignItems: "center", justifyContent: "center",
             width: "38px", height: "38px", borderRadius: "10px", border: "none",
-            background: "transparent", color: "#6B6B8A", cursor: "pointer",
+            background: "transparent", color: "#E2E8F0", cursor: "pointer",
             transition: "all 0.15s",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
@@ -124,7 +124,7 @@ export default function PostActions({
             display: "flex", alignItems: "center", justifyContent: "center",
             width: "38px", height: "38px", borderRadius: "10px", border: "none",
             background: bookmarked ? "rgba(139,92,246,0.1)" : "transparent",
-            color: bookmarked ? "#8B5CF6" : "#6B6B8A",
+            color: bookmarked ? "#8B5CF6" : "#E2E8F0",
             cursor: "pointer", transition: "all 0.15s",
           }}
           onMouseEnter={(e) => { if (!bookmarked) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
