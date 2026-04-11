@@ -83,6 +83,13 @@ export default function PostActions({
 
         {/* Send Tip */}
         {!isOwnProfile && (
+          <>
+          <style>{`
+            @keyframes tipPulse {
+              0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
+              50%      { transform: scale(1.08); box-shadow: 0 0 12px 4px rgba(139,92,246,0.3); }
+            }
+          `}</style>
           <button
             onClick={onTip}
             style={{
@@ -92,9 +99,10 @@ export default function PostActions({
               border: "none", cursor: "pointer",
               fontFamily: "'Inter', sans-serif",
               transition: "opacity 0.15s",
+              animation: "tipPulse 2s ease-in-out infinite",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; e.currentTarget.style.animationPlayState = "paused"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.animationPlayState = "running"; }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 12 20 22 4 22 4 12"/>
@@ -105,6 +113,7 @@ export default function PostActions({
             </svg>
             <span style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>Send Tip</span>
           </button>
+          </>
         )}
 
         {/* Bookmark — pushed to right */}

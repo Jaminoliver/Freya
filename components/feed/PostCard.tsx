@@ -525,24 +525,34 @@ const handleSubscribeBannerClick = useCallback(async () => {
 
       {/* Subscribe banner for Spotlight posts */}
       {showSubscribeBanner && (
-        <div
-          onClick={handleSubscribeBannerClick}
-          style={{
-            margin: "0 0 10px",
-            padding: "12px 16px",
-            background: subscribed
-              ? "linear-gradient(135deg, #22C55E, #16A34A)"
-              : "linear-gradient(135deg, #8B5CF6, #EC4899)",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            cursor: subLoading ? "wait" : "pointer",
-            transition: "opacity 0.15s",
-            opacity: subLoading ? 0.7 : 1,
-          }}
-          onMouseEnter={(e) => { if (!subLoading) e.currentTarget.style.opacity = "0.9"; }}
-          onMouseLeave={(e) => { if (!subLoading) e.currentTarget.style.opacity = "1"; }}
-        >
+        <>
+          <style>{`
+            @keyframes bannerGradientSweep {
+              0%   { background-position: 0% 50%; }
+              50%  { background-position: 100% 50%; }
+              100% { background-position: 0% 50%; }
+            }
+          `}</style>
+          <div
+            onClick={handleSubscribeBannerClick}
+            style={{
+              margin: "0 0 10px",
+              padding: "12px 16px",
+              background: subscribed
+                ? "linear-gradient(135deg, #22C55E, #16A34A)"
+                : "linear-gradient(135deg, #8B5CF6, #A855F7, #EC4899, #8B5CF6)",
+              backgroundSize: subscribed ? "100% 100%" : "300% 100%",
+              animation: subscribed ? "none" : "bannerGradientSweep 4s ease infinite",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              cursor: subLoading ? "wait" : "pointer",
+              transition: "opacity 0.15s",
+              opacity: subLoading ? 0.7 : 1,
+            }}
+            onMouseEnter={(e) => { if (!subLoading) e.currentTarget.style.opacity = "0.9"; }}
+            onMouseLeave={(e) => { if (!subLoading) e.currentTarget.style.opacity = "1"; }}
+          >
           <img
             src={post.creator.avatar_url || ""}
             alt={post.creator.name}
@@ -578,6 +588,7 @@ const handleSubscribeBannerClick = useCallback(async () => {
             {subscribed ? "Subscribed ✓" : "Subscribe"}
           </div>
         </div>
+        </>
       )}
 
       {isTextPost && <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />}
