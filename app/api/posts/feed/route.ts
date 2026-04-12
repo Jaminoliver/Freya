@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
         creator_id,
         content_type,
         caption,
+        text_background,
         audience,
         is_free,
         is_ppv,

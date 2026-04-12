@@ -22,7 +22,8 @@ interface FeedPost {
   id:            number;
   creator_id:    string;
   content_type:  string;
-  caption:       string | null;
+  caption:          string | null;
+  text_background?: string | null;
   is_free:       boolean;
   is_ppv:        boolean;
   ppv_price:     number | null;
@@ -59,8 +60,9 @@ interface FeedPost {
 
 function adaptPost(p: FeedPost) {
   return {
-    id:           String(p.id),
-    content_type: p.content_type,
+    id:              String(p.id),
+    content_type:    p.content_type,
+    text_background: p.text_background ?? null,
     creator: {
       id:         p.creator_id,
       name:       p.profiles?.display_name || p.profiles?.username || "Creator",
