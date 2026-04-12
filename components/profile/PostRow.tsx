@@ -7,6 +7,7 @@ import { MoreHorizontal } from "lucide-react";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
+import PostTextViewer from "@/components/shared/PostTextViewer";
 import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
 import CreatorPostOptionsSheet from "@/components/profile/PostOptionsSheet";
 import type { LightboxPost } from "@/components/profile/Lightbox";
@@ -19,20 +20,21 @@ import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 
 export interface ApiPost {
-  id:            number;
-  content_type:  string;
-  caption:       string | null;
-  is_free:       boolean;
-  is_ppv:        boolean;
-  ppv_price:     number | null;
-  like_count:    number;
-  comment_count: number;
-  published_at:  string;
-  liked:         boolean;
-  can_access:    boolean;
-  locked:        boolean;
-  audience:      "subscribers" | "everyone";
-  poll?:         PollData | null;
+  id:              number;
+  content_type:    string;
+  caption:         string | null;
+  text_background?: string | null;
+  is_free:         boolean;
+  is_ppv:          boolean;
+  ppv_price:       number | null;
+  like_count:      number;
+  comment_count:   number;
+  published_at:    string;
+  liked:           boolean;
+  can_access:      boolean;
+  locked:          boolean;
+  audience:        "subscribers" | "everyone";
+  poll?:           PollData | null;
   profiles: {
     id:           string;
     username:     string;
@@ -75,15 +77,9 @@ function EditCaptionModal({ caption, onSave, onClose }: {
 
   const handleSave = async () => {
     if (saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave(value);
-      onClose();
-    } catch {
-      setError("Failed to save. Try again.");
-      setSaving(false);
-    }
+    setSaving(true); setError(null);
+    try { await onSave(value); onClose(); }
+    catch { setError("Failed to save. Try again."); setSaving(false); }
   };
 
   return (
@@ -223,14 +219,11 @@ export default function PostRow({
   React.useEffect(() => {
     if (isOwnProfile) return;
     Promise.all([
-      fetch(`/api/saved/posts?post_id=${post.id}`)
-        .then((r) => r.json()).then((d) => setSavedPost(d.saved ?? false)).catch(() => {}),
-      fetch(`/api/saved/creators?creator_id=${post.profiles.id}`)
-        .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {}),
+      fetch(`/api/saved/posts?post_id=${post.id}`).then((r) => r.json()).then((d) => setSavedPost(d.saved ?? false)).catch(() => {}),
+      fetch(`/api/saved/creators?creator_id=${post.profiles.id}`).then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {}),
     ]);
   }, [post.id, post.profiles.id, isOwnProfile]);
 
-  // Listen to postSyncStore — sync likes from PostCard or other PostRows
   React.useEffect(() => {
     const unsub = postSyncStore.subscribe((event) => {
       if (String(event.postId) !== String(post.id)) return;
@@ -241,9 +234,7 @@ export default function PostRow({
     return unsub;
   }, [post.id]);
 
-  const handleOpenFanSheet = React.useCallback(() => {
-    setSheetOpen(true);
-  }, []);
+  const handleOpenFanSheet = React.useCallback(() => { setSheetOpen(true); }, []);
 
   const isLiking   = React.useRef(false);
   const firstMedia = post.media?.[0];
@@ -259,7 +250,6 @@ export default function PostRow({
     }));
   }, [post.media]);
 
-  // Sync caption and poll from props only
   React.useEffect(() => {
     setPollData(post.poll ?? null);
     setCaption(post.caption);
@@ -297,72 +287,49 @@ export default function PostRow({
   const handleLike = async () => {
     if (isLiking.current) return;
     isLiking.current = true;
-
-    // Snapshot for rollback
-    const wasLiked = liked;
-    const oldCount = likeCount;
-    const newLiked = !wasLiked;
-    const newCount = newLiked ? oldCount + 1 : Math.max(0, oldCount - 1);
-
-    // Optimistic update
-    setLiked(newLiked);
-    setLikeCount(newCount);
+    const wasLiked = liked; const oldCount = likeCount;
+    const newLiked = !wasLiked; const newCount = newLiked ? oldCount + 1 : Math.max(0, oldCount - 1);
+    setLiked(newLiked); setLikeCount(newCount);
     postSyncStore.emit({ postId: String(post.id), liked: newLiked, like_count: newCount, comment_count: commentCount });
-
     try {
       const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
       const data = await res.json();
-
       if (res.ok) {
-        setLiked(data.liked);
-        setLikeCount(data.like_count);
+        setLiked(data.liked); setLikeCount(data.like_count);
         postSyncStore.emit({ postId: String(post.id), liked: data.liked, like_count: data.like_count, comment_count: commentCount });
         onLike?.(String(post.id));
       } else {
-        // Rollback
-        setLiked(wasLiked);
-        setLikeCount(oldCount);
+        setLiked(wasLiked); setLikeCount(oldCount);
         postSyncStore.emit({ postId: String(post.id), liked: wasLiked, like_count: oldCount, comment_count: commentCount });
       }
     } catch {
-      // Rollback
-      setLiked(wasLiked);
-      setLikeCount(oldCount);
+      setLiked(wasLiked); setLikeCount(oldCount);
       postSyncStore.emit({ postId: String(post.id), liked: wasLiked, like_count: oldCount, comment_count: commentCount });
     }
-
     isLiking.current = false;
   };
 
   const handleDoubleTapLike = async () => {
     if (liked || isLiking.current) return;
     isLiking.current = true;
-
     const oldCount = likeCount;
-
-    setLiked(true);
-    setLikeCount(oldCount + 1);
+    setLiked(true); setLikeCount(oldCount + 1);
     postSyncStore.emit({ postId: String(post.id), liked: true, like_count: oldCount + 1, comment_count: commentCount });
-
     try {
       const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setLiked(data.liked);
-        setLikeCount(data.like_count);
+        setLiked(data.liked); setLikeCount(data.like_count);
         postSyncStore.emit({ postId: String(post.id), liked: data.liked, like_count: data.like_count, comment_count: commentCount });
         onLike?.(String(post.id));
       } else {
-        setLiked(false);
-        setLikeCount(oldCount);
+        setLiked(false); setLikeCount(oldCount);
         postSyncStore.emit({ postId: String(post.id), liked: false, like_count: oldCount, comment_count: commentCount });
       }
     } catch {
-      setLiked(false);
-      setLikeCount(oldCount);
+      setLiked(false); setLikeCount(oldCount);
       postSyncStore.emit({ postId: String(post.id), liked: false, like_count: oldCount, comment_count: commentCount });
     }
-
     isLiking.current = false;
   };
 
@@ -409,9 +376,7 @@ export default function PostRow({
 
   const handleAvatarClick = React.useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isOwnProfile && hasUnviewed && storyGroup) {
-      setStoryViewerOpen(true);
-    }
+    if (!isOwnProfile && hasUnviewed && storyGroup) setStoryViewerOpen(true);
   }, [isOwnProfile, hasUnviewed, storyGroup]);
 
   const isTextPost = post.content_type === "text";
@@ -421,54 +386,27 @@ export default function PostRow({
     <div style={{ borderBottom: "1px solid #1A1A2E" }}>
 
       {storyViewerOpen && storyGroup && (
-        <StoryViewer
-          groups={[storyGroup]}
-          startGroupIndex={0}
-          onClose={() => { setStoryViewerOpen(false); refresh(); }}
-        />
+        <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refresh(); }} />
       )}
 
       {editOpen && <EditCaptionModal caption={caption ?? ""} onSave={handleSaveCaption} onClose={() => setEditOpen(false)} />}
       {ppvEditOpen && <EditPPVModal currentPrice={ppvPrice != null ? ppvPrice / 100 : null} onSave={handleSavePPV} onRemove={isPPV ? handleRemovePPV : undefined} onClose={() => setPpvEditOpen(false)} />}
 
       {!isOwnProfile && (
-        <PostOptionsSheet
-          isOpen={sheetOpen}
-          onClose={() => setSheetOpen(false)}
-          onSavePost={handleSavePost}
-          onSaveCreator={handleSaveCreator}
-          onNotInterested={() => console.log("not interested")}
-          onReport={() => console.log("report")}
-          onBlockCreator={() => console.log("block creator")}
-          savedPost={savedPost}
-          savedCreator={savedCreator}
-        />
+        <PostOptionsSheet isOpen={sheetOpen} onClose={() => setSheetOpen(false)} onSavePost={handleSavePost} onSaveCreator={handleSaveCreator} onNotInterested={() => console.log("not interested")} onReport={() => console.log("report")} onBlockCreator={() => console.log("block creator")} savedPost={savedPost} savedCreator={savedCreator} />
       )}
 
       {isOwnProfile && (
-        <CreatorPostOptionsSheet
-          isOpen={creatorSheetOpen}
-          onClose={() => setCreatorSheetOpen(false)}
-          onEdit={() => setEditOpen(true)}
-          onDelete={handleDelete}
-          onEditPPV={() => setPpvEditOpen(true)}
-        />
+        <CreatorPostOptionsSheet isOpen={creatorSheetOpen} onClose={() => setCreatorSheetOpen(false)} onEdit={() => setEditOpen(true)} onDelete={handleDelete} onEditPPV={() => setPpvEditOpen(true)} />
       )}
 
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <AvatarWithStoryRing
-            src={post.profiles?.avatar_url ?? null}
-            alt={post.profiles?.display_name || post.profiles?.username || ""}
-            size={48}
-            hasStory={!isOwnProfile && hasStory}
-            hasUnviewed={!isOwnProfile && hasUnviewed}
-            onClick={handleAvatarClick}
-          />
+          <AvatarWithStoryRing src={post.profiles?.avatar_url ?? null} alt={post.profiles?.display_name || post.profiles?.username || ""} size={48} hasStory={!isOwnProfile && hasStory} hasUnviewed={!isOwnProfile && hasUnviewed} onClick={handleAvatarClick} />
           <div>
             <div style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{post.profiles?.display_name || post.profiles?.username}</div>
-           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>@{post.profiles?.username}</span>
+            <span style={{ fontSize: "12px", color: "#6B6B8A" }}>@{post.profiles?.username}</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -478,24 +416,23 @@ export default function PostRow({
             </span>
           ) : null}
           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{getRelativeTime(post.published_at)}</span>
-          <button
-            onClick={() => isOwnProfile ? setCreatorSheetOpen(true) : handleOpenFanSheet()}
-            style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-          >
+          <button onClick={() => isOwnProfile ? setCreatorSheetOpen(true) : handleOpenFanSheet()} style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
             <MoreHorizontal size={16} />
           </button>
         </div>
       </div>
 
-      {caption && (
-        <p style={{ fontSize: isTextPost ? "15px" : "14px", color: "#C4C4D4", lineHeight: isTextPost ? 1.7 : 1.6, margin: "0", padding: isTextPost ? "0 16px 14px" : "0 16px 10px", whiteSpace: "pre-wrap" }}>
+      {/* Caption — plain text for non-text posts */}
+      {caption && !isTextPost && (
+        <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
           {caption}
         </p>
       )}
 
-      {isTextPost && <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />}
+      {/* Text post viewer */}
+      {isTextPost && caption && (
+        <PostTextViewer caption={caption} textBackground={post.text_background} />
+      )}
 
       {isPollPost && pollData && (
         <PollDisplay poll={pollData} postId={String(post.id)} isCreator={isOwnProfile} onVoted={(updated) => setPollData(updated)} />

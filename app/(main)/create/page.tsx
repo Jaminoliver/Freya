@@ -1,19 +1,20 @@
 "use client";
 
 import React, { useState, Suspense, useCallback, useMemo } from "react";
-import { ArrowLeft, ImagePlus, BarChart2, HelpCircle, Lock, Calendar, ChevronDown } from "lucide-react";
+import { ArrowLeft, ImagePlus, BarChart2, HelpCircle, Lock, Calendar, ChevronDown, Type } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { MediaUploader } from "@/components/create/MediaUploader";
 import { ThumbnailPicker } from "@/components/create/ThumbnailPicker";
 import { PollBuilder } from "@/components/create/PollBuilder";
+import { TextComposer } from "@/components/create/TextComposer";
 import { createClient } from "@/lib/supabase/client";
 import { usePostUpload } from "@/lib/context/PostUploadContext";
 import { useAppStore } from "@/lib/store/appStore";
 
 /* ── types ──────────────────────────────────────────────────────────────────── */
 
-type ActivePanel = "none" | "poll" | "quiz";
+type ActivePanel = "none" | "poll" | "quiz" | "text";
 
 /* ── main content ──────────────────────────────────────────────────────────── */
 
@@ -33,19 +34,21 @@ function CreatePostContent() {
 
   /* ── state ──────────────────────────────────────────────────────────────── */
 
-  const [caption,      setCaption]      = useState("");
-  const [files,        setFiles]        = useState<File[]>([]);
-  const [activePanel,  setActivePanel]  = useState<ActivePanel>("none");
-  const [audience,     setAudience]     = useState<"subscribers" | "everyone">("subscribers");
-  const [isPPV,        setIsPPV]        = useState(false);
-  const [ppvPrice,     setPpvPrice]     = useState("");
-  const [isScheduled,  setIsScheduled]  = useState(false);
-  const [schedDate,    setSchedDate]    = useState("");
-  const [schedTime,    setSchedTime]    = useState("");
-  const [pollOptions,  setPollOptions]  = useState(["", ""]);
-  const [pollDuration, setPollDuration] = useState("7 days");
-  const [posting,      setPosting]      = useState(false);
-  const [error,        setError]        = useState<string | null>(null);
+  const [caption,           setCaption]           = useState("");
+  const [files,             setFiles]             = useState<File[]>([]);
+  const [activePanel,       setActivePanel]       = useState<ActivePanel>("none");
+  const [audience,          setAudience]          = useState<"subscribers" | "everyone">("subscribers");
+  const [isPPV,             setIsPPV]             = useState(false);
+  const [ppvPrice,          setPpvPrice]          = useState("");
+  const [isScheduled,       setIsScheduled]       = useState(false);
+  const [schedDate,         setSchedDate]         = useState("");
+  const [schedTime,         setSchedTime]         = useState("");
+  const [pollOptions,       setPollOptions]       = useState(["", ""]);
+  const [pollDuration,      setPollDuration]      = useState("7 days");
+  const [textContent,       setTextContent]       = useState("");
+  const [textBackground,    setTextBackground]    = useState("dark");
+  const [posting,           setPosting]           = useState(false);
+  const [error,             setError]             = useState<string | null>(null);
 
   const [thumbnailBlob,    setThumbnailBlob]    = useState<Blob | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
@@ -94,6 +97,7 @@ function CreatePostContent() {
   const hasImages   = files.some((f) => f.type.startsWith("image/"));
   const videoFile   = hasVideo ? files.find((f) => f.type.startsWith("video/")) ?? null : null;
   const hasPoll     = activePanel === "poll" || activePanel === "quiz";
+  const hasText     = activePanel === "text";
   const pollValid   = pollOptions.filter((o) => o.trim().length > 0).length >= 2;
 
   /* auto-detect post type for API */
@@ -105,16 +109,19 @@ function CreatePostContent() {
   }, [hasPoll, activePanel, hasVideo, files.length]);
 
   const canPost = (() => {
-    if (hasPoll) return caption.trim().length > 0 && pollValid;
-    if (files.length > 0) return true; // media post — caption optional
-    return caption.trim().length > 0; // text post needs caption
+    if (hasPoll)  return caption.trim().length > 0 && pollValid;
+    if (hasText)  return textContent.trim().length > 0;
+    if (files.length > 0) return true;
+    return caption.trim().length > 0;
   })();
 
   /* ── handlers ──────────────────────────────────────────────────────────── */
 
-  const togglePanel = useCallback((panel: "poll" | "quiz") => {
+  const togglePanel = useCallback((panel: "poll" | "quiz" | "text") => {
     setActivePanel((prev) => prev === panel ? "none" : panel);
     setPollOptions(["", ""]);
+    setTextContent("");
+    setTextBackground("dark");
   }, []);
 
   const createPost = async (mediaIds: number[]) => {
@@ -126,12 +133,13 @@ function CreatePostContent() {
     }
 
     const body: Record<string, unknown> = {
-      content_type:  apiContentType,
-      caption:       caption || null,
+      content_type:    apiContentType,
+      caption:         hasText ? textContent : (caption || null),
+      text_background: hasText ? textBackground : null,
       audience,
-      is_ppv:        isPPV,
-      ppv_price:     isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null,
-      media_ids:     mediaIds,
+      is_ppv:          isPPV,
+      ppv_price:       isPPV && ppvPrice ? Math.round(Number(ppvPrice) * 100) : null,
+      media_ids:       mediaIds,
       scheduled_for,
     };
 
@@ -182,7 +190,6 @@ function CreatePostContent() {
           }
         };
 
-        // Start photo upload
         if (photoFiles.length === 1) {
           startPhotoUpload({
             file: photoFiles[0],
@@ -205,7 +212,6 @@ function CreatePostContent() {
           });
         }
 
-        // Start video upload
         startVideoUpload({
           file:          videoFile,
           title:         caption || videoFile.name,
@@ -275,7 +281,7 @@ function CreatePostContent() {
         await createPost([]);
         invalidateProfileCache();
         startTextPost({
-          label:   caption.slice(0, 40) || "Text post",
+          label:   textContent.slice(0, 40) || "Text post",
           onDone:  async () => {},
           onError: (err) => console.error("[CreatePost] text post error:", err),
         });
@@ -376,69 +382,40 @@ function CreatePostContent() {
         )}
 
         {/* ── Compose area ────────────────────────────────────────────── */}
-        <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
-          <div style={{ paddingTop: "2px", flexShrink: 0 }}>
-            <Avatar src={currentUser.avatar_url} alt={currentUser.name} size="sm" showRing={false} />
-          </div>
-          <textarea
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            placeholder={hasPoll ? "Ask a question…" : "Add caption…"}
-            rows={3}
-            style={{
-              flex: 1,
-              backgroundColor: "transparent",
-              border: "none", outline: "none",
-              color: "#E2E8F0",
-              fontSize: "15px", lineHeight: 1.6,
-              resize: "none",
-              fontFamily: "inherit",
-              padding: 0,
-              minHeight: "72px",
-            }}
-          />
-        </div>
-
-        {/* ── Poll / Quiz ─────────────────────────────────────────────── */}
-        {hasPoll && (
-          <div>
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              marginBottom: "10px",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                {activePanel === "poll"
-                  ? <BarChart2 size={15} color="#8B5CF6" />
-                  : <HelpCircle size={15} color="#8B5CF6" />
-                }
-                <span style={{ fontSize: "13px", fontWeight: 600, color: "#A3A3C2" }}>
-                  {activePanel === "poll" ? "Poll" : "Quiz"}
-                </span>
-              </div>
-              <select
-                value={pollDuration}
-                onChange={(e) => setPollDuration(e.target.value)}
-                style={{
-                  backgroundColor: "transparent", border: "none",
-                  color: "#8A8AA0", fontSize: "12px",
-                  cursor: "pointer", outline: "none", fontFamily: "inherit",
-                }}
-              >
-                {["1 day", "3 days", "7 days", "14 days"].map((d) => (
-                  <option key={d} value={d} style={{ backgroundColor: "#1C1C2E" }}>{d}</option>
-                ))}
-              </select>
+        {!hasText && (
+          <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+            <div style={{ paddingTop: "2px", flexShrink: 0 }}>
+              <Avatar src={currentUser.avatar_url} alt={currentUser.name} size="sm" showRing={false} />
             </div>
-            <PollBuilder type={activePanel as "poll" | "quiz"} options={pollOptions} onChange={setPollOptions} />
+            <textarea
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder={hasPoll ? "Ask a question…" : "Add caption…"}
+              rows={3}
+              style={{
+                flex: 1,
+                backgroundColor: "transparent",
+                border: "none", outline: "none",
+                color: "#E2E8F0",
+                fontSize: "15px", lineHeight: 1.6,
+                resize: "none",
+                fontFamily: "inherit",
+                padding: 0,
+                minHeight: "72px",
+              }}
+            />
           </div>
         )}
 
-        {/* ── Media section ───────────────────────────────────────────── */}
-        {!hasPoll && (
-          <MediaUploader files={files} onChange={setFiles} />
-        )}
+        {/* ── Unified media / poll / text area ─────────────────────────── */}
+        {hasPoll
+          ? <PollBuilder type={activePanel as "poll" | "quiz"} options={pollOptions} onChange={setPollOptions} />
+          : hasText
+          ? <TextComposer value={textContent} onChange={setTextContent} onBgChange={setTextBackground} />
+          : <MediaUploader files={files} onChange={setFiles} />
+        }
 
-        {/* ── Thumbnail picker (video only) ───────────────────────────── */}
+        {/* ── Thumbnail picker (video only, no poll) ──────────────────── */}
         {videoFile && !hasPoll && (
           <div style={{
             borderRadius: "14px",
@@ -464,18 +441,26 @@ function CreatePostContent() {
           gap: "6px",
         }}>
           {/* Media button */}
-          {!hasPoll && (
-            <ToolbarButton
-              icon={<ImagePlus size={19} strokeWidth={1.6} />}
-              active={files.length > 0}
-              label={files.length > 0 ? `${files.length}` : undefined}
-              onClick={() => {
-                /* scroll to media uploader or open file picker if files exist */
+          <ToolbarButton
+            icon={<ImagePlus size={19} strokeWidth={1.6} />}
+            active={!hasPoll && !hasText && files.length > 0}
+            label={!hasPoll && !hasText && files.length > 0 ? `${files.length}` : undefined}
+            onClick={() => {
+              if (hasPoll || hasText) {
+                setActivePanel("none");
+                setPollOptions(["", ""]);
+                setTextContent("");
+                setTextBackground("dark");
+                setTimeout(() => {
+                  const input = document.querySelector('input[type="file"][accept]') as HTMLInputElement;
+                  input?.click();
+                }, 50);
+              } else {
                 const input = document.querySelector('input[type="file"][accept]') as HTMLInputElement;
                 input?.click();
-              }}
-            />
-          )}
+              }
+            }}
+          />
 
           {/* Poll */}
           <ToolbarButton
@@ -489,6 +474,13 @@ function CreatePostContent() {
             icon={<HelpCircle size={19} strokeWidth={1.6} />}
             active={activePanel === "quiz"}
             onClick={() => togglePanel("quiz")}
+          />
+
+          {/* Text composer */}
+          <ToolbarButton
+            icon={<Type size={19} strokeWidth={1.6} />}
+            active={activePanel === "text"}
+            onClick={() => togglePanel("text")}
           />
 
           <div style={{ flex: 1 }} />

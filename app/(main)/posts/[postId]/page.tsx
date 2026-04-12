@@ -8,6 +8,7 @@ import CommentSection from "@/components/profile/CommentSection";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import Lightbox from "@/components/profile/Lightbox";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
+import PostTextViewer from "@/components/shared/PostTextViewer";
 import { PollDisplay } from "@/components/feed/PollDisplay";
 import type { PollData } from "@/components/feed/PollDisplay";
 import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
@@ -29,41 +30,42 @@ interface ApiComment {
 }
 
 interface PostData {
-  id: number;
-  creator_id: string;
-  content_type: string;
-  caption: string | null;
-  is_free: boolean;
-  is_ppv: boolean;
-  ppv_price: number | null;
-  like_count: number;
-  comment_count: number;
-  published_at: string;
-  liked: boolean;
-  can_access: boolean;
-  locked: boolean;
-  poll_data: PollData | null;
+  id:              number;
+  creator_id:      string;
+  content_type:    string;
+  caption:         string | null;
+  text_background?: string | null;
+  is_free:         boolean;
+  is_ppv:          boolean;
+  ppv_price:       number | null;
+  like_count:      number;
+  comment_count:   number;
+  published_at:    string;
+  liked:           boolean;
+  can_access:      boolean;
+  locked:          boolean;
+  poll_data:       PollData | null;
   profiles: {
-    username: string;
-    display_name: string | null;
-    avatar_url: string | null;
-    is_verified: boolean;
+    username:           string;
+    display_name:       string | null;
+    avatar_url:         string | null;
+    is_verified:        boolean;
     subscription_price: number | null;
   };
   media: {
-    id: number;
-    media_type: string;
-    file_url: string | null;
-    thumbnail_url: string | null;
-    raw_video_url: string | null;
-    bunny_video_id: string | null;
+    id:                number;
+    media_type:        string;
+    file_url:          string | null;
+    thumbnail_url:     string | null;
+    raw_video_url:     string | null;
+    bunny_video_id:    string | null;
     processing_status: string | null;
-    duration_seconds: number | null;
-    locked: boolean;
-    display_order: number;
-    blur_hash?: string | null;
-    width?: number | null;
-    height?: number | null;
+    duration_seconds:  number | null;
+    locked:            boolean;
+    display_order:     number;
+    blur_hash?:        string | null;
+    width?:            number | null;
+    height?:           number | null;
   }[];
 }
 
@@ -88,24 +90,13 @@ function PostMenu({ isOwnPost, onDelete }: { isOwnPost: boolean; onDelete: () =>
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button
-        onClick={() => setOpen(!open)}
-        style={{ background: "none", border: "none", color: "#E2E8F0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "32px", height: "32px", borderRadius: "8px" }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-      >
+      <button onClick={() => setOpen(!open)} style={{ background: "none", border: "none", color: "#E2E8F0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "32px", height: "32px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
         <MoreHorizontal size={18} />
       </button>
       {open && (
         <div style={{ position: "absolute", right: 0, top: "38px", zIndex: 50, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", overflow: "hidden", minWidth: "160px", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
           {items.map((item, i) => (
-            <button
-              key={item.label}
-              onClick={() => { item.action(); setOpen(false); }}
-              style={{ width: "100%", padding: "10px 14px", border: "none", backgroundColor: "transparent", color: item.danger ? "#EF4444" : "#C4C4D4", fontSize: "13px", textAlign: "left", cursor: "pointer", fontFamily: "'Inter', sans-serif", borderBottom: i < items.length - 1 ? "1px solid #2A2A3D" : "none" }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-            >
+            <button key={item.label} onClick={() => { item.action(); setOpen(false); }} style={{ width: "100%", padding: "10px 14px", border: "none", backgroundColor: "transparent", color: item.danger ? "#EF4444" : "#C4C4D4", fontSize: "13px", textAlign: "left", cursor: "pointer", fontFamily: "'Inter', sans-serif", borderBottom: i < items.length - 1 ? "1px solid #2A2A3D" : "none" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
               {item.label}
             </button>
           ))}
@@ -186,23 +177,17 @@ export default function SinglePostPage() {
 
   useEffect(() => {
     if (!postId || !post) return;
-    const fetchSavedState = async () => {
-      try {
-        const res  = await fetch(`/api/saved/posts?post_id=${postId}`);
-        const data = await res.json();
-        if (res.ok) setSavedPost(data.saved ?? false);
-      } catch {}
-    };
-    fetchSavedState();
+    fetch(`/api/saved/posts?post_id=${postId}`)
+      .then((r) => r.json())
+      .then((d) => { if (d) setSavedPost(d.saved ?? false); })
+      .catch(() => {});
   }, [postId, post?.id]);
 
   useEffect(() => {
     if (!postId) return;
     return postSyncStore.subscribe((event) => {
       if (event.postId !== postId) return;
-      setPost((p) =>
-        p ? { ...p, liked: event.liked, like_count: event.like_count, comment_count: event.comment_count ?? p.comment_count } : p
-      );
+      setPost((p) => p ? { ...p, liked: event.liked, like_count: event.like_count, comment_count: event.comment_count ?? p.comment_count } : p);
       if (event.comment_count !== undefined) setCommentCount(event.comment_count);
     });
   }, [postId]);
@@ -283,13 +268,7 @@ export default function SinglePostPage() {
     const res = await fetch(`/api/posts/${id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content:            text,
-        gif_url:            gif_url ?? null,
-        parent_comment_id:  parent_comment_id ?? null,
-        reply_to_username:  reply_to_username ?? null,
-        reply_to_id:        reply_to_id ?? null,
-      }),
+      body: JSON.stringify({ content: text, gif_url: gif_url ?? null, parent_comment_id: parent_comment_id ?? null, reply_to_username: reply_to_username ?? null, reply_to_id: reply_to_id ?? null }),
     });
     if (res.ok) {
       const newCount = commentCount + 1;
@@ -308,14 +287,8 @@ export default function SinglePostPage() {
     const next = !savedPost;
     setSavedPost(next);
     try {
-      await fetch("/api/saved/posts", {
-        method:  next ? "POST" : "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ post_id: post.id }),
-      });
-    } catch {
-      setSavedPost(!next);
-    }
+      await fetch("/api/saved/posts", { method: next ? "POST" : "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ post_id: post.id }) });
+    } catch { setSavedPost(!next); }
   }, [savedPost, post]);
 
   const openTip    = () => { setCheckoutType("tips");        setCheckoutOpen(true); };
@@ -354,45 +327,16 @@ export default function SinglePostPage() {
   }
 
   const isOwnPost  = viewerId === post.creator_id;
+  const isTextPost = post.content_type === "text";
   const photoMedia = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
 
   const normalizedMedia: NormalizedMedia[] = post.locked
-    ? post.media.slice(0, 1).map((m) => ({
-        type:             m.media_type === "video" ? "video" : "image",
-        url:              m.file_url,
-        bunnyVideoId:     m.bunny_video_id,
-        thumbnailUrl:     m.thumbnail_url,
-        processingStatus: m.processing_status,
-        rawVideoUrl:      m.raw_video_url,
-        blurHash:         m.blur_hash ?? null,
-        width:            m.width ?? null,
-        height:           m.height ?? null,
-      }))
-    : post.media.filter((m) => !m.locked).map((m) => ({
-        type:             m.media_type === "video" ? "video" : "image",
-        url:              m.file_url,
-        bunnyVideoId:     m.bunny_video_id,
-        thumbnailUrl:     m.thumbnail_url,
-        processingStatus: m.processing_status,
-        rawVideoUrl:      m.raw_video_url,
-        blurHash:         m.blur_hash ?? null,
-        width:            m.width ?? null,
-        height:           m.height ?? null,
-      }));
+    ? post.media.slice(0, 1).map((m) => ({ type: m.media_type === "video" ? "video" : "image", url: m.file_url, bunnyVideoId: m.bunny_video_id, thumbnailUrl: m.thumbnail_url, processingStatus: m.processing_status, rawVideoUrl: m.raw_video_url, blurHash: m.blur_hash ?? null, width: m.width ?? null, height: m.height ?? null }))
+    : post.media.filter((m) => !m.locked).map((m) => ({ type: m.media_type === "video" ? "video" : "image", url: m.file_url, bunnyVideoId: m.bunny_video_id, thumbnailUrl: m.thumbnail_url, processingStatus: m.processing_status, rawVideoUrl: m.raw_video_url, blurHash: m.blur_hash ?? null, width: m.width ?? null, height: m.height ?? null }));
 
   const lightboxPost: LightboxPost = {
     id: post.id,
-    media: photoMedia.map((m) => ({
-      id:                m.id,
-      media_type:        m.media_type,
-      file_url:          m.file_url,
-      thumbnail_url:     m.thumbnail_url,
-      raw_video_url:     m.raw_video_url,
-      locked:            m.locked,
-      display_order:     m.display_order,
-      processing_status: m.processing_status,
-      bunny_video_id:    m.bunny_video_id,
-    })),
+    media: photoMedia.map((m) => ({ id: m.id, media_type: m.media_type, file_url: m.file_url, thumbnail_url: m.thumbnail_url, raw_video_url: m.raw_video_url, locked: m.locked, display_order: m.display_order, processing_status: m.processing_status, bunny_video_id: m.bunny_video_id })),
   };
 
   const creatorForCheckout = {
@@ -408,13 +352,7 @@ export default function SinglePostPage() {
     <div style={{ width: "100%", fontFamily: "'Inter', sans-serif" }}>
 
       {lightboxOpen && lightboxPost.media.length > 0 && (
-        <Lightbox
-          post={lightboxPost}
-          allPosts={[lightboxPost]}
-          initialMediaIndex={lightboxMediaIdx}
-          onClose={() => setLightboxOpen(false)}
-          onNavigate={() => {}}
-        />
+        <Lightbox post={lightboxPost} allPosts={[lightboxPost]} initialMediaIndex={lightboxMediaIdx} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
       )}
 
       <CheckoutModal
@@ -438,12 +376,7 @@ export default function SinglePostPage() {
           </button>
           <span style={{ fontSize: "17px", fontWeight: 800, color: "#F1F5F9", letterSpacing: "0.06em", textTransform: "uppercase" }}>Post</span>
         </div>
-        <button
-          onClick={() => console.log("share")}
-          style={{ background: "none", border: "none", color: "#E2E8F0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "8px" }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-        >
+        <button onClick={() => console.log("share")} style={{ background: "none", border: "none", color: "#E2E8F0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
           <Share2 size={18} />
         </button>
       </div>
@@ -475,70 +408,45 @@ export default function SinglePostPage() {
             <PostMenu isOwnPost={isOwnPost} onDelete={handleDelete} />
           </div>
         </div>
-        {post.caption && (
+
+        {/* Caption — plain for non-text posts, inside the creator card */}
+        {post.caption && !isTextPost && (
           <p style={{ margin: "14px 0 0", fontSize: "14px", color: "#FFFFFF", lineHeight: 1.7 }}>{post.caption}</p>
         )}
       </div>
 
+      {/* Text post viewer — outside the card, full bleed style */}
+      {isTextPost && post.caption && (
+        <div style={{ margin: "12px 0 0" }}>
+          <PostTextViewer caption={post.caption} textBackground={post.text_background} />
+        </div>
+      )}
+
       {/* Poll */}
       {post.poll_data && (
         <div style={{ margin: "12px 16px 0", backgroundColor: "#13131F", borderRadius: "14px" }}>
-          <PollDisplay
-  poll={post.poll_data}
-  postId={String(post.id)}
-  isCreator={isOwnPost}
-  onVoted={(updated) => setPost((p) => p ? { ...p, poll_data: updated } : p)}
-/>
+          <PollDisplay poll={post.poll_data} postId={String(post.id)} isCreator={isOwnPost} onVoted={(updated) => setPost((p) => p ? { ...p, poll_data: updated } : p)} />
         </div>
       )}
 
       {/* Media */}
       {normalizedMedia.length > 0 && (
         <div style={{ marginTop: "12px" }}>
-          <PostMediaViewer
-            media={normalizedMedia}
-            isLocked={post.locked}
-            price={post.ppv_price}
-            isUnlockedPPV={post.is_ppv && !post.locked}
-            onDoubleTap={handleDoubleTapLike}
-            onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
-            onUnlock={openUnlock}
-          />
+          <PostMediaViewer media={normalizedMedia} isLocked={post.locked} price={post.ppv_price} isUnlockedPPV={post.is_ppv && !post.locked} onDoubleTap={handleDoubleTapLike} onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }} onUnlock={openUnlock} />
         </div>
       )}
 
       {/* Actions */}
       {!post.locked && (
         <div style={{ margin: "0 16px" }}>
-          <PostActions
-            likes={post.like_count}
-            comments={commentCount}
-            liked={post.liked}
-            bookmarked={savedPost}
-            isSubscribed={post.can_access}
-            isOwnProfile={isOwnPost}
-            onLike={handleLike}
-            onComment={handleComment}
-            onTip={openTip}
-            onBookmark={handleBookmark}
-          />
+          <PostActions likes={post.like_count} comments={commentCount} liked={post.liked} bookmarked={savedPost} isSubscribed={post.can_access} isOwnProfile={isOwnPost} onLike={handleLike} onComment={handleComment} onTip={openTip} onBookmark={handleBookmark} />
         </div>
       )}
 
       {/* Comments */}
       {!post.locked && (
         <div ref={commentRef} style={{ margin: "8px 16px 48px" }}>
-          <CommentSection
-            postId={String(post.id)}
-            comments={comments}
-            viewer={viewer || { username: "", display_name: "", avatar_url: "" }}
-            viewerUserId={viewerId || undefined}
-            isOpen={commentOpen}
-            isLoading={commentsLoading}
-            totalCommentCount={commentCount}
-            onClose={() => setCommentOpen(false)}
-            onAddComment={handleAddComment}
-          />
+          <CommentSection postId={String(post.id)} comments={comments} viewer={viewer || { username: "", display_name: "", avatar_url: "" }} viewerUserId={viewerId || undefined} isOpen={commentOpen} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} onAddComment={handleAddComment} />
         </div>
       )}
     </div>

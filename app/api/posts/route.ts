@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
+const VALID_BACKGROUNDS = ["dark", "purple", "blue", "red", "green", "amber"];
+
 function parseDuration(duration: string | null | undefined): string | null {
   if (!duration) return null;
   const map: Record<string, number> = {
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest) {
     const {
       content_type,
       caption,
+      text_background,
       audience,
       is_free,
       is_ppv,
@@ -68,6 +71,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "PPV price must be at least ₦100" }, { status: 400 });
     }
 
+    // Validate text_background if provided
+    const resolvedTextBackground =
+      content_type === "text" && text_background && VALID_BACKGROUNDS.includes(text_background)
+        ? text_background
+        : null;
+
     const resolvedAudience: "everyone" | "subscribers" =
       audience === "everyone" ? "everyone" : "subscribers";
 
@@ -81,17 +90,18 @@ export async function POST(req: NextRequest) {
     const { data: post, error: postError } = await service
       .from("posts")
       .insert({
-        creator_id:    user.id,
+        creator_id:      user.id,
         content_type,
-        caption:       caption ?? null,
-        audience:      resolvedAudience,
-        is_free:       is_ppv ? false : (is_free ?? true),
-        is_ppv:        is_ppv ?? false,
-        ppv_price:     is_ppv ? ppv_price : null,
-        is_scheduled:  isScheduled,
-        scheduled_for: scheduled_for ?? null,
-        is_published:  isPublished,
-        published_at:  publishedAt,
+        caption:         caption ?? null,
+        text_background: resolvedTextBackground,
+        audience:        resolvedAudience,
+        is_free:         is_ppv ? false : (is_free ?? true),
+        is_ppv:          is_ppv ?? false,
+        ppv_price:       is_ppv ? ppv_price : null,
+        is_scheduled:    isScheduled,
+        scheduled_for:   scheduled_for ?? null,
+        is_published:    isPublished,
+        published_at:    publishedAt,
       })
       .select("id")
       .single();

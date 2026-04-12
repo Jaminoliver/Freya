@@ -7,6 +7,7 @@ import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import Lightbox from "@/components/profile/Lightbox";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
+import PostTextViewer from "@/components/shared/PostTextViewer";
 import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import { ReportModal } from "@/components/messages/ReportModal";
@@ -43,8 +44,9 @@ interface TaggedCreator {
 }
 
 interface Post {
-  id:              string;
-  content_type?:   string;
+  id:               string;
+  content_type?:    string;
+  text_background?: string | null;
   creator: {
     id:         string;
     name:       string;
@@ -181,7 +183,6 @@ export function PostCard({
     fetchStatus,
   } = useBlockRestrict({ userId: post.creator.id });
 
-  // Sync subscribed state from parent (when another PostCard for same creator subscribes)
   useEffect(() => {
     if (isSubscribedExternal) setSubscribed(true);
   }, [isSubscribedExternal]);
@@ -193,7 +194,6 @@ export function PostCard({
       .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {});
   }, [post.id, post.creator.id]);
 
-  // Subscribe to postSyncStore for cross-page sync
   useEffect(() => {
     const unsub = postSyncStore.subscribe((event) => {
       if (event.postId !== post.id) return;
@@ -260,18 +260,13 @@ export function PostCard({
   const handleLike = async () => {
     if (isLiking.current) return;
     isLiking.current = true;
-
-    // Snapshot for rollback
     const wasLiked = liked;
     const oldCount = likeCount;
     const newLiked = !wasLiked;
     const newCount = newLiked ? oldCount + 1 : Math.max(0, oldCount - 1);
-
-    // Optimistic update
     setLiked(newLiked);
     setLikeCount(newCount);
     postSyncStore.emit({ postId: post.id, liked: newLiked, like_count: newCount, comment_count: commentCount });
-
     try {
       const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
       const data = await res.json();
@@ -290,20 +285,16 @@ export function PostCard({
       setLikeCount(oldCount);
       postSyncStore.emit({ postId: post.id, liked: wasLiked, like_count: oldCount, comment_count: commentCount });
     }
-
     isLiking.current = false;
   };
 
   const handleDoubleTapLike = async () => {
     if (liked || isLiking.current) return;
     isLiking.current = true;
-
     const oldCount = likeCount;
-
     setLiked(true);
     setLikeCount(oldCount + 1);
     postSyncStore.emit({ postId: post.id, liked: true, like_count: oldCount + 1, comment_count: commentCount });
-
     try {
       const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
       const data = await res.json();
@@ -322,7 +313,6 @@ export function PostCard({
       setLikeCount(oldCount);
       postSyncStore.emit({ postId: post.id, liked: false, like_count: oldCount, comment_count: commentCount });
     }
-
     isLiking.current = false;
   };
 
@@ -376,57 +366,47 @@ export function PostCard({
     refresh();
   }, [refresh]);
 
-const handleSubscribeBannerClick = useCallback(async () => {
-  if (subscribed) return;
-  const isFree = (subscriptionPrice ?? 0) === 0;
-
-  if (isFree) {
-    // Free flow: call checkout directly, no modal
-    setFreeSubbing(true);
-    try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "subscription", amount: 0, creatorId: post.creator.id, selectedTier: "monthly" }),
-      });
-      if (res.ok) {
-        setSubscribed(true);
-        onSubscribed?.(post.creator.id);
+  const handleSubscribeBannerClick = useCallback(async () => {
+    if (subscribed) return;
+    const isFree = (subscriptionPrice ?? 0) === 0;
+    if (isFree) {
+      setFreeSubbing(true);
+      try {
+        const res = await fetch("/api/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "subscription", amount: 0, creatorId: post.creator.id, selectedTier: "monthly" }),
+        });
+        if (res.ok) { setSubscribed(true); onSubscribed?.(post.creator.id); }
+      } catch (err) {
+        console.error("[PostCard] free subscribe error:", err);
+      } finally {
+        setFreeSubbing(false);
       }
+      return;
+    }
+    setSubLoading(true);
+    try {
+      const supabase = createClient();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("subscription_price, bundle_price_3_months, bundle_price_6_months")
+        .eq("id", post.creator.id)
+        .single();
+      if (profile) {
+        setSubMonthly(profile.subscription_price ?? 0);
+        setSubThreeMonth(profile.bundle_price_3_months ?? undefined);
+        setSubSixMonth(profile.bundle_price_6_months ?? undefined);
+      } else {
+        setSubMonthly(0); setSubThreeMonth(undefined); setSubSixMonth(undefined);
+      }
+      setSubOpen(true);
     } catch (err) {
-      console.error("[PostCard] free subscribe error:", err);
+      console.error("[PostCard] handleSubscribeBannerClick error:", err);
     } finally {
-      setFreeSubbing(false);
+      setSubLoading(false);
     }
-    return;
-  }
-
-  // Paid flow: fetch prices and open modal
-  setSubLoading(true);
-  try {
-    const supabase = createClient();
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("subscription_price, bundle_price_3_months, bundle_price_6_months")
-      .eq("id", post.creator.id)
-      .single();
-
-    if (profile) {
-      setSubMonthly(profile.subscription_price ?? 0);
-      setSubThreeMonth(profile.bundle_price_3_months ?? undefined);
-      setSubSixMonth(profile.bundle_price_6_months ?? undefined);
-    } else {
-      setSubMonthly(0);
-      setSubThreeMonth(undefined);
-      setSubSixMonth(undefined);
-    }
-    setSubOpen(true);
-  } catch (err) {
-    console.error("[PostCard] handleSubscribeBannerClick error:", err);
-  } finally {
-    setSubLoading(false);
-  }
-}, [subscribed, subscriptionPrice, post.creator.id, onSubscribed]);
+  }, [subscribed, subscriptionPrice, post.creator.id, onSubscribed]);
 
   const handleSubscriptionSuccess = useCallback(() => {
     setSubscribed(true);
@@ -454,26 +434,14 @@ const handleSubscribeBannerClick = useCallback(async () => {
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
 
       {storyViewerOpen && storyGroup && (
-        <StoryViewer
-          groups={[storyGroup]}
-          startGroupIndex={0}
-          onClose={handleStoryViewerClose}
-        />
+        <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={handleStoryViewerClose} />
       )}
 
-      <CheckoutModal
-        isOpen={tipOpen}
-        onClose={() => setTipOpen(false)}
-        type="tips"
-        creator={creatorAsUser}
-        postId={Number(post.id)}
-      />
+      <CheckoutModal isOpen={tipOpen} onClose={() => setTipOpen(false)} type="tips" creator={creatorAsUser} postId={Number(post.id)} />
 
       <CheckoutModal
         isOpen={subOpen}
-        onClose={() => {
-          setSubOpen(false);
-        }}
+        onClose={() => setSubOpen(false)}
         type="subscription"
         creator={creatorAsUser}
         monthlyPrice={subMonthly}
@@ -491,13 +459,7 @@ const handleSubscribeBannerClick = useCallback(async () => {
       )}
 
       {reportOpen && (
-        <ReportModal
-          context="user"
-          username={post.creator.username}
-          reportedUserId={post.creator.id}
-          onClose={() => setReportOpen(false)}
-          onBlockUser={block}
-        />
+        <ReportModal context="user" username={post.creator.username} reportedUserId={post.creator.id} onClose={() => setReportOpen(false)} onBlockUser={block} />
       )}
 
       <BlockConfirmModal isOpen={blockConfirm}      onClose={() => setBlockConfirm(false)}      onConfirm={block}      type="block"    username={post.creator.username} />
@@ -522,6 +484,7 @@ const handleSubscribeBannerClick = useCallback(async () => {
         isRestricted={isRestricted}
       />
 
+      {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <AvatarWithStoryRing
@@ -548,46 +511,23 @@ const handleSubscribeBannerClick = useCallback(async () => {
         </div>
       </div>
 
-      {post.caption && (
-        <p style={{ fontSize: isTextPost ? "15px" : "14px", color: "#C4C4D4", lineHeight: isTextPost ? 1.7 : 1.6, margin: "0", padding: isTextPost ? "0 16px 14px" : "0 16px 10px", whiteSpace: "pre-wrap" }}>
+      {/* Caption — plain text for non-text posts */}
+      {post.caption && !isTextPost && (
+        <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
           {post.caption}
         </p>
       )}
 
-      {/* Subscribe banner for Spotlight posts */}
+      {/* Text post viewer */}
+      {isTextPost && post.caption && (
+        <PostTextViewer caption={post.caption} textBackground={post.text_background} />
+      )}
+
+      {/* Subscribe banner */}
       {showSubscribeBanner && (
-        <div
-          style={{
-            margin: "0 0 10px",
-            padding: "12px 16px",
-            background: subscribed
-              ? "linear-gradient(135deg, #22C55E, #16A34A)"
-              : "linear-gradient(135deg, #8B5CF6, #EC4899)",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            cursor: "default",
-            transition: "background 0.5s ease, opacity 0.15s",
-            opacity: (subLoading || freeSubbing) ? 0.7 : 1,
-          }}
-        >
-          {/* Avatar + name area — navigates to profile */}
-          <div
-            onClick={() => navigate(`/${post.creator.username}`)}
-            style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}
-          >
-            <img
-              src={post.creator.avatar_url || ""}
-              alt={post.creator.name}
-              style={{
-                width: "44px",
-                height: "44px",
-                borderRadius: "50%",
-                objectFit: "cover",
-                border: "2px solid rgba(255,255,255,0.3)",
-                flexShrink: 0,
-              }}
-            />
+        <div style={{ margin: "0 0 10px", padding: "12px 16px", background: subscribed ? "linear-gradient(135deg, #22C55E, #16A34A)" : "linear-gradient(135deg, #8B5CF6, #EC4899)", display: "flex", alignItems: "center", gap: "12px", transition: "background 0.5s ease, opacity 0.15s", opacity: (subLoading || freeSubbing) ? 0.7 : 1 }}>
+          <div onClick={() => navigate(`/${post.creator.username}`)} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
+            <img src={post.creator.avatar_url || ""} alt={post.creator.name} style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.3)", flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                 <span style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
@@ -596,53 +536,17 @@ const handleSubscribeBannerClick = useCallback(async () => {
               <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>@{post.creator.username}</span>
             </div>
           </div>
-
-          {/* Subscribe button */}
           <>
             <style>{`
-              @keyframes subscribePulse {
-                0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
-                50%       { transform: scale(1.08); box-shadow: 0 0 12px 4px rgba(139,92,246,0.3); }
-              }
-              @keyframes subscribedPop {
-                0%   { transform: scale(1); }
-                40%  { transform: scale(1.15); }
-                100% { transform: scale(1); }
-              }
+              @keyframes subscribePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+              @keyframes subscribedPop  { 0% { transform: scale(1); } 40% { transform: scale(1.15); } 100% { transform: scale(1); } }
             `}</style>
-            <div
-              onClick={handleSubscribeBannerClick}
-              style={{
-                marginLeft: "auto",
-                padding: "8px 20px",
-                borderRadius: "8px",
-                backgroundColor: subscribed ? "#22C55E" : "#FFFFFF",
-                fontSize: "14px",
-                fontWeight: 700,
-                color: subscribed ? "#FFFFFF" : "#8B5CF6",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-                fontFamily: "'Inter', sans-serif",
-                cursor: subscribed ? "default" : (subLoading || freeSubbing) ? "wait" : "pointer",
-                animation: subscribed
-                  ? "subscribedPop 0.4s ease-out"
-                  : "subscribePulse 2s ease-in-out infinite",
-                transition: "background-color 0.3s ease, color 0.3s ease",
-              }}
-            >
-              {subscribed
-                ? "Subscribed ✓"
-                : freeSubbing
-                  ? "Subscribing..."
-                  : (subscriptionPrice ?? 0) === 0
-                    ? "Subscribe for Free"
-                    : "Subscribe"}
+            <div onClick={handleSubscribeBannerClick} style={{ marginLeft: "auto", padding: "8px 20px", borderRadius: "8px", backgroundColor: subscribed ? "#22C55E" : "#FFFFFF", fontSize: "14px", fontWeight: 700, color: subscribed ? "#FFFFFF" : "#8B5CF6", whiteSpace: "nowrap", flexShrink: 0, fontFamily: "'Inter', sans-serif", cursor: subscribed ? "default" : (subLoading || freeSubbing) ? "wait" : "pointer", animation: subscribed ? "subscribedPop 0.4s ease-out" : "subscribePulse 2s ease-in-out infinite", transition: "background-color 0.3s ease, color 0.3s ease" }}>
+              {subscribed ? "Subscribed ✓" : freeSubbing ? "Subscribing..." : (subscriptionPrice ?? 0) === 0 ? "Subscribe for Free" : "Subscribe"}
             </div>
           </>
         </div>
       )}
-
-      {isTextPost && <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />}
 
       {isPollPost && pollData && (
         <PollDisplay poll={pollData} postId={post.id} onVoted={(updated) => setPollData(updated)} />
@@ -650,14 +554,14 @@ const handleSubscribeBannerClick = useCallback(async () => {
 
       {!isTextPost && !isPollPost && (
         <PostMediaViewer
-  media={normalizedMedia} isLocked={post.isLocked} price={post.price}
-  isUnlockedPPV={post.is_ppv && !post.isLocked}
-  onDoubleTap={handleDoubleTapLike}
-  onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
-  onUnlock={() => onUnlock?.(post.id)}
-  initialSlide={initialSlide}
-  onSlideChange={(index) => onSlideChange?.(post.id, index)}
-/>
+          media={normalizedMedia} isLocked={post.isLocked} price={post.price}
+          isUnlockedPPV={post.is_ppv && !post.isLocked}
+          onDoubleTap={handleDoubleTapLike}
+          onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
+          onUnlock={() => onUnlock?.(post.id)}
+          initialSlide={initialSlide}
+          onSlideChange={(index) => onSlideChange?.(post.id, index)}
+        />
       )}
 
       {post.taggedCreators && post.taggedCreators.length > 0 && (

@@ -79,6 +79,7 @@ export async function GET(
         creator_id,
         content_type,
         caption,
+        text_background,
         audience,
         is_free,
         is_ppv,
