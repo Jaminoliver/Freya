@@ -3,10 +3,10 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ postId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { postId: id } = await params;
+    const { id } = await params;
     const postId = Number(id);
     if (isNaN(postId)) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 
