@@ -33,6 +33,8 @@ interface FeedPost {
   liked:         boolean;
   can_access:    boolean;
   locked:        boolean;
+  saved_post:    boolean;
+  saved_creator: boolean;
   poll?:         PollData | null;
   profiles: {
     username:           string;
@@ -100,23 +102,6 @@ function loadScroll(key: string): number  { try { return Number(sessionStorage.g
 function saveSlides(map: Record<string, number>) { try { sessionStorage.setItem(SLIDES_KEY, JSON.stringify(map)); } catch {} }
 function loadSlides(): Record<string, number>    { try { return JSON.parse(sessionStorage.getItem(SLIDES_KEY) ?? "{}"); } catch { return {}; } }
 
-function preloadThumbnails(posts: FeedPost[], count = 3): Promise<void> {
-  const urls: string[] = [];
-  for (const post of posts.slice(0, count)) {
-    for (const m of post.media.slice(0, 1)) {
-      const src = m.thumbnail_url ?? m.file_url;
-      if (src) urls.push(src);
-    }
-  }
-  if (!urls.length) return Promise.resolve();
-  return Promise.all(urls.map((src) => new Promise<void>((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve();
-    img.onerror = () => resolve();
-    img.src = src;
-  }))).then(() => undefined);
-}
-
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<"feed" | "spotlight">("feed");
   const { feed, setFeed, updateFeedPost } = useAppStore();
@@ -124,7 +109,6 @@ export default function HomePage() {
   // ── Feed state ─────────────────────────────────────────────────────────
   const [posts,       setPosts]       = useState<FeedPost[]>([]);
   const [apiLoading,  setApiLoading]  = useState(true);
-  const [thumbsReady, setThumbsReady] = useState(false);
   const [nextCursor,  setNextCursor]  = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error,       setError]       = useState<string | null>(null);
@@ -133,7 +117,6 @@ export default function HomePage() {
   // ── Spotlight state ────────────────────────────────────────────────────
   const [spotPosts,       setSpotPosts]       = useState<FeedPost[]>([]);
   const [spotLoading,     setSpotLoading]     = useState(true);
-  const [spotThumbsReady, setSpotThumbsReady] = useState(false);
   const [spotNextPage,    setSpotNextPage]    = useState<number | null>(null);
   const [spotLoadingMore, setSpotLoadingMore] = useState(false);
   const [spotError,       setSpotError]       = useState<string | null>(null);
@@ -155,8 +138,8 @@ export default function HomePage() {
 
   useEffect(() => { setSlideMap(loadSlides()); }, []);
 
-  const showSkeleton     = apiLoading || !thumbsReady;
-  const showSpotSkeleton = spotLoading || !spotThumbsReady;
+  const showSkeleton     = apiLoading;
+  const showSpotSkeleton = spotLoading;
 
   const scrollRestoredRef     = useRef(false);
   const spotScrollRestoredRef = useRef(false);
@@ -172,17 +155,25 @@ export default function HomePage() {
   useEffect(() => { spotNextPageRef.current = spotNextPage; }, [spotNextPage]);
   useEffect(() => { spotLoadingMoreRef.current = spotLoadingMore; }, [spotLoadingMore]);
 
-  // ── Scroll persistence ────────────────────────────────────────────────
+  // ── Scroll persistence (throttled) ────────────────────────────────────
   const scrollKey = activeTab === "feed" ? SCROLL_KEY : SPOTLIGHT_SCROLL_KEY;
 
   useEffect(() => {
-    const onScroll = () => saveScroll(scrollKey, window.scrollY);
-    const onHide   = () => saveScroll(scrollKey, window.scrollY);
-    const onVis    = () => { if (document.visibilityState === "hidden") saveScroll(scrollKey, window.scrollY); };
+    let rafId: number | null = null;
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        saveScroll(scrollKey, window.scrollY);
+        rafId = null;
+      });
+    };
+    const onHide = () => saveScroll(scrollKey, window.scrollY);
+    const onVis  = () => { if (document.visibilityState === "hidden") saveScroll(scrollKey, window.scrollY); };
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("pagehide", onHide);
     document.addEventListener("visibilitychange", onVis);
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("pagehide", onHide);
       document.removeEventListener("visibilitychange", onVis);
@@ -224,7 +215,6 @@ export default function HomePage() {
       if (!res.ok) {
         setError(data.error || "Failed to load feed");
         setApiLoading(false);
-        setThumbsReady(true);
         setLoadingMore(false);
         return;
       }
@@ -246,12 +236,10 @@ export default function HomePage() {
         setNextCursor(data.nextCursor ?? null);
         setFeed({ posts: merged, nextCursor: data.nextCursor ?? null, fetchedAt: Date.now() });
         setApiLoading(false);
-        preloadThumbnails(merged, 5).then(() => setThumbsReady(true));
       }
     } catch {
       setError("Failed to load feed");
       setApiLoading(false);
-      setThumbsReady(true);
       setLoadingMore(false);
     }
   }, [setFeed]);
@@ -261,7 +249,6 @@ export default function HomePage() {
       setPosts(feed.posts);
       setNextCursor(feed.nextCursor);
       setApiLoading(false);
-      setThumbsReady(true);
       return;
     }
     fetchFeed();
@@ -294,7 +281,6 @@ export default function HomePage() {
       if (!res.ok) {
         setSpotError(data.error || "Failed to load spotlight");
         setSpotLoading(false);
-        setSpotThumbsReady(true);
         setSpotLoadingMore(false);
         return;
       }
@@ -314,12 +300,10 @@ export default function HomePage() {
         setSpotPosts(merged);
         setSpotNextPage(data.nextPage ?? null);
         setSpotLoading(false);
-        preloadThumbnails(merged, 5).then(() => setSpotThumbsReady(true));
       }
     } catch {
       setSpotError("Failed to load spotlight");
       setSpotLoading(false);
-      setSpotThumbsReady(true);
       setSpotLoadingMore(false);
     }
   }, []);
@@ -458,6 +442,8 @@ export default function HomePage() {
           onSubscribed={isSpotlight ? handleSubscribed : undefined}
           subscriptionPrice={isSpotlight ? subPrice : undefined}
           isSubscribedExternal={isSpotlight ? subscribedCreatorIds.has(post.creator_id) : false}
+          initialSavedPost={post.saved_post ?? false}
+          initialSavedCreator={post.saved_creator ?? false}
         />
       );
       if ((index + 1) % SUGGESTIONS_EVERY === 0 && index < feedPosts.length - 1) {
@@ -518,91 +504,86 @@ export default function HomePage() {
         <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} />
       </div>
 
-      <div style={{ overflow: "hidden", padding: "0 0 40px" }}>
-        <div
-          style={{
-            display: "flex",
-            width: "200%",
-            transform: activeTab === "feed" ? "translateX(0)" : "translateX(-50%)",
-            transition: "transform 0.3s ease",
-          }}
-        >
+      <div style={{ padding: "0 0 40px" }}>
           {/* ── Feed Tab ─────────────────────────────────────────────── */}
-          <div style={{ width: "50%", minHeight: "200px", flexShrink: 0 }}>
-            {showSkeleton && <FeedSkeleton count={5} />}
+          {activeTab === "feed" && (
+            <div style={{ minHeight: "200px" }}>
+              {showSkeleton && <FeedSkeleton count={5} />}
 
-            {!showSkeleton && (
-              <>
-                {error && (
-                  <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
-                    {error}
-                  </div>
-                )}
+              {!showSkeleton && (
+                <>
+                  {error && (
+                    <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
+                      {error}
+                    </div>
+                  )}
 
-                {!error && posts.length === 0 && (
-                  <div style={{ textAlign: "center", padding: "60px 24px" }}>
-                    <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>Your feed is empty</p>
-                    <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Subscribe to creators to see their posts here</p>
-                  </div>
-                )}
+                  {!error && posts.length === 0 && (
+                    <div style={{ textAlign: "center", padding: "60px 24px" }}>
+                      <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>Your feed is empty</p>
+                      <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Subscribe to creators to see their posts here</p>
+                    </div>
+                  )}
 
-                {buildFeedItems(posts)}
+                  {buildFeedItems(posts)}
 
-                <div ref={sentinelRef} style={{ height: "1px", marginTop: "1px" }} />
+                  <div ref={sentinelRef} style={{ height: "1px", marginTop: "1px" }} />
 
-                {loadingMore && (
-                  <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
-                    <div className="feed-spinner" />
-                  </div>
-                )}
+                  {loadingMore && (
+                    <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
+                      <div className="feed-spinner" />
+                    </div>
+                  )}
 
-                {!nextCursor && !loadingMore && posts.length > 0 && (
-                  <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
-                    You&apos;re all caught up ✓
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+                  {!nextCursor && !loadingMore && posts.length > 0 && (
+                    <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
+                      You&apos;re all caught up ✓
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* ── Spotlight Tab ────────────────────────────────────────── */}
-          <div style={{ width: "50%", minHeight: "200px", flexShrink: 0 }}>
-            {showSpotSkeleton && <FeedSkeleton count={5} />}
+          {activeTab === "spotlight" && (
+            <div style={{ minHeight: "200px" }}>
+              {showSpotSkeleton && <FeedSkeleton count={5} />}
 
-            {!showSpotSkeleton && (
-              <>
-                {spotError && (
-                  <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
-                    {spotError}
-                  </div>
-                )}
+              {!showSpotSkeleton && (
+                <>
+                  {spotError && (
+                    <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
+                      {spotError}
+                    </div>
+                  )}
 
-                {!spotError && spotPosts.length === 0 && (
-                  <div style={{ textAlign: "center", padding: "60px 24px" }}>
-                    <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>No posts in Spotlight yet</p>
-                    <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Check back soon for new content from creators</p>
-                  </div>
-                )}
+                  {!spotError && spotPosts.length === 0 && (
+                    <div style={{ textAlign: "center", padding: "60px 24px" }}>
+                      <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>No posts in Spotlight yet</p>
+                      <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Check back soon for new content from creators</p>
+                    </div>
+                  )}
 
-                {buildFeedItems(spotPosts, true)}
+                  {buildFeedItems(spotPosts, true)}
 
-                <div ref={spotSentinelRef} style={{ height: "1px", marginTop: "1px" }} />
+                  <div ref={spotSentinelRef} style={{ height: "1px", marginTop: "1px" }} />
 
-                {spotLoadingMore && (
-                  <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
-                    <div className="feed-spinner" />
-                  </div>
-                )}
+                  {spotLoadingMore && (
+                    <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
+                      <div className="feed-spinner" />
+                    </div>
+                  )}
 
-                {!spotNextPage && !spotLoadingMore && spotPosts.length > 0 && (
-                  <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
-                    You&apos;ve seen everything ✓
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+                  {!spotNextPage && !spotLoadingMore && spotPosts.length > 0 && (
+                    <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
+                      You&apos;ve seen everything ✓
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
       </div>
     </div>
   );

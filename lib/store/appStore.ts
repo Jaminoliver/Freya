@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ApiPost } from "@/components/profile/PostRow";
 
-const STALE_MS          = 30 * 1000;
+const STALE_MS          = 3 * 60 * 1000; // 3 minutes (was 30s — too aggressive for slow Nigerian connections)
 const FEED_KEY          = "freya_feed_cache";
 const PROFILES_KEY      = "freya_profiles_cache";
 const CONTENT_FEEDS_KEY = "freya_content_feeds_cache";
@@ -122,7 +122,12 @@ export const useAppStore = create<AppStore>((set) => ({
     const idx = s.feed.posts.findIndex((p) => String(p.id) === postId);
     if (idx === -1) return s;
     const posts = [...s.feed.posts]; posts[idx] = { ...posts[idx], ...patch };
-    const updated = { ...s.feed, posts }; saveFeedToStorage(updated); return { feed: updated };
+    const updated = { ...s.feed, posts };
+    // NOTE: intentionally NOT calling saveFeedToStorage here.
+    // This fires on every like/comment sync — serializing the full feed
+    // to sessionStorage each time blocks the main thread on low-end phones.
+    // The in-memory Zustand store is sufficient for SPA navigation.
+    return { feed: updated };
   }),
   clearFeed: () => { clearFeedFromStorage(); set({ feed: null }); },
 

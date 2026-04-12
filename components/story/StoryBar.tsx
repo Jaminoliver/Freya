@@ -2,13 +2,16 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Plus, AlertCircle, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store/appStore";
-import StoryUploadModal from "@/components/story/StoryUploadModal";
 import { useStoryUpload } from "@/lib/context/StoryUploadContext";
 import type { UploadJob } from "@/lib/context/StoryUploadContext";
 import { prewarmHls } from "@/components/story/StoryViewer";
 import { createClient } from "@/lib/supabase/client";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+
+// ── Dynamic import: only loaded when user taps "Add to story" ────────────────
+const StoryUploadModal = dynamic(() => import("@/components/story/StoryUploadModal"), { ssr: false });
 
 export interface StoryItem {
   id:           number;
@@ -166,20 +169,15 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       if (res.ok && data.groups) {
         const fetchedGroups: CreatorStoryGroup[] = applyLocalViewed(data.groups);
         setOrderedGroups(sortGroups(fetchedGroups));
-        for (const g of fetchedGroups) {
+
+        // ── OPTIMIZED: Only preload first 3 visible card thumbnails ──────
+        // Previously preloaded ALL avatars, thumbnails, story photos, and
+        // HLS video manifests on page load — competing with feed media
+        // on slow Nigerian connections.
+        const visibleGroups = fetchedGroups.slice(0, 3);
+        for (const g of visibleGroups) {
           if (g.latestThumbnail) { const img = new Image(); img.src = g.latestThumbnail; }
-          if (g.avatarUrl)       { const img = new Image(); img.src = g.avatarUrl; }
-          for (const s of g.items) {
-            if (s.mediaType === "photo" && s.mediaUrl) { const img = new Image(); img.src = s.mediaUrl; }
-            if (s.thumbnailUrl) { const t = new Image(); t.src = s.thumbnailUrl; }
-          }
         }
-        const videoUrls = fetchedGroups
-          .flatMap((g) => g.items)
-          .filter((s) => s.mediaType === "video" && s.mediaUrl && !s.isProcessing)
-          .map((s) => s.mediaUrl)
-          .slice(0, 3);
-        if (videoUrls.length > 0) prewarmHls(videoUrls);
       }
     } catch (err) {
       console.error("[StoryBar] fetch stories error:", err);
@@ -289,6 +287,15 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
       .filter((g) => g.items.length > 0);
     const viewableIndex = viewableGroups.findIndex((g) => g.creatorId === clickedCreatorId);
     if (viewableIndex === -1 || viewableGroups[viewableIndex].items.length === 0) return;
+
+    // ── Prewarm HLS only when user actually taps a story ─────────────────
+    const tappedGroup = viewableGroups[viewableIndex];
+    const videoUrls = tappedGroup.items
+      .filter((s) => s.mediaType === "video" && s.mediaUrl && !s.isProcessing)
+      .map((s) => s.mediaUrl)
+      .slice(0, 2);
+    if (videoUrls.length > 0) prewarmHls(videoUrls);
+
     onOpenViewer?.(viewableGroups, viewableIndex);
   }, [displayGroups, onOpenViewer]);
 

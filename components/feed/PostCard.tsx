@@ -1,17 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { useRouter } from "next/navigation";
 import { BadgeCheck } from "lucide-react";
+import dynamic from "next/dynamic";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
-import Lightbox from "@/components/profile/Lightbox";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
 import PostTextViewer from "@/components/shared/PostTextViewer";
 import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
-import CheckoutModal from "@/components/checkout/CheckoutModal";
-import { ReportModal } from "@/components/messages/ReportModal";
-import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
 import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
@@ -22,9 +19,18 @@ import type { PollData } from "@/components/feed/PollDisplay";
 import type { User } from "@/lib/types/profile";
 import { useNav } from "@/lib/hooks/useNav";
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
-import StoryViewer from "@/components/story/StoryViewer";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
+
+// ── Heavy components: dynamic imports (not in initial bundle) ────────────────
+const StoryViewer = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
+const CheckoutModal = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
+const Lightbox = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
+const ReportModal = dynamic(
+  () => import("@/components/messages/ReportModal").then((mod) => ({ default: mod.ReportModal })),
+  { ssr: false }
+);
+const BlockConfirmModal = dynamic(() => import("@/components/ui/BlockConfirmModal"), { ssr: false });
 
 interface MediaItem {
   type:              "image" | "video";
@@ -120,7 +126,7 @@ function toLightboxPost(post: Post): LightboxPost {
   };
 }
 
-export function PostCard({
+function PostCardInner({
   post,
   onLike,
   onUnlock,
@@ -130,16 +136,20 @@ export function PostCard({
   onSubscribed,
   subscriptionPrice,
   isSubscribedExternal = false,
+  initialSavedPost = false,
+  initialSavedCreator = false,
 }: {
-  post:                 Post;
-  onLike?:              (postId: string) => void;
-  onUnlock?:            (postId: string) => void;
-  initialSlide?:        number;
-  onSlideChange?:       (postId: string, index: number) => void;
-  showSubscribeBanner?: boolean;
-  onSubscribed?:        (creatorId: string) => void;
-  subscriptionPrice?:   number;
+  post:                  Post;
+  onLike?:               (postId: string) => void;
+  onUnlock?:             (postId: string) => void;
+  initialSlide?:         number;
+  onSlideChange?:        (postId: string, index: number) => void;
+  showSubscribeBanner?:  boolean;
+  onSubscribed?:         (creatorId: string) => void;
+  subscriptionPrice?:    number;
   isSubscribedExternal?: boolean;
+  initialSavedPost?:     boolean;
+  initialSavedCreator?:  boolean;
 }) {
   const { navigate } = useNav();
   const router  = useRouter();
@@ -167,8 +177,8 @@ export function PostCard({
   const [lightboxOpen,      setLightboxOpen]      = useState(false);
   const [lightboxMediaIdx,  setLightboxMediaIdx]  = useState(0);
   const [pollData,          setPollData]          = useState<PollData | null>(post.poll ?? null);
-  const [savedPost,         setSavedPost]         = useState(false);
-  const [savedCreator,      setSavedCreator]      = useState(false);
+  const [savedPost,         setSavedPost]         = useState(initialSavedPost);
+  const [savedCreator,      setSavedCreator]      = useState(initialSavedCreator);
   const [sheetDataFetched,  setSheetDataFetched]  = useState(false);
   const [timestamp,         setTimestamp]         = useState("");
   const [reportOpen,        setReportOpen]        = useState(false);
@@ -187,12 +197,9 @@ export function PostCard({
     if (isSubscribedExternal) setSubscribed(true);
   }, [isSubscribedExternal]);
 
-  useEffect(() => {
-    fetch(`/api/saved/posts?post_id=${post.id}`)
-      .then((r) => r.json()).then((d) => setSavedPost(d.saved ?? false)).catch(() => {});
-    fetch(`/api/saved/creators?creator_id=${post.creator.id}`)
-      .then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {});
-  }, [post.id, post.creator.id]);
+  // ── REMOVED: per-card saved-status fetches ─────────────────────────────
+  // saved_post and saved_creator are now provided by the feed API response
+  // and passed in via initialSavedPost / initialSavedCreator props.
 
   useEffect(() => {
     const unsub = postSyncStore.subscribe((event) => {
@@ -581,6 +588,20 @@ export function PostCard({
     </div>
   );
 }
+
+// ── Memoized export: prevents re-render when sibling cards change state ──────
+export const PostCard = memo(PostCardInner, (prev, next) => {
+  if (prev.post.id !== next.post.id) return false;
+  if (prev.post.liked !== next.post.liked) return false;
+  if (prev.post.likes !== next.post.likes) return false;
+  if (prev.post.comments !== next.post.comments) return false;
+  if (prev.post.isLocked !== next.post.isLocked) return false;
+  if (prev.initialSlide !== next.initialSlide) return false;
+  if (prev.isSubscribedExternal !== next.isSubscribedExternal) return false;
+  if (prev.initialSavedPost !== next.initialSavedPost) return false;
+  if (prev.initialSavedCreator !== next.initialSavedCreator) return false;
+  return true;
+});
 
 function TaggedCreatorCard({ creator, onClick }: { creator: TaggedCreator; onClick: () => void }) {
   return (

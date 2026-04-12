@@ -27,9 +27,10 @@ function NavigationWatcher() {
 function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  useEffect(() => {
-    fetch("/api/conversations/deliver-all", { method: "PATCH" }).catch(() => {});
-  }, []);
+  // ── REMOVED: deliver-all fetch on every layout mount ───────────────────
+  // Previously called fetch("/api/conversations/deliver-all", { method: "PATCH" })
+  // on every page load regardless of whether the user has messages.
+  // If delivery tracking is needed, trigger it when the user opens /messages.
 
   const isSettings      = pathname.startsWith("/settings");
   const isSubscriptions = pathname.startsWith("/subscriptions");

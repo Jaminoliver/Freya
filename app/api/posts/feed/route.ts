@@ -81,7 +81,8 @@ export async function GET(req: NextRequest) {
           username,
           display_name,
           avatar_url,
-          is_verified
+          is_verified,
+          subscription_price
         ),
         media (
           id,
@@ -124,7 +125,10 @@ export async function GET(req: NextRequest) {
 
     const postIds = (posts ?? []).map((p: { id: number }) => Number(p.id));
 
-    // ── Fetch likes, polls, and PPV unlocks in parallel ──────────────────
+    // ── Collect unique creator IDs from this page of posts ────────────────
+    const pageCreatorIds = [...new Set((posts ?? []).map((p: Record<string, unknown>) => p.creator_id as string))];
+
+    // ── Fetch likes, polls, PPV unlocks, saved posts, saved creators in parallel ──
     const likesPromise = postIds.length > 0
       ? service
           .from("likes")
@@ -141,14 +145,31 @@ export async function GET(req: NextRequest) {
           .in("post_id", postIds)
       : Promise.resolve({ data: [] });
 
+    const savedPostsPromise = postIds.length > 0
+      ? service
+          .from("saved_posts")
+          .select("post_id")
+          .eq("user_id", user.id)
+          .in("post_id", postIds)
+      : Promise.resolve({ data: [] });
+
+    const savedCreatorsPromise = pageCreatorIds.length > 0
+      ? service
+          .from("saved_creators")
+          .select("creator_id")
+          .eq("user_id", user.id)
+          .in("creator_id", pageCreatorIds)
+      : Promise.resolve({ data: [] });
+
     const pollPostIds = (posts ?? [])
       .filter((p: Record<string, unknown>) => p.content_type === "poll")
       .map((p: Record<string, unknown>) => Number(p.id));
 
+    // ── Polls: nested select fetches poll_options in one query (was 2 sequential queries) ──
     const pollsPromise = pollPostIds.length > 0
       ? service
           .from("polls")
-          .select("id, post_id, question, total_votes, ends_at")
+          .select("id, post_id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)")
           .in("post_id", pollPostIds)
       : Promise.resolve({ data: [] });
 
@@ -163,10 +184,19 @@ export async function GET(req: NextRequest) {
       return !hasUnreadyVideo;
     });
 
-    const [{ data: userLikes }, { data: ppvUnlocksRaw }, { data: pollsRaw }] = await Promise.all([
+    // ── Single parallel batch: all lookups at once ───────────────────────
+    const [
+      { data: userLikes },
+      { data: ppvUnlocksRaw },
+      { data: pollsRaw },
+      { data: savedPostsRaw },
+      { data: savedCreatorsRaw },
+    ] = await Promise.all([
       likesPromise,
       ppvUnlocksPromise,
       pollsPromise,
+      savedPostsPromise,
+      savedCreatorsPromise,
     ]);
 
     const likedSet = new Set(
@@ -177,24 +207,24 @@ export async function GET(req: NextRequest) {
       (ppvUnlocksRaw ?? []).map((u: { post_id: number | string }) => Number(u.post_id))
     );
 
+    const savedPostSet = new Set(
+      (savedPostsRaw ?? []).map((s: { post_id: number | string }) => Number(s.post_id))
+    );
+
+    const savedCreatorSet = new Set(
+      (savedCreatorsRaw ?? []).map((s: { creator_id: string }) => s.creator_id)
+    );
+
+    // ── Poll votes: only 1 follow-up query (was 2 — poll_options is now nested above) ──
     const pollIds = (pollsRaw ?? []).map((p: { id: number }) => p.id);
 
-    const [{ data: pollOptionsRaw }, { data: userVotesRaw }] = await Promise.all([
-      pollIds.length > 0
-        ? service
-            .from("poll_options")
-            .select("id, poll_id, option_text, vote_count, display_order")
-            .in("poll_id", pollIds)
-            .order("display_order")
-        : Promise.resolve({ data: [] }),
-      pollIds.length > 0
-        ? service
-            .from("poll_votes")
-            .select("poll_id, poll_option_id")
-            .eq("user_id", user.id)
-            .in("poll_id", pollIds)
-        : Promise.resolve({ data: [] }),
-    ]);
+    const { data: userVotesRaw } = pollIds.length > 0
+      ? await service
+          .from("poll_votes")
+          .select("poll_id, poll_option_id")
+          .eq("user_id", user.id)
+          .in("poll_id", pollIds)
+      : { data: [] as { poll_id: number; poll_option_id: number }[] };
 
     type PollOption = { id: number; option_text: string; vote_count: number; display_order: number };
     type PollData   = {
@@ -208,10 +238,10 @@ export async function GET(req: NextRequest) {
 
     const pollByPostId = new Map<number, PollData>();
 
-    for (const poll of (pollsRaw ?? []) as { id: number; post_id: number; question: string; total_votes: number; ends_at: string | null }[]) {
-      const options = (pollOptionsRaw ?? [])
-        .filter((o: { poll_id: number }) => o.poll_id === poll.id)
-        .map((o: { id: number; option_text: string; vote_count: number; display_order: number }) => ({
+    for (const poll of (pollsRaw ?? []) as { id: number; post_id: number; question: string; total_votes: number; ends_at: string | null; poll_options: { id: number; option_text: string; vote_count: number; display_order: number }[] }[]) {
+      const options = (poll.poll_options ?? [])
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((o) => ({
           id:            o.id,
           option_text:   o.option_text,
           vote_count:    o.vote_count,
@@ -273,16 +303,26 @@ export async function GET(req: NextRequest) {
 
       return {
         ...post,
-        audience:   postAudience,
-        media:      mediaItems,
-        liked:      likedSet.has(postId),
-        can_access: canAccess,
-        locked:     !canAccess,
-        poll:       pollByPostId.get(postId) ?? null,
+        audience:      postAudience,
+        media:         mediaItems,
+        liked:         likedSet.has(postId),
+        can_access:    canAccess,
+        locked:        !canAccess,
+        poll:          pollByPostId.get(postId) ?? null,
+        saved_post:    savedPostSet.has(postId),
+        saved_creator: savedCreatorSet.has(post.creator_id as string),
       };
     });
 
-    return NextResponse.json({ posts: processed, nextCursor });
+    const res = NextResponse.json({ posts: processed, nextCursor });
+
+    // ── Cache headers: Vercel edge caches per-user for 30s, serves stale for 60s while revalidating ──
+    res.headers.set(
+      "Cache-Control",
+      "private, s-maxage=30, stale-while-revalidate=60"
+    );
+
+    return res;
 
   } catch (err) {
     console.error("[Feed:ERROR] Unhandled exception:", err);
