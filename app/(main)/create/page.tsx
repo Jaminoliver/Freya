@@ -172,7 +172,6 @@ function CreatePostContent() {
       const photoFiles = files.filter((f) => f.type.startsWith("image/"));
       const videoFile  = files.find((f) => f.type.startsWith("video/"));
 
-      // ── Mixed: photos + video ───────────────────────────────────────
       if (photoFiles.length > 0 && videoFile) {
         let photoMediaIds: number[] = [];
         let videoMediaId: number | null = null;
@@ -229,7 +228,6 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Video only ────────────────────────────────────────────────────
       if (videoFile) {
         startVideoUpload({
           file:          videoFile,
@@ -246,7 +244,6 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Single photo ──────────────────────────────────────────────────
       if (photoFiles.length === 1) {
         startPhotoUpload({
           file: photoFiles[0],
@@ -261,7 +258,6 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Multiple photos ───────────────────────────────────────────────
       if (photoFiles.length > 1) {
         startMultiPhotoUpload({
           files: photoFiles,
@@ -276,7 +272,6 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Text post ─────────────────────────────────────────────────────
       if (resolvedPostType === "text") {
         await createPost([]);
         invalidateProfileCache();
@@ -289,7 +284,6 @@ function CreatePostContent() {
         return;
       }
 
-      // ── Poll / Quiz ───────────────────────────────────────────────────
       if (hasPoll) {
         await createPost([]);
         invalidateProfileCache();
@@ -332,15 +326,15 @@ function CreatePostContent() {
           onClick={() => router.back()}
           style={{
             background: "none", border: "none", cursor: "pointer",
-            color: "#A3A3C2", display: "flex", alignItems: "center",
+            color: "#D4D4E8", display: "flex", alignItems: "center", /* ← whiter */
             padding: "4px",
           }}
         >
-          <ArrowLeft size={22} strokeWidth={1.8} />
+          <ArrowLeft size={26} strokeWidth={2} /> {/* ← bigger */}
         </button>
 
         <span style={{
-          fontSize: "16px", fontWeight: 700, color: "#fff",
+          fontSize: "17px", fontWeight: 700, color: "#FFFFFF", /* ← bigger + whiter */
           letterSpacing: "-0.01em",
         }}>
           Create
@@ -354,7 +348,7 @@ function CreatePostContent() {
             border: "none",
             backgroundColor: canPost && !posting && userLoaded ? "#8B5CF6" : "#2A2A3D",
             color: canPost && !posting && userLoaded ? "#fff" : "#6B6B8A",
-            fontSize: "14px", fontWeight: 600,
+            fontSize: "15px", fontWeight: 600, /* ← bigger */
             cursor: canPost && !posting && userLoaded ? "pointer" : "default",
             fontFamily: "inherit",
             transition: "all 0.2s",
@@ -375,7 +369,7 @@ function CreatePostContent() {
           <div style={{
             padding: "12px 14px", borderRadius: "12px",
             backgroundColor: "rgba(239,68,68,0.06)",
-            color: "#EF4444", fontSize: "13px",
+            color: "#EF4444", fontSize: "14px",
           }}>
             {error}
           </div>
@@ -384,8 +378,9 @@ function CreatePostContent() {
         {/* ── Compose area ────────────────────────────────────────────── */}
         {!hasText && (
           <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+            {/* ↓ avatar size bumped from "sm" to "md" */}
             <div style={{ paddingTop: "2px", flexShrink: 0 }}>
-              <Avatar src={currentUser.avatar_url} alt={currentUser.name} size="sm" showRing={false} />
+              <Avatar src={currentUser.avatar_url} alt={currentUser.name} size="md" showRing={false} />
             </div>
             <textarea
               value={caption}
@@ -396,8 +391,9 @@ function CreatePostContent() {
                 flex: 1,
                 backgroundColor: "transparent",
                 border: "none", outline: "none",
-                color: "#E2E8F0",
-                fontSize: "15px", lineHeight: 1.6,
+                color: "#FFFFFF",        /* ← whiter */
+                fontSize: "17px",        /* ← bigger */
+                lineHeight: 1.6,
                 resize: "none",
                 fontFamily: "inherit",
                 padding: 0,
@@ -442,7 +438,7 @@ function CreatePostContent() {
         }}>
           {/* Media button */}
           <ToolbarButton
-            icon={<ImagePlus size={19} strokeWidth={1.6} />}
+            icon={<ImagePlus size={22} strokeWidth={1.8} />}  /* ← bigger */
             active={!hasPoll && !hasText && files.length > 0}
             label={!hasPoll && !hasText && files.length > 0 ? `${files.length}` : undefined}
             onClick={() => {
@@ -464,21 +460,21 @@ function CreatePostContent() {
 
           {/* Poll */}
           <ToolbarButton
-            icon={<BarChart2 size={19} strokeWidth={1.6} />}
+            icon={<BarChart2 size={22} strokeWidth={1.8} />}  /* ← bigger */
             active={activePanel === "poll"}
             onClick={() => togglePanel("poll")}
           />
 
           {/* Quiz */}
           <ToolbarButton
-            icon={<HelpCircle size={19} strokeWidth={1.6} />}
+            icon={<HelpCircle size={22} strokeWidth={1.8} />}  /* ← bigger */
             active={activePanel === "quiz"}
             onClick={() => togglePanel("quiz")}
           />
 
           {/* Text composer */}
           <ToolbarButton
-            icon={<Type size={19} strokeWidth={1.6} />}
+            icon={<Type size={22} strokeWidth={1.8} />}  /* ← bigger */
             active={activePanel === "text"}
             onClick={() => togglePanel("text")}
           />
@@ -493,14 +489,14 @@ function CreatePostContent() {
               padding: "6px 12px", borderRadius: "20px",
               border: "none",
               backgroundColor: "#1A1A2E",
-              color: "#A3A3C2",
-              fontSize: "12px", fontWeight: 600,
+              color: "#D4D4E8",     /* ← whiter */
+              fontSize: "13px", fontWeight: 600, /* ← bigger */
               cursor: "pointer", fontFamily: "inherit",
               transition: "background-color 0.15s",
             }}
           >
             {audience === "subscribers" ? "Subscribers" : "Everyone"}
-            <ChevronDown size={13} strokeWidth={2} />
+            <ChevronDown size={14} strokeWidth={2} />
           </button>
         </div>
 
@@ -518,10 +514,10 @@ function CreatePostContent() {
             borderBottom: "1px solid #2A2A3D",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <Lock size={16} color="#6B6B8A" strokeWidth={1.5} />
+              <Lock size={18} color="#9090B0" strokeWidth={1.5} />  {/* ← bigger + whiter */}
               <div>
-                <div style={{ fontSize: "14px", fontWeight: 500, color: "#C4C4D4" }}>Pay-Per-View</div>
-                <div style={{ fontSize: "11px", color: "#4A4A6A", marginTop: "1px" }}>Fans pay to unlock</div>
+                <div style={{ fontSize: "15px", fontWeight: 500, color: "#FFFFFF" }}>Pay-Per-View</div>  {/* ← bigger + whiter */}
+                <div style={{ fontSize: "12px", color: "#6B6B8A", marginTop: "1px" }}>Fans pay to unlock</div>
               </div>
             </div>
             <Toggle on={isPPV} onToggle={() => setIsPPV(!isPPV)} />
@@ -540,7 +536,7 @@ function CreatePostContent() {
                 borderRadius: "10px",
                 padding: "10px 14px",
               }}>
-                <span style={{ color: "#6B6B8A", fontSize: "14px", fontWeight: 600 }}>₦</span>
+                <span style={{ color: "#9090B0", fontSize: "15px", fontWeight: 600 }}>₦</span>
                 <input
                   type="number"
                   min="100"
@@ -551,7 +547,7 @@ function CreatePostContent() {
                   style={{
                     flex: 1, backgroundColor: "transparent",
                     border: "none", outline: "none",
-                    color: "#E2E8F0", fontSize: "14px",
+                    color: "#FFFFFF", fontSize: "15px",
                     fontFamily: "inherit", caretColor: "#8B5CF6",
                   }}
                 />
@@ -565,10 +561,10 @@ function CreatePostContent() {
             display: "flex", alignItems: "center", justifyContent: "space-between",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <Calendar size={16} color="#6B6B8A" strokeWidth={1.5} />
+              <Calendar size={18} color="#9090B0" strokeWidth={1.5} />  {/* ← bigger + whiter */}
               <div>
-                <div style={{ fontSize: "14px", fontWeight: 500, color: "#C4C4D4" }}>Schedule</div>
-                <div style={{ fontSize: "11px", color: "#4A4A6A", marginTop: "1px" }}>Publish later</div>
+                <div style={{ fontSize: "15px", fontWeight: 500, color: "#FFFFFF" }}>Schedule</div>  {/* ← bigger + whiter */}
+                <div style={{ fontSize: "12px", color: "#6B6B8A", marginTop: "1px" }}>Publish later</div>
               </div>
             </div>
             <Toggle on={isScheduled} onToggle={() => setIsScheduled(!isScheduled)} />
@@ -584,8 +580,8 @@ function CreatePostContent() {
                 style={{
                   flex: 1, backgroundColor: "#1A1A2E",
                   border: "none", borderRadius: "10px",
-                  padding: "10px 14px", color: "#E2E8F0",
-                  fontSize: "13px", fontFamily: "inherit",
+                  padding: "10px 14px", color: "#FFFFFF",
+                  fontSize: "14px", fontFamily: "inherit",
                   outline: "none", colorScheme: "dark",
                 }}
               />
@@ -596,8 +592,8 @@ function CreatePostContent() {
                 style={{
                   flex: 1, backgroundColor: "#1A1A2E",
                   border: "none", borderRadius: "10px",
-                  padding: "10px 14px", color: "#E2E8F0",
-                  fontSize: "13px", fontFamily: "inherit",
+                  padding: "10px 14px", color: "#FFFFFF",
+                  fontSize: "14px", fontFamily: "inherit",
                   outline: "none", colorScheme: "dark",
                 }}
               />
@@ -658,11 +654,11 @@ function ToolbarButton({
         borderRadius: "10px",
         border: "none",
         backgroundColor: active ? "rgba(139,92,246,0.12)" : "transparent",
-        color: active ? "#8B5CF6" : "#6B6B8A",
+        color: active ? "#8B5CF6" : "#C4C4D4",   /* ← whiter inactive state */
         cursor: "pointer",
         transition: "all 0.15s",
         fontFamily: "inherit",
-        fontSize: "12px",
+        fontSize: "13px",
         fontWeight: 600,
       }}
     >

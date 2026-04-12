@@ -34,32 +34,25 @@ function formatDuration(sec: number): string {
 export function MediaUploader({ files, onChange }: MediaUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  /* blob URLs — track for cleanup */
   const blobUrlsRef = useRef<Map<File, string>>(new Map());
 
-  /* video durations cache */
   const [durations,   setDurations]   = useState<Map<File, number>>(new Map());
-const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
+  const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
 
-  /* drag state */
-  const [dragIdx, setDragIdx]     = useState<number | null>(null);
-  const [overIdx, setOverIdx]     = useState<number | null>(null);
+  const [dragIdx, setDragIdx]       = useState<number | null>(null);
+  const [overIdx, setOverIdx]       = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  /* drop zone drag-over (for empty state) */
   const [dropHover, setDropHover] = useState(false);
 
-  /* validation */
   const [error, setError] = useState<string | null>(null);
 
-  /* cleanup blob URLs on unmount */
   useEffect(() => {
     return () => {
       blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
-  /* get or create blob URL for a file */
   const getBlobUrl = useCallback((file: File): string => {
     const existing = blobUrlsRef.current.get(file);
     if (existing) return existing;
@@ -68,34 +61,31 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
     return url;
   }, []);
 
-  /* extract video duration */
   const loadDuration = useCallback((file: File) => {
-  if (durations.has(file) || !file.type.startsWith("video/")) return;
-  const url    = getBlobUrl(file);
-  const video  = document.createElement("video");
-  const canvas = document.createElement("canvas");
-  video.preload    = "metadata";
-  video.muted      = true;
-  video.playsInline = true;
-  video.src        = url;
-  video.onloadedmetadata = () => {
-    setDurations((prev) => new Map(prev).set(file, video.duration));
-    video.currentTime = 0.1;
-  };
-  video.onseeked = () => {
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const poster = canvas.toDataURL("image/jpeg", 0.8);
-    setPosterUrls((prev) => new Map(prev).set(file, poster));
-  };
-  // iOS needs play() to unblock seeking
-  video.play().then(() => video.pause()).catch(() => {});
-}, [durations, getBlobUrl]);
+    if (durations.has(file) || !file.type.startsWith("video/")) return;
+    const url    = getBlobUrl(file);
+    const video  = document.createElement("video");
+    const canvas = document.createElement("canvas");
+    video.preload    = "metadata";
+    video.muted      = true;
+    video.playsInline = true;
+    video.src        = url;
+    video.onloadedmetadata = () => {
+      setDurations((prev) => new Map(prev).set(file, video.duration));
+      video.currentTime = 0.1;
+    };
+    video.onseeked = () => {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const poster = canvas.toDataURL("image/jpeg", 0.8);
+      setPosterUrls((prev) => new Map(prev).set(file, poster));
+    };
+    video.play().then(() => video.pause()).catch(() => {});
+  }, [durations, getBlobUrl]);
 
-  /* load durations for all video files */
   useEffect(() => {
     files.forEach((f) => { if (f.type.startsWith("video/")) loadDuration(f); });
   }, [files, loadDuration]);
@@ -125,7 +115,6 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
       return;
     }
 
-    /* max 1 video — TUS only handles one at a time */
     const existingVideos = files.filter((f) => f.type.startsWith("video/")).length;
     const incomingVideos = arr.filter((f) => f.type.startsWith("video/")).length;
     if (existingVideos + incomingVideos > 1) {
@@ -180,16 +169,9 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
     setIsDragging(false);
   }, []);
 
-  /* ── drop zone handlers (empty state) ───────────────────────────────────── */
-
-  const onZoneDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDropHover(true);
-  }, []);
-
+  const onZoneDragOver  = useCallback((e: React.DragEvent) => { e.preventDefault(); setDropHover(true); }, []);
   const onZoneDragLeave = useCallback(() => setDropHover(false), []);
-
-  const onZoneDrop = useCallback((e: React.DragEvent) => {
+  const onZoneDrop      = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDropHover(false);
     addFiles(e.dataTransfer.files);
@@ -204,7 +186,7 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
           <div style={{
             padding: "10px 14px", borderRadius: "10px",
             backgroundColor: "rgba(239,68,68,0.06)", color: "#EF4444",
-            fontSize: "13px", lineHeight: 1.5,
+            fontSize: "14px", lineHeight: 1.5,
           }}>
             {error}
           </div>
@@ -228,29 +210,29 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
         >
           {/* Icon circle */}
           <div style={{
-            width: "56px", height: "56px", borderRadius: "50%",
-            backgroundColor: dropHover ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.04)",
+            width: "64px", height: "64px", borderRadius: "50%",   /* ← bigger circle */
+            backgroundColor: dropHover ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.06)",
             display: "flex", alignItems: "center", justifyContent: "center",
             transition: "background-color 0.2s",
           }}>
             <Plus
-              size={24}
-              strokeWidth={1.8}
-              color={dropHover ? "#8B5CF6" : "#6B6B8A"}
+              size={28}                                             /* ← bigger icon */
+              strokeWidth={2}
+              color={dropHover ? "#8B5CF6" : "#C4C4D4"}            /* ← whiter */
               style={{ transition: "color 0.2s" }}
             />
           </div>
 
           <div style={{ textAlign: "center" }}>
             <div style={{
-              fontSize: "15px", fontWeight: 600,
-              color: dropHover ? "#8B5CF6" : "#C4C4D4",
+              fontSize: "16px", fontWeight: 600,                   /* ← bigger */
+              color: dropHover ? "#8B5CF6" : "#FFFFFF",            /* ← whiter */
               transition: "color 0.2s",
             }}>
               Add photos or videos
             </div>
             <div style={{
-              fontSize: "12px", color: "#4A4A6A", marginTop: "4px",
+              fontSize: "13px", color: "#6B6B8A", marginTop: "4px", /* ← bigger */
             }}>
               JPG, PNG, GIF, MP4, MOV · Up to {MAX_FILES} files
             </div>
@@ -277,7 +259,7 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
         <div style={{
           padding: "10px 14px", borderRadius: "10px",
           backgroundColor: "rgba(239,68,68,0.06)", color: "#EF4444",
-          fontSize: "13px", lineHeight: 1.5,
+          fontSize: "14px", lineHeight: 1.5,
         }}>
           {error}
         </div>
@@ -287,11 +269,11 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
-        <span style={{ fontSize: "13px", color: "#8A8AA0", fontWeight: 500 }}>
+        <span style={{ fontSize: "14px", color: "#D4D4E8", fontWeight: 500 }}>  {/* ← whiter */}
           {files.length}/{MAX_FILES} files
         </span>
         {files.length > 1 && (
-          <span style={{ fontSize: "11px", color: "#4A4A6A" }}>
+          <span style={{ fontSize: "12px", color: "#8A8AA0" }}>           {/* ← whiter */}
             Drag to reorder · first is cover
           </span>
         )}
@@ -304,12 +286,12 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
         gap: "4px",
       }}>
         {files.map((file, i) => {
-          const url       = getBlobUrl(file);
-          const isImage   = file.type.startsWith("image/");
-          const isVideo   = file.type.startsWith("video/");
-          const duration  = durations.get(file);
-          const isBeingDragged = dragIdx === i;
-          const isDropTarget   = overIdx === i && dragIdx !== i;
+          const url              = getBlobUrl(file);
+          const isImage          = file.type.startsWith("image/");
+          const isVideo          = file.type.startsWith("video/");
+          const duration         = durations.get(file);
+          const isBeingDragged   = dragIdx === i;
+          const isDropTarget     = overIdx === i && dragIdx !== i;
 
           return (
             <div
@@ -333,7 +315,6 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
                 transition: "transform 0.15s, opacity 0.15s, outline 0.15s",
               }}
             >
-              {/* Media preview */}
               {isImage && (
                 <img
                   src={url}
@@ -342,35 +323,34 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
                 />
               )}
               {isVideo && (
-  <>
-    {posterUrls.get(file) ? (
-      <img
-        src={posterUrls.get(file)}
-        alt=""
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-      />
-    ) : (
-      <div style={{ width: "100%", height: "100%", backgroundColor: "#0D0D18" }} />
-    )}
-                  {/* Play icon overlay */}
+                <>
+                  {posterUrls.get(file) ? (
+                    <img
+                      src={posterUrls.get(file)}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    />
+                  ) : (
+                    <div style={{ width: "100%", height: "100%", backgroundColor: "#0D0D18" }} />
+                  )}
                   <div style={{
                     position: "absolute", inset: 0,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     pointerEvents: "none",
                   }}>
                     <div style={{
-                      width: "32px", height: "32px", borderRadius: "50%",
+                      width: "36px", height: "36px", borderRadius: "50%",  /* ← bigger */
                       backgroundColor: "rgba(0,0,0,0.5)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       backdropFilter: "blur(4px)",
                     }}>
-                      <Play size={14} color="#fff" fill="#fff" style={{ marginLeft: "2px" }} />
+                      <Play size={16} color="#fff" fill="#fff" style={{ marginLeft: "2px" }} />  {/* ← bigger */}
                     </div>
                   </div>
                 </>
               )}
 
-              {/* Cover badge — first item */}
+              {/* Cover badge */}
               {i === 0 && files.length > 1 && (
                 <div style={{
                   position: "absolute", top: "6px", left: "6px",
@@ -378,7 +358,7 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
                   backdropFilter: "blur(6px)",
                   borderRadius: "4px",
                   padding: "2px 6px",
-                  fontSize: "10px", fontWeight: 700,
+                  fontSize: "11px", fontWeight: 700,
                   color: "#fff",
                   letterSpacing: "0.03em",
                   textTransform: "uppercase",
@@ -387,7 +367,7 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
                 </div>
               )}
 
-              {/* Duration badge — videos */}
+              {/* Duration badge */}
               {isVideo && duration != null && (
                 <div style={{
                   position: "absolute", bottom: "6px", right: "6px",
@@ -395,7 +375,7 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
                   backdropFilter: "blur(6px)",
                   borderRadius: "4px",
                   padding: "2px 6px",
-                  fontSize: "10px", fontWeight: 600,
+                  fontSize: "11px", fontWeight: 600,
                   color: "#fff",
                 }}>
                   {formatDuration(duration)}
@@ -407,7 +387,7 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
                 onClick={(e) => { e.stopPropagation(); removeFile(i); }}
                 style={{
                   position: "absolute", top: "6px", right: "6px",
-                  width: "24px", height: "24px",
+                  width: "26px", height: "26px",                /* ← bigger */
                   borderRadius: "50%",
                   backgroundColor: "rgba(0,0,0,0.6)",
                   backdropFilter: "blur(6px)",
@@ -424,13 +404,13 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(0,0,0,0.6)";
                 }}
               >
-                <X size={13} color="#fff" strokeWidth={2.5} />
+                <X size={14} color="#fff" strokeWidth={2.5} />   {/* ← bigger */}
               </button>
             </div>
           );
         })}
 
-        {/* Add more button — last cell in grid */}
+        {/* Add more button */}
         {files.length < MAX_FILES && (
           <div
             onClick={() => inputRef.current?.click()}
@@ -451,8 +431,8 @@ const [posterUrls,  setPosterUrls]  = useState<Map<File, string>>(new Map());
               (e.currentTarget as HTMLDivElement).style.backgroundColor = "#0D0D18";
             }}
           >
-            <Plus size={22} color="#6B6B8A" strokeWidth={1.8} />
-            <span style={{ fontSize: "11px", color: "#4A4A6A", fontWeight: 500 }}>
+            <Plus size={26} color="#C4C4D4" strokeWidth={1.8} />   {/* ← bigger + whiter */}
+            <span style={{ fontSize: "12px", color: "#8A8AA0", fontWeight: 500 }}>  {/* ← whiter */}
               Add
             </span>
           </div>

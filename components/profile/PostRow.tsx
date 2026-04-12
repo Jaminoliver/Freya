@@ -405,8 +405,10 @@ export default function PostRow({
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <AvatarWithStoryRing src={post.profiles?.avatar_url ?? null} alt={post.profiles?.display_name || post.profiles?.username || ""} size={48} hasStory={!isOwnProfile && hasStory} hasUnviewed={!isOwnProfile && hasUnviewed} onClick={handleAvatarClick} />
           <div>
-            <div style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{post.profiles?.display_name || post.profiles?.username}</div>
-            <span style={{ fontSize: "12px", color: "#6B6B8A" }}>@{post.profiles?.username}</span>
+            {/* ↓ name: bigger + whiter */}
+            <div style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>{post.profiles?.display_name || post.profiles?.username}</div>
+            {/* ↓ username: bigger, same color */}
+            <span style={{ fontSize: "13px", color: "#6B6B8A" }}>@{post.profiles?.username}</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -416,20 +418,19 @@ export default function PostRow({
             </span>
           ) : null}
           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{getRelativeTime(post.published_at)}</span>
-          <button onClick={() => isOwnProfile ? setCreatorSheetOpen(true) : handleOpenFanSheet()} style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
-            <MoreHorizontal size={16} />
+          <button onClick={() => isOwnProfile ? setCreatorSheetOpen(true) : handleOpenFanSheet()} style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#C4C4D4", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
+            <MoreHorizontal size={18} />
           </button>
         </div>
       </div>
 
-      {/* Caption — plain text for non-text posts */}
+      {/* Caption — bigger + whiter */}
       {caption && !isTextPost && (
-        <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
+        <p style={{ fontSize: "16px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
           {caption}
         </p>
       )}
 
-      {/* Text post viewer */}
       {isTextPost && caption && (
         <PostTextViewer caption={caption} textBackground={post.text_background} />
       )}

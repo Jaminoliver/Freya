@@ -20,11 +20,12 @@ interface Props {
 export function TextComposer({ value, onChange, onBgChange }: Props) {
   const [activeBg, setActiveBg] = useState(BG_OPTIONS[0]);
 
-React.useEffect(() => {
-  const found = BG_OPTIONS.find((bg) => bg.id === activeBg.id);
-  if (found) onBgChange(found.id);
-}, []);
-  const textareaRef             = useRef<HTMLTextAreaElement>(null);
+  React.useEffect(() => {
+    const found = BG_OPTIONS.find((bg) => bg.id === activeBg.id);
+    if (found) onBgChange(found.id);
+  }, []);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -71,7 +72,7 @@ React.useEffect(() => {
             outline:       "none",
             resize:        "none",
             textAlign:     "center",
-            fontSize:      "22px",
+            fontSize:      "24px",        /* ← bigger */
             fontWeight:    600,
             lineHeight:    1.45,
             color:         activeBg.text,
@@ -86,8 +87,8 @@ React.useEffect(() => {
           position:   "absolute",
           bottom:     "10px",
           right:      "14px",
-          fontSize:   "11px",
-          color:      "rgba(255,255,255,0.25)",
+          fontSize:   "12px",             /* ← bigger */
+          color:      "rgba(255,255,255,0.35)",  /* ← whiter */
           fontFamily: "inherit",
         }}>
           {value.length} / 500
@@ -99,11 +100,11 @@ React.useEffect(() => {
         display:         "flex",
         alignItems:      "center",
         gap:             "10px",
-        padding:         "12px 16px",
+        padding:         "14px 16px",     /* ← slightly more padding */
         backgroundColor: "#0D0D18",
         borderTop:       "1px solid #1F1F2A",
       }}>
-        <span style={{ fontSize: "11px", color: "#4A4A6A", flexShrink: 0 }}>
+        <span style={{ fontSize: "12px", color: "#8A8AA0", flexShrink: 0 }}>  {/* ← bigger + whiter */}
           Background
         </span>
         {BG_OPTIONS.map((bg) => (
@@ -111,8 +112,8 @@ React.useEffect(() => {
             key={bg.id}
             onClick={() => handleBgChange(bg)}
             style={{
-              width:        "26px",
-              height:       "26px",
+              width:        "30px",         /* ← bigger swatches */
+              height:       "30px",
               borderRadius: "50%",
               background:   bg.value,
               border:       activeBg.id === bg.id ? "2px solid #8B5CF6" : "2px solid transparent",

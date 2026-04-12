@@ -49,15 +49,15 @@ export function PollBuilder({ type, options, onChange }: PollBuilderProps) {
               display: "flex",
               alignItems: "center",
               gap: "10px",
-              padding: "12px 14px",
+              padding: "14px 16px",                          /* ← slightly more padding */
               borderBottom: i < options.length - 1 ? "1px solid #1A1A2E" : "none",
               transition: "background 0.15s",
             }}
           >
             {/* Radio / checkbox indicator */}
             <div style={{
-              width: "18px",
-              height: "18px",
+              width: "20px",                                 /* ← bigger */
+              height: "20px",
               borderRadius: isQuiz ? "50%" : "5px",
               border: `1.5px solid ${i === 0 && isQuiz ? "#8B5CF6" : "#4A4A6A"}`,
               backgroundColor: i === 0 && isQuiz ? "rgba(139,92,246,0.15)" : "transparent",
@@ -68,7 +68,7 @@ export function PollBuilder({ type, options, onChange }: PollBuilderProps) {
             }}>
               {i === 0 && isQuiz && (
                 <div style={{
-                  width: "8px", height: "8px",
+                  width: "9px", height: "9px",               /* ← bigger dot */
                   borderRadius: "50%",
                   backgroundColor: "#8B5CF6",
                 }} />
@@ -86,16 +86,16 @@ export function PollBuilder({ type, options, onChange }: PollBuilderProps) {
                 backgroundColor: "transparent",
                 border: "none",
                 outline: "none",
-                color: "#E2E8F0",
-                fontSize: "14px",
+                color: "#FFFFFF",                            /* ← whiter */
+                fontSize: "15px",                            /* ← bigger */
                 fontFamily: "'Inter', sans-serif",
                 caretColor: "#8B5CF6",
               }}
             />
 
             {/* Drag handle */}
-            <div style={{ color: "#6B6B8A", cursor: "grab", display: "flex", flexShrink: 0 }}>
-              <GripVertical size={16} />
+            <div style={{ color: "#9090B0", cursor: "grab", display: "flex", flexShrink: 0 }}>  {/* ← whiter */}
+              <GripVertical size={18} />                     {/* ← bigger */}
             </div>
 
             {/* Remove button */}
@@ -106,7 +106,7 @@ export function PollBuilder({ type, options, onChange }: PollBuilderProps) {
                 background: "none",
                 border: "none",
                 cursor: options.length <= 2 ? "default" : "pointer",
-                color: options.length <= 2 ? "#2A2A3D" : "#6B6B8A",
+                color: options.length <= 2 ? "#2A2A3D" : "#9090B0",  /* ← whiter */
                 display: "flex",
                 padding: "2px",
                 borderRadius: "4px",
@@ -119,10 +119,10 @@ export function PollBuilder({ type, options, onChange }: PollBuilderProps) {
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLButtonElement).style.color =
-                  options.length <= 2 ? "#2A2A3D" : "#6B6B8A";
+                  options.length <= 2 ? "#2A2A3D" : "#9090B0";
               }}
             >
-              <X size={15} />
+              <X size={17} />                                {/* ← bigger */}
             </button>
           </div>
         ))}
@@ -137,12 +137,12 @@ export function PollBuilder({ type, options, onChange }: PollBuilderProps) {
             display: "flex",
             alignItems: "center",
             gap: "8px",
-            padding: "12px 14px",
+            padding: "14px 16px",                           /* ← more padding */
             backgroundColor: "transparent",
             border: "none",
             borderTop: "1px solid #1A1A2E",
             color: "#8B5CF6",
-            fontSize: "13px",
+            fontSize: "14px",                               /* ← bigger */
             fontWeight: 600,
             cursor: "pointer",
             fontFamily: "'Inter', sans-serif",
@@ -155,7 +155,7 @@ export function PollBuilder({ type, options, onChange }: PollBuilderProps) {
             (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
           }}
         >
-          <Plus size={15} />
+          <Plus size={17} />                                 {/* ← bigger */}
           Add another option
         </button>
       )}

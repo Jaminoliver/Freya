@@ -22,7 +22,6 @@ import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 
-// ── Heavy components: dynamic imports (not in initial bundle) ────────────────
 const StoryViewer = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
 const CheckoutModal = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
 const Lightbox = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
@@ -196,10 +195,6 @@ function PostCardInner({
   useEffect(() => {
     if (isSubscribedExternal) setSubscribed(true);
   }, [isSubscribedExternal]);
-
-  // ── REMOVED: per-card saved-status fetches ─────────────────────────────
-  // saved_post and saved_creator are now provided by the feed API response
-  // and passed in via initialSavedPost / initialSavedCreator props.
 
   useEffect(() => {
     const unsub = postSyncStore.subscribe((event) => {
@@ -504,28 +499,29 @@ function PostCardInner({
           />
           <div style={{ cursor: "pointer" }} onClick={() => navigate(`/${post.creator.username}`)}>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <span style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
-              {post.creator.isVerified && <BadgeCheck size={14} color="#8B5CF6" />}
+              {/* ↓ name: bigger + whiter */}
+              <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
+              {post.creator.isVerified && <BadgeCheck size={15} color="#8B5CF6" />}
             </div>
-            <span style={{ fontSize: "12px", color: "#6B6B8A" }}>@{post.creator.username}</span>
+            {/* ↓ username: bigger, same color */}
+            <span style={{ fontSize: "13px", color: "#6B6B8A" }}>@{post.creator.username}</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{timestamp}</span>
           <button onClick={handleOpenSheet} style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#C4C4D4", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
           </button>
         </div>
       </div>
 
-      {/* Caption — plain text for non-text posts */}
+      {/* Caption — bigger + whiter */}
       {post.caption && !isTextPost && (
-        <p style={{ fontSize: "14px", color: "#C4C4D4", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
+        <p style={{ fontSize: "16px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
           {post.caption}
         </p>
       )}
 
-      {/* Text post viewer */}
       {isTextPost && post.caption && (
         <PostTextViewer caption={post.caption} textBackground={post.text_background} />
       )}
@@ -589,7 +585,6 @@ function PostCardInner({
   );
 }
 
-// ── Memoized export: prevents re-render when sibling cards change state ──────
 export const PostCard = memo(PostCardInner, (prev, next) => {
   if (prev.post.id !== next.post.id) return false;
   if (prev.post.liked !== next.post.liked) return false;

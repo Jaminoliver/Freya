@@ -23,8 +23,8 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
     <div
       onClick={onToggle}
       style={{
-        width: "42px", height: "24px",
-        borderRadius: "12px",
+        width: "44px", height: "26px",
+        borderRadius: "13px",
         backgroundColor: on ? "#8B5CF6" : "#2A2A3D",
         cursor: "pointer",
         position: "relative",
@@ -36,7 +36,7 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
         position: "absolute",
         top: "3px",
         left: on ? "21px" : "3px",
-        width: "18px", height: "18px",
+        width: "20px", height: "20px",
         borderRadius: "50%",
         backgroundColor: "#fff",
         transition: "left 0.2s",
@@ -73,7 +73,9 @@ export function PostSettings({
           justifyContent: "space-between",
           borderBottom: "1px solid #2A2A3D",
         }}>
-          <span style={{ fontSize: "14px", color: "#C4C4D4", fontWeight: 500 }}>Who can see this?</span>
+          <span style={{ fontSize: "15px", color: "#FFFFFF", fontWeight: 500 }}>  {/* ← bigger + whiter */}
+            Who can see this?
+          </span>
           <div style={{
             display: "flex",
             backgroundColor: "#1A1A2E",
@@ -90,8 +92,8 @@ export function PostSettings({
                   borderRadius: "8px",
                   border: "none",
                   backgroundColor: audience === opt ? "#8B5CF6" : "transparent",
-                  color: audience === opt ? "#fff" : "#8A8AA0",
-                  fontSize: "12px",
+                  color: audience === opt ? "#fff" : "#C4C4D4",  /* ← whiter inactive */
+                  fontSize: "13px",                               /* ← bigger */
                   fontWeight: 600,
                   cursor: "pointer",
                   fontFamily: "'Inter', sans-serif",
@@ -114,10 +116,10 @@ export function PostSettings({
             gap: "12px",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <Lock size={16} color="#8A8AA0" strokeWidth={1.5} />
+              <Lock size={20} color="#C4C4D4" strokeWidth={1.5} />  {/* ← bigger + whiter */}
               <div>
-                <div style={{ fontSize: "14px", fontWeight: 500, color: "#C4C4D4" }}>Set as Pay-Per-View</div>
-                <div style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "2px" }}>Fans pay once to unlock</div>
+                <div style={{ fontSize: "15px", fontWeight: 500, color: "#FFFFFF" }}>Set as Pay-Per-View</div>  {/* ← bigger + whiter */}
+                <div style={{ fontSize: "12px", color: "#6B6B8A", marginTop: "2px" }}>Fans pay once to unlock</div>
               </div>
             </div>
             <Toggle on={isPPV} onToggle={() => onPPVChange(!isPPV)} />
@@ -138,9 +140,9 @@ export function PostSettings({
                 backgroundColor: "#1A1A2E",
                 border: "1px solid #2A2A3D",
                 borderRadius: "8px",
-                padding: "8px 12px",
+                padding: "10px 12px",
               }}>
-                <span style={{ color: "#8A8AA0", fontSize: "14px", fontWeight: 600 }}>₦</span>
+                <span style={{ color: "#C4C4D4", fontSize: "15px", fontWeight: 600 }}>₦</span>  {/* ← whiter */}
                 <input
                   type="number"
                   min="100"
@@ -153,14 +155,14 @@ export function PostSettings({
                     backgroundColor: "transparent",
                     border: "none",
                     outline: "none",
-                    color: "#E2E8F0",
-                    fontSize: "14px",
+                    color: "#FFFFFF",        /* ← whiter */
+                    fontSize: "15px",        /* ← bigger */
                     fontFamily: "'Inter', sans-serif",
                     caretColor: "#8B5CF6",
                   }}
                 />
               </div>
-              <span style={{ fontSize: "12px", color: "#6B6B8A", flexShrink: 0 }}>Max ₦50,000</span>
+              <span style={{ fontSize: "13px", color: "#8A8AA0", flexShrink: 0 }}>Max ₦50,000</span>  {/* ← bigger + whiter */}
             </div>
           )}
         </div>
@@ -175,10 +177,10 @@ export function PostSettings({
             gap: "12px",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <Calendar size={16} color="#8A8AA0" strokeWidth={1.5} />
+              <Calendar size={20} color="#C4C4D4" strokeWidth={1.5} />  {/* ← bigger + whiter */}
               <div>
-                <div style={{ fontSize: "14px", fontWeight: 500, color: "#C4C4D4" }}>Schedule post</div>
-                <div style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "2px" }}>Set a future publish date & time</div>
+                <div style={{ fontSize: "15px", fontWeight: 500, color: "#FFFFFF" }}>Schedule post</div>  {/* ← bigger + whiter */}
+                <div style={{ fontSize: "12px", color: "#6B6B8A", marginTop: "2px" }}>Set a future publish date & time</div>
               </div>
             </div>
             <Toggle on={isScheduled} onToggle={() => onScheduledChange(!isScheduled)} />
@@ -195,9 +197,9 @@ export function PostSettings({
                   backgroundColor: "#1A1A2E",
                   border: "1px solid #2A2A3D",
                   borderRadius: "8px",
-                  padding: "8px 12px",
-                  color: "#E2E8F0",
-                  fontSize: "13px",
+                  padding: "10px 12px",
+                  color: "#FFFFFF",        /* ← whiter */
+                  fontSize: "14px",        /* ← bigger */
                   fontFamily: "'Inter', sans-serif",
                   outline: "none",
                   colorScheme: "dark",
@@ -212,9 +214,9 @@ export function PostSettings({
                   backgroundColor: "#1A1A2E",
                   border: "1px solid #2A2A3D",
                   borderRadius: "8px",
-                  padding: "8px 12px",
-                  color: "#E2E8F0",
-                  fontSize: "13px",
+                  padding: "10px 12px",
+                  color: "#FFFFFF",        /* ← whiter */
+                  fontSize: "14px",        /* ← bigger */
                   fontFamily: "'Inter', sans-serif",
                   outline: "none",
                   colorScheme: "dark",
@@ -231,21 +233,28 @@ export function PostSettings({
         <button
           onClick={onCancel}
           style={{
-            flex: 1, padding: "12px", borderRadius: "12px",
+            flex: 1, padding: "13px", borderRadius: "12px",
             border: "1.5px solid #2A2A3D", backgroundColor: "transparent",
-            color: "#A3A3C2", fontSize: "14px", fontWeight: 600,
+            color: "#D4D4E8",              /* ← whiter */
+            fontSize: "15px", fontWeight: 600,  /* ← bigger */
             cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s",
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#4A4A6A"; (e.currentTarget as HTMLButtonElement).style.color = "#E2E8F0"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#2A2A3D"; (e.currentTarget as HTMLButtonElement).style.color = "#A3A3C2"; }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "#4A4A6A";
+            (e.currentTarget as HTMLButtonElement).style.color = "#FFFFFF";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "#2A2A3D";
+            (e.currentTarget as HTMLButtonElement).style.color = "#D4D4E8";
+          }}
         >
           Cancel
         </button>
         <button
           style={{
-            flex: 2, padding: "12px", borderRadius: "12px",
+            flex: 2, padding: "13px", borderRadius: "12px",
             border: "none", backgroundColor: "#8B5CF6",
-            color: "#fff", fontSize: "14px", fontWeight: 700,
+            color: "#fff", fontSize: "15px", fontWeight: 700,  /* ← bigger */
             cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "opacity 0.15s",
           }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.88"; }}

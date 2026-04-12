@@ -87,39 +87,38 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
         playsInline
         style={{ display: "none" }}
         onLoadedMetadata={() => {
-  const v = videoRef.current;
-  if (!v) return;
-  setDuration(v.duration);
-  const w = v.videoWidth;
-  const h = v.videoHeight;
-  setIsPortrait(h > w);
-  const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
-  const d   = gcd(w, h);
-  setAspectRatio(`${w / d}/${h / d}`);
-  // iOS requires play/pause to unblock seeking to frame 0
-  v.play().then(() => {
-    v.pause();
-    v.currentTime = 0.1;
-  }).catch(() => {
-    v.currentTime = 0.1;
-  });
-}}
+          const v = videoRef.current;
+          if (!v) return;
+          setDuration(v.duration);
+          const w = v.videoWidth;
+          const h = v.videoHeight;
+          setIsPortrait(h > w);
+          const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
+          const d   = gcd(w, h);
+          setAspectRatio(`${w / d}/${h / d}`);
+          v.play().then(() => {
+            v.pause();
+            v.currentTime = 0.1;
+          }).catch(() => {
+            v.currentTime = 0.1;
+          });
+        }}
         onSeeked={handleSeeked}
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <Film size={14} color="#8B5CF6" />
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "#8A8AA0" }}>Cover frame</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+          <Film size={17} color="#8B5CF6" />               {/* ← bigger */}
+          <span style={{ fontSize: "14px", fontWeight: 600, color: "#D4D4E8" }}>Cover frame</span>  {/* ← bigger + whiter */}
         </div>
         {picked && (
           <span style={{
-            fontSize: "12px", color: "#22C55E",
+            fontSize: "13px", color: "#22C55E",            /* ← bigger */
             display: "flex", alignItems: "center", gap: "4px",
           }}>
-            <Check size={12} /> Applied
+            <Check size={14} /> Applied                    {/* ← bigger */}
           </span>
         )}
       </div>
@@ -147,10 +146,10 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
             <div style={{
               width: "100%", height: "100%",
               display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center", gap: "6px",
+              alignItems: "center", justifyContent: "center", gap: "8px",
             }}>
-              <Film size={22} color="#2A2A3D" />
-              <span style={{ fontSize: "12px", color: "#4A4A6A" }}>Scrub to preview</span>
+              <Film size={26} color="#4A4A6A" />            {/* ← bigger */}
+              <span style={{ fontSize: "13px", color: "#6B6B8A" }}>Scrub to preview</span>  {/* ← bigger */}
             </div>
           )}
 
@@ -162,7 +161,7 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
               backdropFilter: "blur(6px)",
               borderRadius: "4px",
               padding: "2px 7px",
-              fontSize: "11px", color: "#fff", fontWeight: 600,
+              fontSize: "12px", color: "#fff", fontWeight: 600,  /* ← bigger */
             }}>
               {formatTime(currentTime)}
             </div>
@@ -185,9 +184,9 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
               cursor: "pointer", height: "4px",
             }}
           />
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "2px" }}>
-            <span style={{ fontSize: "10px", color: "#4A4A6A" }}>0:00</span>
-            <span style={{ fontSize: "10px", color: "#4A4A6A" }}>{formatTime(duration)}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
+            <span style={{ fontSize: "12px", color: "#8A8AA0" }}>0:00</span>    {/* ← bigger + whiter */}
+            <span style={{ fontSize: "12px", color: "#8A8AA0" }}>{formatTime(duration)}</span>
           </div>
         </div>
 
@@ -196,12 +195,12 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
           disabled={!preview}
           style={{
             width: "100%",
-            padding: "10px",
+            padding: "11px",
             borderRadius: "10px",
             border: "none",
             backgroundColor: picked ? "rgba(34,197,94,0.1)" : "rgba(139,92,246,0.1)",
             color: picked ? "#22C55E" : "#8B5CF6",
-            fontSize: "13px",
+            fontSize: "14px",              /* ← bigger */
             fontWeight: 600,
             cursor: preview ? "pointer" : "default",
             fontFamily: "inherit",
@@ -213,7 +212,7 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
             opacity: preview ? 1 : 0.4,
           }}
         >
-          {picked ? <><Check size={14} /> Using this frame</> : "Set as cover"}
+          {picked ? <><Check size={16} /> Using this frame</> : "Set as cover"}  {/* ← bigger icon */}
         </button>
       </div>
     </div>
