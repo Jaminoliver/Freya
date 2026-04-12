@@ -224,7 +224,7 @@ export async function GET(
         liked,
         can_access: canAccess,
         locked:     !canAccess,
-        poll:       pollData,
+        poll_data: pollData,
       },
     });
 

@@ -8,6 +8,8 @@ import CommentSection from "@/components/profile/CommentSection";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import Lightbox from "@/components/profile/Lightbox";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
+import { PollDisplay } from "@/components/feed/PollDisplay";
+import type { PollData } from "@/components/feed/PollDisplay";
 import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
@@ -40,6 +42,7 @@ interface PostData {
   liked: boolean;
   can_access: boolean;
   locked: boolean;
+  poll_data: PollData | null;
   profiles: {
     username: string;
     display_name: string | null;
@@ -476,18 +479,31 @@ export default function SinglePostPage() {
         )}
       </div>
 
+      {/* Poll */}
+      {post.poll_data && (
+        <div style={{ margin: "12px 16px 0", backgroundColor: "#13131F", borderRadius: "14px" }}>
+          <PollDisplay
+            poll={post.poll_data}
+            postId={String(post.id)}
+            onVoted={(updated) => setPost((p) => p ? { ...p, poll_data: updated } : p)}
+          />
+        </div>
+      )}
+
       {/* Media */}
-      <div style={{ marginTop: "12px" }}>
-        <PostMediaViewer
-          media={normalizedMedia}
-          isLocked={post.locked}
-          price={post.ppv_price}
-          isUnlockedPPV={post.is_ppv && !post.locked}
-          onDoubleTap={handleDoubleTapLike}
-          onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
-          onUnlock={openUnlock}
-        />
-      </div>
+      {normalizedMedia.length > 0 && (
+        <div style={{ marginTop: "12px" }}>
+          <PostMediaViewer
+            media={normalizedMedia}
+            isLocked={post.locked}
+            price={post.ppv_price}
+            isUnlockedPPV={post.is_ppv && !post.locked}
+            onDoubleTap={handleDoubleTapLike}
+            onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
+            onUnlock={openUnlock}
+          />
+        </div>
+      )}
 
       {/* Actions */}
       {!post.locked && (
