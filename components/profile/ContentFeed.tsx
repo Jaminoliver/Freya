@@ -3,14 +3,17 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Search, Grid3X3, List, ImageIcon, Film, Lock, Images } from "lucide-react";
+import dynamic from "next/dynamic";
 import type { Post } from "@/lib/types/profile";
 import PostRow from "@/components/profile/PostRow";
 import type { ApiPost } from "@/components/profile/PostRow";
-import Lightbox from "@/components/profile/Lightbox";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import { useAppStore } from "@/lib/store/appStore";
 import { ContentFeedSkeleton } from "@/components/loadscreen/ContentFeedSkeleton";
+
+// ── Dynamic import: Lightbox only loaded when user taps an image ─────────────
+const Lightbox = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
 
 export interface ContentFeedProps {
   posts: Post[];
@@ -122,41 +125,16 @@ function MediaToolbar({ totalCount, photoCount, videoCount, mediaFilter, setMedi
 
 function SubscribeDivider({ onSubscribe }: { onSubscribe?: () => void }) {
   return (
-    <div style={{
-      margin: "8px 16px",
-      borderRadius: "14px",
-      backgroundColor: "#0D0D18",
-      border: "1.5px solid #2A2A3D",
-      padding: "20px 16px",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: "10px",
-      textAlign: "center",
-    }}>
-      <div style={{
-        width: "44px", height: "44px", borderRadius: "50%",
-        backgroundColor: "rgba(139,92,246,0.12)",
-        border: "1.5px solid rgba(139,92,246,0.3)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
+    <div style={{ margin: "8px 16px", borderRadius: "14px", backgroundColor: "#0D0D18", border: "1.5px solid #2A2A3D", padding: "20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", textAlign: "center" }}>
+      <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "rgba(139,92,246,0.12)", border: "1.5px solid rgba(139,92,246,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Lock size={20} color="#8B5CF6" />
       </div>
       <div>
-        <p style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>
-          Subscribe to see all posts
-        </p>
-        <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>
-          Subscribers get full access to exclusive content
-        </p>
+        <p style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>Subscribe to see all posts</p>
+        <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>Subscribers get full access to exclusive content</p>
       </div>
       {onSubscribe && (
-        <button
-          onClick={onSubscribe}
-          style={{ padding: "10px 28px", borderRadius: "10px", background: "linear-gradient(135deg, #8B5CF6, #7C3AED)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
-        >
+        <button onClick={onSubscribe} style={{ padding: "10px 28px", borderRadius: "10px", background: "linear-gradient(135deg, #8B5CF6, #7C3AED)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
           Subscribe
         </button>
       )}
@@ -164,36 +142,33 @@ function SubscribeDivider({ onSubscribe }: { onSubscribe?: () => void }) {
   );
 }
 
+// ── Module-level caches — cleared on logout via freya:clear-caches event ─────
 const feedLayoutCache = new Map<string, { activeTab: string; isPostsGridView: boolean; isMediaGridView: boolean }>();
 const feedPostsCache  = new Map<string, { posts: ApiPost[]; media: PostMediaSummary[] }>();
+
+// Listen for clear event from appStore.clearAll()
+if (typeof window !== "undefined") {
+  window.addEventListener("freya:clear-caches", () => {
+    feedLayoutCache.clear();
+    feedPostsCache.clear();
+  });
+}
 
 function buildMediaFromPosts(fetchedPosts: ApiPost[]): PostMediaSummary[] {
   const summaries: PostMediaSummary[] = [];
   for (const p of fetchedPosts) {
     if (!p.media?.length) continue;
-    // Skip text-only and poll posts
     if (p.content_type === "text" || p.content_type === "poll") continue;
-
     const firstMedia = p.media[0];
     const hasImage = p.media.some((m) => m.media_type !== "video");
     const hasVideo = p.media.some((m) => m.media_type === "video");
-
     let thumbnail: string | null = null;
     if (firstMedia.media_type === "video" && firstMedia.bunny_video_id) {
       thumbnail = getBunnyThumbnail(firstMedia.bunny_video_id);
     } else {
       thumbnail = firstMedia.thumbnail_url || firstMedia.file_url || null;
     }
-
-    summaries.push({
-      post_id: p.id,
-      thumbnail_url: thumbnail,
-      bunny_video_id: firstMedia.bunny_video_id || null,
-      media_count: p.media.length,
-      has_image: hasImage,
-      has_video: hasVideo,
-      locked: p.locked,
-    });
+    summaries.push({ post_id: p.id, thumbnail_url: thumbnail, bunny_video_id: firstMedia.bunny_video_id || null, media_count: p.media.length, has_image: hasImage, has_video: hasVideo, locked: p.locked });
   }
   return summaries;
 }
@@ -203,11 +178,7 @@ function mergeApiPosts(existing: ApiPost[], incoming: ApiPost[]): ApiPost[] {
   return incoming.map((incomingPost) => {
     const existingPost = existingMap.get(incomingPost.id);
     if (!existingPost) return incomingPost;
-    return {
-      ...incomingPost,
-      locked:     existingPost.locked === false ? false : incomingPost.locked,
-      can_access: existingPost.can_access === true ? true  : incomingPost.can_access,
-    };
+    return { ...incomingPost, locked: existingPost.locked === false ? false : incomingPost.locked, can_access: existingPost.can_access === true ? true : incomingPost.can_access };
   });
 }
 
@@ -252,7 +223,8 @@ export default function ContentFeed({
       prevRefreshKey.current = refreshKey;
       feedPostsCache.delete(cacheKey);
       if (initialApiPosts) {
-        setApiPosts((prev) => mergeApiPosts(prev, initialApiPosts));
+        setApiPosts(initialApiPosts);
+
         const freshMedia = buildMediaFromPosts(initialApiPosts);
         setApiMedia(freshMedia);
         feedPostsCache.set(cacheKey, { posts: initialApiPosts, media: freshMedia });
@@ -271,7 +243,8 @@ export default function ContentFeed({
     if (!initialApiPosts) return;
     if (prevInitialPostsRef.current === initialApiPosts) return;
     prevInitialPostsRef.current = initialApiPosts;
-    setApiPosts((prev) => mergeApiPosts(prev, initialApiPosts));
+    setApiPosts(initialApiPosts);
+
     const freshMedia = buildMediaFromPosts(initialApiPosts);
     setApiMedia(freshMedia);
     feedPostsCache.set(cacheKey, { posts: initialApiPosts, media: freshMedia });
@@ -362,7 +335,7 @@ export default function ContentFeed({
     const thumb = m ? m.media_type === "video" && m.bunny_video_id ? getBunnyThumbnail(m.bunny_video_id) : (m.thumbnail_url || m.file_url || undefined) : undefined;
     return (
       <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
-        {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: post.locked ? "blur(12px)" : "none" }} />}
+        {thumb && <img src={thumb} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: post.locked ? "blur(12px)" : "none" }} />}
         {post.locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}><Lock size={16} color="#fff" /></div>}
         {!post.locked && (post.media?.length ?? 0) > 1 && (
           <div style={{ position: "absolute", top: "5px", right: "5px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "4px", padding: "2px 6px", fontSize: "10px", fontWeight: 700, color: "#fff" }}>1/{post.media.length}</div>
@@ -378,12 +351,8 @@ export default function ContentFeed({
     const thumb = item.thumbnail_url || undefined;
     return (
       <div key={item.post_id} onClick={() => router.push(`/posts/${item.post_id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
-        {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: item.locked ? "blur(12px)" : "none" }} />}
-        {item.locked && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}>
-            <Lock size={16} color="#fff" />
-          </div>
-        )}
+        {thumb && <img src={thumb} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: item.locked ? "blur(12px)" : "none" }} />}
+        {item.locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}><Lock size={16} color="#fff" /></div>}
         {item.media_count > 1 && (
           <div style={{ position: "absolute", top: "5px", right: "5px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "4px", padding: "2px 6px", display: "flex", alignItems: "center", gap: "3px" }}>
             <Images size={10} color="#fff" />
@@ -391,10 +360,7 @@ export default function ContentFeed({
           </div>
         )}
         <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
-          {item.has_video
-            ? <Film size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
-            : <ImageIcon size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
-          }
+          {item.has_video ? <Film size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} /> : <ImageIcon size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />}
         </div>
       </div>
     );
@@ -405,17 +371,9 @@ export default function ContentFeed({
     return (
       <div key={item.post_id} onClick={() => router.push(`/posts/${item.post_id}`)} style={{ borderBottom: "1px solid #1A1A2E", cursor: "pointer" }}>
         <div style={{ position: "relative" }}>
-          {thumb && <img src={thumb} alt="" style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block", filter: item.locked ? "blur(12px)" : "none" }} />}
-          {item.locked && (
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.4)" }}>
-              <Lock size={24} color="#fff" />
-            </div>
-          )}
-          {item.has_video && !item.locked && (
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
-              <Film size={32} color="#fff" style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.8))" }} />
-            </div>
-          )}
+          {thumb && <img src={thumb} alt="" loading="lazy" style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block", filter: item.locked ? "blur(12px)" : "none" }} />}
+          {item.locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.4)" }}><Lock size={24} color="#fff" /></div>}
+          {item.has_video && !item.locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}><Film size={32} color="#fff" style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.8))" }} /></div>}
           {item.media_count > 1 && (
             <div style={{ position: "absolute", top: "8px", right: "8px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "6px", padding: "3px 8px", display: "flex", alignItems: "center", gap: "4px" }}>
               <Images size={12} color="#fff" />
@@ -444,7 +402,6 @@ export default function ContentFeed({
         onChange={(key) => { setActiveTab(key); setShowSearch(false); setSearchQuery(""); }}
       />
 
-      {/* Posts tab */}
       {activeTab === "posts" && (
         <>
           <div style={{ padding: "12px 16px 4px" }}>
@@ -494,7 +451,6 @@ export default function ContentFeed({
         </>
       )}
 
-      {/* Media tab */}
       {activeTab === "media" && (
         <>
           <MediaToolbar totalCount={apiMedia.length} photoCount={photoCount} videoCount={videoCount}
@@ -515,7 +471,6 @@ export default function ContentFeed({
         </>
       )}
 
-      {/* Extra tab */}
       {activeTab === "extra" && extraTabContent && (
         <div style={{ padding: "16px" }}>
           {extraTabContent}

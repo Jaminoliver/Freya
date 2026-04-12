@@ -339,6 +339,15 @@ function PostCardInner({
     }
   }, [liked, likeCount]);
 
+  // ✅ FIX: decrement commentCount and sync via postSyncStore on top-level delete
+  const handleDeleteComment = useCallback(() => {
+    setCommentCount((c) => {
+      const newCount = Math.max(0, c - 1);
+      postSyncStore.emit({ postId: post.id, liked, like_count: likeCount, comment_count: newCount });
+      return newCount;
+    });
+  }, [post.id, liked, likeCount]);
+
   const handleSavePost = useCallback(async () => {
     const next = !savedPost;
     setSavedPost(next);
@@ -499,11 +508,9 @@ function PostCardInner({
           />
           <div style={{ cursor: "pointer" }} onClick={() => navigate(`/${post.creator.username}`)}>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              {/* ↓ name: bigger + whiter */}
               <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
               {post.creator.isVerified && <BadgeCheck size={15} color="#8B5CF6" />}
             </div>
-            {/* ↓ username: bigger, same color */}
             <span style={{ fontSize: "13px", color: "#6B6B8A" }}>@{post.creator.username}</span>
           </div>
         </div>
@@ -515,7 +522,7 @@ function PostCardInner({
         </div>
       </div>
 
-      {/* Caption — bigger + whiter */}
+      {/* Caption */}
       {post.caption && !isTextPost && (
         <p style={{ fontSize: "16px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
           {post.caption}
@@ -578,7 +585,18 @@ function PostCardInner({
       {!post.isLocked && (
         <div style={{ padding: "0 16px" }}>
           <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={true} isOwnProfile={false} onLike={handleLike} onComment={handleToggleComment} onTip={() => setTipOpen(true)} onBookmark={handleSavePost} />
-          <CommentSection postId={post.id} comments={comments} viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null} viewerUserId={viewer?.id} isOpen={commentOpen} onAddComment={handleAddComment} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} />
+          <CommentSection
+            postId={post.id}
+            comments={comments}
+            viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null}
+            viewerUserId={viewer?.id}
+            isOpen={commentOpen}
+            onAddComment={handleAddComment}
+            onDeleteComment={handleDeleteComment}
+            isLoading={commentsLoading}
+            totalCommentCount={commentCount}
+            onClose={() => setCommentOpen(false)}
+          />
         </div>
       )}
     </div>

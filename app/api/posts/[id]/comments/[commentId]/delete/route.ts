@@ -18,7 +18,7 @@ export async function DELETE(
 
     const { data: comment } = await service
       .from("comments")
-      .select("id, user_id, post_id")
+      .select("id, user_id, post_id, parent_comment_id")
       .eq("id", commentIdNum)
       .maybeSingle();
 
@@ -31,7 +31,10 @@ export async function DELETE(
       .update({ is_deleted: true, deleted_at: new Date().toISOString() })
       .eq("id", commentIdNum);
 
-    await service.rpc("decrement_comment_count", { post_id: comment.post_id });
+    // ✅ FIX: only decrement for top-level comments, not replies
+    if (!comment.parent_comment_id) {
+      await service.rpc("decrement_comment_count", { post_id: comment.post_id });
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

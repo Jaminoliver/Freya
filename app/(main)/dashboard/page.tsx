@@ -13,10 +13,10 @@ import type { PollData } from "@/components/feed/PollDisplay";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import type { User } from "@/lib/types/profile";
 
-const SCROLL_KEY         = "home_feed_scroll";
+const SCROLL_KEY           = "home_feed_scroll";
 const SPOTLIGHT_SCROLL_KEY = "home_spotlight_scroll";
-const SLIDES_KEY         = "home_feed_slides";
-const SUGGESTIONS_EVERY  = 4;
+const SLIDES_KEY           = "home_feed_slides";
+const SUGGESTIONS_EVERY    = 4;
 
 interface FeedPost {
   id:            number;
@@ -97,8 +97,20 @@ function adaptPost(p: FeedPost) {
   };
 }
 
+// ✅ FIX: helper to merge postSyncStore cache into a post (likes + comment_count)
+function mergeSync(p: FeedPost): FeedPost {
+  const cached = postSyncStore.get(String(p.id));
+  if (!cached) return p;
+  return {
+    ...p,
+    liked:         cached.liked,
+    like_count:    cached.like_count,
+    comment_count: cached.comment_count ?? p.comment_count,
+  };
+}
+
 function saveScroll(key: string, y: number) { try { sessionStorage.setItem(key, String(y)); } catch {} }
-function loadScroll(key: string): number  { try { return Number(sessionStorage.getItem(key) ?? 0); } catch { return 0; } }
+function loadScroll(key: string): number    { try { return Number(sessionStorage.getItem(key) ?? 0); } catch { return 0; } }
 function saveSlides(map: Record<string, number>) { try { sessionStorage.setItem(SLIDES_KEY, JSON.stringify(map)); } catch {} }
 function loadSlides(): Record<string, number>    { try { return JSON.parse(sessionStorage.getItem(SLIDES_KEY) ?? "{}"); } catch { return {}; } }
 
@@ -106,7 +118,6 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<"feed" | "spotlight">("feed");
   const { feed, setFeed, updateFeedPost } = useAppStore();
 
-  // ── Feed state ─────────────────────────────────────────────────────────
   const [posts,       setPosts]       = useState<FeedPost[]>([]);
   const [apiLoading,  setApiLoading]  = useState(true);
   const [nextCursor,  setNextCursor]  = useState<string | null>(null);
@@ -114,7 +125,6 @@ export default function HomePage() {
   const [error,       setError]       = useState<string | null>(null);
   const [slideMap,    setSlideMap]    = useState<Record<string, number>>({});
 
-  // ── Spotlight state ────────────────────────────────────────────────────
   const [spotPosts,       setSpotPosts]       = useState<FeedPost[]>([]);
   const [spotLoading,     setSpotLoading]     = useState(true);
   const [spotNextPage,    setSpotNextPage]    = useState<number | null>(null);
@@ -122,10 +132,8 @@ export default function HomePage() {
   const [spotError,       setSpotError]       = useState<string | null>(null);
   const [spotFetched,     setSpotFetched]     = useState(false);
 
-  // ── Subscribed creators tracking (for syncing banner across cards) ────
   const [subscribedCreatorIds, setSubscribedCreatorIds] = useState<Set<string>>(new Set());
 
-  // ── Shared state ───────────────────────────────────────────────────────
   const [ppvOpen,    setPpvOpen]    = useState(false);
   const [ppvPrice,   setPpvPrice]   = useState(0);
   const [ppvPostId,  setPpvPostId]  = useState<number | undefined>(undefined);
@@ -155,17 +163,13 @@ export default function HomePage() {
   useEffect(() => { spotNextPageRef.current = spotNextPage; }, [spotNextPage]);
   useEffect(() => { spotLoadingMoreRef.current = spotLoadingMore; }, [spotLoadingMore]);
 
-  // ── Scroll persistence (throttled) ────────────────────────────────────
   const scrollKey = activeTab === "feed" ? SCROLL_KEY : SPOTLIGHT_SCROLL_KEY;
 
   useEffect(() => {
     let rafId: number | null = null;
     const onScroll = () => {
       if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        saveScroll(scrollKey, window.scrollY);
-        rafId = null;
-      });
+      rafId = requestAnimationFrame(() => { saveScroll(scrollKey, window.scrollY); rafId = null; });
     };
     const onHide = () => saveScroll(scrollKey, window.scrollY);
     const onVis  = () => { if (document.visibilityState === "hidden") saveScroll(scrollKey, window.scrollY); };
@@ -180,7 +184,6 @@ export default function HomePage() {
     };
   }, [scrollKey]);
 
-  // Restore feed scroll
   useEffect(() => {
     if (activeTab !== "feed" || showSkeleton || scrollRestoredRef.current) return;
     scrollRestoredRef.current = true;
@@ -188,7 +191,6 @@ export default function HomePage() {
     if (saved > 0) setTimeout(() => window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior }), 80);
   }, [showSkeleton, activeTab]);
 
-  // Restore spotlight scroll
   useEffect(() => {
     if (activeTab !== "spotlight" || showSpotSkeleton || spotScrollRestoredRef.current) return;
     spotScrollRestoredRef.current = true;
@@ -219,11 +221,8 @@ export default function HomePage() {
         return;
       }
 
-      const merged: FeedPost[] = data.posts.map((p: FeedPost) => {
-        const cached = postSyncStore.get(String(p.id));
-        if (!cached) return p;
-        return { ...p, liked: cached.liked, like_count: cached.like_count };
-      });
+      // ✅ FIX: merge comment_count from postSyncStore, not just liked/like_count
+      const merged: FeedPost[] = data.posts.map(mergeSync);
 
       if (cursor) {
         const updated = [...postsRef.current, ...merged];
@@ -246,7 +245,9 @@ export default function HomePage() {
 
   useEffect(() => {
     if (feed && !isStale(feed.fetchedAt)) {
-      setPosts(feed.posts);
+      // ✅ FIX: also merge postSyncStore into cached posts on restore
+      const merged = feed.posts.map(mergeSync);
+      setPosts(merged);
       setNextCursor(feed.nextCursor);
       setApiLoading(false);
       return;
@@ -255,7 +256,6 @@ export default function HomePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Feed infinite scroll
   useEffect(() => {
     if (activeTab !== "feed") return;
     const sentinel = sentinelRef.current;
@@ -285,11 +285,8 @@ export default function HomePage() {
         return;
       }
 
-      const merged: FeedPost[] = data.posts.map((p: FeedPost) => {
-        const cached = postSyncStore.get(String(p.id));
-        if (!cached) return p;
-        return { ...p, liked: cached.liked, like_count: cached.like_count };
-      });
+      // ✅ FIX: merge comment_count from postSyncStore here too
+      const merged: FeedPost[] = data.posts.map(mergeSync);
 
       if (page && page > 1) {
         const updated = [...spotPostsRef.current, ...merged];
@@ -308,7 +305,6 @@ export default function HomePage() {
     }
   }, []);
 
-  // Fetch spotlight on first tab switch
   useEffect(() => {
     if (activeTab === "spotlight" && !spotFetched) {
       setSpotFetched(true);
@@ -316,7 +312,6 @@ export default function HomePage() {
     }
   }, [activeTab, spotFetched, fetchSpotlight]);
 
-  // Spotlight infinite scroll
   useEffect(() => {
     if (activeTab !== "spotlight") return;
     const sentinel = spotSentinelRef.current;
@@ -401,31 +396,19 @@ export default function HomePage() {
     );
   }, []);
 
-  // ── Tab switch: save scroll, scroll to top ─────────────────────────────
   const handleTabSwitch = useCallback((tab: "feed" | "spotlight") => {
     if (tab === activeTab) return;
-    // Save current scroll position before switching
     saveScroll(activeTab === "feed" ? SCROLL_KEY : SPOTLIGHT_SCROLL_KEY, window.scrollY);
     setActiveTab(tab);
-    // Reset scroll restore flag for the target tab so it restores on render
-    if (tab === "feed") {
-      scrollRestoredRef.current = false;
-    } else {
-      spotScrollRestoredRef.current = false;
-    }
+    if (tab === "feed") scrollRestoredRef.current = false;
+    else spotScrollRestoredRef.current = false;
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   }, [activeTab]);
 
-  // ── Handle subscription from Spotlight banner ───────────────────────
   const handleSubscribed = useCallback((creatorId: string) => {
-    setSubscribedCreatorIds((prev) => {
-      const next = new Set(prev);
-      next.add(creatorId);
-      return next;
-    });
+    setSubscribedCreatorIds((prev) => { const next = new Set(prev); next.add(creatorId); return next; });
   }, []);
 
-  /** Build feed items: interleave <FeedSuggestions> after every N posts */
   function buildFeedItems(feedPosts: FeedPost[], isSpotlight = false) {
     const items: React.ReactNode[] = [];
     feedPosts.forEach((post, index) => {
@@ -477,7 +460,6 @@ export default function HomePage() {
         />
       )}
 
-      {/* Tabs */}
       <div style={{ borderBottom: "1px solid #1F1F2A", padding: "0 16px", backgroundColor: "#0A0A0F" }}>
         <div style={{ display: "flex" }}>
           {(["feed", "spotlight"] as const).map((tab) => (
@@ -499,91 +481,52 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Story bar — always visible */}
       <div style={{ padding: "0 16px", backgroundColor: "#0A0A0F" }}>
         <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} />
       </div>
 
       <div style={{ padding: "0 0 40px" }}>
-          {/* ── Feed Tab ─────────────────────────────────────────────── */}
-          {activeTab === "feed" && (
-            <div style={{ minHeight: "200px" }}>
-              {showSkeleton && <FeedSkeleton count={5} />}
+        {activeTab === "feed" && (
+          <div style={{ minHeight: "200px" }}>
+            {showSkeleton && <FeedSkeleton count={5} />}
+            {!showSkeleton && (
+              <>
+                {error && <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>{error}</div>}
+                {!error && posts.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "60px 24px" }}>
+                    <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>Your feed is empty</p>
+                    <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Subscribe to creators to see their posts here</p>
+                  </div>
+                )}
+                {buildFeedItems(posts)}
+                <div ref={sentinelRef} style={{ height: "1px", marginTop: "1px" }} />
+                {loadingMore && <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}><div className="feed-spinner" /></div>}
+                {!nextCursor && !loadingMore && posts.length > 0 && <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>You&apos;re all caught up ✓</div>}
+              </>
+            )}
+          </div>
+        )}
 
-              {!showSkeleton && (
-                <>
-                  {error && (
-                    <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
-                      {error}
-                    </div>
-                  )}
-
-                  {!error && posts.length === 0 && (
-                    <div style={{ textAlign: "center", padding: "60px 24px" }}>
-                      <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>Your feed is empty</p>
-                      <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Subscribe to creators to see their posts here</p>
-                    </div>
-                  )}
-
-                  {buildFeedItems(posts)}
-
-                  <div ref={sentinelRef} style={{ height: "1px", marginTop: "1px" }} />
-
-                  {loadingMore && (
-                    <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
-                      <div className="feed-spinner" />
-                    </div>
-                  )}
-
-                  {!nextCursor && !loadingMore && posts.length > 0 && (
-                    <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
-                      You&apos;re all caught up ✓
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ── Spotlight Tab ────────────────────────────────────────── */}
-          {activeTab === "spotlight" && (
-            <div style={{ minHeight: "200px" }}>
-              {showSpotSkeleton && <FeedSkeleton count={5} />}
-
-              {!showSpotSkeleton && (
-                <>
-                  {spotError && (
-                    <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>
-                      {spotError}
-                    </div>
-                  )}
-
-                  {!spotError && spotPosts.length === 0 && (
-                    <div style={{ textAlign: "center", padding: "60px 24px" }}>
-                      <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>No posts in Spotlight yet</p>
-                      <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Check back soon for new content from creators</p>
-                    </div>
-                  )}
-
-                  {buildFeedItems(spotPosts, true)}
-
-                  <div ref={spotSentinelRef} style={{ height: "1px", marginTop: "1px" }} />
-
-                  {spotLoadingMore && (
-                    <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
-                      <div className="feed-spinner" />
-                    </div>
-                  )}
-
-                  {!spotNextPage && !spotLoadingMore && spotPosts.length > 0 && (
-                    <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
-                      You&apos;ve seen everything ✓
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+        {activeTab === "spotlight" && (
+          <div style={{ minHeight: "200px" }}>
+            {showSpotSkeleton && <FeedSkeleton count={5} />}
+            {!showSpotSkeleton && (
+              <>
+                {spotError && <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>{spotError}</div>}
+                {!spotError && spotPosts.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "60px 24px" }}>
+                    <p style={{ color: "#6B6B8A", fontSize: "15px", marginBottom: "8px" }}>No posts in Spotlight yet</p>
+                    <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Check back soon for new content from creators</p>
+                  </div>
+                )}
+                {buildFeedItems(spotPosts, true)}
+                <div ref={spotSentinelRef} style={{ height: "1px", marginTop: "1px" }} />
+                {spotLoadingMore && <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}><div className="feed-spinner" /></div>}
+                {!spotNextPage && !spotLoadingMore && spotPosts.length > 0 && <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>You&apos;ve seen everything ✓</div>}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

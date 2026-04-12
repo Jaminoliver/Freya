@@ -56,7 +56,7 @@ export const postSyncStore = {
       comment_count: event.comment_count,
       poll_data:     event.poll_data,
     });
-    listeners.forEach((fn) => fn(event));
+    queueMicrotask(() => listeners.forEach((fn) => fn(event)));
   },
 
   get(postId: string) {
@@ -74,7 +74,7 @@ export const postSyncStore = {
       liked:      event.liked,
       like_count: event.like_count,
     });
-    commentListeners.forEach((fn) => fn(event));
+    queueMicrotask(() => commentListeners.forEach((fn) => fn(event)));
   },
 
   getCommentLike(postId: string, commentId: string | number) {
@@ -89,7 +89,7 @@ export const postSyncStore = {
   // ── Reply counts ──────────────────────────────────────────────────────────
   emitReplyCount(event: ReplyCountSyncEvent) {
     replyCountCache.set(commentCacheKey(event.postId, event.parentCommentId), event.reply_count);
-    replyCountListeners.forEach((fn) => fn(event));
+    queueMicrotask(() => replyCountListeners.forEach((fn) => fn(event)));
   },
 
   getReplyCount(postId: string, parentCommentId: string | number) {

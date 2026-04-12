@@ -22,15 +22,17 @@ export interface NormalizedMedia {
 }
 
 interface PostMediaViewerProps {
-  media:            NormalizedMedia[];
-  isLocked:         boolean;
-  isUnlockedPPV?:   boolean;
-  price?:           number | null;
-  onDoubleTap?:     () => void;
-  onSingleTap?:     (index: number) => void;
-  onUnlock?:        () => void;
-  initialSlide?:    number;
-  onSlideChange?:   (index: number) => void;
+  media:                NormalizedMedia[];
+  isLocked:             boolean;
+  isUnlockedPPV?:       boolean;
+  isPPV?:               boolean;
+  isFreeSubscription?:  boolean;
+  price?:               number | null;
+  onDoubleTap?:         () => void;
+  onSingleTap?:         (index: number) => void;
+  onUnlock?:            () => void;
+  initialSlide?:        number;
+  onSlideChange?:       (index: number) => void;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -183,9 +185,103 @@ function UnlockedPPVBadge() {
   );
 }
 
+// ── SubscribeButton ───────────────────────────────────────────────────────────
+function SubscribeButton({ label, badge, onClick }: {
+  label:   string;
+  badge?:  string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display:        "flex",
+        alignItems:     "center",
+        justifyContent: badge ? "space-between" : "center",
+        width:          "100%",
+        maxWidth:       "280px",
+        padding:        "11px 16px",
+        borderRadius:   "50px",
+        background:     "linear-gradient(135deg, #8B5CF6, #EC4899)",
+        border:         "none",
+        cursor:         "pointer",
+        fontFamily:     "'Inter', sans-serif",
+        position:       "relative",
+        overflow:       "hidden",
+        animation:      "pmv-pulse 2.2s ease-in-out infinite",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.opacity = "0.88";
+        e.currentTarget.style.animationPlayState = "paused";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.opacity = "1";
+        e.currentTarget.style.animationPlayState = "running";
+      }}
+    >
+      {/* Sweep shine */}
+      <span style={{
+        position:     "absolute",
+        top:          0,
+        left:         "-80%",
+        width:        "50%",
+        height:       "100%",
+        background:   "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
+        transform:    "skewX(-20deg)",
+        animation:    "pmv-sweep 2.5s ease-in-out infinite",
+        pointerEvents:"none",
+      }} />
+
+      {/* Lock icon + label */}
+      <span style={{
+        fontSize:   "13px",
+        fontWeight: 700,
+        color:      "#fff",
+        position:   "relative",
+        zIndex:     1,
+        display:    "flex",
+        alignItems: "center",
+        gap:        "6px",
+      }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        {label}
+      </span>
+
+      {/* Badge */}
+      {badge && (
+        <span style={{
+          fontSize:   "11px",
+          fontWeight: 600,
+          color:      "rgba(255,255,255,0.9)",
+          background: "rgba(255,255,255,0.15)",
+          padding:    "3px 10px",
+          borderRadius:"20px",
+          position:   "relative",
+          zIndex:     1,
+        }}>
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
 // ── PostMediaViewer ──────────────────────────────────────────────────────────
 export default function PostMediaViewer({
-  media, isLocked, isUnlockedPPV = false, price, onDoubleTap, onSingleTap, onUnlock, initialSlide = 0, onSlideChange,
+  media,
+  isLocked,
+  isUnlockedPPV = false,
+  isPPV = false,
+  isFreeSubscription = false,
+  price,
+  onDoubleTap,
+  onSingleTap,
+  onUnlock,
+  initialSlide = 0,
+  onSlideChange,
 }: PostMediaViewerProps) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
@@ -203,184 +299,142 @@ export default function PostMediaViewer({
 
   if (!media.length || !first) return null;
 
-  // ── Locked (PPV) ─────────────────────────────────────────────────────────
+  // ── Locked ────────────────────────────────────────────────────────────────
   if (isLocked) {
     const blurSrc = isVideo
       ? (first.bunnyVideoId ? getBunnyThumbnail(first.bunnyVideoId) : first.thumbnailUrl ?? undefined)
       : (first.thumbnailUrl ?? first.url ?? undefined);
-    const isPPV        = price != null && price > 0;
-    const displayPrice = isPPV ? price! / 100 : 0;
+
+    // PPV locked — show price and unlock button (unchanged)
+    const isPPVLocked      = isPPV && price != null && price > 0;
+    const displayPrice     = isPPVLocked ? price! / 100 : 0;
 
     return (
       <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
         <style>{LOCK_STYLES}</style>
-        <div style={{ position: "relative", width: "100%", aspectRatio: String(ratio), maxHeight: "85svh", backgroundColor: "#0A0A0F", overflow: "hidden" }}>
+        <div style={{
+          position:        "relative",
+          width:           "100%",
+          aspectRatio:     String(ratio),
+          maxHeight:       "85svh",
+          backgroundColor: "#0A0A0F",
+          overflow:        "hidden",
+        }}>
+          {/* BlurHash */}
           {first.blurHash && (
             <BlurHashCanvas
               hash={first.blurHash}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }}
             />
           )}
+
+          {/* Blurred thumbnail */}
           {blurSrc && (
             <img
               src={blurSrc}
               alt=""
               loading="lazy"
               style={{
-                position: "absolute", inset: 0, width: "100%", height: "100%",
+                position:  "absolute",
+                inset:     0,
+                width:     "100%",
+                height:    "100%",
                 objectFit: "cover",
-                filter: "blur(6px) brightness(0.45)",
+                filter:    "blur(6px) brightness(0.45)",
                 transform: "scale(1.08)",
-                zIndex: 1,
+                zIndex:    1,
               }}
             />
           )}
 
           {/* Dark overlay */}
           <div style={{
-            position: "absolute", inset: 0, zIndex: 2,
+            position:   "absolute",
+            inset:      0,
+            zIndex:     2,
             background: "linear-gradient(to bottom, rgba(10,10,15,0.3) 0%, rgba(10,10,15,0.65) 100%)",
           }} />
 
           {/* Lock UI */}
           <div style={{
-            position: "absolute", inset: 0, zIndex: 3,
-            display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-            gap: "16px",
+            position:       "absolute",
+            inset:          0,
+            zIndex:         3,
+            display:        "flex",
+            flexDirection:  "column",
+            alignItems:     "center",
+            justifyContent: "center",
+            gap:            "16px",
           }}>
+            {/* Lock icon circle */}
             <div style={{
-              width: "56px", height: "56px", borderRadius: "50%",
-              background: "rgba(139,92,246,0.15)",
-              border: "1.5px solid rgba(139,92,246,0.6)",
-              backdropFilter: "blur(8px)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 0 24px rgba(139,92,246,0.3)",
+              width:           "56px",
+              height:          "56px",
+              borderRadius:    "50%",
+              background:      "rgba(139,92,246,0.15)",
+              border:          "1.5px solid rgba(139,92,246,0.6)",
+              backdropFilter:  "blur(8px)",
+              display:         "flex",
+              alignItems:      "center",
+              justifyContent:  "center",
+              boxShadow:       "0 0 24px rgba(139,92,246,0.3)",
             }}>
               <Lock size={22} color="#A78BFA" strokeWidth={2} />
             </div>
 
-            {isPPV ? (
+            {/* ── PPV locked ── */}
+            {isPPVLocked ? (
               <>
                 <div style={{ textAlign: "center" }}>
                   <div style={{
-                    fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em",
-                    color: "#A78BFA", textTransform: "uppercase",
-                    fontFamily: "'Inter', sans-serif", marginBottom: "4px",
+                    fontSize:      "11px",
+                    fontWeight:    700,
+                    letterSpacing: "0.1em",
+                    color:         "#A78BFA",
+                    textTransform: "uppercase",
+                    fontFamily:    "'Inter', sans-serif",
+                    marginBottom:  "4px",
                   }}>
                     Pay-Per-View
                   </div>
                   <div style={{
-                    fontSize: "26px", fontWeight: 800,
-                    color: "#FFFFFF", fontFamily: "'Inter', sans-serif",
+                    fontSize:      "26px",
+                    fontWeight:    800,
+                    color:         "#FFFFFF",
+                    fontFamily:    "'Inter', sans-serif",
                     letterSpacing: "-0.5px",
                   }}>
                     ₦{displayPrice.toLocaleString("en-NG")}
                   </div>
                 </div>
-
-                <button
+                <SubscribeButton
+                  label="Unlock content"
+                  badge={`₦${displayPrice.toLocaleString("en-NG")}`}
                   onClick={onUnlock}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    width: "100%", maxWidth: "260px",
-                    padding: "11px 16px", borderRadius: "50px",
-                    background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
-                    border: "none", cursor: "pointer",
-                    fontFamily: "'Inter', sans-serif",
-                    position: "relative", overflow: "hidden",
-                    animation: "pmv-pulse 2.2s ease-in-out infinite",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.opacity = "0.88";
-                    e.currentTarget.style.animationPlayState = "paused";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.opacity = "1";
-                    e.currentTarget.style.animationPlayState = "running";
-                  }}
-                >
-                  <span style={{
-                    position: "absolute", top: 0, left: "-80%",
-                    width: "50%", height: "100%",
-                    background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
-                    transform: "skewX(-20deg)",
-                    animation: "pmv-sweep 2.5s ease-in-out infinite",
-                    pointerEvents: "none",
-                  }} />
-                  <span style={{
-                    fontSize: "13px", fontWeight: 700, color: "#fff",
-                    position: "relative", zIndex: 1,
-                    display: "flex", alignItems: "center", gap: "6px",
-                  }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="11" width="18" height="11" rx="2"/>
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                    </svg>
-                    Unlock content
-                  </span>
-                  <span style={{
-                    fontSize: "11px", fontWeight: 600,
-                    color: "rgba(255,255,255,0.8)",
-                    background: "rgba(255,255,255,0.15)",
-                    padding: "3px 10px", borderRadius: "20px",
-                    position: "relative", zIndex: 1,
-                  }}>
-                    ₦{displayPrice.toLocaleString("en-NG")}
-                  </span>
-                </button>
+                />
               </>
             ) : (
-              <button
-                onClick={onUnlock}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  width: "100%", maxWidth: "260px",
-                  padding: "11px 16px", borderRadius: "50px",
-                  background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
-                  border: "none", cursor: "pointer",
-                  fontFamily: "'Inter', sans-serif",
-                  position: "relative", overflow: "hidden",
-                  animation: "pmv-pulse 2.2s ease-in-out infinite",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = "0.88";
-                  e.currentTarget.style.animationPlayState = "paused";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = "1";
-                  e.currentTarget.style.animationPlayState = "running";
-                }}
-              >
-                <span style={{
-                  position: "absolute", top: 0, left: "-80%",
-                  width: "50%", height: "100%",
-                  background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
-                  transform: "skewX(-20deg)",
-                  animation: "pmv-sweep 2.5s ease-in-out infinite",
-                  pointerEvents: "none",
-                }} />
-                <span style={{
-                  fontSize: "13px", fontWeight: 700, color: "#fff",
-                  position: "relative", zIndex: 1,
-                  display: "flex", alignItems: "center", gap: "6px",
-                }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                  </svg>
-                  Unlock content
-                </span>
-                <span style={{
-                  fontSize: "11px", fontWeight: 600,
-                  color: "rgba(255,255,255,0.8)",
-                  background: "rgba(255,255,255,0.15)",
-                  padding: "3px 10px", borderRadius: "20px",
-                  position: "relative", zIndex: 1,
-                }}>
-                  Free
-                </span>
-              </button>
+              // ── Subscription locked ──
+              <>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{
+                    fontSize:      "11px",
+                    fontWeight:    700,
+                    letterSpacing: "0.1em",
+                    color:         "#A78BFA",
+                    textTransform: "uppercase",
+                    fontFamily:    "'Inter', sans-serif",
+                    marginBottom:  "4px",
+                  }}>
+                    {isFreeSubscription ? "Free subscription" : "Subscribers only"}
+                  </div>
+                </div>
+                <SubscribeButton
+                  label={isFreeSubscription ? "Subscribe for free to view" : "Subscribe to view content"}
+                  badge={isFreeSubscription ? "Free" : undefined}
+                  onClick={onUnlock}
+                />
+              </>
             )}
           </div>
         </div>
@@ -408,14 +462,27 @@ export default function PostMediaViewer({
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
         <div
           style={{
-            width: "100%", position: "relative", overflow: "hidden",
-            aspectRatio: String(videoRatio), maxHeight: "85svh", backgroundColor: "#000",
-            backgroundImage: blurSrc ? `url(${blurSrc})` : undefined,
-            backgroundSize: "cover", backgroundPosition: "center",
+            width:                "100%",
+            position:             "relative",
+            overflow:             "hidden",
+            aspectRatio:          String(videoRatio),
+            maxHeight:            "85svh",
+            backgroundColor:      "#000",
+            backgroundImage:      blurSrc ? `url(${blurSrc})` : undefined,
+            backgroundSize:       "cover",
+            backgroundPosition:   "center",
           }}
         >
           {blurSrc && (
-            <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", backgroundColor: "rgba(0,0,0,0.35)", zIndex: 0, pointerEvents: "none" }} />
+            <div style={{
+              position:             "absolute",
+              inset:                0,
+              backdropFilter:       "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              backgroundColor:      "rgba(0,0,0,0.35)",
+              zIndex:               0,
+              pointerEvents:        "none",
+            }} />
           )}
           <div style={{ position: "relative", zIndex: 2, width: "100%", height: "100%" }}>
             <VideoPlayer
@@ -429,7 +496,6 @@ export default function PostMediaViewer({
               objectFit="contain"
             />
           </div>
-
           {isUnlockedPPV && <UnlockedPPVBadge />}
         </div>
       </DoubleTapLike>
@@ -475,7 +541,7 @@ export default function PostMediaViewer({
     );
   }
 
-  // ── Single image ─────────────────────────────────────────────────────────────
+  // ── Single image ──────────────────────────────────────────────────────────
   const imageRatio = (() => {
     if (first?.aspectRatio != null && first.aspectRatio > 0) {
       return Math.min(Math.max(first.aspectRatio, 0.4), 1.91);
@@ -490,19 +556,17 @@ export default function PostMediaViewer({
     <DoubleTapLike onSingleTap={singleTapAt0} onDoubleTap={doubleTap} style={{ width: "100%", cursor: "zoom-in" }}>
       <style>{`
         @media (min-width: 768px) {
-          .pmv-blur-bg {
-            display: block !important;
-          }
+          .pmv-blur-bg { display: block !important; }
         }
       `}</style>
       <div
         style={{
-          position: "relative",
-          width: "100%",
-          aspectRatio: String(imageRatio),
-          maxHeight: "85svh",
+          position:        "relative",
+          width:           "100%",
+          aspectRatio:     String(imageRatio),
+          maxHeight:       "85svh",
           backgroundColor: "#000",
-          overflow: "hidden",
+          overflow:        "hidden",
         }}
       >
         {/* Blurred background — desktop only */}
@@ -528,9 +592,12 @@ export default function PostMediaViewer({
           draggable={false}
           loading="lazy"
           style={{
-            position: "relative", zIndex: 1,
-            width: "100%", height: "100%",
-            objectFit: "contain", display: "block",
+            position:   "relative",
+            zIndex:     1,
+            width:      "100%",
+            height:     "100%",
+            objectFit:  "contain",
+            display:    "block",
           }}
         />
 

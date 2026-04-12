@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
+import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
 const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
@@ -22,15 +22,12 @@ function extractBunnyVideoId(url: string | null): string | null {
 
 function resolveVideoMedia(m: Record<string, unknown>) {
   let bunnyVideoId = m.bunny_video_id as string | null;
-
   if (!bunnyVideoId && m.media_type === "video") {
     bunnyVideoId = extractBunnyVideoId(m.file_url as string | null);
   }
-
   const derivedThumb = bunnyVideoId
     ? `https://${STREAM_CDN_HOST}/${bunnyVideoId}/thumbnail.jpg`
     : null;
-
   return { bunnyVideoId, derivedThumb };
 }
 
@@ -43,9 +40,8 @@ export async function GET(
     const postId   = Number(id);
     if (isNaN(postId)) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
+    // ── FIX: use getUser() directly instead of createServerSupabaseClient ──
+    const { user } = await getUser();
     const service = createServiceSupabaseClient();
 
     const { data: post, error } = await service
@@ -96,72 +92,68 @@ export async function GET(
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
+    // ── OPTIMIZED: all access checks + like + poll in ONE parallel batch ──
+    // Was 6 sequential queries: sub → ppv → like → poll → options → votes
+    const isOwnPost = user?.id === post.creator_id;
+    const isPoll    = post.content_type === "poll";
+
+    const [subResult, ppvResult, likeResult, pollResult] = await Promise.all([
+      // Subscription check
+      user && !isOwnPost && !post.is_free
+        ? service.from("subscriptions").select("id").eq("fan_id", user.id).eq("creator_id", post.creator_id).eq("status", "active").maybeSingle()
+        : Promise.resolve({ data: null }),
+
+      // PPV unlock check
+      user && post.is_ppv
+        ? service.from("ppv_unlocks").select("id").eq("fan_id", user.id).eq("post_id", postId).maybeSingle()
+        : Promise.resolve({ data: null }),
+
+      // Like check
+      user
+        ? service.from("likes").select("id").eq("user_id", user.id).eq("post_id", postId).maybeSingle()
+        : Promise.resolve({ data: null }),
+
+      // Poll with nested options (single query instead of 2)
+      isPoll
+        ? service.from("polls").select("id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)").eq("post_id", postId).single()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    // Determine access
     let canAccess = post.is_free && !post.is_ppv;
+    if (isOwnPost) canAccess = true;
+    else if (subResult.data && !post.is_ppv) canAccess = true;
+    else if (ppvResult.data && post.is_ppv) canAccess = true;
 
-    if (user && !canAccess) {
-      if (user.id === post.creator_id) {
-        canAccess = true;
-      } else {
-        const { data: sub } = await service
-          .from("subscriptions")
-          .select("id")
-          .eq("fan_id", user.id)
-          .eq("creator_id", post.creator_id)
-          .in("status", ["active", "ACTIVE"])
-          .maybeSingle();
+    const liked = !!likeResult.data;
 
-        if (sub && !post.is_ppv) canAccess = true;
-
-        if (!canAccess && post.is_ppv) {
-          const { data: ppvPurchase } = await service
-            .from("ppv_unlocks")
-            .select("id")
-            .eq("fan_id", user.id)
-            .eq("post_id", postId)
-            .maybeSingle();
-
-          if (ppvPurchase) canAccess = true;
-        }
-      }
-    }
-
-    let liked = false;
+    // ── Fire post_views WITHOUT awaiting — don't block response ──────────
     if (user) {
-      const { data: likeRow } = await service
-        .from("likes")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("post_id", postId)
-        .maybeSingle();
-      liked = !!likeRow;
+      Promise.resolve(
+        service
+          .from("post_views")
+          .upsert({ post_id: postId, user_id: user.id }, { onConflict: "post_id,user_id" })
+      )
+        .then(() => {})
+        .catch(() => {});
     }
 
-    if (user) {
-      await service
-        .from("post_views")
-        .upsert({ post_id: postId, user_id: user.id }, { onConflict: "post_id,user_id" });
-    }
-
+    // Process media
     const mediaItems = (post.media as Record<string, unknown>[] ?? [])
       .sort((a, b) => (a.display_order as number) - (b.display_order as number))
       .map((m: Record<string, unknown>) => {
         const rawUrl   = m.file_url as string | null;
         const path     = extractBunnyPath(rawUrl);
         const freshUrl = canAccess && path ? signBunnyUrl(path) : null;
-
         const { bunnyVideoId, derivedThumb } = resolveVideoMedia(m);
-
         let freshThumb: string | null = null;
         if (m.media_type === "video") {
-          const customThumb = m.thumbnail_url as string | null;
-          const customPath  = extractBunnyPath(customThumb);
+          const customPath = extractBunnyPath(m.thumbnail_url as string | null);
           freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
         } else {
-          const rawThumb  = m.thumbnail_url as string | null;
-          const thumbPath = extractBunnyPath(rawThumb);
+          const thumbPath = extractBunnyPath(m.thumbnail_url as string | null);
           freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;
         }
-
         return {
           ...m,
           file_url:          freshUrl,
@@ -173,7 +165,8 @@ export async function GET(
         };
       });
 
-  let pollData: {
+    // Build poll data
+    let pollData: {
       id: number;
       question: string;
       total_votes: number;
@@ -182,52 +175,49 @@ export async function GET(
       user_voted_option_id: number | null;
     } | null = null;
 
-    if (post.content_type === "poll") {
-      const { data: poll } = await service
-        .from("polls")
-        .select("id, question, total_votes, ends_at")
-        .eq("post_id", postId)
-        .single();
+    if (isPoll && pollResult.data) {
+      const poll = pollResult.data as {
+        id: number; question: string; total_votes: number; ends_at: string | null;
+        poll_options: { id: number; option_text: string; vote_count: number; display_order: number }[];
+      };
 
-      if (poll) {
-        const { data: options } = await service
-          .from("poll_options")
-          .select("id, option_text, vote_count, display_order")
+      // Single follow-up: user's vote (only if poll exists and user is logged in)
+      let userVotedOptionId: number | null = null;
+      if (user) {
+        const { data: vote } = await service
+          .from("poll_votes")
+          .select("poll_option_id")
           .eq("poll_id", poll.id)
-          .order("display_order");
-
-        let userVotedOptionId: number | null = null;
-        if (user) {
-          const { data: vote } = await service
-            .from("poll_votes")
-            .select("poll_option_id")
-            .eq("poll_id", poll.id)
-            .eq("user_id", user.id)
-            .maybeSingle();
-          userVotedOptionId = vote?.poll_option_id ?? null;
-        }
-
-        pollData = {
-          id:                   poll.id,
-          question:             poll.question,
-          total_votes:          poll.total_votes ?? 0,
-          ends_at:              poll.ends_at ?? null,
-          options:              options ?? [],
-          user_voted_option_id: userVotedOptionId,
-        };
+          .eq("user_id", user.id)
+          .maybeSingle();
+        userVotedOptionId = vote?.poll_option_id ?? null;
       }
+
+      pollData = {
+        id:                   poll.id,
+        question:             poll.question,
+        total_votes:          poll.total_votes ?? 0,
+        ends_at:              poll.ends_at ?? null,
+        options:              (poll.poll_options ?? []).sort((a, b) => a.display_order - b.display_order),
+        user_voted_option_id: userVotedOptionId,
+      };
     }
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       post: {
         ...post,
         media:      mediaItems,
         liked,
         can_access: canAccess,
         locked:     !canAccess,
-        poll_data: pollData,
+        poll_data:  pollData,
       },
     });
+
+    // ── Cache: short cache for single posts, user-specific ──────────────
+    res.headers.set("Cache-Control", "private, s-maxage=15, stale-while-revalidate=30");
+
+    return res;
 
   } catch (err) {
     console.error("[Single Post] Error:", err);
@@ -244,12 +234,10 @@ export async function PATCH(
     const postId  = Number(id);
     if (isNaN(postId)) return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { user } = await getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
-
     const service = createServiceSupabaseClient();
 
     const { data: post } = await service

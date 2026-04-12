@@ -142,8 +142,10 @@ export async function POST(
       return NextResponse.json({ error: "Failed to add comment" }, { status: 500 });
     }
 
-    await service.rpc("increment_comment_count", { post_id: postId });
-    // Notification handled by DB trigger: handle_post_comment_notification
+    // ✅ FIX: only increment for top-level comments, not replies
+    if (!parent_comment_id) {
+      await service.rpc("increment_comment_count", { post_id: postId });
+    }
 
     return NextResponse.json({ comment: { ...comment, viewer_has_liked: false } });
 

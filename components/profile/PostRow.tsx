@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { getRelativeTime } from "@/lib/utils/profile";
 import { MoreHorizontal } from "lucide-react";
+import dynamic from "next/dynamic";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
@@ -14,10 +15,11 @@ import type { LightboxPost } from "@/components/profile/Lightbox";
 import { PollDisplay } from "@/components/feed/PollDisplay";
 import type { PollData } from "@/components/feed/PollDisplay";
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
-import StoryViewer from "@/components/story/StoryViewer";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import { postSyncStore } from "@/lib/store/postSyncStore";
+
+const StoryViewer = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
 
 export interface ApiPost {
   id:              number;
@@ -35,6 +37,8 @@ export interface ApiPost {
   locked:          boolean;
   audience:        "subscribers" | "everyone";
   poll?:           PollData | null;
+  saved_post?:     boolean;
+  saved_creator?:  boolean;
   profiles: {
     id:           string;
     username:     string;
@@ -59,7 +63,6 @@ export interface ApiPost {
   }[];
 }
 
-// ── Edit Caption Modal ────────────────────────────────────────────────────────
 function EditCaptionModal({ caption, onSave, onClose }: {
   caption: string;
   onSave:  (newCaption: string) => Promise<void>;
@@ -102,7 +105,6 @@ function EditCaptionModal({ caption, onSave, onClose }: {
   );
 }
 
-// ── Edit PPV Modal ────────────────────────────────────────────────────────────
 function EditPPVModal({ currentPrice, onSave, onRemove, onClose }: {
   currentPrice: number | null;
   onSave:       (priceKobo: number) => Promise<void>;
@@ -172,7 +174,6 @@ function EditPPVModal({ currentPrice, onSave, onRemove, onClose }: {
   );
 }
 
-// ── Main PostRow ──────────────────────────────────────────────────────────────
 export default function PostRow({
   post, isOwnProfile, isSubscribed,
   onLike, onComment, onTip, onUnlock,
@@ -203,26 +204,19 @@ export default function PostRow({
   const [liked,            setLiked]            = React.useState(post.liked);
   const [likeCount,        setLikeCount]        = React.useState(post.like_count);
   const [comments,         setComments]         = React.useState<any[]>([]);
-  const [commentsLoading,  setCommentsLoading]  = React.useState(true);
+  const [commentsLoading,  setCommentsLoading]  = React.useState(false);
+  const [commentsFetched,  setCommentsFetched]  = React.useState(false);
   const [commentCount,     setCommentCount]     = React.useState(post.comment_count);
   const [pollData,         setPollData]         = React.useState<PollData | null>(post.poll ?? null);
   const [caption,          setCaption]          = React.useState<string | null>(post.caption);
   const [editOpen,         setEditOpen]         = React.useState(false);
-  const [savedPost,        setSavedPost]        = React.useState(false);
-  const [savedCreator,     setSavedCreator]     = React.useState(false);
+  const [savedPost,        setSavedPost]        = React.useState(post.saved_post ?? false);
+  const [savedCreator,     setSavedCreator]     = React.useState(post.saved_creator ?? false);
   const [ppvEditOpen,      setPpvEditOpen]      = React.useState(false);
   const [ppvPrice,         setPpvPrice]         = React.useState<number | null>(post.ppv_price);
   const [isPPV,            setIsPPV]            = React.useState(post.is_ppv);
 
   React.useEffect(() => { setPpvPrice(post.ppv_price); setIsPPV(post.is_ppv); }, [post.ppv_price, post.is_ppv]);
-
-  React.useEffect(() => {
-    if (isOwnProfile) return;
-    Promise.all([
-      fetch(`/api/saved/posts?post_id=${post.id}`).then((r) => r.json()).then((d) => setSavedPost(d.saved ?? false)).catch(() => {}),
-      fetch(`/api/saved/creators?creator_id=${post.profiles.id}`).then((r) => r.json()).then((d) => setSavedCreator(d.saved ?? false)).catch(() => {}),
-    ]);
-  }, [post.id, post.profiles.id, isOwnProfile]);
 
   React.useEffect(() => {
     const unsub = postSyncStore.subscribe((event) => {
@@ -255,13 +249,21 @@ export default function PostRow({
     setCaption(post.caption);
   }, [post.poll, post.caption]);
 
-  React.useEffect(() => {
-    fetch(`/api/posts/${post.id}/comments`)
-      .then((r) => r.json())
-      .then((d) => { if (d.comments) setComments(d.comments); })
-      .catch(() => {})
-      .finally(() => setCommentsLoading(false));
-  }, [post.id]);
+  const handleToggleComment = React.useCallback(() => {
+    setCommentOpen((prev) => {
+      const next = !prev;
+      if (next && !commentsFetched) {
+        setCommentsLoading(true);
+        setCommentsFetched(true);
+        fetch(`/api/posts/${post.id}/comments`)
+          .then((r) => r.json())
+          .then((d) => { if (d.comments) setComments(d.comments); })
+          .catch(() => {})
+          .finally(() => setCommentsLoading(false));
+      }
+      return next;
+    });
+  }, [commentsFetched, post.id]);
 
   const handleAddComment = React.useCallback(async (
     id: string, text: string, gif_url?: string,
@@ -282,6 +284,14 @@ export default function PostRow({
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
       if (d.comments) setComments(d.comments);
     }
+  }, [post.id, liked, likeCount]);
+
+  const handleDeleteComment = React.useCallback(() => {
+    setCommentCount((c) => {
+      const newCount = Math.max(0, c - 1);
+      postSyncStore.emit({ postId: String(post.id), liked, like_count: likeCount, comment_count: newCount });
+      return newCount;
+    });
   }, [post.id, liked, likeCount]);
 
   const handleLike = async () => {
@@ -400,14 +410,11 @@ export default function PostRow({
         <CreatorPostOptionsSheet isOpen={creatorSheetOpen} onClose={() => setCreatorSheetOpen(false)} onEdit={() => setEditOpen(true)} onDelete={handleDelete} onEditPPV={() => setPpvEditOpen(true)} />
       )}
 
-      {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <AvatarWithStoryRing src={post.profiles?.avatar_url ?? null} alt={post.profiles?.display_name || post.profiles?.username || ""} size={48} hasStory={!isOwnProfile && hasStory} hasUnviewed={!isOwnProfile && hasUnviewed} onClick={handleAvatarClick} />
           <div>
-            {/* ↓ name: bigger + whiter */}
             <div style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>{post.profiles?.display_name || post.profiles?.username}</div>
-            {/* ↓ username: bigger, same color */}
             <span style={{ fontSize: "13px", color: "#6B6B8A" }}>@{post.profiles?.username}</span>
           </div>
         </div>
@@ -424,7 +431,6 @@ export default function PostRow({
         </div>
       </div>
 
-      {/* Caption — bigger + whiter */}
       {caption && !isTextPost && (
         <p style={{ fontSize: "16px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
           {caption}
@@ -440,16 +446,37 @@ export default function PostRow({
       )}
 
       {viewerMedia.length > 0 && (
-        <PostMediaViewer media={viewerMedia} isLocked={post.locked} price={ppvPrice} isUnlockedPPV={post.is_ppv && !post.locked} onDoubleTap={handleDoubleTapLike} onSingleTap={handleSingleTap} onUnlock={() => onUnlock?.(String(post.id))} />
+        <PostMediaViewer
+          media={viewerMedia}
+          isLocked={post.locked}
+          price={ppvPrice}
+          isPPV={isPPV}
+          isFreeSubscription={post.is_free}
+          isUnlockedPPV={isPPV && !post.locked}
+          onDoubleTap={handleDoubleTapLike}
+          onSingleTap={handleSingleTap}
+          onUnlock={() => onUnlock?.(String(post.id))}
+        />
       )}
 
       {!post.locked && (
         <div style={{ padding: "0 16px" }}>
-          <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={isSubscribed} isFree={isFreePost} isOwnProfile={isOwnProfile} onLike={handleLike} onComment={() => setCommentOpen((p) => !p)} onTip={() => onTip?.(String(post.id))} onBookmark={handleSavePost} />
+          <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={isSubscribed} isFree={isFreePost} isOwnProfile={isOwnProfile} onLike={handleLike} onComment={handleToggleComment} onTip={() => onTip?.(String(post.id))} onBookmark={handleSavePost} />
         </div>
       )}
 
-      <CommentSection postId={String(post.id)} comments={comments} viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : { username: "", display_name: "", avatar_url: "" }} viewerUserId={viewer?.id} isOpen={commentOpen} onAddComment={handleAddComment} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} />
+      <CommentSection
+        postId={String(post.id)}
+        comments={comments}
+        viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : { username: "", display_name: "", avatar_url: "" }}
+        viewerUserId={viewer?.id}
+        isOpen={commentOpen}
+        onAddComment={handleAddComment}
+        onDeleteComment={handleDeleteComment}
+        isLoading={commentsLoading}
+        totalCommentCount={commentCount}
+        onClose={() => setCommentOpen(false)}
+      />
     </div>
   );
 }

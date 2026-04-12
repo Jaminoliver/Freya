@@ -34,6 +34,7 @@ interface CommentSectionProps {
   viewer?: { username: string; display_name: string; avatar_url?: string } | null;
   viewerUserId?: string;
   onAddComment?: (postId: string, text: string, gif_url?: string, parent_comment_id?: string | number, reply_to_username?: string | null, reply_to_id?: string | number | null) => Promise<void>;
+  onDeleteComment?: () => void; // ✅ FIX: notify parent on top-level delete
   isOpen?: boolean;
   onClose?: () => void;
   isLoading?: boolean;
@@ -41,7 +42,7 @@ interface CommentSectionProps {
 }
 
 
-export default function CommentSection({ postId, comments: propComments, viewer, viewerUserId, onAddComment, isOpen = false, onClose, isLoading = false, totalCommentCount }: CommentSectionProps) {
+export default function CommentSection({ postId, comments: propComments, viewer, viewerUserId, onAddComment, onDeleteComment, isOpen = false, onClose, isLoading = false, totalCommentCount }: CommentSectionProps) {
   const [text,          setText]          = React.useState("");
   const [selectedGif,   setSelectedGif]   = React.useState<GifItem | null>(null);
   const [gifPickerOpen, setGifPickerOpen] = React.useState(false);
@@ -52,7 +53,6 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   // Reply state
   const [replyingTo, setReplyingTo] = React.useState<ApiComment | null>(null);
-  // Track the actual parent comment id separately (always the top-level comment)
   const [replyParentId, setReplyParentId] = React.useState<string | number | null>(null);
 
   const inputRef     = React.useRef<HTMLInputElement>(null);
@@ -114,14 +114,16 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     dragDeltaY.current = 0;
   };
 
-  const handleDeleted   = (id: string | number) => setLocalComments((prev) => prev.filter((c) => c.id !== id));
+  // ✅ FIX: notify parent when a top-level comment is deleted
+  const handleDeleted = (id: string | number) => {
+    setLocalComments((prev) => prev.filter((c) => c.id !== id));
+    onDeleteComment?.();
+  };
+
   const handleGifSelect = (gif: GifItem) => { setSelectedGif(gif); setGifPickerOpen(false); setText(""); };
 
-  // comment passed here is either the top-level comment (direct reply)
-  // or a spread of top-level comment with reply_to_username/reply_to_id set (reply to a reply)
   const handleReply = (comment: ApiComment) => {
     setReplyingTo(comment);
-    // The actual parent_comment_id is always the top-level comment id
     setReplyParentId(comment.id);
     setText("");
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -142,9 +144,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     const isReply = replyingTo !== null;
 
     if (isReply && replyParentId !== null) {
-      // reply_to_username is the specific person being replied to
       const replyToUsername = replyingTo!.reply_to_username ?? replyingTo!.profiles?.username ?? null;
-      // reply_to_id is the specific reply being replied to (null if replying directly to top-level comment)
       const replyToId = replyingTo!.reply_to_id ?? null;
 
       const optimisticReply: ApiComment = {
@@ -179,7 +179,6 @@ export default function CommentSection({ postId, comments: propComments, viewer,
       }
 
     } else {
-      // Normal top-level comment
       const optimistic: ApiComment = {
         id:               `local-${Date.now()}`,
         content:          trimmed,
@@ -203,7 +202,6 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const handleKey = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
   const canSend   = text.trim().length > 0 || selectedGif !== null;
 
-  // Derive the display name for the reply placeholder
   const replyTargetName = replyingTo
     ? (replyingTo.reply_to_username || replyingTo.profiles?.username || "user")
     : null;
@@ -272,7 +270,6 @@ export default function CommentSection({ postId, comments: propComments, viewer,
             </div>
           )}
 
-          {/* Reply banner */}
           {replyingTo && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", padding: "6px 10px", backgroundColor: "#1C1C2E", borderRadius: "8px", borderLeft: "2px solid #8B5CF6" }}>
               <span style={{ fontSize: "12px", color: "#8B5CF6", fontFamily: "'Inter', sans-serif" }}>

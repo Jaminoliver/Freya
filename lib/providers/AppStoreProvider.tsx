@@ -24,7 +24,7 @@ async function fetchProfileById(userId: string, accessToken: string) {
 }
 
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
-  const { setViewer } = useAppStore();
+  const { setViewer, clearAll } = useAppStore();
   const fetchingRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -43,6 +43,13 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     const fetchAndSetViewer = async (userId: string, accessToken: string) => {
       if (fetchingRef.current === userId) return;
       fetchingRef.current = userId;
+
+      // ── Detect user switch: if a different user is logging in, clear all caches ──
+      const currentViewer = useAppStore.getState().viewer;
+      if (currentViewer && currentViewer.id !== userId) {
+        console.log("[AppStoreProvider] User switch detected, clearing all caches");
+        clearAll();
+      }
 
       // Defer to next event loop tick to break out of Supabase auth lock chain
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -72,7 +79,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         if (session?.user && session.access_token) {
           await fetchAndSetViewer(session.user.id, session.access_token);
         } else {
-          setViewer(null);
+          // ── FIXED: clear ALL caches on logout, not just viewer ──────────
+          // Previously only called setViewer(null) which left freya_feed_cache,
+          // freya_profiles_cache, freya_content_feeds_cache in sessionStorage.
+          // Next login on the same tab would show the old user's feed.
+          clearAll();
+
           if (event === "SIGNED_OUT") {
             window.location.href = "/login";
           }

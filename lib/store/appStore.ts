@@ -106,6 +106,7 @@ interface AppStore {
   setNavigating: (val: boolean) => void;
   settingsPanel: string | null;
   setSettingsPanel: (panel: string | null) => void;
+  clearAll: () => void;
 }
 
 const DEFAULT_STORY_UPLOAD: StoryUploadState = { phase: "idle", uploadPct: 0, compressPct: 0, error: null, storyId: null };
@@ -148,4 +149,30 @@ export const useAppStore = create<AppStore>((set) => ({
   setNavigating: (val) => set({ isNavigating: val }),
   settingsPanel: null,
   setSettingsPanel: (panel) => set({ settingsPanel: panel }),
+
+  // ── Clear ALL caches: call on logout or user switch ──────────────────────
+  clearAll: () => {
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.removeItem(FEED_KEY);
+        sessionStorage.removeItem(PROFILES_KEY);
+        sessionStorage.removeItem(CONTENT_FEEDS_KEY);
+        sessionStorage.removeItem(VIEWER_KEY);
+        sessionStorage.removeItem("sb_viewed_story_ids");
+        sessionStorage.removeItem("home_feed_scroll");
+        sessionStorage.removeItem("home_spotlight_scroll");
+        sessionStorage.removeItem("home_feed_slides");
+      } catch {}
+      // Notify module-level caches (ContentFeed, FeedSuggestions, PostCard viewer)
+      window.dispatchEvent(new Event("freya:clear-caches"));
+    }
+    set({
+      viewer: null,
+      viewerFetchedAt: null,
+      feed: null,
+      profiles: {},
+      contentFeeds: {},
+      storyUpload: DEFAULT_STORY_UPLOAD,
+    });
+  },
 }));

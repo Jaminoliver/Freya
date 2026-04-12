@@ -3,9 +3,9 @@
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { followCreator, unfollowCreator, checkIsFollowing } from "@/lib/utils/follow";
-import CheckoutModal from "@/components/checkout/CheckoutModal";
 import { ProfileSkeleton } from "@/components/loadscreen/ProfileSkeleton";
 import type { ProfileSkeletonContext } from "@/components/loadscreen/ProfileSkeleton";
 import type { User, Subscription } from "@/lib/types/profile";
@@ -15,12 +15,16 @@ import { useAppStore, isStale } from "@/lib/store/appStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 
-import OwnCreatorProfile from "@/components/profile/views/OwnCreatorProfile";
-import OwnFanProfile from "@/components/profile/views/OwnFanProfile";
-import CreatorViewingFan from "@/components/profile/views/CreatorViewingFan";
-import CreatorViewingDualRole from "@/components/profile/views/CreatorViewingDualRole";
-import SubscribedCreatorProfile from "@/components/profile/views/SubscribedCreatorProfile";
-import UnsubscribedCreatorProfile from "@/components/profile/views/UnsubscribedCreatorProfile";
+// ── Dynamic imports: only the active view loads ──────────────────────────────
+const CheckoutModal              = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
+const OwnCreatorProfile          = dynamic(() => import("@/components/profile/views/OwnCreatorProfile"), { ssr: false });
+const OwnFanProfile              = dynamic(() => import("@/components/profile/views/OwnFanProfile"), { ssr: false });
+const CreatorViewingFan          = dynamic(() => import("@/components/profile/views/CreatorViewingFan"), { ssr: false });
+const CreatorViewingDualRole     = dynamic(() => import("@/components/profile/views/CreatorViewingDualRole"), { ssr: false });
+const SubscribedCreatorProfile   = dynamic(() => import("@/components/profile/views/SubscribedCreatorProfile"), { ssr: false });
+const UnsubscribedCreatorProfile = dynamic(() => import("@/components/profile/views/UnsubscribedCreatorProfile"), { ssr: false });
+
+export function clearContentFeedCaches() {}
 
 function ProfilePageInner() {
   const params       = useParams();
@@ -66,6 +70,11 @@ function ProfilePageInner() {
 
   const profileIdRef = React.useRef<string | null>(null);
   const viewerIdRef  = React.useRef<string | null>(null);
+
+  // ── Stable refs so realtime callbacks always have fresh values ────────────
+  const profileRef      = React.useRef<User | null>(null);
+  const refreshPostsRef = React.useRef<((u: string) => Promise<void>) | null>(null);
+  const fetchSubRef     = React.useRef<((id: string) => Promise<void>) | null>(null);
 
   const skeletonContext = React.useMemo<ProfileSkeletonContext>(() => {
     if (!viewer || !profile) return "unsubscribedCreator";
@@ -157,6 +166,11 @@ function ProfilePageInner() {
     }
   }, [updateProfile]);
 
+  // ── Keep refs in sync so the realtime channel can call them safely ────────
+  React.useEffect(() => { profileRef.current      = profile; },               [profile]);
+  React.useEffect(() => { refreshPostsRef.current = refreshPosts; },           [refreshPosts]);
+  React.useEffect(() => { fetchSubRef.current     = fetchSubscriptionStatus; }, [fetchSubscriptionStatus]);
+
   const backgroundRevalidate = React.useCallback(async (creatorId: string, creatorUsername: string) => {
     try {
       const [subRes, postsRes] = await Promise.allSettled([
@@ -165,9 +179,9 @@ function ProfilePageInner() {
       ]);
       if (subRes.status === "fulfilled" && subRes.value.ok) {
         const data = await subRes.value.json();
-        const subscribedVal = !!data.active;
-        const periodEndVal  = data.currentPeriodEnd ?? null;
-        const pricePaidVal  = data.pricePaid ?? undefined;
+        const subscribedVal   = !!data.active;
+        const periodEndVal    = data.currentPeriodEnd ?? null;
+        const pricePaidVal    = data.pricePaid ?? undefined;
         const selectedTierVal = data.selectedTier ?? undefined;
         setIsSubscribed(subscribedVal);
         setSubscriptionPeriodEnd(periodEndVal);
@@ -176,8 +190,8 @@ function ProfilePageInner() {
         updateProfile(creatorUsername, {
           isSubscribed: subscribedVal,
           subscriptionPeriodEnd: periodEndVal,
-          pricePaid: pricePaidVal,       // FIX: persist to cache on revalidate
-          selectedTier: selectedTierVal, // FIX: persist to cache on revalidate
+          pricePaid: pricePaidVal,
+          selectedTier: selectedTierVal,
         });
       }
       if (postsRes.status === "fulfilled" && postsRes.value.ok) {
@@ -216,14 +230,14 @@ function ProfilePageInner() {
       if (cached.viewer)  { setViewer(cached.viewer);   viewerIdRef.current  = cached.viewer.id; }
       if (cached.profile) { setProfile(cached.profile); profileIdRef.current = cached.profile.id; }
       setApiPosts((cached.apiPosts ?? []).map((p) => {
-          const synced = postSyncStore.get(String(p.id));
-          if (!synced) return p;
-          return { ...p, liked: synced.liked, like_count: synced.like_count };
-        }));
+        const synced = postSyncStore.get(String(p.id));
+        if (!synced) return p;
+        return { ...p, liked: synced.liked, like_count: synced.like_count };
+      }));
       setIsSubscribed(cached.isSubscribed ?? false);
       setSubscriptionPeriodEnd(cached.subscriptionPeriodEnd ?? null);
-      setPricePaid(cached.pricePaid ?? undefined);       // FIX: restore from cache
-      setSelectedTier(cached.selectedTier ?? undefined); // FIX: restore from cache
+      setPricePaid(cached.pricePaid ?? undefined);
+      setSelectedTier(cached.selectedTier ?? undefined);
       setIsFollowing(cached.isFollowing ?? false);
       setTotalLikes(cached.totalLikes ?? 0);
       if (cached.fanSubscription) setFanSubscription(cached.fanSubscription);
@@ -254,15 +268,15 @@ function ProfilePageInner() {
           viewerIdRef.current = viewerData.id;
         }
 
-        let enriched: User | null           = null;
-        let likesCount                      = 0;
-        let followingVal                    = false;
-        let subscribedVal                   = false;
-        let periodEndVal: string | null     = null;
-        let pricePaidVal: number | undefined = undefined;
+        let enriched: User | null            = null;
+        let likesCount                       = 0;
+        let followingVal                     = false;
+        let subscribedVal                    = false;
+        let periodEndVal: string | null      = null;
+        let pricePaidVal: number | undefined  = undefined;
         let selectedTierVal: string | undefined = undefined;
-        let fetchedPosts: ApiPost[]         = [];
-        let fanSubData: Subscription | null = null;
+        let fetchedPosts: ApiPost[]          = [];
+        let fanSubData: Subscription | null  = null;
 
         if (profileRaw) {
           profileIdRef.current = profileRaw.id;
@@ -298,10 +312,10 @@ function ProfilePageInner() {
 
             if (subRes.status === "fulfilled" && subRes.value instanceof Response && subRes.value.ok) {
               const data = await subRes.value.json();
-              subscribedVal    = !!data.active;
-              periodEndVal     = data.currentPeriodEnd ?? null;
-              pricePaidVal     = data.pricePaid ?? undefined;
-              selectedTierVal  = data.selectedTier ?? undefined;
+              subscribedVal   = !!data.active;
+              periodEndVal    = data.currentPeriodEnd ?? null;
+              pricePaidVal    = data.pricePaid ?? undefined;
+              selectedTierVal = data.selectedTier ?? undefined;
               setIsSubscribed(subscribedVal);
               setSubscriptionPeriodEnd(periodEndVal);
               setPricePaid(pricePaidVal);
@@ -349,7 +363,6 @@ function ProfilePageInner() {
           }
         }
 
-        // FIX: pricePaid and selectedTier now saved to store
         setStoreProfile(username, {
           viewer: viewerData, profile: enriched, totalLikes: likesCount,
           tierId: undefined,
@@ -386,6 +399,7 @@ function ProfilePageInner() {
 
   const prevUploadPhases = React.useRef<Record<string, string>>({});
 
+  // ── Realtime channel: subscription + profile updates ─────────────────────
   React.useEffect(() => {
     if (!profileIdRef.current || !viewerIdRef.current) return;
     const supabase  = createClient();
@@ -397,16 +411,34 @@ function ProfilePageInner() {
       .on("postgres_changes", {
         event: "*", schema: "public", table: "subscriptions",
         filter: `fan_id=eq.${fanId}`,
-      }, (payload: any) => {
+      }, async (payload: any) => {
         const row = payload.new;
+
+        // ── Subscription activated ────────────────────────────────────────
         if (row?.creator_id === creatorId && row?.status === "active") {
           setIsSubscribed(true);
           setSubscriptionPeriodEnd(row.current_period_end ?? null);
           clearProfile(username);
+
+          // Refresh posts so previously locked content shows as unlocked
+          const currentProfile = profileRef.current;
+          if (currentProfile?.username) {
+            await fetchSubRef.current?.(creatorId);
+            await refreshPostsRef.current?.(currentProfile.username);
+          }
         }
+
+        // ── Subscription cancelled or expired ────────────────────────────
         if (row?.creator_id === creatorId && (row?.status === "cancelled" || row?.status === "expired")) {
           setIsSubscribed(false);
           clearProfile(username);
+
+          // Refresh posts so unlocked content goes back to locked
+          const currentProfile = profileRef.current;
+          if (currentProfile?.username) {
+            await fetchSubRef.current?.(creatorId);
+            await refreshPostsRef.current?.(currentProfile.username);
+          }
         }
       })
       .subscribe();
@@ -433,22 +465,27 @@ function ProfilePageInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username]);
 
+  // ── Called after checkout subscribe success ────────────────────────────────
   const handleSubscriptionSuccess = React.useCallback(async () => {
     setIsSubscribed(true);
     updateProfile(username, { isSubscribed: true });
     if (profile) {
       try { await fetchSubscriptionStatus(profile.id); } catch (e) { console.error(e); }
-      try { await refreshPosts(profile.username); } catch (e) { console.error(e); }
+      try { await refreshPosts(profile.username); }     catch (e) { console.error(e); }
     }
     clearProfile(username);
   }, [profile, fetchSubscriptionStatus, refreshPosts, username, clearProfile, updateProfile]);
 
+  // ── Called after user cancels subscription ────────────────────────────────
   const handleCancelled = React.useCallback(async () => {
     if (profile) {
-      await fetchSubscriptionStatus(profile.id);
-      await refreshPosts(profile.username);
+      setIsSubscribed(false);
+      updateProfile(username, { isSubscribed: false });
+      clearProfile(username);
+      try { await fetchSubscriptionStatus(profile.id); } catch (e) { console.error(e); }
+      try { await refreshPosts(profile.username); }     catch (e) { console.error(e); }
     }
-  }, [profile, fetchSubscriptionStatus, refreshPosts]);
+  }, [profile, fetchSubscriptionStatus, refreshPosts, username, clearProfile, updateProfile]);
 
   const handleFollow = async () => {
     if (!profile || followLoading) return;
@@ -477,30 +514,6 @@ function ProfilePageInner() {
   const handlePost     = (content: string, media: File[], isLocked: boolean, price?: number) => console.log("Post:", { content, media, isLocked, price });
   const handleSchedule = (content: string, media: File[], scheduledFor: Date) => console.log("Schedule:", { content, media, scheduledFor });
 
-  // Dedicated effect: fetch price_paid + selected_tier directly from DB.
-  // Runs whenever isSubscribed flips true or profile changes.
-  // This is immune to clearProfile() wiping cache state mid-render.
-  React.useEffect(() => {
-    if (!isSubscribed || !profile || !viewer || viewer.id === profile.id) return;
-    const supabase = createClient();
-    supabase
-      .from("subscriptions")
-      .select("price_paid, selected_tier, id, current_period_end")
-      .eq("fan_id", viewer.id)
-      .eq("creator_id", profile.id)
-      .eq("status", "active")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }: { data: { price_paid: number | null; selected_tier: string | null; id: number | null; current_period_end: string | null } | null }) => {
-        if (!data) return;
-        setPricePaid(data.price_paid ?? undefined);
-        setSelectedTier(data.selected_tier ?? undefined);
-        if (data.id)                  setSubscriptionId(data.id);
-        if (data.current_period_end)  setSubscriptionPeriodEnd(data.current_period_end);
-      });
-  }, [isSubscribed, profile?.id, viewer?.id]);
-
   React.useEffect(() => {
     const unsub = postSyncStore.subscribe((event) => {
       setApiPosts((prev) =>
@@ -524,8 +537,10 @@ function ProfilePageInner() {
         <div style={{ textAlign: "center" }}>
           <h1 style={{ fontSize: "28px", fontWeight: 700, color: "#F1F5F9", marginBottom: "12px" }}>Something went wrong</h1>
           <p style={{ fontSize: "16px", color: "#94A3B8", marginBottom: "24px" }}>Could not load this profile. Check your connection.</p>
-          <button onClick={() => { setFetchError(false); setApiLoading(true); setRevealed(false); }}
-            style={{ padding: "12px 24px", borderRadius: "10px", background: "#8B5CF6", color: "#fff", border: "none", cursor: "pointer", fontSize: "15px", fontWeight: 600 }}>
+          <button
+            onClick={() => { setFetchError(false); setApiLoading(true); setRevealed(false); }}
+            style={{ padding: "12px 24px", borderRadius: "10px", background: "#8B5CF6", color: "#fff", border: "none", cursor: "pointer", fontSize: "15px", fontWeight: 600 }}
+          >
             Try Again
           </button>
         </div>
