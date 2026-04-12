@@ -46,6 +46,10 @@ export function PollDisplay({
     });
   }, [postId]);
 
+  useEffect(() => {
+  setLocalPoll(poll);
+}, [poll]);
+
   const handleVote = async (optionId: number) => {
     if (hasVoted || voting || isPollEnd) return;
     setVoting(true);

@@ -12,17 +12,15 @@ const TAB_TYPES: Record<string, NotificationType[]> = {
   payments:      ["tip_sent", "ppv_purchased", "wallet_topup", "renewal_success", "subscription_charged"],
 };
 
-function parseRef(raw: string | null): { kind: string; id: number } | null {
+function parseRef(raw: string | null): { kind: string; id: number; question?: string } | null {
   if (!raw) return null;
-  // JSON format: {"kind":"post","id":137}
   if (raw.startsWith("{")) {
     try {
       const p = JSON.parse(raw);
-      if (p.kind && p.id) return { kind: p.kind, id: Number(p.id) };
+      if (p.kind && p.id) return { kind: p.kind, id: Number(p.id), question: p.question ?? undefined };
     } catch {}
     return null;
   }
-  // Plain number format (legacy tip IDs) — return as tip kind for lookup
   const n = Number(raw);
   if (!isNaN(n) && n > 0) return { kind: "tip", id: n };
   return null;
@@ -68,13 +66,12 @@ export async function GET(req: Request) {
   for (const row of rows) {
     const ref = parseRef(row.reference_id);
     if (!ref) continue;
-    if (ref.kind === "post")  postIds.push(ref.id);
+    if (ref.kind === "post" || ref.kind === "poll") postIds.push(ref.id);
     if (ref.kind === "story") storyIds.push(ref.id);
-    if (ref.kind === "tip")   tipIds.push(ref.id);   // legacy plain-number tips
+    if (ref.kind === "tip")   tipIds.push(ref.id);
   }
 
   // ── Resolve legacy tip IDs → post IDs ────────────────────────────────────
-  // Maps tip.id → post_id
   const tipPostMap: Record<number, number | null> = {};
 
   if (tipIds.length > 0) {
@@ -141,15 +138,18 @@ export async function GET(req: Request) {
       let thumbnail: string | null = null;
 
       if (ref.kind === "post") {
-        postId = ref.id;
+        postId    = ref.id;
         thumbnail = postThumbMap[postId] ?? null;
         referenceId = JSON.stringify({ kind: "post", id: postId, thumbnail });
+      } else if (ref.kind === "poll") {
+        postId    = ref.id;
+        thumbnail = postThumbMap[postId] ?? null;
+        referenceId = JSON.stringify({ kind: "poll", id: postId, question: ref.question ?? null, thumbnail });
       } else if (ref.kind === "story") {
         thumbnail = storyThumbMap[ref.id] ?? null;
         referenceId = JSON.stringify({ kind: "story", id: ref.id, thumbnail });
       } else if (ref.kind === "tip") {
-        // legacy plain-number tip — resolve to post
-        postId = tipPostMap[ref.id] ?? null;
+        postId    = tipPostMap[ref.id] ?? null;
         thumbnail = postId ? (postThumbMap[postId] ?? null) : null;
         referenceId = JSON.stringify({ kind: "post", id: postId, thumbnail });
       }

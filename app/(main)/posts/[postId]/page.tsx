@@ -209,6 +209,7 @@ export default function SinglePostPage() {
 
   const fetchComments = useCallback(async () => {
     if (!postId) return;
+    if (post?.content_type === "poll") { setCommentsLoading(false); return; }
     try {
       const res = await fetch(`/api/posts/${postId}/comments`);
       if (!res.ok) throw new Error("Failed");

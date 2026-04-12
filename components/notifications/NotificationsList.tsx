@@ -31,6 +31,7 @@ const TYPE_TO_FILTER: Record<NotificationItem["type"], NotificationFilterTab> = 
   tip_sent:               "activity",
   wallet_topup:           "activity",
   message:                "messages",
+  poll_vote:              "activity",
 };
 
 function getFilter(n: NotificationItem): NotificationFilterTab {
@@ -60,7 +61,6 @@ function groupByDate(items: NotificationItem[]): NotificationGroupType[] {
 }
 
 export function NotificationsList({ notifications, filter, loading = false, onSelect }: Props) {
-  // Show skeleton while loading
   if (loading) {
     return (
       <div style={{ flex: 1, overflowY: "auto" }}>

@@ -17,6 +17,7 @@ export type NotificationType =
   | "ppv_purchased"
   | "payout_completed"
   | "payout_failed"
+  | "poll_vote"
   // fan only
   | "renewal_failed"
   | "renewal_success"
@@ -69,4 +70,5 @@ export interface NotificationPreferences {
   tip_sent:               boolean;
   wallet_topup:           boolean;
   message:                boolean;
+  poll_vote:              boolean;
 }

@@ -105,19 +105,17 @@ export default function NotificationsPage() {
       router.push(`/${item.actorHandle}`);
     } else if (
       (item.type === "like" || item.type === "comment" || item.type === "comment_liked" ||
-       item.type === "ppv_unlocked" || item.type === "ppv_purchased" ||
-       item.type === "tip_received" || item.type === "tip_sent") &&
+ item.type === "ppv_unlocked" || item.type === "ppv_purchased" ||
+ item.type === "tip_received" || item.type === "tip_sent" || item.type === "poll_vote") &&
       item.referenceId
     ) {
       const parsed = parseReferenceId(item.referenceId as string);
 
       if (parsed?.kind === "story" && item.actorHandle) {
-        router.push(`/${item.actorHandle}?story=${parsed.id}`);
-      } else if (parsed?.kind === "post" && parsed?.id) {
-        router.push(`/posts/${parsed.id}`);
-      } else if (item.type !== "tip_received" && item.type !== "tip_sent") {
-        router.push(`/posts/${item.referenceId}`);
-      }
+  router.push(`/${item.actorHandle}?story=${parsed.id}`);
+} else if ((parsed?.kind === "post" || parsed?.kind === "poll") && parsed?.id) {
+  router.push(`/posts/${parsed.id}`);
+}
     }
   }, [router]);
 

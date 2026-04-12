@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart, MessageCircle, Banknote, UserPlus, Lock, RefreshCcw, Wallet, AlertCircle, CheckCircle, Send } from "lucide-react";
+import { Heart, MessageCircle, Banknote, UserPlus, Lock, RefreshCcw, Wallet, AlertCircle, CheckCircle, Send, BarChart2 } from "lucide-react";
 import type { NotificationItem as NotificationItemType } from "@/lib/types/notifications";
 
 interface Props {
@@ -33,6 +33,7 @@ function TypeIcon({ type }: { type: NotificationItemType["type"] }) {
     tip_sent:               { icon: Send,          bg: "#1A2A1A", color: "#10B981" },
     wallet_topup:           { icon: Wallet,        bg: "#1A2028", color: "#3B82F6" },
     message:                { icon: MessageCircle, bg: "#1A1A2E", color: "#8B5CF6" },
+    poll_vote:              { icon: BarChart2,      bg: "#1A1A2E", color: "#8B5CF6" },
   };
 
   const { icon: Icon, bg, color } = configs[type];
@@ -56,11 +57,13 @@ export function NotificationItem({ notification, onClick }: Props) {
   const parsed      = parseReferenceId(referenceId as string | undefined);
   const isStoryLike = type === "like" && parsed?.kind === "story";
   const isPostNotif = ["like","comment","ppv_unlocked","ppv_purchased","tip_received","tip_sent"].includes(type) && parsed?.kind === "post";
+  const isPollVote  = type === "poll_vote";
   const thumbnail   = (isStoryLike || isPostNotif) ? parsed?.thumbnail : null;
+  const pollQuestion = isPollVote ? parsed?.question : null;
 
   const thumbAspect = isStoryLike
-    ? { width: "56px", height: "72px" }   // portrait for stories
-    : { width: "56px", height: "56px" };  // square for posts
+    ? { width: "56px", height: "72px" }
+    : { width: "56px", height: "56px" };
 
   return (
     <div
@@ -118,7 +121,7 @@ export function NotificationItem({ notification, onClick }: Props) {
         </p>
       </div>
 
-      {/* Right — thumbnail + time OR timestamp+dot */}
+      {/* Right side */}
       {thumbnail ? (
         <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           <div style={{
@@ -127,6 +130,25 @@ export function NotificationItem({ notification, onClick }: Props) {
             overflow: "hidden", border: "1px solid #2A2A3D", flexShrink: 0,
           }}>
             <img src={thumbnail} alt="media" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </div>
+          <span style={{ fontSize: "12px", color: "#4A4A6A", whiteSpace: "nowrap" }}>{createdAt}</span>
+        </div>
+      ) : pollQuestion ? (
+        <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          <div style={{
+            width: "56px", height: "56px", borderRadius: "6px", flexShrink: 0,
+            backgroundColor: "#1A1A2E", border: "1px solid #2A2A3D",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "6px",
+          }}>
+            <span style={{
+              fontSize: "10px", color: "#C4B5FD", fontWeight: 600,
+              textAlign: "center", lineHeight: 1.3,
+              overflow: "hidden", display: "-webkit-box",
+              WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
+            }}>
+              {pollQuestion}
+            </span>
           </div>
           <span style={{ fontSize: "12px", color: "#4A4A6A", whiteSpace: "nowrap" }}>{createdAt}</span>
         </div>
