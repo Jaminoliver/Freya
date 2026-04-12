@@ -498,7 +498,7 @@ export default function PostRow({
       {isTextPost && <div style={{ margin: "0 16px 4px", height: "1px", backgroundColor: "#1A1A2E" }} />}
 
       {isPollPost && pollData && (
-        <PollDisplay poll={pollData} postId={String(post.id)} onVoted={(updated) => setPollData(updated)} />
+        <PollDisplay poll={pollData} postId={String(post.id)} isCreator={isOwnProfile} onVoted={(updated) => setPollData(updated)} />
       )}
 
       {viewerMedia.length > 0 && (

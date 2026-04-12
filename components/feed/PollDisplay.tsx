@@ -25,10 +25,12 @@ export function PollDisplay({
   poll,
   postId,
   onVoted,
+  isCreator,
 }: {
-  poll:    PollData;
-  postId:  string;
-  onVoted: (updated: PollData) => void;
+  poll:      PollData;
+  postId:    string;
+  onVoted:   (updated: PollData) => void;
+  isCreator?: boolean;
 }) {
   const [voting,    setVoting]    = useState(false);
   const [localPoll, setLocalPoll] = useState(poll);
@@ -36,7 +38,7 @@ export function PollDisplay({
 
   const hasVoted  = localPoll.user_voted_option_id !== null;
   const isPollEnd = localPoll.ends_at ? new Date(localPoll.ends_at) < new Date() : false;
-  const showBars  = hasVoted || isPollEnd;
+  const showBars  = hasVoted || isPollEnd || !!isCreator;
 
   useEffect(() => {
     return postSyncStore.subscribe((event) => {

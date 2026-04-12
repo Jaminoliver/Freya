@@ -484,10 +484,11 @@ export default function SinglePostPage() {
       {post.poll_data && (
         <div style={{ margin: "12px 16px 0", backgroundColor: "#13131F", borderRadius: "14px" }}>
           <PollDisplay
-            poll={post.poll_data}
-            postId={String(post.id)}
-            onVoted={(updated) => setPost((p) => p ? { ...p, poll_data: updated } : p)}
-          />
+  poll={post.poll_data}
+  postId={String(post.id)}
+  isCreator={isOwnPost}
+  onVoted={(updated) => setPost((p) => p ? { ...p, poll_data: updated } : p)}
+/>
         </div>
       )}
 
