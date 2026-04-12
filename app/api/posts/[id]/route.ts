@@ -55,6 +55,7 @@ export async function GET(
         creator_id,
         content_type,
         caption,
+        text_background,
         is_free,
         is_ppv,
         ppv_price,

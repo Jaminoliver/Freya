@@ -89,7 +89,22 @@ export async function GET(req: Request) {
   // ── Fresh signed thumbnails for posts ─────────────────────────────────────
   const postThumbMap: Record<number, string | null> = {};
 
+  const postContentMap: Record<number, { content_type: string; text_background: string | null; caption: string | null }> = {};
+
   if (postIds.length > 0) {
+    const { data: postRows } = await supabase
+      .from("posts")
+      .select("id, content_type, text_background, caption")
+      .in("id", [...new Set(postIds)]);
+
+    for (const p of postRows ?? []) {
+      postContentMap[p.id] = {
+        content_type:    p.content_type,
+        text_background: p.text_background ?? null,
+        caption:         p.caption ?? null,
+      };
+    }
+
     const { data: mediaRows } = await supabase
       .from("media")
       .select("post_id, media_type, file_url, thumbnail_url, bunny_video_id")
@@ -140,7 +155,8 @@ export async function GET(req: Request) {
       if (ref.kind === "post") {
         postId    = ref.id;
         thumbnail = postThumbMap[postId] ?? null;
-        referenceId = JSON.stringify({ kind: "post", id: postId, thumbnail });
+        const postMeta = postContentMap[postId] ?? null;
+        referenceId = JSON.stringify({ kind: "post", id: postId, thumbnail, content_type: postMeta?.content_type ?? null, text_background: postMeta?.text_background ?? null, caption: postMeta?.caption ?? null });
       } else if (ref.kind === "poll") {
         postId    = ref.id;
         thumbnail = postThumbMap[postId] ?? null;

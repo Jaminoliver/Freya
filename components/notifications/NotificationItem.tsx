@@ -51,15 +51,31 @@ function TypeIcon({ type }: { type: NotificationItemType["type"] }) {
   );
 }
 
+const BG_STYLES: Record<string, { background: string; color: string }> = {
+  dark:   { background: "#0D0D18",                                  color: "#E2E8F0" },
+  purple: { background: "linear-gradient(135deg,#1e1b4b,#4c1d95)", color: "#EDE9FE" },
+  blue:   { background: "linear-gradient(135deg,#0f172a,#1d4ed8)", color: "#BAE6FD" },
+  red:    { background: "linear-gradient(135deg,#1a0000,#7f1d1d)", color: "#FEE2E2" },
+  green:  { background: "linear-gradient(135deg,#052e16,#14532d)", color: "#D1FAE5" },
+  amber:  { background: "linear-gradient(135deg,#1c1000,#78350f)", color: "#FEF3C7" },
+};
+
 export function NotificationItem({ notification, onClick }: Props) {
   const { actorName, actorAvatar, bodyText, subText, createdAt, isUnread, type, referenceId } = notification;
 
-  const parsed      = parseReferenceId(referenceId as string | undefined);
-  const isStoryLike = type === "like" && parsed?.kind === "story";
-  const isPostNotif = ["like","comment","ppv_unlocked","ppv_purchased","tip_received","tip_sent"].includes(type) && parsed?.kind === "post";
-  const isPollVote  = type === "poll_vote";
-  const thumbnail   = (isStoryLike || isPostNotif) ? parsed?.thumbnail : null;
+  const parsed       = parseReferenceId(referenceId as string | undefined);
+  const isStoryLike  = type === "like" && parsed?.kind === "story";
+  const isPostNotif  = ["like","comment","ppv_unlocked","ppv_purchased","tip_received","tip_sent"].includes(type) && parsed?.kind === "post";
+  const isPollVote   = type === "poll_vote";
+  const thumbnail    = (isStoryLike || isPostNotif) ? parsed?.thumbnail : null;
   const pollQuestion = isPollVote ? parsed?.question : null;
+
+  const isTextPost  = isPostNotif && parsed?.content_type === "text" && !thumbnail;
+  const isPollLike  = isPostNotif && parsed?.content_type === "poll" && !thumbnail;
+
+  const textBg      = isTextPost ? (parsed?.text_background ?? "dark") : null;
+  const textTheme   = textBg ? (BG_STYLES[textBg] ?? BG_STYLES.dark) : null;
+  const textCaption = (isTextPost || isPollLike) ? (parsed?.caption ?? "") : null;
 
   const thumbAspect = isStoryLike
     ? { width: "56px", height: "72px" }
@@ -115,6 +131,12 @@ export function NotificationItem({ notification, onClick }: Props) {
             <><span style={{ fontWeight: 700 }}>{actorName}</span>{" "}</>
           )}
           <span style={{ color: actorName ? "#C4C4D4" : "#FFFFFF" }}>{bodyText}</span>
+          {(isTextPost || isPollLike) && textCaption && (
+            <span style={{ color: "#6B6B8A" }}>{" · "}{textCaption}</span>
+          )}
+          {isPollVote && pollQuestion && (
+            <span style={{ color: "#6B6B8A" }}>{" · "}{pollQuestion}</span>
+          )}
         </p>
         <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {subText}
@@ -133,6 +155,48 @@ export function NotificationItem({ notification, onClick }: Props) {
           </div>
           <span style={{ fontSize: "12px", color: "#4A4A6A", whiteSpace: "nowrap" }}>{createdAt}</span>
         </div>
+
+      ) : isTextPost ? (
+        <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          <div style={{
+            width: "56px", height: "56px", borderRadius: "6px", flexShrink: 0,
+            background: textTheme?.background ?? "#0D0D18",
+            border: "1px solid #2A2A3D",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "6px",
+          }}>
+            <span style={{
+              fontSize: "9px", fontWeight: 700, textAlign: "center", lineHeight: 1.3,
+              color: textTheme?.color ?? "#E2E8F0",
+              overflow: "hidden", display: "-webkit-box",
+              WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
+            }}>
+              {textCaption}
+            </span>
+          </div>
+          <span style={{ fontSize: "12px", color: "#4A4A6A", whiteSpace: "nowrap" }}>{createdAt}</span>
+        </div>
+
+      ) : isPollLike ? (
+        <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          <div style={{
+            width: "56px", height: "56px", borderRadius: "6px", flexShrink: 0,
+            backgroundColor: "#1A1A2E", border: "1px solid #2A2A3D",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "6px",
+          }}>
+            <span style={{
+              fontSize: "9px", fontWeight: 700, textAlign: "center", lineHeight: 1.3,
+              color: "#C4B5FD",
+              overflow: "hidden", display: "-webkit-box",
+              WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
+            }}>
+              {textCaption}
+            </span>
+          </div>
+          <span style={{ fontSize: "12px", color: "#4A4A6A", whiteSpace: "nowrap" }}>{createdAt}</span>
+        </div>
+
       ) : pollQuestion ? (
         <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           <div style={{
@@ -152,6 +216,7 @@ export function NotificationItem({ notification, onClick }: Props) {
           </div>
           <span style={{ fontSize: "12px", color: "#4A4A6A", whiteSpace: "nowrap" }}>{createdAt}</span>
         </div>
+
       ) : (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px", flexShrink: 0 }}>
           <span style={{ fontSize: "12px", color: "#4A4A6A", whiteSpace: "nowrap" }}>{createdAt}</span>
