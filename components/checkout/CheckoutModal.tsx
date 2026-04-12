@@ -27,6 +27,7 @@ interface CheckoutModalProps {
   onSubscriptionSuccess?: () => void;
   onViewContent?: () => void;
   onGoToSubscriptions?: () => void;
+  autoCloseOnSuccess?: boolean;
 }
 
 const TIER_LABEL: Record<SubscriptionTier, string> = {
@@ -40,6 +41,7 @@ export default function CheckoutModal({
   monthlyPrice = 2000, threeMonthPrice, sixMonthPrice, initialTier = "monthly",
   postPrice = 0, postTitle, postId,
   onSuccess, onSubscriptionSuccess, onViewContent, onGoToSubscriptions,
+  autoCloseOnSuccess = false,
 }: CheckoutModalProps) {
   const [screen, setScreen] = React.useState<CheckoutScreen>(
     type === "tips" ? "tip_input"
@@ -59,9 +61,17 @@ export default function CheckoutModal({
   const [mounted, setMounted] = React.useState(false);
 
   const successRef = React.useRef(false);
+  const autoCloseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Required for SSR — portal target only exists in browser
   React.useEffect(() => { setMounted(true); }, []);
+
+  // Cleanup auto-close timer on unmount
+  React.useEffect(() => {
+    return () => {
+      if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
+    };
+  }, []);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -127,6 +137,13 @@ export default function CheckoutModal({
     setScreen("success");
     onSuccess?.();
     if (type === "subscription") onSubscriptionSuccess?.();
+
+    // Auto-close after brief success flash if enabled
+    if (autoCloseOnSuccess) {
+      autoCloseTimerRef.current = setTimeout(() => {
+        handleClose();
+      }, 1200);
+    }
   };
 
   const handleNext = async () => {
@@ -389,7 +406,61 @@ export default function CheckoutModal({
           />
         )}
 
-        {screen === "success" && (
+        {screen === "success" && autoCloseOnSuccess && (
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "48px 24px",
+            gap: "16px",
+          }}>
+            <style>{`
+              @keyframes successCheck {
+                0%   { transform: scale(0); opacity: 0; }
+                50%  { transform: scale(1.2); opacity: 1; }
+                100% { transform: scale(1); opacity: 1; }
+              }
+              @keyframes successFade {
+                0%   { opacity: 0; transform: translateY(8px); }
+                100% { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
+            <div style={{
+              width: "64px",
+              height: "64px",
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #22C55E, #16A34A)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              animation: "successCheck 0.5s ease-out forwards",
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+            <span style={{
+              fontSize: "18px",
+              fontWeight: 700,
+              color: "#FFFFFF",
+              animation: "successFade 0.4s ease-out 0.3s forwards",
+              opacity: 0,
+            }}>
+              Subscribed!
+            </span>
+            <span style={{
+              fontSize: "13px",
+              color: "#6B6B8A",
+              animation: "successFade 0.4s ease-out 0.5s forwards",
+              opacity: 0,
+            }}>
+              @{creator.username}
+            </span>
+          </div>
+        )}
+
+        {screen === "success" && !autoCloseOnSuccess && (
           <SuccessScreen
             type={type}
             creator={creator}

@@ -75,7 +75,8 @@ export async function GET(req: NextRequest) {
           username,
           display_name,
           avatar_url,
-          is_verified
+          is_verified,
+          subscription_price
         ),
         media (
           id,

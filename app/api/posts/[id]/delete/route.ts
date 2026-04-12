@@ -26,6 +26,12 @@ export async function POST(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    // Delete media rows for this post
+    await service
+      .from("media")
+      .delete()
+      .eq("post_id", postId);
+
     await service
       .from("posts")
       .update({ is_deleted: true, deleted_at: new Date().toISOString() })

@@ -34,10 +34,11 @@ interface FeedPost {
   locked:        boolean;
   poll?:         PollData | null;
   profiles: {
-    username:     string;
-    display_name: string | null;
-    avatar_url:   string | null;
-    is_verified:  boolean;
+    username:           string;
+    display_name:       string | null;
+    avatar_url:         string | null;
+    is_verified:        boolean;
+    subscription_price?: number | null;
   };
   media: {
     id:                number;
@@ -135,6 +136,9 @@ export default function HomePage() {
   const [spotLoadingMore, setSpotLoadingMore] = useState(false);
   const [spotError,       setSpotError]       = useState<string | null>(null);
   const [spotFetched,     setSpotFetched]     = useState(false);
+
+  // ── Subscribed creators tracking (for syncing banner across cards) ────
+  const [subscribedCreatorIds, setSubscribedCreatorIds] = useState<Set<string>>(new Set());
 
   // ── Shared state ───────────────────────────────────────────────────────
   const [ppvOpen,    setPpvOpen]    = useState(false);
@@ -428,14 +432,18 @@ export default function HomePage() {
 
   // ── Handle subscription from Spotlight banner ───────────────────────
   const handleSubscribed = useCallback((creatorId: string) => {
-    // Remove all posts by this creator from Spotlight (they'll appear in Feed on refresh)
-    setSpotPosts((prev) => prev.filter((p) => p.creator_id !== creatorId));
+    setSubscribedCreatorIds((prev) => {
+      const next = new Set(prev);
+      next.add(creatorId);
+      return next;
+    });
   }, []);
 
   /** Build feed items: interleave <FeedSuggestions> after every N posts */
   function buildFeedItems(feedPosts: FeedPost[], isSpotlight = false) {
     const items: React.ReactNode[] = [];
     feedPosts.forEach((post, index) => {
+      const subPrice = post.profiles?.subscription_price ?? undefined;
       items.push(
         <PostCard
           key={post.id}
@@ -446,6 +454,8 @@ export default function HomePage() {
           onSlideChange={handleSlideChange}
           showSubscribeBanner={isSpotlight}
           onSubscribed={isSpotlight ? handleSubscribed : undefined}
+          subscriptionPrice={isSpotlight ? subPrice : undefined}
+          isSubscribedExternal={isSpotlight ? subscribedCreatorIds.has(post.creator_id) : false}
         />
       );
       if ((index + 1) % SUGGESTIONS_EVERY === 0 && index < feedPosts.length - 1) {

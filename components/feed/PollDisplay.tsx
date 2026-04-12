@@ -38,7 +38,6 @@ export function PollDisplay({
   const isPollEnd = localPoll.ends_at ? new Date(localPoll.ends_at) < new Date() : false;
   const showBars  = hasVoted || isPollEnd;
 
-  // Subscribe to sync from other instances (e.g. feed vs profile)
   useEffect(() => {
     return postSyncStore.subscribe((event) => {
       if (event.postId === postId && event.poll_data) {
@@ -90,7 +89,6 @@ export function PollDisplay({
       setLocalPoll(updated);
       onVoted(updated);
 
-      // Emit to sync all other instances
       postSyncStore.emit({
         postId,
         liked:      false,
@@ -110,6 +108,8 @@ export function PollDisplay({
 
   return (
     <div style={{ padding: "0 16px 14px" }}>
+
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <BarChart2 size={14} color="#8B5CF6" />
@@ -130,6 +130,7 @@ export function PollDisplay({
         </div>
       </div>
 
+      {/* Options */}
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         {localPoll.options.map((option) => {
           const isVoted  = localPoll.user_voted_option_id === option.id;
@@ -146,57 +147,105 @@ export function PollDisplay({
               style={{
                 position:        "relative",
                 width:           "100%",
-                padding:         "10px 14px",
+                height:          "44px",
                 borderRadius:    "10px",
-                border:          isVoted ? "1.5px solid #8B5CF6" : "1.5px solid #2A2A3D",
-                backgroundColor: "transparent",
+                border:          "none",
+                backgroundColor: "#1A1A2E",
                 cursor:          hasVoted || isPollEnd ? "default" : "pointer",
                 overflow:        "hidden",
                 textAlign:       "left",
                 fontFamily:      "'Inter', sans-serif",
-                transition:      "border-color 0.15s",
-              }}
-              onMouseEnter={(e) => {
-                if (!hasVoted && !isPollEnd) {
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "#8B5CF6";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isVoted) {
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "#2A2A3D";
-                }
+                padding:         0,
               }}
             >
+              {/* Full-width dim background fill (always shown, voted option only) */}
+              {isVoted && (
+                <div style={{
+                  position:        "absolute",
+                  inset:           0,
+                  background:      "linear-gradient(135deg, #8B5CF6, #EC4899)",
+                  opacity:         0.25,
+                  borderRadius:    "10px",
+                }} />
+              )}
+
+              {/* Proportional fill */}
               {showBars && (
                 <div style={{
                   position:        "absolute",
                   top: 0, left: 0,
                   height:          "100%",
                   width:           `${pct}%`,
-                  backgroundColor: isVoted
-                    ? "rgba(139,92,246,0.15)"
+                  background:      isVoted
+                    ? "linear-gradient(135deg, #8B5CF6, #EC4899)"
                     : isWinner
-                    ? "rgba(139,92,246,0.08)"
-                    : "rgba(255,255,255,0.03)",
+                    ? "rgba(139,92,246,0.2)"
+                    : "rgba(139,92,246,0.1)",
+                  borderRadius:    "10px",
                   transition:      "width 0.4s ease",
-                  borderRadius:    "8px",
                 }} />
               )}
-              <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+
+              {/* Hover fill for unvoted state */}
+              {!hasVoted && !isPollEnd && (
+                <div
+                  className="poll-hover-fill"
+                  style={{
+                    position:        "absolute",
+                    inset:           0,
+                    background:      "rgba(139,92,246,0.08)",
+                    borderRadius:    "10px",
+                    opacity:         0,
+                    transition:      "opacity 0.15s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}
+                />
+              )}
+
+              {/* Content row */}
+              <div style={{
+                position:       "relative",
+                display:        "flex",
+                alignItems:     "center",
+                justifyContent: "space-between",
+                height:         "100%",
+                padding:        "0 14px",
+                zIndex:         1,
+              }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   {isVoted && (
-                    <div style={{ width: "16px", height: "16px", borderRadius: "50%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                        <path d="M1 4L3 6L7 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <div style={{
+                      width:           "18px",
+                      height:          "18px",
+                      borderRadius:    "50%",
+                      backgroundColor: "#fff",
+                      display:         "flex",
+                      alignItems:      "center",
+                      justifyContent:  "center",
+                      flexShrink:      0,
+                    }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="3" strokeLinecap="round">
+                        <polyline points="20 6 9 17 4 12" />
                       </svg>
                     </div>
                   )}
-                  <span style={{ fontSize: "14px", color: isVoted ? "#FFFFFF" : "#C4C4D4", fontWeight: isVoted ? 600 : 400 }}>
+                  <span style={{
+                    fontSize:   "14px",
+                    fontWeight: isVoted ? 600 : 400,
+                    color:      isVoted ? "#fff" : showBars && !isVoted ? "#C4C4D4" : "#F1F5F9",
+                  }}>
                     {option.option_text}
                   </span>
                 </div>
+
                 {showBars && (
-                  <span style={{ fontSize: "13px", fontWeight: 600, color: isVoted ? "#8B5CF6" : "#6B6B8A", flexShrink: 0 }}>
+                  <span style={{
+                    fontSize:   "13px",
+                    fontWeight: 700,
+                    color:      isVoted ? "#fff" : "#6B6B8A",
+                    flexShrink: 0,
+                  }}>
                     {pct}%
                   </span>
                 )}

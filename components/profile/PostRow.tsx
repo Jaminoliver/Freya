@@ -468,7 +468,7 @@ export default function PostRow({
           />
           <div>
             <div style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>{post.profiles?.display_name || post.profiles?.username}</div>
-            <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{getRelativeTime(post.published_at)}</span>
+           <span style={{ fontSize: "12px", color: "#6B6B8A" }}>@{post.profiles?.username}</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Search, Grid3X3, List, ImageIcon, Film, Lock } from "lucide-react";
+import { Search, Grid3X3, List, ImageIcon, Film, Lock, Images } from "lucide-react";
 import type { Post } from "@/lib/types/profile";
 import PostRow from "@/components/profile/PostRow";
 import type { ApiPost } from "@/components/profile/PostRow";
@@ -31,15 +31,14 @@ export interface ContentFeedProps {
   extraTabContent?: React.ReactNode;
 }
 
-interface ApiMedia {
-  id: number;
-  media_type: string;
-  file_url: string | null;
-  thumbnail_url: string | null;
-  raw_video_url: string | null;
+interface PostMediaSummary {
   post_id: number;
-  processing_status: string | null;
+  thumbnail_url: string | null;
   bunny_video_id: string | null;
+  media_count: number;
+  has_image: boolean;
+  has_video: boolean;
+  locked: boolean;
 }
 
 function TabBar({ postCount, mediaCount, active, onChange, extraTab }: {
@@ -77,8 +76,8 @@ function TabBar({ postCount, mediaCount, active, onChange, extraTab }: {
   );
 }
 
-function MediaToolbar({ apiMediaCount, photoCount, videoCount, mediaFilter, setMediaFilter, showSearch, setShowSearch, isMediaGridView, setIsMediaGridView, searchQuery, setSearchQuery }: {
-  apiMediaCount: number; photoCount: number; videoCount: number;
+function MediaToolbar({ totalCount, photoCount, videoCount, mediaFilter, setMediaFilter, showSearch, setShowSearch, isMediaGridView, setIsMediaGridView, searchQuery, setSearchQuery }: {
+  totalCount: number; photoCount: number; videoCount: number;
   mediaFilter: "all" | "photo" | "video"; setMediaFilter: (f: "all" | "photo" | "video") => void;
   showSearch: boolean; setShowSearch: (v: boolean) => void;
   isMediaGridView: boolean; setIsMediaGridView: (v: boolean) => void;
@@ -87,7 +86,7 @@ function MediaToolbar({ apiMediaCount, photoCount, videoCount, mediaFilter, setM
   return (
     <div style={{ padding: "12px 16px 0" }}>
       <div style={{ display: "flex", gap: "6px", overflowX: "auto", scrollbarWidth: "none", marginBottom: "8px" }}>
-        {([{ key: "all", label: `All ${apiMediaCount}` }, { key: "photo", label: `Photo ${photoCount}` }, { key: "video", label: `Video ${videoCount}` }] as const).map((f) => (
+        {([{ key: "all", label: `All ${totalCount}` }, { key: "photo", label: `Photo ${photoCount}` }, { key: "video", label: `Video ${videoCount}` }] as const).map((f) => (
           <button
             key={f.key}
             onClick={() => setMediaFilter(f.key)}
@@ -166,16 +165,37 @@ function SubscribeDivider({ onSubscribe }: { onSubscribe?: () => void }) {
 }
 
 const feedLayoutCache = new Map<string, { activeTab: string; isPostsGridView: boolean; isMediaGridView: boolean }>();
-const feedPostsCache  = new Map<string, { posts: ApiPost[]; media: ApiMedia[] }>();
+const feedPostsCache  = new Map<string, { posts: ApiPost[]; media: PostMediaSummary[] }>();
 
-function buildMediaFromPosts(fetchedPosts: ApiPost[]): ApiMedia[] {
-  const allMedia: ApiMedia[] = [];
+function buildMediaFromPosts(fetchedPosts: ApiPost[]): PostMediaSummary[] {
+  const summaries: PostMediaSummary[] = [];
   for (const p of fetchedPosts) {
-    for (const m of p.media || []) {
-      if (!p.locked) allMedia.push({ ...m, post_id: p.id });
+    if (!p.media?.length) continue;
+    // Skip text-only and poll posts
+    if (p.content_type === "text" || p.content_type === "poll") continue;
+
+    const firstMedia = p.media[0];
+    const hasImage = p.media.some((m) => m.media_type !== "video");
+    const hasVideo = p.media.some((m) => m.media_type === "video");
+
+    let thumbnail: string | null = null;
+    if (firstMedia.media_type === "video" && firstMedia.bunny_video_id) {
+      thumbnail = getBunnyThumbnail(firstMedia.bunny_video_id);
+    } else {
+      thumbnail = firstMedia.thumbnail_url || firstMedia.file_url || null;
     }
+
+    summaries.push({
+      post_id: p.id,
+      thumbnail_url: thumbnail,
+      bunny_video_id: firstMedia.bunny_video_id || null,
+      media_count: p.media.length,
+      has_image: hasImage,
+      has_video: hasVideo,
+      locked: p.locked,
+    });
   }
-  return allMedia;
+  return summaries;
 }
 
 function mergeApiPosts(existing: ApiPost[], incoming: ApiPost[]): ApiPost[] {
@@ -214,7 +234,7 @@ export default function ContentFeed({
   const seedMedia   = cachedPosts?.media ?? (initialApiPosts ? buildMediaFromPosts(initialApiPosts) : []);
 
   const [apiPosts,        setApiPosts]        = React.useState<ApiPost[]>(seedPosts);
-  const [apiMedia,        setApiMedia]        = React.useState<ApiMedia[]>(seedMedia);
+  const [apiMedia,        setApiMedia]        = React.useState<PostMediaSummary[]>(seedMedia);
   const [loading,         setLoading]         = React.useState(!initialApiPosts && !cachedPosts);
   const [mediaFilter,     setMediaFilter]     = React.useState<"all" | "photo" | "video">("all");
   const [isPostsGridView, setIsPostsGridView] = React.useState(cached?.isPostsGridView ?? false);
@@ -275,12 +295,16 @@ export default function ContentFeed({
   }, [filteredPosts, isSubscribed, isOwnProfile]);
 
   const filteredMedia = React.useMemo(
-    () => apiMedia.filter((m) => mediaFilter === "all" ? true : mediaFilter === "photo" ? m.media_type !== "video" : m.media_type === "video"),
+    () => apiMedia.filter((m) => {
+      if (mediaFilter === "photo") return m.has_image;
+      if (mediaFilter === "video") return m.has_video;
+      return true;
+    }),
     [apiMedia, mediaFilter]
   );
 
-  const photoCount = React.useMemo(() => apiMedia.filter((m) => m.media_type !== "video").length, [apiMedia]);
-  const videoCount = React.useMemo(() => apiMedia.filter((m) => m.media_type === "video").length,  [apiMedia]);
+  const photoCount = React.useMemo(() => apiMedia.filter((m) => m.has_image).length, [apiMedia]);
+  const videoCount = React.useMemo(() => apiMedia.filter((m) => m.has_video).length, [apiMedia]);
 
   const fetchPosts = React.useCallback(async (force = false) => {
     if (!creatorUsername) return;
@@ -304,11 +328,12 @@ export default function ContentFeed({
 
   const handleDeletePost = (id: string) => {
     setApiPosts((prev) => {
-      const updated = prev.filter((p) => String(p.id) !== id);
-      feedPostsCache.set(cacheKey, { posts: updated, media: apiMedia.filter((m) => String(m.post_id) !== id) });
-      return updated;
+      const updatedPosts = prev.filter((p) => String(p.id) !== id);
+      const updatedMedia = buildMediaFromPosts(updatedPosts);
+      setApiMedia(updatedMedia);
+      feedPostsCache.set(cacheKey, { posts: updatedPosts, media: updatedMedia });
+      return updatedPosts;
     });
-    setApiMedia((prev) => prev.filter((m) => String(m.post_id) !== id));
   };
 
   const handlePPVUpdated = React.useCallback((id: string, priceKobo: number) => {
@@ -337,13 +362,66 @@ export default function ContentFeed({
     const thumb = m ? m.media_type === "video" && m.bunny_video_id ? getBunnyThumbnail(m.bunny_video_id) : (m.thumbnail_url || m.file_url || undefined) : undefined;
     return (
       <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
-        {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
+        {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: post.locked ? "blur(12px)" : "none" }} />}
         {post.locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}><Lock size={16} color="#fff" /></div>}
         {!post.locked && (post.media?.length ?? 0) > 1 && (
           <div style={{ position: "absolute", top: "5px", right: "5px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "4px", padding: "2px 6px", fontSize: "10px", fontWeight: 700, color: "#fff" }}>1/{post.media.length}</div>
         )}
         <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
           {m?.media_type === "video" ? <Film size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} /> : <ImageIcon size={13} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />}
+        </div>
+      </div>
+    );
+  };
+
+  const renderMediaGridItem = (item: PostMediaSummary) => {
+    const thumb = item.thumbnail_url || undefined;
+    return (
+      <div key={item.post_id} onClick={() => router.push(`/posts/${item.post_id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
+        {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: item.locked ? "blur(12px)" : "none" }} />}
+        {item.locked && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}>
+            <Lock size={16} color="#fff" />
+          </div>
+        )}
+        {item.media_count > 1 && (
+          <div style={{ position: "absolute", top: "5px", right: "5px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "4px", padding: "2px 6px", display: "flex", alignItems: "center", gap: "3px" }}>
+            <Images size={10} color="#fff" />
+            <span style={{ fontSize: "10px", fontWeight: 700, color: "#fff" }}>{item.media_count}</span>
+          </div>
+        )}
+        <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
+          {item.has_video
+            ? <Film size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
+            : <ImageIcon size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />
+          }
+        </div>
+      </div>
+    );
+  };
+
+  const renderMediaListItem = (item: PostMediaSummary) => {
+    const thumb = item.thumbnail_url || undefined;
+    return (
+      <div key={item.post_id} onClick={() => router.push(`/posts/${item.post_id}`)} style={{ borderBottom: "1px solid #1A1A2E", cursor: "pointer" }}>
+        <div style={{ position: "relative" }}>
+          {thumb && <img src={thumb} alt="" style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block", filter: item.locked ? "blur(12px)" : "none" }} />}
+          {item.locked && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.4)" }}>
+              <Lock size={24} color="#fff" />
+            </div>
+          )}
+          {item.has_video && !item.locked && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
+              <Film size={32} color="#fff" style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.8))" }} />
+            </div>
+          )}
+          {item.media_count > 1 && (
+            <div style={{ position: "absolute", top: "8px", right: "8px", backgroundColor: "rgba(0,0,0,0.6)", borderRadius: "6px", padding: "3px 8px", display: "flex", alignItems: "center", gap: "4px" }}>
+              <Images size={12} color="#fff" />
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#fff" }}>{item.media_count}</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -419,44 +497,18 @@ export default function ContentFeed({
       {/* Media tab */}
       {activeTab === "media" && (
         <>
-          <MediaToolbar apiMediaCount={apiMedia.length} photoCount={photoCount} videoCount={videoCount}
+          <MediaToolbar totalCount={apiMedia.length} photoCount={photoCount} videoCount={videoCount}
             mediaFilter={mediaFilter} setMediaFilter={setMediaFilter} showSearch={showSearch}
             setShowSearch={setShowSearch} isMediaGridView={isMediaGridView} setIsMediaGridView={setIsMediaGridView}
             searchQuery={searchQuery} setSearchQuery={setSearchQuery}
           />
           {isMediaGridView ? (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>
-              {filteredMedia.map((item) => {
-                const thumb = item.media_type === "video" && item.bunny_video_id ? getBunnyThumbnail(item.bunny_video_id) : (item.thumbnail_url || item.file_url || undefined);
-                const parentPost = postById.get(item.post_id);
-                return (
-                  <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
-                    {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
-                    <div style={{ position: "absolute", bottom: "6px", right: "6px" }}>
-                      {item.media_type === "video" ? <Film size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} /> : <ImageIcon size={14} color="#fff" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }} />}
-                    </div>
-                  </div>
-                );
-              })}
+              {filteredMedia.map(renderMediaGridItem)}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {filteredMedia.map((item) => {
-                const thumb = item.media_type === "video" && item.bunny_video_id ? getBunnyThumbnail(item.bunny_video_id) : (item.thumbnail_url || item.file_url || undefined);
-                const parentPost = postById.get(item.post_id);
-                return (
-                  <div key={item.id} onClick={() => parentPost ? router.push(`/posts/${parentPost.id}`) : undefined} style={{ borderBottom: "1px solid #1A1A2E", cursor: "pointer" }}>
-                    <div style={{ position: "relative" }}>
-                      {thumb && <img src={thumb} alt="" style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" }} />}
-                      {item.media_type === "video" && (
-                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
-                          <Film size={32} color="#fff" style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.8))" }} />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {filteredMedia.map(renderMediaListItem)}
             </div>
           )}
           {filteredMedia.length === 0 && <div style={{ textAlign: "center", padding: "40px 0", color: "#4A4A6A", fontSize: "14px" }}>No media yet</div>}
