@@ -68,16 +68,15 @@ export default function VideoPlayer({
   const [posterError,   setPosterError]   = React.useState(false);
   const [isBuffering,   setIsBuffering]   = React.useState(false);
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
+  const [isMuted,       setIsMuted]       = React.useState(false);
 
   const aspectRatio = fillParent ? null : (externalRatio ?? internalRatio);
   const isPortrait  = (() => {
     if (!aspectRatio) return false;
-    // Handle "9/16" format
     if (aspectRatio.includes("/")) {
       const parts = aspectRatio.split("/");
       return Number(parts[0]) < Number(parts[1]);
     }
-    // Handle decimal format like "0.5625"
     return parseFloat(aspectRatio) < 1;
   })();
 
@@ -195,6 +194,13 @@ export default function VideoPlayer({
     try { await video?.play(); } catch { }
   }, [initVideo]);
 
+  const handleToggleMute = React.useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !isMuted;
+    setIsMuted(!isMuted);
+  }, [isMuted]);
+
   const containerStyle: React.CSSProperties = fillParent ? {
     width:          "100%",
     height:         "100%",
@@ -244,7 +250,6 @@ export default function VideoPlayer({
 
       <div ref={containerRef} style={containerStyle}>
 
-        {/* Blurred thumbnail background — skipped when carousel handles blur bars */}
         {!hideInternalBlur && posterSrc && (
           <img
             src={posterSrc}
@@ -282,6 +287,7 @@ export default function VideoPlayer({
           controls={!showPoster}
           playsInline
           preload="none"
+          muted={isMuted}
           poster={posterSrc}
           onLoadedMetadata={handleLoadedMetadata}
           onPlay={() => setIsBuffering(false)}
@@ -300,6 +306,44 @@ export default function VideoPlayer({
             <div style={{ width: "44px", height: "44px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.2)", borderTop: "3px solid rgba(255,255,255,0.9)", animation: "spin 0.8s linear infinite" }} />
           </div>
         )}
+
+        {!showPoster && (
+          <button
+            onClick={handleToggleMute}
+            style={{
+              position:        "absolute",
+              top:             "12px",
+              right:           "12px",
+              zIndex:          10,
+              width:           "36px",
+              height:          "36px",
+              borderRadius:    "50%",
+              border:          "none",
+              backgroundColor: "rgba(0,0,0,0.55)",
+              backdropFilter:  "blur(4px)",
+              WebkitBackdropFilter: "blur(4px)",
+              display:         "flex",
+              alignItems:      "center",
+              justifyContent:  "center",
+              cursor:          "pointer",
+            }}
+          >
+            {isMuted ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <line x1="23" y1="9" x2="17" y2="15"/>
+                <line x1="17" y1="9" x2="23" y2="15"/>
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            )}
+          </button>
+        )}
+
       </div>
     </>
   );

@@ -39,6 +39,7 @@ export interface ApiPost {
   poll?:           PollData | null;
   saved_post?:     boolean;
   saved_creator?:  boolean;
+  tip_total?:      number; // kobo — only present on own profile
   profiles: {
     id:           string;
     username:     string;
@@ -461,7 +462,20 @@ export default function PostRow({
 
       {!post.locked && (
         <div style={{ padding: "0 16px" }}>
-          <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={isSubscribed} isFree={isFreePost} isOwnProfile={isOwnProfile} onLike={handleLike} onComment={handleToggleComment} onTip={() => onTip?.(String(post.id))} onBookmark={handleSavePost} />
+          <PostActions
+            likes={likeCount}
+            comments={commentCount}
+            tips={isOwnProfile ? post.tip_total : undefined}
+            liked={liked}
+            bookmarked={savedPost}
+            isSubscribed={isSubscribed}
+            isFree={isFreePost}
+            isOwnProfile={isOwnProfile}
+            onLike={handleLike}
+            onComment={handleToggleComment}
+            onTip={() => onTip?.(String(post.id))}
+            onBookmark={handleSavePost}
+          />
         </div>
       )}
 

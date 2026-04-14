@@ -19,7 +19,7 @@ interface Props {
   isFollowing:    boolean;
   onSubscribe:    (tier: SubscriptionTier) => void;
   onFollow:       () => void;
-  onTip:          () => void;
+  onTip:          (id: string) => void;
   onLike:         (id: string) => void;
   onComment:      (id: string) => void;
   onUnlock:       (id: string) => void;
@@ -69,7 +69,7 @@ export default function UnsubscribedCreatorProfile({
           <ProfileActions
             viewContext="fanViewingCreator"
             isSubscribed={false}
-            onTip={onTip}
+            onTip={() => onTip("")}
             onFollow={onFollow}
             isFollowing={isFollowing}
           />
@@ -90,7 +90,7 @@ export default function UnsubscribedCreatorProfile({
       <ContentFeed
         posts={[]} isSubscribed={false} creatorUsername={profile.username}
         initialApiPosts={apiPosts} refreshKey={feedRefreshKey}
-        onLike={onLike} onComment={onComment} onTip={() => onTip()} onUnlock={onUnlock}
+        onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
       />
     </div>
   );

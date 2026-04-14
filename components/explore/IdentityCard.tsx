@@ -2,16 +2,16 @@
 
 import { useRouter } from "next/navigation";
 
-export interface StripCreator {
+export interface IdentityCardData {
+  type:             "identity";
   creator_id:       string;
   username:         string;
   display_name:     string | null;
   avatar_url:       string | null;
   banner_url:       string | null;
   subscriber_count: number;
-  is_featured:      boolean;
-  is_new?:          boolean;
-  likes_count?:     number;
+  likes_count:      number;
+  categories:       string[];
 }
 
 function formatCount(n: number): string {
@@ -20,53 +20,40 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-export function CreatorCard({
-  username,
-  display_name,
-  avatar_url,
-  banner_url,
-  subscriber_count,
-  likes_count = 0,
-  is_new,
-}: StripCreator) {
-  const router = useRouter();
-  const name     = display_name || username;
+export function IdentityCard({ data }: { data: IdentityCardData }) {
+  const router   = useRouter();
+  const name     = data.display_name || data.username;
   const initials = (name[0] ?? "?").toUpperCase();
 
   return (
     <>
       <style>{`
-        .strip-creator-card {
-          flex-shrink: 0;
-          width: 200px;
-          height: 270px;
-          border-radius: 14px;
+        .identity-card {
+          position: relative;
+          width: 100%;
+          height: 280px;
+          border-radius: 12px;
           overflow: hidden;
           cursor: pointer;
-          position: relative;
-          scroll-snap-align: start;
+          background-color: #1A1A2E;
           border: 1px solid #2A2A3D;
           transition: border-color 0.15s ease, transform 0.15s ease;
-          background-color: #1A1A2E;
         }
-        .strip-creator-card:hover {
+        .identity-card:hover {
           border-color: #8B5CF6;
           transform: translateY(-2px);
-        }
-        @media (max-width: 480px) {
-          .strip-creator-card { width: 170px; height: 240px; }
         }
       `}</style>
 
       <div
-        className="strip-creator-card"
-        onClick={() => router.push(`/${username}`)}
+        className="identity-card"
+        onClick={() => router.push(`/${data.username}`)}
       >
         {/* Banner */}
-        {banner_url ? (
+        {data.banner_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={banner_url}
+            src={data.banner_url}
             alt=""
             loading="lazy"
             style={{
@@ -88,19 +75,6 @@ export function CreatorCard({
           background: "linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,0.92) 100%)",
         }} />
 
-        {/* New badge */}
-        {is_new && (
-          <div style={{
-            position: "absolute", top: "10px", left: "10px",
-            background: "#8B5CF6", color: "#fff",
-            fontSize: "9px", fontWeight: 700, letterSpacing: "0.4px",
-            padding: "3px 7px", borderRadius: "4px", zIndex: 2,
-            fontFamily: "'Inter', sans-serif",
-          }}>
-            New
-          </div>
-        )}
-
         {/* Avatar */}
         <div style={{
           position: "absolute", top: "50%", left: "50%",
@@ -114,10 +88,10 @@ export function CreatorCard({
               width: "100%", height: "100%", borderRadius: "50%",
               overflow: "hidden", border: "2px solid #0A0A0F",
             }}>
-              {avatar_url ? (
+              {data.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={avatar_url}
+                  src={data.avatar_url}
                   alt={name}
                   loading="lazy"
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
@@ -154,16 +128,16 @@ export function CreatorCard({
             fontSize: "12px", color: "rgba(255,255,255,0.5)",
             fontFamily: "'Inter', sans-serif",
           }}>
-            @{username}
+            @{data.username}
           </span>
         </div>
 
-        {/* Stats row — subscribers (crown) + likes (heart) */}
+        {/* Stats row */}
         <div style={{
           position: "absolute", bottom: "12px", left: 0, right: 0, zIndex: 2,
           display: "flex", justifyContent: "center", gap: "14px",
         }}>
-          {/* Subscribers — crown icon matching ProfileBanner */}
+          {/* Subscribers — crown */}
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 18h20"/>
@@ -176,11 +150,11 @@ export function CreatorCard({
               fontSize: "12px", color: "#F5C842",
               fontWeight: 700, fontFamily: "'Inter', sans-serif",
             }}>
-              {formatCount(subscriber_count)}
+              {formatCount(data.subscriber_count)}
             </span>
           </div>
 
-          {/* Likes — heart icon matching ProfileBanner */}
+          {/* Likes — heart */}
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
@@ -189,7 +163,7 @@ export function CreatorCard({
               fontSize: "12px", color: "rgba(255,255,255,0.85)",
               fontWeight: 700, fontFamily: "'Inter', sans-serif",
             }}>
-              {formatCount(likes_count)}
+              {formatCount(data.likes_count)}
             </span>
           </div>
         </div>

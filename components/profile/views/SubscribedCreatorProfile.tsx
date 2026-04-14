@@ -22,7 +22,7 @@ interface Props {
   selectedTier?:         string;
   onCancelled:           () => void;
   onFollow:              () => void;
-  onTip:                 () => void;
+  onTip:                 (id: string) => void;
   onMessage:             () => void;
   onLike:                (id: string) => void;
   onComment:             (id: string) => void;
@@ -83,7 +83,7 @@ export default function SubscribedCreatorProfile({
             viewContext="fanViewingCreator"
             isSubscribed={true}
             onMessage={onMessage}
-            onTip={onTip}
+            onTip={() => onTip("")}
             onFollow={onFollow}
             isFollowing={isFollowing}
           />
@@ -114,7 +114,7 @@ export default function SubscribedCreatorProfile({
       <ContentFeed
         posts={[]} isSubscribed={true} creatorUsername={profile.username}
         initialApiPosts={apiPosts} refreshKey={feedRefreshKey}
-        onLike={onLike} onComment={onComment} onTip={() => onTip()} onUnlock={onUnlock}
+        onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
       />
     </div>
   );

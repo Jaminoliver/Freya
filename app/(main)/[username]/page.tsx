@@ -414,13 +414,10 @@ function ProfilePageInner() {
       }, async (payload: any) => {
         const row = payload.new;
 
-        // ── Subscription activated ────────────────────────────────────────
         if (row?.creator_id === creatorId && row?.status === "active") {
           setIsSubscribed(true);
           setSubscriptionPeriodEnd(row.current_period_end ?? null);
           clearProfile(username);
-
-          // Refresh posts so previously locked content shows as unlocked
           const currentProfile = profileRef.current;
           if (currentProfile?.username) {
             await fetchSubRef.current?.(creatorId);
@@ -428,12 +425,9 @@ function ProfilePageInner() {
           }
         }
 
-        // ── Subscription cancelled or expired ────────────────────────────
         if (row?.creator_id === creatorId && (row?.status === "cancelled" || row?.status === "expired")) {
           setIsSubscribed(false);
           clearProfile(username);
-
-          // Refresh posts so unlocked content goes back to locked
           const currentProfile = profileRef.current;
           if (currentProfile?.username) {
             await fetchSubRef.current?.(creatorId);
@@ -465,7 +459,6 @@ function ProfilePageInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username]);
 
-  // ── Called after checkout subscribe success ────────────────────────────────
   const handleSubscriptionSuccess = React.useCallback(async () => {
     setIsSubscribed(true);
     updateProfile(username, { isSubscribed: true });
@@ -476,7 +469,6 @@ function ProfilePageInner() {
     clearProfile(username);
   }, [profile, fetchSubscriptionStatus, refreshPosts, username, clearProfile, updateProfile]);
 
-  // ── Called after user cancels subscription ────────────────────────────────
   const handleCancelled = React.useCallback(async () => {
     if (profile) {
       setIsSubscribed(false);
@@ -529,7 +521,13 @@ function ProfilePageInner() {
 
   const handleLike    = (_postId: string) => {};
   const handleComment = (id: string) => console.log("Comment:", id);
-  const handleTip     = (_id: string) => openTip();
+
+  // ── FIX: capture post ID so tips are linked to the correct post ──────────
+  const handleTip = (id: string) => {
+    const post = apiPosts.find((p) => String(p.id) === id);
+    setLockedPostId(post?.id);
+    openTip();
+  };
 
   if (!apiLoading && fetchError) {
     return (
@@ -626,7 +624,7 @@ function ProfilePageInner() {
               selectedTier={selectedTier}
               onSubscribe={(tier) => openCheckout("subscription", tier)}
               onCancelled={handleCancelled} onFollow={handleFollow}
-              onTip={openTip} onMessage={handleMessage}
+              onTip={handleTip} onMessage={handleMessage}
               onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
             />
           )}
@@ -637,7 +635,7 @@ function ProfilePageInner() {
               totalLikes={totalLikes} isFollowing={isFollowing}
               subscriptionPeriodEnd={subscriptionPeriodEnd} subscriptionId={subscriptionId}
               onCancelled={handleCancelled} onFollow={handleFollow}
-              onTip={openTip} onMessage={handleMessage}
+              onTip={handleTip} onMessage={handleMessage}
               onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
               pricePaid={pricePaid}
               selectedTier={selectedTier}

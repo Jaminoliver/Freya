@@ -6,7 +6,7 @@ import { Heart, MessageCircle, Bookmark } from "lucide-react";
 interface PostActionsProps {
   likes: number;
   comments: number;
-  tips?: number;
+  tips?: number; // kobo
   liked?: boolean;
   bookmarked?: boolean;
   isSubscribed: boolean;
@@ -41,6 +41,8 @@ export default function PostActions({
     setBookmarked(!bookmarked);
     onBookmark?.();
   };
+
+  const tipsNaira = tips / 100;
 
   return (
     <div style={{ padding: "4px 0 4px", fontFamily: "'Inter', sans-serif" }}>
@@ -143,11 +145,11 @@ export default function PostActions({
         <span style={{ fontSize: "13px", fontWeight: 600, color: "#C4C4D4" }}>
           {comments.toLocaleString()} comments
         </span>
-        {tips > 0 && (
+        {tipsNaira > 0 && (
           <>
             <span style={{ fontSize: "13px", color: "#4A4A6A" }}>·</span>
             <span style={{ fontSize: "13px", fontWeight: 600, color: "#8B5CF6" }}>
-              ${tips.toFixed(2)} tips
+              ₦{tipsNaira.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tips
             </span>
           </>
         )}

@@ -78,7 +78,9 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
 
   const inputRef    = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
-  const isDashboard = pathname === "/dashboard";
+
+  // ✅ Show mobile header on both dashboard and explore
+  const showMobileHeader = pathname === "/dashboard" || pathname === "/explore";
 
   const fetchExplore = useCallback(async () => {
     if (exploreData.length > 0) return;
@@ -148,7 +150,7 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
       `}</style>
 
       {/* MOBILE TOP BAR */}
-      {isDashboard && (
+      {showMobileHeader && (
         <div
           className="md:hidden"
           style={{
@@ -207,7 +209,7 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
       )}
 
       {/* MOBILE SEARCH OVERLAY */}
-      {isDashboard && searchOpen && (
+      {showMobileHeader && searchOpen && (
         <div className="md:hidden" style={{ position: "fixed", top: "56px", left: 0, right: 0, bottom: "64px", backgroundColor: "#0A0A0F", zIndex: 99, overflowY: "auto", animation: "fadeIn 0.2s ease", fontFamily: "'Inter', sans-serif" }}>
           {!query.trim() && (
             <div style={{ padding: "20px 16px 80px" }}>

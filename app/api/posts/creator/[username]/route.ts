@@ -38,7 +38,6 @@ export async function GET(
   try {
     const { username } = await params;
 
-    // ── FIX: use getUser() directly instead of createServerSupabaseClient + getUser ──
     const { user } = await getUser();
     const service = createServiceSupabaseClient();
 
@@ -136,11 +135,18 @@ export async function GET(
       ? service.from("saved_creators").select("creator_id").eq("user_id", user.id).eq("creator_id", creator.id)
       : Promise.resolve({ data: [] });
 
+    // ── Tip totals — only fetched for own profile ─────────────────────────
+    const tipTotalsPromise = isOwnProfile && postIds.length > 0
+      ? service
+          .from("tips")
+          .select("post_id, amount")
+          .in("post_id", postIds)
+      : Promise.resolve({ data: [] });
+
     const pollPostIds = (posts ?? [])
       .filter((p: Record<string, unknown>) => p.content_type === "poll")
       .map((p: Record<string, unknown>) => Number(p.id));
 
-    // ── Nested select: polls + options in one query ──────────────────────
     const pollsPromise = pollPostIds.length > 0
       ? service.from("polls")
           .select("id, post_id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)")
@@ -161,12 +167,14 @@ export async function GET(
       { data: pollsRaw },
       { data: savedPostsRaw },
       { data: savedCreatorRaw },
+      { data: tipRowsRaw },
     ] = await Promise.all([
       likesPromise,
       ppvUnlocksPromise,
       pollsPromise,
       savedPostsPromise,
       savedCreatorPromise,
+      tipTotalsPromise,
     ]);
 
     const likedSet    = new Set((likes ?? []).map((l: { post_id: number }) => l.post_id));
@@ -174,7 +182,13 @@ export async function GET(
     const savedPostSet = new Set((savedPostsRaw ?? []).map((s: { post_id: number | string }) => Number(s.post_id)));
     const isSavedCreator = (savedCreatorRaw ?? []).length > 0;
 
-    // ── Single follow-up: poll votes only ───────────────────────────────
+    // ── Build tip total map (kobo) per post_id ────────────────────────────
+    const tipTotalMap = new Map<number, number>();
+    for (const row of (tipRowsRaw ?? []) as { post_id: number; amount: number }[]) {
+      if (row.post_id == null) continue;
+      tipTotalMap.set(row.post_id, (tipTotalMap.get(row.post_id) ?? 0) + row.amount);
+    }
+
     const pollIds = (pollsRaw ?? []).map((p: { id: number }) => p.id);
 
     const { data: userVotesRaw } = pollIds.length > 0 && user
@@ -241,6 +255,7 @@ export async function GET(
         poll: pollByPostId.get(postId) ?? null,
         saved_post: savedPostSet.has(postId),
         saved_creator: isSavedCreator,
+        ...(isOwnProfile && { tip_total: tipTotalMap.get(postId) ?? 0 }),
       };
     });
 

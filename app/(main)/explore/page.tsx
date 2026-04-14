@@ -1,112 +1,207 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search } from "lucide-react";
-import { FilterTabs } from "@/components/explore/FilterTabs";
-import { CreatorGrid } from "@/components/explore/CreatorGrid";
-import { createClient } from "@/lib/supabase/client";
+import { CreatorGrid, type GridItem } from "@/components/explore/CreatorGrid";
+import { FeaturedStrip } from "@/components/explore/FeaturedStrip";
+import type { StripCreator } from "@/components/explore/CreatorCard";
+import { ExploreSkeleton } from "@/components/loadscreen/ExploreSkeleton";
 
-interface Creator {
-  username: string;
-  name: string;
-  avatar: string;
-  coverImage: string;
-  subscribers: string;
-  trending?: boolean;
-}
 
-interface ProfileRow {
-  username: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  banner_url: string | null;
-  subscriber_count: number | null;
-  is_verified: boolean | null;
-}
+type SortOption = "most_liked" | "newest" | "most_subscribed";
 
-function formatCount(n: number): string {
-  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "K";
-  return String(n);
-}
+const SORT_LABELS: Record<SortOption, string> = {
+  most_liked:       "Most Liked",
+  newest:           "Newest",
+  most_subscribed:  "Most Subscribed",
+};
 
-const FALLBACK_COVER = "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80";
+const SORT_TO_FILTER: Record<SortOption, string> = {
+  most_liked:      "toprated",
+  newest:          "new",
+  most_subscribed: "most_subscribed",
+};
 
 export default function ExplorePage() {
-  const [activeFilter, setActiveFilter] = useState("all");
-  const [search,       setSearch]       = useState("");
-  const [creators,     setCreators]     = useState<Creator[]>([]);
-  const [loading,      setLoading]      = useState(true);
+  const [stripCreators, setStripCreators] = useState<StripCreator[]>([]);
+  const [gridItems, setGridItems]         = useState<GridItem[]>([]);
+  const [cursor, setCursor]               = useState<string | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [loadingMore, setLoadingMore]     = useState(false);
+  const [hasMore, setHasMore]             = useState(true);
+  const [sort, setSort]                   = useState<SortOption>("most_liked");
+  const [dropdownOpen, setDropdownOpen]   = useState(false);
 
-  const fetchCreators = useCallback(async () => {
-    setLoading(true);
-    const supabase = createClient();
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("username, display_name, avatar_url, banner_url, subscriber_count, is_verified")
-      .eq("role", "creator")
-      .eq("is_active", true)
-      .eq("is_suspended", false)
-      .order("subscriber_count", { ascending: false })
-      .limit(50);
+    const run = async () => {
+      setLoading(true);
+      setGridItems([]);
+      setCursor(null);
+      setHasMore(true);
+      setDropdownOpen(false);
 
-    if (!error && data) {
-      const mapped: Creator[] = (data as ProfileRow[]).map((p, i) => ({
-        username:    p.username,
-        name:        p.display_name || p.username,
-        avatar:      p.avatar_url || `https://i.pravatar.cc/150?img=${i + 1}`,
-        coverImage:  p.banner_url  || FALLBACK_COVER,
-        subscribers: formatCount(p.subscriber_count ?? 0),
-        trending:    (p.subscriber_count ?? 0) > 10000,
-      }));
-      setCreators(mapped);
+      try {
+        const filter = SORT_TO_FILTER[sort];
+        const res    = await fetch(`/api/discover?filter=${filter}`);
+        const data   = await res.json();
+        if (cancelled) return;
+
+        setStripCreators(data.strip  ?? []);
+        setGridItems(data.grid       ?? []);
+        setCursor(data.nextCursor    ?? null);
+        setHasMore(!!data.nextCursor);
+      } catch (err) {
+        console.error("[ExplorePage] fetch error:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    run();
+    return () => { cancelled = true; };
+  }, [sort]);
+
+  // ── Load more ──────────────────────────────────────────────────────────────
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !cursor) return;
+    setLoadingMore(true);
+
+    try {
+      const filter = SORT_TO_FILTER[sort];
+      const res    = await fetch(`/api/discover?filter=${filter}&cursor=${cursor}`);
+      const data   = await res.json();
+
+      setGridItems((prev) => [...prev, ...(data.grid ?? [])]);
+      setCursor(data.nextCursor ?? null);
+      setHasMore(!!data.nextCursor);
+    } catch (err) {
+      console.error("[ExplorePage] loadMore error:", err);
+    } finally {
+      setLoadingMore(false);
     }
-    setLoading(false);
-  }, []);
+  }, [loadingMore, hasMore, cursor, sort]);
 
-  useEffect(() => { fetchCreators(); }, [fetchCreators]);
-
-  const filtered = creators.filter((c) => {
-    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
-                          c.username.toLowerCase().includes(search.toLowerCase());
-    if (activeFilter === "trending") return matchesSearch && c.trending;
-    return matchesSearch;
-  });
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ maxWidth: "100%", fontFamily: "'Inter', sans-serif", backgroundColor: "#0A0A0F", minHeight: "100vh" }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "#0A0A0F", padding: "24px 20px 16px", borderBottom: "1px solid #1E1E2E" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", gap: "16px", flexWrap: "wrap" }}>
-          <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 800, color: "#F1F5F9" }}>Discover</h1>
-          <div style={{ position: "relative", flex: 1, maxWidth: "360px", minWidth: "200px" }}>
-            <Search size={15} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "#6B6B8A" }} />
-            <input
-              type="text"
-              placeholder="Search creators..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ width: "100%", borderRadius: "20px", padding: "10px 16px 10px 38px", fontSize: "14px", outline: "none", backgroundColor: "#1E1E2E", border: "1.5px solid #2A2A3D", color: "#F1F5F9", boxSizing: "border-box", fontFamily: "'Inter', sans-serif" }}
-            />
+    <div
+      style={{
+        maxWidth: "100%",
+        fontFamily: "'Inter', sans-serif",
+        backgroundColor: "#0A0A0F",
+        minHeight: "100vh",
+      }}
+    >
+      <style>{`
+        @keyframes skelPulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.35; }
+        }
+        .sort-dropdown {
+          position: absolute;
+          top: calc(100% + 6px);
+          right: 0;
+          background: #1A1A2E;
+          border: 1px solid #2A2A3D;
+          border-radius: 8px;
+          overflow: hidden;
+          z-index: 50;
+          min-width: 150px;
+        }
+        .sort-option {
+          padding: 10px 14px;
+          font-size: 13px;
+          font-family: 'Inter', sans-serif;
+          color: rgba(255,255,255,0.75);
+          cursor: pointer;
+          transition: background 0.1s ease;
+        }
+        .sort-option:hover {
+          background: #2A2A3D;
+          color: #fff;
+        }
+        .sort-option.active {
+          color: #8B5CF6;
+          font-weight: 600;
+        }
+      `}</style>
+
+      <div style={{ padding: "16px 12px 80px" }}>
+
+        {/* Featured strip */}
+        {!loading && stripCreators.length > 0 && (
+          <FeaturedStrip creators={stripCreators} />
+        )}
+
+        {/* Discover header + Sort by */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "12px",
+          position: "relative",
+        }}>
+          <span style={{
+            fontSize: "16px",
+            fontWeight: 700,
+            color: "#FFFFFF",
+            fontFamily: "'Inter', sans-serif",
+            letterSpacing: "0.3px",
+          }}>
+            Discover
+          </span>
+
+          {/* Sort by */}
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setDropdownOpen(o => !o)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                background: "#1A1A2E",
+                border: "1px solid #2A2A3D",
+                borderRadius: "8px",
+                padding: "6px 10px",
+                cursor: "pointer",
+                color: "rgba(255,255,255,0.75)",
+                fontSize: "12px",
+                fontFamily: "'Inter', sans-serif",
+                fontWeight: 600,
+              }}
+            >
+              {SORT_LABELS[sort]}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+
+            {dropdownOpen && (
+              <div className="sort-dropdown">
+                {(Object.keys(SORT_LABELS) as SortOption[]).map((key) => (
+                  <div
+                    key={key}
+                    className={`sort-option${sort === key ? " active" : ""}`}
+                    onClick={() => setSort(key)}
+                  >
+                    {SORT_LABELS[key]}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-        <FilterTabs active={activeFilter} onChange={setActiveFilter} />
-      </div>
 
-      <div style={{ padding: "20px 20px 80px" }}>
         {loading ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px" }}>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} style={{ height: "260px", borderRadius: "12px", backgroundColor: "#1A1A2E", animation: "pulse 1.5s ease-in-out infinite" }} />
-            ))}
-            <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "60px 0", color: "#6B6B8A", fontSize: "14px" }}>
-            No creators found
-          </div>
-        ) : (
-          <CreatorGrid creators={filtered} />
+  <ExploreSkeleton gridCount={8} />
+) : (
+          <CreatorGrid
+            items={gridItems}
+            onLoadMore={handleLoadMore}
+            loadingMore={loadingMore}
+            hasMore={hasMore}
+          />
         )}
       </div>
     </div>

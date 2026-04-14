@@ -30,7 +30,7 @@ interface Props {
   onSubscribe:           (tier: SubscriptionTier) => void;
   onCancelled:           () => void;
   onFollow:              () => void;
-  onTip:                 () => void;
+  onTip:                 (id: string) => void;
   onMessage:             () => void;
   onLike:                (id: string) => void;
   onComment:             (id: string) => void;
@@ -170,7 +170,7 @@ export default function CreatorViewingDualRole({
           <ProfileActions
             viewContext="fanViewingCreator"
             isSubscribed={isSubscribed}
-            onMessage={onMessage} onTip={onTip} onFollow={onFollow} isFollowing={isFollowing}
+            onMessage={onMessage} onTip={() => onTip("")} onFollow={onFollow} isFollowing={isFollowing}
           />
         </div>
       </div>
@@ -223,7 +223,7 @@ export default function CreatorViewingDualRole({
       <ContentFeed
         posts={[]} isSubscribed={isSubscribed} creatorUsername={profile.username}
         initialApiPosts={apiPosts} refreshKey={feedRefreshKey}
-        onLike={onLike} onComment={onComment} onTip={() => onTip()} onUnlock={onUnlock}
+        onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
         extraTab={fanSubscription ? "FAN INFO" : undefined}
         extraTabContent={fanInfoContent}
       />
