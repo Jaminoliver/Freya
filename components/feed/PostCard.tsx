@@ -571,17 +571,22 @@ function PostCardInner({
       {/* ── Subscribe / Resubscribe banner ─────────────────────────────── */}
       {showSubscribeBanner && (
         <div style={{
-          margin: "0 0 10px", padding: "8px 12px",
+          margin: "0 0 10px", padding: "12px 16px",
           background: subscribed ? "linear-gradient(135deg, #22C55E, #16A34A)" : bannerGradient,
-          display: "flex", alignItems: "center", gap: "10px",
+          display: "flex", alignItems: "center", gap: "12px",
           transition: "background 0.5s ease, opacity 0.15s",
           opacity: (subLoading || freeSubbing) ? 0.7 : 1,
         }}>
-          <div onClick={() => navigate(`/${post.creator.username}`)} style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+          <div onClick={() => navigate(`/${post.creator.username}`)} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
             <img src={post.creator.avatar_url || ""} alt={post.creator.name} style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.3)", flexShrink: 0 }} />
-            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-              <span style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
-              {post.creator.isVerified && <BadgeCheck size={13} color="#FFFFFF" />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                <span style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
+                {post.creator.isVerified && <BadgeCheck size={14} color="#FFFFFF" />}
+              </div>
+              <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>
+                {is_renewal && !subscribed ? "You were a fan" : `@${post.creator.username}`}
+              </span>
             </div>
           </div>
 
@@ -593,9 +598,9 @@ function PostCardInner({
             <div
               onClick={handleSubscribeBannerClick}
               style={{
-                marginLeft: "auto", padding: "6px 14px", borderRadius: "8px",
+                marginLeft: "auto", padding: "8px 20px", borderRadius: "8px",
                 backgroundColor: buttonBg,
-                fontSize: "12px", fontWeight: 700, color: buttonColor,
+                fontSize: "14px", fontWeight: 700, color: buttonColor,
                 whiteSpace: "nowrap", flexShrink: 0,
                 fontFamily: "'Inter', sans-serif",
                 cursor: subscribed ? "default" : (subLoading || freeSubbing) ? "wait" : "pointer",
