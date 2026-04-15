@@ -80,7 +80,9 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
   // ── Only change: use scrollTo param instead of post ──────────────────────
   const handleClick = () => router.push(`/${data.username}?scrollTo=${data.post_id}`);
 
-  const thumbnail = data.thumbnail_url ?? null;
+  const rawThumb = data.thumbnail_url;
+const thumbnail =
+  rawThumb && !rawThumb.includes("undefined") ? rawThumb : null;
   const duration = formatDuration(data.duration_seconds);
   const name = data.display_name || data.username;
   const initials = (name[0] ?? "?").toUpperCase();
