@@ -58,10 +58,10 @@ export function MobileBottomNav() {
             <MessageCircle size={22} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
             {unreadCount > 0 && (
               <span style={{
-                position: "absolute", top: "-5px", right: "-8px",
-                minWidth: "16px", height: "16px", borderRadius: "8px",
-                backgroundColor: "#8B5CF6", color: "#FFFFFF",
-                fontSize: "10px", fontWeight: 700, lineHeight: 1,
+                position: "absolute", top: "-6px", right: "-10px",
+                minWidth: "18px", height: "18px", borderRadius: "9px",
+                backgroundColor: "#EF4444", color: "#FFFFFF",
+                fontSize: "11px", fontWeight: 700, lineHeight: 1,
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
                 padding: "0 4px", border: "2px solid #13131F",
               }}>

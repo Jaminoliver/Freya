@@ -2,11 +2,10 @@
 
 import { usePathname } from "next/navigation";
 import {
-  Home, Search, MessageCircle, Bell, Wallet,
-  User, Plus, X, BadgeCheck, ArrowLeft, CreditCard, MoreHorizontal,
+  Home, MessageCircle, Bell, Wallet,
+  User, Plus, BadgeCheck, CreditCard, MoreHorizontal,
 } from "lucide-react";
-import { useEffect, useState, useRef, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useAppStore } from "@/lib/store/appStore";
@@ -22,28 +21,12 @@ const navItems = [
   { label: "Wallet",        href: "/wallet",        icon: Wallet        },
 ];
 
-interface Creator {
-  id: string;
-  username: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  banner_url: string | null;
-  is_verified: boolean;
-  subscriber_count: number;
-}
-
-function formatCount(n: number): string {
-  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "K";
-  return String(n);
-}
-
 function UnreadBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <span style={{
       minWidth: "18px", height: "18px", borderRadius: "9px",
-      backgroundColor: "#8B5CF6", color: "#FFFFFF",
+      backgroundColor: "#EF4444", color: "#FFFFFF",
       fontSize: "11px", fontWeight: 700, lineHeight: 1,
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       padding: "0 5px", marginLeft: "auto", flexShrink: 0,
@@ -53,9 +36,7 @@ function UnreadBadge({ count }: { count: number }) {
   );
 }
 
-const FALLBACK_COVER = "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80";
-
-export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
+export function Sidebar() {
   const pathname = usePathname();
   const { navigate } = useNav();
 
@@ -68,192 +49,15 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
   const isActive = (href: string) =>
     pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
 
-  const [searchOpen,     setSearchOpen]     = useState(false);
-  const [moreOpen,       setMoreOpen]       = useState(false);
-  const [query,          setQuery]          = useState("");
-  const [results,        setResults]        = useState<Creator[]>([]);
-  const [searching,      setSearching]      = useState(false);
-  const [exploreData,    setExploreData]    = useState<Creator[]>([]);
-  const [exploreLoading, setExploreLoading] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
-  const inputRef    = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ✅ Show mobile header on both dashboard and explore
-  const showMobileHeader = pathname === "/dashboard" || pathname === "/explore";
-
-  const fetchExplore = useCallback(async () => {
-    if (exploreData.length > 0) return;
-    setExploreLoading(true);
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username, display_name, avatar_url, banner_url, is_verified, subscriber_count")
-      .eq("role", "creator")
-      .eq("is_active", true)
-      .eq("is_suspended", false)
-      .order("subscriber_count", { ascending: false })
-      .limit(20);
-    setExploreData((data as Creator[]) || []);
-    setExploreLoading(false);
-  }, [exploreData.length]);
-
-  useEffect(() => {
-    if (searchOpen) {
-      setTimeout(() => inputRef.current?.focus(), 150);
-      fetchExplore();
-    }
-  }, [searchOpen, fetchExplore]);
-
-  useEffect(() => {
-    if (!query.trim()) { setResults([]); return; }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, username, display_name, avatar_url, banner_url, is_verified, subscriber_count")
-        .eq("role", "creator")
-        .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
-        .limit(10);
-      setResults((data as Creator[]) || []);
-      setSearching(false);
-    }, 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query]);
-
-  useEffect(() => {
-    setSearchOpen(false);
-    setQuery("");
-    setResults([]);
-  }, [pathname]);
-
-  const closeSearch = () => { setSearchOpen(false); setQuery(""); setResults([]); };
-
-  const handleNav = (href: string) => {
-    closeSearch();
-    navigate(href);
-  };
-
-  const navigateToCreator = (u: string) => {
-    closeSearch();
-    navigate(`/${u}`);
-  };
+  const handleNav = (href: string) => navigate(href);
 
   return (
     <>
       <style>{`
-        @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes fadeIn    { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
       `}</style>
-
-      {/* MOBILE TOP BAR */}
-      {showMobileHeader && (
-        <div
-          className="md:hidden"
-          style={{
-            position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-            backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A",
-            height: "56px", fontFamily: "'Inter', sans-serif",
-            transform: headerVisible ? "translateY(0)" : "translateY(-100%)",
-            transition: "transform 0.25s ease",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
-            <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Fréya</span>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <button onClick={() => setSearchOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
-                <Search size={22} strokeWidth={1.8} />
-              </button>
-              <button onClick={() => handleNav("/notifications")} style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
-                <Bell size={22} strokeWidth={1.8} />
-                {unreadNotificationCount > 0 && (
-                  <span style={{
-                    position: "absolute", top: "4px", right: "4px",
-                    minWidth: "16px", height: "16px", borderRadius: "8px",
-                    backgroundColor: "#8B5CF6", color: "#FFFFFF",
-                    fontSize: "10px", fontWeight: 700, lineHeight: 1,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    padding: "0 4px", border: "2px solid #13131F",
-                  }}>
-                    {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 12px", height: "100%", opacity: searchOpen ? 1 : 0, transform: searchOpen ? "translateY(0)" : "translateY(-10px)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "auto" : "none", position: "absolute", inset: 0 }}>
-            <button onClick={closeSearch} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", flexShrink: 0 }}>
-              <ArrowLeft size={22} strokeWidth={1.8} />
-            </button>
-            <div style={{ position: "relative", flex: 1 }}>
-              <input
-                ref={inputRef}
-                type="text"
-                placeholder="Search creators..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={{ width: "100%", borderRadius: "10px", padding: "10px 36px 10px 14px", fontSize: "14px", outline: "none", backgroundColor: "#1E1E2E", border: "1.5px solid #2A2A3D", color: "#FFFFFF", boxSizing: "border-box", fontFamily: "'Inter', sans-serif" }}
-              />
-              {query && (
-                <button onClick={() => setQuery("")} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", padding: 0 }}>
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MOBILE SEARCH OVERLAY */}
-      {showMobileHeader && searchOpen && (
-        <div className="md:hidden" style={{ position: "fixed", top: "56px", left: 0, right: 0, bottom: "64px", backgroundColor: "#0A0A0F", zIndex: 99, overflowY: "auto", animation: "fadeIn 0.2s ease", fontFamily: "'Inter', sans-serif" }}>
-          {!query.trim() && (
-            <div style={{ padding: "20px 16px 80px" }}>
-              <p style={{ margin: "0 0 16px", fontSize: "13px", fontWeight: 700, color: "#6B6B8A", textTransform: "uppercase", letterSpacing: "0.08em" }}>Discover Creators</p>
-              {exploreLoading ? (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} style={{ height: "200px", borderRadius: "12px", backgroundColor: "#1A1A2E", animation: "pulse 1.5s ease-in-out infinite" }} />
-                  ))}
-                </div>
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  {exploreData.map((creator) => (
-                    <MobileCreatorCard key={creator.id} creator={creator} onClick={() => navigateToCreator(creator.username)} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {searching && <div style={{ padding: "40px 20px", textAlign: "center", color: "#6B6B8A", fontSize: "14px" }}>Searching...</div>}
-          {!searching && query.trim() && results.length === 0 && (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: "#6B6B8A", fontSize: "14px" }}>No creators found for "{query}"</div>
-          )}
-          {!searching && query.trim() && results.map((creator) => (
-            <div key={creator.id} onClick={() => navigateToCreator(creator.username)}
-              style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 20px", borderBottom: "1px solid #1F1F2A", cursor: "pointer" }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1E1E2E")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-            >
-              <Avatar src={creator.avatar_url ?? undefined} alt={creator.display_name || creator.username} size="md" showRing />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                  <span style={{ fontSize: "15px", fontWeight: 600, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {creator.display_name || creator.username}
-                  </span>
-                  {creator.is_verified && <BadgeCheck size={14} color="#8B5CF6" />}
-                </div>
-                <span style={{ fontSize: "13px", color: "#6B6B8A" }}>@{creator.username}</span>
-              </div>
-              <span style={{ fontSize: "12px", color: "#6B6B8A", flexShrink: 0 }}>{formatCount(creator.subscriber_count)} subs</span>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* DESKTOP SIDEBAR */}
       <div className="hidden md:flex" style={{ width: "280px", flexShrink: 0, height: "100vh", backgroundColor: "#13131F", borderRight: "1px solid #1F1F2A", flexDirection: "column", padding: "24px 16px", position: "sticky", top: 0, overflowY: "hidden", fontFamily: "'Inter', sans-serif" }}>
@@ -266,10 +70,10 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
 
         <nav style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
           {navItems.map(({ label, href, icon: Icon }) => {
-            const active   = isActive(href);
-            const isMsg    = href === "/messages";
-            const isNotif  = href === "/notifications";
-            const badge    = isMsg ? unreadMessageCount : isNotif ? unreadNotificationCount : 0;
+            const active  = isActive(href);
+            const isMsg   = href === "/messages";
+            const isNotif = href === "/notifications";
+            const badge   = isMsg ? unreadMessageCount : isNotif ? unreadNotificationCount : 0;
             return (
               <button key={href} onClick={() => handleNav(href)}
                 style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", background: active ? "#1E1E2E" : "none", border: "none", cursor: "pointer", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease", width: "100%", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
@@ -325,32 +129,5 @@ export function Sidebar({ headerVisible = true }: { headerVisible?: boolean }) {
 
       <MoreDrawer isOpen={moreOpen} onClose={() => setMoreOpen(false)} />
     </>
-  );
-}
-
-function MobileCreatorCard({ creator, onClick }: { creator: Creator; onClick: () => void }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div onClick={onClick} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-      style={{ borderRadius: "10px", overflow: "hidden", cursor: "pointer", border: `1px solid ${hovered ? "#8B5CF6" : "#2A2A3D"}`, transition: "border-color 0.15s ease", position: "relative", height: "200px" }}
-    >
-      <img src={creator.banner_url || FALLBACK_COVER} alt={creator.display_name || creator.username} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.85) 100%)" }} />
-      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -20%)", zIndex: 2 }}>
-        <Avatar src={creator.avatar_url ?? undefined} alt={creator.display_name || creator.username} size="lg" showRing />
-      </div>
-      <div style={{ position: "absolute", bottom: "28px", left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", zIndex: 2, padding: "0 6px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-          <span style={{ fontSize: "12px", fontWeight: 700, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.6)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90px" }}>
-            {creator.display_name || creator.username}
-          </span>
-          {creator.is_verified && <BadgeCheck size={11} color="#A78BFA" />}
-        </div>
-        <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.65)" }}>@{creator.username}</span>
-      </div>
-      <div style={{ position: "absolute", bottom: "8px", left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 2 }}>
-        <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.8)", fontWeight: 600 }}>{formatCount(creator.subscriber_count)} subscribers</span>
-      </div>
-    </div>
   );
 }

@@ -3,6 +3,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRef, useState, useEffect, Suspense } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileHeader } from "@/components/layout/MobileHeader";
 import { RightPanel } from "@/components/layout/RightPanel";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { PostUploadProvider } from "@/lib/context/PostUploadContext";
@@ -32,12 +33,10 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const isMessages      = pathname.startsWith("/messages");
   const isNotifications = pathname.startsWith("/notifications");
   const isDashboard     = pathname === "/dashboard";
-  const isExplore       = pathname === "/explore"; // ✅ added
+  const isExplore       = pathname === "/explore";
   const isPostPage      = pathname.startsWith("/posts/");
 
   const showRightPanel = !isSettings && !isSubscriptions && !isMessages;
-
-  // ✅ Explore now gets the 56px top padding just like dashboard
   const noTopbar = (!isDashboard && !isExplore) || isPostPage || isNotifications;
 
   const [headerVisible, setHeaderVisible] = useState(true);
@@ -77,7 +76,8 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
       <Suspense fallback={null}>
         <NavigationWatcher />
       </Suspense>
-      <Sidebar headerVisible={headerVisible} />
+      <Sidebar />
+      <MobileHeader headerVisible={headerVisible} />
 
       <main
         ref={mainRef}
