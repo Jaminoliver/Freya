@@ -48,6 +48,8 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
   const [srcLoaded, setSrcLoaded] = useState(false);
   const [thumbError, setThumbError] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [buffering, setBuffering] = useState(false);
+  const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const previewUrl = data.bunny_video_id
     ? `https://${STREAM_CDN}/${data.bunny_video_id}/play_360p.mp4`
@@ -61,6 +63,17 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
     const video = videoRef.current;
     if (!video) return;
 
+    const onWaiting = () => {
+      bufferTimerRef.current = setTimeout(() => setBuffering(true), 300);
+    };
+    const onPlaying = () => {
+      if (bufferTimerRef.current) { clearTimeout(bufferTimerRef.current); bufferTimerRef.current = null; }
+      setBuffering(false);
+    };
+
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("playing", onPlaying);
+
     if (isActive) {
       const tryPlay = () => {
         video.currentTime = 0;
@@ -69,20 +82,27 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
       if (video.readyState >= 3) {
         tryPlay();
       } else {
+        onWaiting();
         video.addEventListener("canplay", tryPlay, { once: true });
-        return () => video.removeEventListener("canplay", tryPlay);
       }
     } else {
       video.pause();
+      if (bufferTimerRef.current) { clearTimeout(bufferTimerRef.current); bufferTimerRef.current = null; }
+      setBuffering(false);
     }
+
+    return () => {
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("playing", onPlaying);
+      if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+    };
   }, [isActive, srcLoaded]);
 
-  // ── Only change: use scrollTo param instead of post ──────────────────────
   const handleClick = () => router.push(`/${data.username}?scrollTo=${data.post_id}`);
 
   const rawThumb = data.thumbnail_url;
-const thumbnail =
-  rawThumb && !rawThumb.includes("undefined") ? rawThumb : null;
+  const thumbnail =
+    rawThumb && !rawThumb.includes("undefined") ? rawThumb : null;
   const duration = formatDuration(data.duration_seconds);
   const name = data.display_name || data.username;
   const initials = (name[0] ?? "?").toUpperCase();
@@ -131,6 +151,29 @@ const thumbnail =
             transition: "opacity 0.3s ease",
           }}
         />
+      )}
+
+      {/* Loading spinner — only when active + buffering */}
+      {isActive && buffering && (
+        <>
+          <style>{`
+            @keyframes tileSpinRing {
+              0% { transform: translate(-50%,-50%) rotate(0deg); }
+              100% { transform: translate(-50%,-50%) rotate(360deg); }
+            }
+          `}</style>
+          <div style={{
+            position: "absolute", top: "42%", left: "50%",
+            transform: "translate(-50%,-50%)", zIndex: 3,
+          }}>
+            <div style={{
+              width: "28px", height: "28px", borderRadius: "50%",
+              border: "2.5px solid rgba(255,255,255,0.15)",
+              borderTopColor: "rgba(255,255,255,0.8)",
+              animation: "tileSpinRing 0.8s linear infinite",
+            }} />
+          </div>
+        </>
       )}
 
       <div style={{
