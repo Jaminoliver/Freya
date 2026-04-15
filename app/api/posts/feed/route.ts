@@ -150,7 +150,7 @@ export async function GET(req: NextRequest) {
     const merged = weightedShuffle(subPosts, unsubPosts);
 
     // ✅ FIX: use raw counts (before filterReady) so unready videos don't kill pagination
-    const hasMore  = (rawSubPosts ?? []).length === PAGE_SIZE || (rawUnsubPosts ?? []).length === PAGE_SIZE;
+    const hasMore  = merged.length === PAGE_SIZE;
     const nextPage = hasMore ? page + 1 : null;
 
     // ── Parallel lookups ──────────────────────────────────────────────────

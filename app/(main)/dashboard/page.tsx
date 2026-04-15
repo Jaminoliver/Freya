@@ -62,6 +62,7 @@ interface FeedPost {
 }
 
 function adaptPost(p: FeedPost) {
+  console.log("[adaptPost] id:", p.id, "type:", typeof p.id, "String(id):", String(p.id));
   return {
     id:              String(p.id),
     content_type:    p.content_type,
@@ -178,7 +179,7 @@ export default function HomePage() {
   // ── Fetch ──────────────────────────────────────────────────────────────
   const fetchFeed = useCallback(async (page?: number) => {
     try {
-      const url  = page ? `/api/posts/home?page=${page}` : "/api/posts/home";
+      const url  = page ? `/api/posts/feed?page=${page}` : "/api/posts/feed";
       const res  = await fetch(url);
       const data = await res.json();
 
@@ -189,7 +190,8 @@ export default function HomePage() {
         return;
       }
 
-      const merged: FeedPost[] = data.posts.map(mergeSync);
+      console.log("[HomePage] raw posts from API:", data.posts?.map((p: any) => ({ id: p.id, type: typeof p.id, creator: p.creator_id })));
+const merged: FeedPost[] = data.posts.map(mergeSync);
 
       if (page && page > 1) {
         const updated = [...postsRef.current, ...merged];
@@ -304,6 +306,7 @@ export default function HomePage() {
   // ── Render posts ───────────────────────────────────────────────────────
   function buildFeedItems(feedPosts: FeedPost[]) {
     const items: React.ReactNode[] = [];
+    console.log("[HomePage] buildFeedItems called with", feedPosts.length, "posts:", feedPosts.map(p => ({ id: p.id, type: typeof p.id })));
     feedPosts.forEach((post, index) => {
       const showBanner   = !post.is_subscribed || post.is_renewal;
       const subPrice     = post.profiles?.subscription_price ?? undefined;
