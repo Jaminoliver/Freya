@@ -73,17 +73,34 @@ interface Viewer {
   id: string; username: string; display_name: string; avatar_url: string;
 }
 
+// ── Module-level viewer cache with auth invalidation ─────────────────────
 let cachedViewer: Viewer | null = null;
 let viewerPromise: Promise<Viewer | null> | null = null;
+let authListenerSet = false;
+
+function setupAuthListener() {
+  if (authListenerSet) return;
+  authListenerSet = true;
+  try {
+    const supabase = createClient();
+    supabase.auth.onAuthStateChange((event: string) => {
+      if (event === "SIGNED_OUT") {
+        cachedViewer = null;
+        viewerPromise = null;
+      }
+    });
+  } catch {}
+}
 
 function fetchViewer(): Promise<Viewer | null> {
+  setupAuthListener();
   if (cachedViewer) return Promise.resolve(cachedViewer);
   if (viewerPromise) return viewerPromise;
   viewerPromise = (async () => {
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+      if (!user) { cachedViewer = null; return null; }
       const { data } = await supabase.from("profiles")
         .select("username, display_name, avatar_url").eq("id", user.id).single();
       if (data) {
@@ -100,7 +117,7 @@ function fetchViewer(): Promise<Viewer | null> {
 function useViewer() {
   const [viewer, setViewer] = useState<Viewer | null>(cachedViewer);
   useEffect(() => {
-    if (cachedViewer) return;
+    if (cachedViewer) { setViewer(cachedViewer); return; }
     fetchViewer().then((v) => { if (v) setViewer(v); });
   }, []);
   return viewer;
@@ -182,12 +199,21 @@ function PostCardInner({
 
   const { isBlocked, isRestricted, block, unblock, restrict, unrestrict, fetchStatus } = useBlockRestrict({ userId: post.creator.id });
 
-  const isFree      = (subscriptionPrice ?? 0) === 0;
+  const isFree = (subscriptionPrice ?? 0) === 0;
+
+  // ── Refs for stable access in callbacks (fixes stale closures) ────────
+  const isLiking     = useRef(false);
+  const prevPostId   = useRef(post.id);
+  const likedRef     = useRef(liked);
+  const likeCountRef = useRef(likeCount);
+
+  useEffect(() => { likedRef.current     = liked;     }, [liked]);
+  useEffect(() => { likeCountRef.current = likeCount; }, [likeCount]);
 
   // ── Banner text & colors ──────────────────────────────────────────────
   const bannerGradient = is_renewal
-    ? "linear-gradient(135deg, #F97316, #EF4444)"   // orange-red for renewal
-    : "linear-gradient(135deg, #8B5CF6, #EC4899)";  // purple-pink for new sub
+    ? "linear-gradient(135deg, #F97316, #EF4444)"
+    : "linear-gradient(135deg, #8B5CF6, #EC4899)";
 
   const buttonBg    = subscribed ? "#22C55E" : is_renewal ? "#FFFFFF" : "#FFFFFF";
   const buttonColor = subscribed ? "#FFFFFF" : is_renewal ? "#F97316" : "#8B5CF6";
@@ -223,21 +249,20 @@ function PostCardInner({
     await fetchStatus();
   }, [sheetDataFetched, fetchStatus]);
 
-  const handleToggleComment = useCallback(async () => {
-    setCommentOpen((prev) => {
-      const next = !prev;
-      if (next && !commentsFetched) {
-        setCommentsLoading(true);
-        setCommentsFetched(true);
-        fetch(`/api/posts/${post.id}/comments`)
-          .then((r) => r.json())
-          .then((d) => { if (d.comments) setComments(d.comments); })
-          .catch(() => {})
-          .finally(() => setCommentsLoading(false));
-      }
-      return next;
-    });
-  }, [commentsFetched, post.id]);
+  // ── Fixed: side effects moved outside setState updater ─────────────────
+  const handleToggleComment = useCallback(() => {
+    const willOpen = !commentOpen;
+    setCommentOpen(willOpen);
+    if (willOpen && !commentsFetched) {
+      setCommentsLoading(true);
+      setCommentsFetched(true);
+      fetch(`/api/posts/${post.id}/comments`)
+        .then((r) => r.json())
+        .then((d) => { if (d.comments) setComments(d.comments); })
+        .catch(() => {})
+        .finally(() => setCommentsLoading(false));
+    }
+  }, [commentOpen, commentsFetched, post.id]);
 
   useEffect(() => {
     function getRelativeTime(dateStr: string): string {
@@ -255,9 +280,6 @@ function PostCardInner({
     const interval = setInterval(() => setTimestamp(getRelativeTime(post.timestamp)), 60000);
     return () => clearInterval(interval);
   }, [post.timestamp]);
-
-  const isLiking   = useRef(false);
-  const prevPostId = useRef(post.id);
 
   useEffect(() => {
     if (prevPostId.current !== post.id) {
@@ -328,6 +350,7 @@ function PostCardInner({
     isLiking.current = false;
   };
 
+  // ── Fixed: uses refs to avoid stale closures for liked/likeCount ───────
   const handleAddComment = useCallback(async (
     id: string, text: string, gif_url?: string,
     parent_comment_id?: string | number,
@@ -340,22 +363,23 @@ function PostCardInner({
     });
     setCommentCount((c) => {
       const newCount = c + 1;
-      postSyncStore.emit({ postId: id, liked, like_count: likeCount, comment_count: newCount });
+      postSyncStore.emit({ postId: id, liked: likedRef.current, like_count: likeCountRef.current, comment_count: newCount });
       return newCount;
     });
     if (!parent_comment_id) {
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
       if (d.comments) setComments(d.comments);
     }
-  }, [liked, likeCount]);
+  }, []);
 
+  // ── Fixed: uses refs to avoid stale closures ───────────────────────────
   const handleDeleteComment = useCallback(() => {
     setCommentCount((c) => {
       const newCount = Math.max(0, c - 1);
-      postSyncStore.emit({ postId: post.id, liked, like_count: likeCount, comment_count: newCount });
+      postSyncStore.emit({ postId: post.id, liked: likedRef.current, like_count: likeCountRef.current, comment_count: newCount });
       return newCount;
     });
-  }, [post.id, liked, likeCount]);
+  }, [post.id]);
 
   const handleSavePost = useCallback(async () => {
     const next = !savedPost;
@@ -385,6 +409,7 @@ function PostCardInner({
 
   const handleSubscribeBannerClick = useCallback(async () => {
     if (subscribed) return;
+    // Free subscribe/resubscribe — no checkout needed
     if (isFree) {
       setFreeSubbing(true);
       try {
@@ -401,6 +426,7 @@ function PostCardInner({
       }
       return;
     }
+    // Paid subscribe/resubscribe — open checkout modal
     setSubLoading(true);
     try {
       const supabase = createClient();
@@ -441,6 +467,19 @@ function PostCardInner({
   const lightboxPost = toLightboxPost(post);
   const isTextPost   = post.content_type === "text";
   const isPollPost   = post.content_type === "poll";
+
+  // ── Fixed: only open lightbox for image taps, not video ────────────────
+  const handleSingleTap = useCallback((index: number) => {
+    const tappedMedia = normalizedMedia[index];
+    if (!tappedMedia || tappedMedia.type !== "image") return;
+    // Map the carousel index to the image-only lightbox index
+    const imageOnlyMedia = normalizedMedia.filter((m) => m.type === "image");
+    const lightboxIdx = imageOnlyMedia.findIndex((m) => m.url === tappedMedia.url);
+    if (lightboxIdx >= 0) {
+      setLightboxMediaIdx(lightboxIdx);
+      setLightboxOpen(true);
+    }
+  }, [normalizedMedia]);
 
   if (isBlocked) return null;
 
@@ -532,22 +571,17 @@ function PostCardInner({
       {/* ── Subscribe / Resubscribe banner ─────────────────────────────── */}
       {showSubscribeBanner && (
         <div style={{
-          margin: "0 0 10px", padding: "12px 16px",
+          margin: "0 0 10px", padding: "8px 12px",
           background: subscribed ? "linear-gradient(135deg, #22C55E, #16A34A)" : bannerGradient,
-          display: "flex", alignItems: "center", gap: "12px",
+          display: "flex", alignItems: "center", gap: "10px",
           transition: "background 0.5s ease, opacity 0.15s",
           opacity: (subLoading || freeSubbing) ? 0.7 : 1,
         }}>
-          <div onClick={() => navigate(`/${post.creator.username}`)} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
+          <div onClick={() => navigate(`/${post.creator.username}`)} style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
             <img src={post.creator.avatar_url || ""} alt={post.creator.name} style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.3)", flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                <span style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
-                {post.creator.isVerified && <BadgeCheck size={14} color="#FFFFFF" />}
-              </div>
-              <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>
-                {is_renewal && !subscribed ? "You were subscribed to this creator" : `@${post.creator.username}`}
-              </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
+              {post.creator.isVerified && <BadgeCheck size={13} color="#FFFFFF" />}
             </div>
           </div>
 
@@ -559,9 +593,9 @@ function PostCardInner({
             <div
               onClick={handleSubscribeBannerClick}
               style={{
-                marginLeft: "auto", padding: "8px 20px", borderRadius: "8px",
+                marginLeft: "auto", padding: "6px 14px", borderRadius: "8px",
                 backgroundColor: buttonBg,
-                fontSize: "14px", fontWeight: 700, color: buttonColor,
+                fontSize: "12px", fontWeight: 700, color: buttonColor,
                 whiteSpace: "nowrap", flexShrink: 0,
                 fontFamily: "'Inter', sans-serif",
                 cursor: subscribed ? "default" : (subLoading || freeSubbing) ? "wait" : "pointer",
@@ -586,7 +620,7 @@ function PostCardInner({
           media={normalizedMedia} isLocked={post.isLocked} price={post.price}
           isPPV={post.is_ppv} isUnlockedPPV={post.is_ppv && !post.isLocked}
           onDoubleTap={handleDoubleTapLike}
-          onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
+          onSingleTap={handleSingleTap}
           onUnlock={() => onUnlock?.(post.id)}
           initialSlide={initialSlide}
           onSlideChange={(index) => onSlideChange?.(post.id, index)}

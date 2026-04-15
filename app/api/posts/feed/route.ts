@@ -1,13 +1,19 @@
-// app/api/posts/home/route.ts
-// Unified feed: subbed + unsubbed posts, same PAGE_SIZE, same sorting logic
+// app/api/posts/feed/route.ts
+// Unified feed: subbed + unsubbed posts with deterministic interleave and cursor-based pagination
 import { NextRequest, NextResponse } from "next/server";
 import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE       = 20;
+const SUB_FETCH_SIZE  = 12;   // Need ~8 per page (4/10 ratio), buffer for filterReady
+const UNSUB_FETCH_SIZE = 16;  // Need ~12 per page (6/10 ratio), buffer for filterReady
 const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
 
 const LAPSED_STATUSES = ["expired", "cancelled", "renewal_failed"];
+
+// Deterministic interleave pattern per 10 slots: 4 sub + 6 unsub
+// Positions 0,3,6,9 = sub; 1,2,4,5,7,8 = unsub
+const SUB_SLOTS = new Set([0, 3, 6, 9]);
 
 function extractBunnyPath(url: string | null): string | null {
   if (!url) return null;
@@ -31,32 +37,43 @@ function resolveVideoMedia(m: Record<string, unknown>) {
   return { bunnyVideoId, derivedThumb };
 }
 
-// Fisher-Yates shuffle
-function shuffle<T>(arr: T[]): T[] {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
+function filterReady(posts: Record<string, unknown>[]) {
+  return posts.filter((post) => {
+    const mediaItems = (post.media as Record<string, unknown>[]) ?? [];
+    return !mediaItems.some(
+      (m) => m.media_type === "video" && m.processing_status !== "completed" && m.processing_status !== null
+    );
+  });
 }
 
-// Per 10 slots: 4 sub + 6 unsub, positions randomized per batch
-function weightedShuffle(subPosts: Record<string, unknown>[], unsubPosts: Record<string, unknown>[]): Record<string, unknown>[] {
+/**
+ * Deterministic interleave: 4 sub + 6 unsub per 10 slots.
+ * When one pool is exhausted, the other fills remaining slots.
+ * Returns exactly `limit` posts (or fewer if both pools exhausted).
+ */
+function deterministicInterleave(
+  subPosts: Record<string, unknown>[],
+  unsubPosts: Record<string, unknown>[],
+  limit: number
+): { posts: Record<string, unknown>[]; subConsumed: number; unsubConsumed: number } {
   const result: Record<string, unknown>[] = [];
   let si = 0, ui = 0;
+  let slot = 0;
 
-  while (si < subPosts.length || ui < unsubPosts.length) {
-    const subTake   = Math.min(4, subPosts.length - si);
-    const unsubTake = Math.min(6, unsubPosts.length - ui);
-    const batch     = shuffle([
-      ...subPosts.slice(si, si + subTake),
-      ...unsubPosts.slice(ui, ui + unsubTake),
-    ]);
-    si += subTake;
-    ui += unsubTake;
-    result.push(...batch);
+  while (result.length < limit && (si < subPosts.length || ui < unsubPosts.length)) {
+    const wantSub = SUB_SLOTS.has(slot % 10);
+
+    if (wantSub) {
+      if (si < subPosts.length)      result.push(subPosts[si++]);
+      else if (ui < unsubPosts.length) result.push(unsubPosts[ui++]);
+    } else {
+      if (ui < unsubPosts.length)    result.push(unsubPosts[ui++]);
+      else if (si < subPosts.length) result.push(subPosts[si++]);
+    }
+    slot++;
   }
-  return result;
+
+  return { posts: result, subConsumed: si, unsubConsumed: ui };
 }
 
 const POST_SELECT = `
@@ -78,9 +95,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
-    const page   = parseInt(searchParams.get("page") ?? "1");
-    const offset = (page - 1) * PAGE_SIZE;
-    const service = createServiceSupabaseClient();
+    const subOffset   = Math.max(0, parseInt(searchParams.get("subOffset")   ?? "0"));
+    const unsubOffset = Math.max(0, parseInt(searchParams.get("unsubOffset") ?? "0"));
+    const service     = createServiceSupabaseClient();
 
     // ── Fetch active subs + lapsed subs in parallel ──────────────────────
     const [{ data: activeSubs }, { data: lapsedSubs }] = await Promise.all([
@@ -95,14 +112,14 @@ export async function GET(req: NextRequest) {
     const subscribedSet = new Set<string>(subscribedIds);
     const lapsedSet     = new Set<string>(lapsedIds);
 
-    // ── Fetch subscribed posts + public teasers in parallel ───────────────
+    // ── Fetch subscribed posts + public posts in parallel ─────────────────
     const subPostsPromise = subscribedIds.length > 0
       ? service.from("posts").select(POST_SELECT)
           .eq("is_published", true).eq("is_deleted", false)
           .in("creator_id", subscribedIds)
           .neq("creator_id", user.id)
           .order("published_at", { ascending: false })
-          .range(offset, offset + PAGE_SIZE - 1)
+          .range(subOffset, subOffset + SUB_FETCH_SIZE - 1)
       : Promise.resolve({ data: [] });
 
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
@@ -113,8 +130,10 @@ export async function GET(req: NextRequest) {
       .neq("creator_id", user.id)
       .order("like_count", { ascending: false })
       .order("published_at", { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1);
+      .range(unsubOffset, unsubOffset + UNSUB_FETCH_SIZE - 1);
 
+    // Exclude only active subs from the unsub pool
+    // Lapsed creators stay in discovery with "Resubscribe" banner
     if (subscribedIds.length > 0)
       unsubQuery = unsubQuery.not("creator_id", "in", `(${subscribedIds.join(",")})`);
 
@@ -123,35 +142,36 @@ export async function GET(req: NextRequest) {
       unsubQuery,
     ]);
 
+    const rawSubArr   = (rawSubPosts   ?? []) as Record<string, unknown>[];
+    const rawUnsubArr = (rawUnsubPosts ?? []) as Record<string, unknown>[];
+
     // ── Boost new creators to front of unsub pool ─────────────────────────
-    const newCreatorPosts = (rawUnsubPosts ?? []).filter((p: Record<string, unknown>) => {
+    const newCreatorPosts = rawUnsubArr.filter((p) => {
       const profile = p.profiles as Record<string, unknown> | null;
       return profile && (profile.created_at as string) > fortyEightHoursAgo;
     });
-    const regularPosts = (rawUnsubPosts ?? []).filter((p: Record<string, unknown>) => {
+    const regularPosts = rawUnsubArr.filter((p) => {
       const profile = p.profiles as Record<string, unknown> | null;
       return !profile || (profile.created_at as string) <= fortyEightHoursAgo;
     });
-    const sortedUnsubPosts = [...newCreatorPosts, ...regularPosts] as Record<string, unknown>[];
+    const sortedUnsubRaw = [...newCreatorPosts, ...regularPosts];
 
     // ── Filter out unready videos ─────────────────────────────────────────
-    const filterReady = (posts: Record<string, unknown>[]) =>
-      posts.filter((post) => {
-        const mediaItems = (post.media as Record<string, unknown>[]) ?? [];
-        return !mediaItems.some(
-          (m) => m.media_type === "video" && m.processing_status !== "completed" && m.processing_status !== null
-        );
-      });
+    const subReady   = filterReady(rawSubArr);
+    const unsubReady = filterReady(sortedUnsubRaw);
 
-    const subPosts   = filterReady((rawSubPosts ?? []) as Record<string, unknown>[]);
-    const unsubPosts = filterReady(sortedUnsubPosts);
+    // ── Deterministic interleave: 4 sub + 6 unsub per 10 slots ───────────
+    const { posts: merged } = deterministicInterleave(subReady, unsubReady, PAGE_SIZE);
 
-    // ── Weighted shuffle: 4 sub + 6 unsub per batch ───────────────────────
-    const merged = weightedShuffle(subPosts, unsubPosts);
+    // ── Pagination cursors ────────────────────────────────────────────────
+    // Advance offsets by the number of rows fetched from DB (not consumed)
+    // This ensures no duplicates across pages
+    const nextSubOffset   = subOffset   + rawSubArr.length;
+    const nextUnsubOffset = unsubOffset + rawUnsubArr.length;
 
-    // ✅ FIX: use raw counts (before filterReady) so unready videos don't kill pagination
-    const hasMore  = merged.length === PAGE_SIZE;
-    const nextPage = hasMore ? page + 1 : null;
+    const subHasMore   = rawSubArr.length   === SUB_FETCH_SIZE;
+    const unsubHasMore = rawUnsubArr.length === UNSUB_FETCH_SIZE;
+    const hasMore      = (subHasMore || unsubHasMore) && merged.length > 0;
 
     // ── Parallel lookups ──────────────────────────────────────────────────
     const postIds        = merged.map((p) => Number(p.id));
@@ -256,12 +276,17 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const res = NextResponse.json({ posts: processed, nextPage });
+    const res = NextResponse.json({
+      posts:           processed,
+      nextSubOffset,
+      nextUnsubOffset,
+      hasMore,
+    });
     res.headers.set("Cache-Control", "private, s-maxage=30, stale-while-revalidate=60");
     return res;
 
   } catch (err) {
-    console.error("[Home:ERROR]", err);
+    console.error("[Feed:ERROR]", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

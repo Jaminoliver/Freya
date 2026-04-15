@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { PostCard } from "@/components/feed/PostCard";
 import { StoryBar } from "@/components/story/StoryBar";
 import StoryViewer from "@/components/story/StoryViewer";
@@ -16,6 +16,11 @@ import type { User } from "@/lib/types/profile";
 const SCROLL_KEY       = "home_feed_scroll";
 const SLIDES_KEY       = "home_feed_slides";
 const SUGGESTIONS_EVERY = 5;
+
+interface FeedCursors {
+  subOffset:   number;
+  unsubOffset: number;
+}
 
 interface FeedPost {
   id:            number;
@@ -62,7 +67,6 @@ interface FeedPost {
 }
 
 function adaptPost(p: FeedPost) {
-  console.log("[adaptPost] id:", p.id, "type:", typeof p.id, "String(id):", String(p.id));
   return {
     id:              String(p.id),
     content_type:    p.content_type,
@@ -105,6 +109,19 @@ function mergeSync(p: FeedPost): FeedPost {
   return { ...p, liked: cached.liked, like_count: cached.like_count, comment_count: cached.comment_count ?? p.comment_count };
 }
 
+function parseCursors(raw: string | undefined | null): FeedCursors | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.subOffset === "number" && typeof parsed.unsubOffset === "number") {
+      return parsed as FeedCursors;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function saveScroll(y: number)          { try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {} }
 function loadScroll(): number           { try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; } }
 function saveSlides(m: Record<string, number>) { try { sessionStorage.setItem(SLIDES_KEY, JSON.stringify(m)); } catch {} }
@@ -115,7 +132,7 @@ export default function HomePage() {
 
   const [posts,       setPosts]       = useState<FeedPost[]>([]);
   const [apiLoading,  setApiLoading]  = useState(true);
-  const [nextPage,    setNextPage]    = useState<number | null>(null);
+  const [nextCursors, setNextCursors] = useState<FeedCursors | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error,       setError]       = useState<string | null>(null);
   const [slideMap,    setSlideMap]    = useState<Record<string, number>>({});
@@ -136,11 +153,11 @@ export default function HomePage() {
 
   const scrollRestoredRef = useRef(false);
   const sentinelRef       = useRef<HTMLDivElement>(null);
-  const nextPageRef       = useRef<number | null>(null);
+  const nextCursorsRef    = useRef<FeedCursors | null>(null);
   const loadingMoreRef    = useRef(false);
   const postsRef          = useRef<FeedPost[]>(posts);
 
-  useEffect(() => { nextPageRef.current    = nextPage;    }, [nextPage]);
+  useEffect(() => { nextCursorsRef.current = nextCursors; }, [nextCursors]);
   useEffect(() => { loadingMoreRef.current = loadingMore; }, [loadingMore]);
   useEffect(() => { postsRef.current       = posts;       }, [posts]);
 
@@ -164,12 +181,18 @@ export default function HomePage() {
     };
   }, []);
 
-  // ── Scroll restore ─────────────────────────────────────────────────────
+  // ── Scroll restore (double rAF for reliable paint timing) ──────────────
   useEffect(() => {
     if (apiLoading || scrollRestoredRef.current) return;
     scrollRestoredRef.current = true;
     const saved = loadScroll();
-    if (saved > 0) setTimeout(() => window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior }), 80);
+    if (saved > 0) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
+        });
+      });
+    }
   }, [apiLoading]);
 
   const handleSlideChange = useCallback((postId: string, index: number) => {
@@ -177,10 +200,16 @@ export default function HomePage() {
   }, []);
 
   // ── Fetch ──────────────────────────────────────────────────────────────
-  const fetchFeed = useCallback(async (page?: number) => {
+  const fetchFeed = useCallback(async (cursors?: FeedCursors) => {
     try {
-      const url  = page ? `/api/posts/feed?page=${page}` : "/api/posts/feed";
-      const res  = await fetch(url);
+      const params = new URLSearchParams();
+      if (cursors) {
+        params.set("subOffset",   String(cursors.subOffset));
+        params.set("unsubOffset", String(cursors.unsubOffset));
+      }
+      const qs  = params.toString();
+      const url = `/api/posts/feed${qs ? `?${qs}` : ""}`;
+      const res = await fetch(url);
       const data = await res.json();
 
       if (!res.ok) {
@@ -190,19 +219,33 @@ export default function HomePage() {
         return;
       }
 
-      console.log("[HomePage] raw posts from API:", data.posts?.map((p: any) => ({ id: p.id, type: typeof p.id, creator: p.creator_id })));
-const merged: FeedPost[] = data.posts.map(mergeSync);
+      const merged: FeedPost[] = data.posts.map(mergeSync);
+      const newCursors: FeedCursors | null = data.hasMore
+        ? { subOffset: data.nextSubOffset ?? 0, unsubOffset: data.nextUnsubOffset ?? 0 }
+        : null;
 
-      if (page && page > 1) {
-        const updated = [...postsRef.current, ...merged];
-        setPosts(updated);
-        setNextPage(data.nextPage ?? null);
-        setFeed({ posts: updated, nextCursor: String(data.nextPage ?? ""), fetchedAt: Date.now() });
+      if (cursors) {
+        // Paginated append — use functional updater to avoid stale ref
+        setPosts((prev) => {
+          const updated = [...prev, ...merged];
+          setFeed({
+            posts:     updated,
+            nextCursor: newCursors ? JSON.stringify(newCursors) : "",
+            fetchedAt:  Date.now(),
+          });
+          return updated;
+        });
+        setNextCursors(newCursors);
         setLoadingMore(false);
       } else {
+        // Fresh load
         setPosts(merged);
-        setNextPage(data.nextPage ?? null);
-        setFeed({ posts: merged, nextCursor: String(data.nextPage ?? ""), fetchedAt: Date.now() });
+        setNextCursors(newCursors);
+        setFeed({
+          posts:     merged,
+          nextCursor: newCursors ? JSON.stringify(newCursors) : "",
+          fetchedAt:  Date.now(),
+        });
         setApiLoading(false);
       }
     } catch {
@@ -214,10 +257,10 @@ const merged: FeedPost[] = data.posts.map(mergeSync);
 
   // ── Initial load (use cache if fresh) ─────────────────────────────────
   useEffect(() => {
-    if (feed && !isStale(feed.fetchedAt)) {
+    if (feed && !isStale(feed.fetchedAt) && feed.posts.length > 0) {
       const merged = feed.posts.map(mergeSync);
       setPosts(merged);
-      setNextPage(feed.nextCursor ? Number(feed.nextCursor) : null);
+      setNextCursors(parseCursors(feed.nextCursor));
       setApiLoading(false);
       return;
     }
@@ -230,10 +273,10 @@ const merged: FeedPost[] = data.posts.map(mergeSync);
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && nextPageRef.current && !loadingMoreRef.current) {
+      if (entries[0].isIntersecting && nextCursorsRef.current && !loadingMoreRef.current) {
         loadingMoreRef.current = true;
         setLoadingMore(true);
-        fetchFeed(nextPageRef.current);
+        fetchFeed(nextCursorsRef.current);
       }
     }, { rootMargin: "600px" });
     observer.observe(sentinel);
@@ -303,11 +346,17 @@ const merged: FeedPost[] = data.posts.map(mergeSync);
     setSubscribedCreatorIds((prev) => { const next = new Set(prev); next.add(creatorId); return next; });
   }, []);
 
-  // ── Render posts ───────────────────────────────────────────────────────
-  function buildFeedItems(feedPosts: FeedPost[]) {
+  // ── Retry handler ──────────────────────────────────────────────────────
+  const handleRetry = useCallback(() => {
+    setError(null);
+    setApiLoading(true);
+    fetchFeed();
+  }, [fetchFeed]);
+
+  // ── Memoized feed items ────────────────────────────────────────────────
+  const feedItems = useMemo(() => {
     const items: React.ReactNode[] = [];
-    console.log("[HomePage] buildFeedItems called with", feedPosts.length, "posts:", feedPosts.map(p => ({ id: p.id, type: typeof p.id })));
-    feedPosts.forEach((post, index) => {
+    posts.forEach((post, index) => {
       const showBanner   = !post.is_subscribed || post.is_renewal;
       const subPrice     = post.profiles?.subscription_price ?? undefined;
       items.push(
@@ -327,12 +376,12 @@ const merged: FeedPost[] = data.posts.map(mergeSync);
           initialSavedCreator={post.saved_creator ?? false}
         />
       );
-      if ((index + 1) % SUGGESTIONS_EVERY === 0 && index < feedPosts.length - 1) {
+      if ((index + 1) % SUGGESTIONS_EVERY === 0 && index < posts.length - 1) {
         items.push(<FeedSuggestions key={`suggestions-${index}`} />);
       }
     });
     return items;
-  }
+  }, [posts, slideMap, subscribedCreatorIds, handleUnlock, handleSlideChange, handleSubscribed]);
 
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>
@@ -362,7 +411,19 @@ const merged: FeedPost[] = data.posts.map(mergeSync);
         {!apiLoading && (
           <>
             {error && (
-              <div style={{ textAlign: "center", padding: "48px 24px", color: "#6B6B8A", fontSize: "14px" }}>{error}</div>
+              <div style={{ textAlign: "center", padding: "48px 24px" }}>
+                <p style={{ color: "#6B6B8A", fontSize: "14px", marginBottom: "16px" }}>{error}</p>
+                <button
+                  onClick={handleRetry}
+                  style={{
+                    padding: "10px 24px", borderRadius: "8px", border: "1px solid #2A2A3D",
+                    backgroundColor: "#1A1A2E", color: "#FFFFFF", fontSize: "14px", fontWeight: 600,
+                    cursor: "pointer", fontFamily: "'Inter', sans-serif",
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
             )}
             {!error && posts.length === 0 && (
               <div style={{ textAlign: "center", padding: "60px 24px" }}>
@@ -370,14 +431,14 @@ const merged: FeedPost[] = data.posts.map(mergeSync);
                 <p style={{ color: "#4A4A6A", fontSize: "13px" }}>Follow creators to see their posts here</p>
               </div>
             )}
-            {buildFeedItems(posts)}
+            {feedItems}
             <div ref={sentinelRef} style={{ height: "1px", marginTop: "1px" }} />
             {loadingMore && (
               <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
                 <div className="feed-spinner" />
               </div>
             )}
-            {!nextPage && !loadingMore && posts.length > 0 && (
+            {!nextCursors && !loadingMore && posts.length > 0 && (
               <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
                 You&apos;re all caught up ✓
               </div>
