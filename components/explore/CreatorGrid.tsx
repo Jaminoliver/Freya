@@ -25,7 +25,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
 
   const [autoPlayId, setAutoPlayId] = useState<number | null>(null);
   const [userHoverId, setUserHoverId] = useState<number | null>(null);
-  const userHoverRef = useRef<number | null>(null); // ← ref mirror so observer can read it
+  const userHoverRef = useRef<number | null>(null);
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPairRef = useRef<string>("");
@@ -90,7 +90,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
           if (!isNaN(id)) ratioMap.current.set(id, entry.intersectionRatio);
         });
 
-        if (userHoverRef.current !== null) return; // ← skip autoplay while user is hovering
+        if (userHoverRef.current !== null) return;
         const { left, right } = getBestPair();
         const pairKey = `${left}-${right}`;
         if (pairKey !== lastPairRef.current) {
@@ -125,6 +125,22 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runAutoPlay]);
+
+  // Re-trigger autoplay when items load (fixes hard refresh)
+  useEffect(() => {
+    if (!items.length) return;
+    const timer = setTimeout(() => {
+      if (userHoverRef.current !== null) return;
+      if (autoPlayId !== null) return;
+      const { left, right } = getBestPair();
+      if (left || right) {
+        lastPairRef.current = `${left}-${right}`;
+        runAutoPlay(left, right);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length]);
 
   const handleTileRef = useCallback((id: number, el: HTMLDivElement | null) => {
     if (!el) { ratioMap.current.delete(id); return; }
@@ -180,7 +196,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
             <VideoTile
               key={`video-${item.post_id}`}
               data={item}
-              isActive={autoPlayId === item.post_id || userHoverId === item.post_id} // ← one line change
+              isActive={autoPlayId === item.post_id || userHoverId === item.post_id}
               onTileRef={handleTileRef}
               onUserInteract={handleUserInteract}
             />
