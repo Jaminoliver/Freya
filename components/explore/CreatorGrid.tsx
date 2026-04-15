@@ -62,6 +62,14 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     return { left: bestLeft, right: bestRight };
   };
 
+  // Fallback: pick first two video items directly from items array
+  const getFirstPair = (): { left: number | null; right: number | null } => {
+    const videoItems = items.filter((i): i is VideoTileData => i.type === "video");
+    const left = videoItems.find((_, idx) => idx % 2 === 0)?.post_id ?? null;
+    const right = videoItems.find((_, idx) => idx % 2 === 1)?.post_id ?? null;
+    return { left, right };
+  };
+
   const runAutoPlay = useCallback((left: number | null, right: number | null) => {
     clearAutoTimer();
     setAutoPlayId(null);
@@ -132,12 +140,22 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     const timer = setTimeout(() => {
       if (userHoverRef.current !== null) return;
       if (autoPlayId !== null) return;
+
+      // Try observer ratios first
       const { left, right } = getBestPair();
       if (left || right) {
         lastPairRef.current = `${left}-${right}`;
         runAutoPlay(left, right);
+        return;
       }
-    }, 600);
+
+      // Fallback: observer ratios still 0, pick from items array
+      const fallback = getFirstPair();
+      if (fallback.left || fallback.right) {
+        lastPairRef.current = `${fallback.left}-${fallback.right}`;
+        runAutoPlay(fallback.left, fallback.right);
+      }
+    }, 800);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);

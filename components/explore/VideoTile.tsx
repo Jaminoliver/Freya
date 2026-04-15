@@ -55,10 +55,12 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
     ? `https://${STREAM_CDN}/${data.bunny_video_id}/play_360p.mp4`
     : null;
 
+  // Set src when becoming active
   useEffect(() => {
     if (isActive && !srcLoaded) setSrcLoaded(true);
   }, [isActive, srcLoaded]);
 
+  // Play/pause + buffering detection + iOS Safari load() fix
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -77,12 +79,15 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
     if (isActive) {
       const tryPlay = () => {
         video.currentTime = 0;
+        video.muted = true; // ensure muted programmatically for iOS
         video.play().catch(() => {});
       };
+
       if (video.readyState >= 3) {
         tryPlay();
       } else {
-        onWaiting();
+        // iOS Safari needs load() after dynamic src assignment
+        if (video.src) video.load();
         video.addEventListener("canplay", tryPlay, { once: true });
       }
     } else {
