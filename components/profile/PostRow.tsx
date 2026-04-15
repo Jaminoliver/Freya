@@ -39,7 +39,7 @@ export interface ApiPost {
   poll?:           PollData | null;
   saved_post?:     boolean;
   saved_creator?:  boolean;
-  tip_total?:      number; // kobo — only present on own profile
+  tip_total?:      number;
   profiles: {
     id:           string;
     username:     string;
@@ -394,7 +394,8 @@ export default function PostRow({
   const isPollPost = post.content_type === "poll";
 
   return (
-    <div style={{ borderBottom: "1px solid #1A1A2E" }}>
+    // ── Only change: id="post-{id}" added for scroll targeting ──────────────
+    <div id={`post-${post.id}`} style={{ borderBottom: "1px solid #1A1A2E" }}>
 
       {storyViewerOpen && storyGroup && (
         <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refresh(); }} />
