@@ -22,13 +22,10 @@ import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 
-const StoryViewer = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
-const CheckoutModal = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
-const Lightbox = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
-const ReportModal = dynamic(
-  () => import("@/components/messages/ReportModal").then((mod) => ({ default: mod.ReportModal })),
-  { ssr: false }
-);
+const StoryViewer    = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
+const CheckoutModal  = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
+const Lightbox       = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
+const ReportModal    = dynamic(() => import("@/components/messages/ReportModal").then((m) => ({ default: m.ReportModal })), { ssr: false });
 const BlockConfirmModal = dynamic(() => import("@/components/ui/BlockConfirmModal"), { ssr: false });
 
 interface MediaItem {
@@ -87,11 +84,8 @@ function fetchViewer(): Promise<Viewer | null> {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data } = await supabase
-        .from("profiles")
-        .select("username, display_name, avatar_url")
-        .eq("id", user.id)
-        .single();
+      const { data } = await supabase.from("profiles")
+        .select("username, display_name, avatar_url").eq("id", user.id).single();
       if (data) {
         cachedViewer = { id: user.id, username: data.username, display_name: data.display_name || data.username, avatar_url: data.avatar_url || "" };
         return cachedViewer;
@@ -115,13 +109,11 @@ function useViewer() {
 function toLightboxPost(post: Post): LightboxPost {
   return {
     id: Number(post.id),
-    media: post.media
-      .filter((m) => m.type === "image" && m.url)
-      .map((m, i) => ({
-        id: i, media_type: "image", file_url: m.url,
-        thumbnail_url: m.thumbnailUrl ?? null, raw_video_url: null,
-        locked: false, display_order: i, processing_status: null, bunny_video_id: null,
-      })),
+    media: post.media.filter((m) => m.type === "image" && m.url).map((m, i) => ({
+      id: i, media_type: "image", file_url: m.url,
+      thumbnail_url: m.thumbnailUrl ?? null, raw_video_url: null,
+      locked: false, display_order: i, processing_status: null, bunny_video_id: null,
+    })),
   };
 }
 
@@ -132,6 +124,7 @@ function PostCardInner({
   initialSlide = 0,
   onSlideChange,
   showSubscribeBanner = false,
+  is_renewal = false,
   onSubscribed,
   subscriptionPrice,
   isSubscribedExternal = false,
@@ -144,6 +137,7 @@ function PostCardInner({
   initialSlide?:         number;
   onSlideChange?:        (postId: string, index: number) => void;
   showSubscribeBanner?:  boolean;
+  is_renewal?:           boolean;
   onSubscribed?:         (creatorId: string) => void;
   subscriptionPrice?:    number;
   isSubscribedExternal?: boolean;
@@ -186,11 +180,27 @@ function PostCardInner({
   const [restrictConfirm,   setRestrictConfirm]   = useState(false);
   const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
 
-  const {
-    isBlocked, isRestricted,
-    block, unblock, restrict, unrestrict,
-    fetchStatus,
-  } = useBlockRestrict({ userId: post.creator.id });
+  const { isBlocked, isRestricted, block, unblock, restrict, unrestrict, fetchStatus } = useBlockRestrict({ userId: post.creator.id });
+
+  const isFree      = (subscriptionPrice ?? 0) === 0;
+
+  // ── Banner text & colors ──────────────────────────────────────────────
+  const bannerGradient = is_renewal
+    ? "linear-gradient(135deg, #F97316, #EF4444)"   // orange-red for renewal
+    : "linear-gradient(135deg, #8B5CF6, #EC4899)";  // purple-pink for new sub
+
+  const buttonBg    = subscribed ? "#22C55E" : is_renewal ? "#FFFFFF" : "#FFFFFF";
+  const buttonColor = subscribed ? "#FFFFFF" : is_renewal ? "#F97316" : "#8B5CF6";
+
+  const buttonLabel = subscribed
+    ? "Subscribed ✓"
+    : freeSubbing
+      ? (is_renewal ? "Resubscribing..." : "Subscribing...")
+      : subLoading
+        ? "..."
+        : is_renewal
+          ? isFree ? "Resubscribe for Free" : "Resubscribe"
+          : isFree ? "Subscribe for Free"  : "Subscribe";
 
   useEffect(() => {
     if (isSubscribedExternal) setSubscribed(true);
@@ -339,7 +349,6 @@ function PostCardInner({
     }
   }, [liked, likeCount]);
 
-  // ✅ FIX: decrement commentCount and sync via postSyncStore on top-level delete
   const handleDeleteComment = useCallback(() => {
     setCommentCount((c) => {
       const newCount = Math.max(0, c - 1);
@@ -365,21 +374,17 @@ function PostCardInner({
   }, [savedCreator, post.creator.id]);
 
   const handleAvatarClick = useCallback(() => {
-    if (hasUnviewed && storyGroup) {
-      setStoryViewerOpen(true);
-    } else {
-      navigate(`/${post.creator.username}`);
-    }
+    if (hasUnviewed && storyGroup) setStoryViewerOpen(true);
+    else navigate(`/${post.creator.username}`);
   }, [hasUnviewed, storyGroup, navigate, post.creator.username]);
 
-  const handleStoryViewerClose = useCallback((updatedGroups: CreatorStoryGroup[]) => {
+  const handleStoryViewerClose = useCallback((_updatedGroups: CreatorStoryGroup[]) => {
     setStoryViewerOpen(false);
     refresh();
   }, [refresh]);
 
   const handleSubscribeBannerClick = useCallback(async () => {
     if (subscribed) return;
-    const isFree = (subscriptionPrice ?? 0) === 0;
     if (isFree) {
       setFreeSubbing(true);
       try {
@@ -399,11 +404,9 @@ function PostCardInner({
     setSubLoading(true);
     try {
       const supabase = createClient();
-      const { data: profile } = await supabase
-        .from("profiles")
+      const { data: profile } = await supabase.from("profiles")
         .select("subscription_price, bundle_price_3_months, bundle_price_6_months")
-        .eq("id", post.creator.id)
-        .single();
+        .eq("id", post.creator.id).single();
       if (profile) {
         setSubMonthly(profile.subscription_price ?? 0);
         setSubThreeMonth(profile.bundle_price_3_months ?? undefined);
@@ -417,7 +420,7 @@ function PostCardInner({
     } finally {
       setSubLoading(false);
     }
-  }, [subscribed, subscriptionPrice, post.creator.id, onSubscribed]);
+  }, [subscribed, isFree, post.creator.id, onSubscribed]);
 
   const handleSubscriptionSuccess = useCallback(() => {
     setSubscribed(true);
@@ -479,31 +482,24 @@ function PostCardInner({
       <BlockConfirmModal isOpen={unrestrictConfirm} onClose={() => setUnrestrictConfirm(false)} onConfirm={unrestrict} type="restrict" username={post.creator.username} />
 
       <PostOptionsSheet
-        isOpen={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        onSavePost={handleSavePost}
-        onSaveCreator={handleSaveCreator}
+        isOpen={sheetOpen} onClose={() => setSheetOpen(false)}
+        onSavePost={handleSavePost} onSaveCreator={handleSaveCreator}
         onNotInterested={() => {}}
         onReport={() => { setSheetOpen(false); setReportOpen(true); }}
         onBlockCreator={() => { setSheetOpen(false); setBlockConfirm(true); }}
         onUnblockCreator={() => { setSheetOpen(false); setUnblockConfirm(true); }}
         onRestrictCreator={() => { setSheetOpen(false); setRestrictConfirm(true); }}
         onUnrestrictCreator={() => { setSheetOpen(false); setUnrestrictConfirm(true); }}
-        savedPost={savedPost}
-        savedCreator={savedCreator}
-        isBlocked={isBlocked}
-        isRestricted={isRestricted}
+        savedPost={savedPost} savedCreator={savedCreator}
+        isBlocked={isBlocked} isRestricted={isRestricted}
       />
 
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <AvatarWithStoryRing
-            src={post.creator.avatar_url || ""}
-            alt={post.creator.name}
-            size={48}
-            hasStory={!!storyGroup}
-            hasUnviewed={hasUnviewed}
+            src={post.creator.avatar_url || ""} alt={post.creator.name}
+            size={48} hasStory={!!storyGroup} hasUnviewed={hasUnviewed}
             onClick={handleAvatarClick}
           />
           <div style={{ cursor: "pointer" }} onClick={() => navigate(`/${post.creator.username}`)}>
@@ -533,9 +529,15 @@ function PostCardInner({
         <PostTextViewer caption={post.caption} textBackground={post.text_background} />
       )}
 
-      {/* Subscribe banner */}
+      {/* ── Subscribe / Resubscribe banner ─────────────────────────────── */}
       {showSubscribeBanner && (
-        <div style={{ margin: "0 0 10px", padding: "12px 16px", background: subscribed ? "linear-gradient(135deg, #22C55E, #16A34A)" : "linear-gradient(135deg, #8B5CF6, #EC4899)", display: "flex", alignItems: "center", gap: "12px", transition: "background 0.5s ease, opacity 0.15s", opacity: (subLoading || freeSubbing) ? 0.7 : 1 }}>
+        <div style={{
+          margin: "0 0 10px", padding: "12px 16px",
+          background: subscribed ? "linear-gradient(135deg, #22C55E, #16A34A)" : bannerGradient,
+          display: "flex", alignItems: "center", gap: "12px",
+          transition: "background 0.5s ease, opacity 0.15s",
+          opacity: (subLoading || freeSubbing) ? 0.7 : 1,
+        }}>
           <div onClick={() => navigate(`/${post.creator.username}`)} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
             <img src={post.creator.avatar_url || ""} alt={post.creator.name} style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.3)", flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -543,16 +545,33 @@ function PostCardInner({
                 <span style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
                 {post.creator.isVerified && <BadgeCheck size={14} color="#FFFFFF" />}
               </div>
-              <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>@{post.creator.username}</span>
+              <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>
+                {is_renewal && !subscribed ? "You were subscribed to this creator" : `@${post.creator.username}`}
+              </span>
             </div>
           </div>
+
           <>
             <style>{`
-              @keyframes subscribePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-              @keyframes subscribedPop  { 0% { transform: scale(1); } 40% { transform: scale(1.15); } 100% { transform: scale(1); } }
+              @keyframes subscribePulse  { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+              @keyframes subscribedPop   { 0% { transform: scale(1); } 40% { transform: scale(1.15); } 100% { transform: scale(1); } }
             `}</style>
-            <div onClick={handleSubscribeBannerClick} style={{ marginLeft: "auto", padding: "8px 20px", borderRadius: "8px", backgroundColor: subscribed ? "#22C55E" : "#FFFFFF", fontSize: "14px", fontWeight: 700, color: subscribed ? "#FFFFFF" : "#8B5CF6", whiteSpace: "nowrap", flexShrink: 0, fontFamily: "'Inter', sans-serif", cursor: subscribed ? "default" : (subLoading || freeSubbing) ? "wait" : "pointer", animation: subscribed ? "subscribedPop 0.4s ease-out" : "subscribePulse 2s ease-in-out infinite", transition: "background-color 0.3s ease, color 0.3s ease" }}>
-              {subscribed ? "Subscribed ✓" : freeSubbing ? "Subscribing..." : (subscriptionPrice ?? 0) === 0 ? "Subscribe for Free" : "Subscribe"}
+            <div
+              onClick={handleSubscribeBannerClick}
+              style={{
+                marginLeft: "auto", padding: "8px 20px", borderRadius: "8px",
+                backgroundColor: buttonBg,
+                fontSize: "14px", fontWeight: 700, color: buttonColor,
+                whiteSpace: "nowrap", flexShrink: 0,
+                fontFamily: "'Inter', sans-serif",
+                cursor: subscribed ? "default" : (subLoading || freeSubbing) ? "wait" : "pointer",
+                animation: subscribed
+                  ? "subscribedPop 0.4s ease-out"
+                  : "subscribePulse 2s ease-in-out infinite",
+                transition: "background-color 0.3s ease, color 0.3s ease",
+              }}
+            >
+              {buttonLabel}
             </div>
           </>
         </div>
@@ -564,9 +583,8 @@ function PostCardInner({
 
       {!isTextPost && !isPollPost && (
         <PostMediaViewer
-  media={normalizedMedia} isLocked={post.isLocked} price={post.price}
-  isPPV={post.is_ppv}
-  isUnlockedPPV={post.is_ppv && !post.isLocked}
+          media={normalizedMedia} isLocked={post.isLocked} price={post.price}
+          isPPV={post.is_ppv} isUnlockedPPV={post.is_ppv && !post.isLocked}
           onDoubleTap={handleDoubleTapLike}
           onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }}
           onUnlock={() => onUnlock?.(post.id)}
@@ -585,18 +603,19 @@ function PostCardInner({
 
       {!post.isLocked && (
         <div style={{ padding: "0 16px" }}>
-          <PostActions likes={likeCount} comments={commentCount} liked={liked} bookmarked={savedPost} isSubscribed={true} isOwnProfile={false} onLike={handleLike} onComment={handleToggleComment} onTip={() => setTipOpen(true)} onBookmark={handleSavePost} />
+          <PostActions
+            likes={likeCount} comments={commentCount} liked={liked}
+            bookmarked={savedPost} isSubscribed={true} isOwnProfile={false}
+            onLike={handleLike} onComment={handleToggleComment}
+            onTip={() => setTipOpen(true)} onBookmark={handleSavePost}
+          />
           <CommentSection
-            postId={post.id}
-            comments={comments}
+            postId={post.id} comments={comments}
             viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null}
             viewerUserId={viewer?.id}
-            isOpen={commentOpen}
-            onAddComment={handleAddComment}
-            onDeleteComment={handleDeleteComment}
-            isLoading={commentsLoading}
-            totalCommentCount={commentCount}
-            onClose={() => setCommentOpen(false)}
+            isOpen={commentOpen} onAddComment={handleAddComment}
+            onDeleteComment={handleDeleteComment} isLoading={commentsLoading}
+            totalCommentCount={commentCount} onClose={() => setCommentOpen(false)}
           />
         </div>
       )}
@@ -605,15 +624,16 @@ function PostCardInner({
 }
 
 export const PostCard = memo(PostCardInner, (prev, next) => {
-  if (prev.post.id !== next.post.id) return false;
-  if (prev.post.liked !== next.post.liked) return false;
-  if (prev.post.likes !== next.post.likes) return false;
-  if (prev.post.comments !== next.post.comments) return false;
-  if (prev.post.isLocked !== next.post.isLocked) return false;
-  if (prev.initialSlide !== next.initialSlide) return false;
+  if (prev.post.id          !== next.post.id)          return false;
+  if (prev.post.liked       !== next.post.liked)       return false;
+  if (prev.post.likes       !== next.post.likes)       return false;
+  if (prev.post.comments    !== next.post.comments)    return false;
+  if (prev.post.isLocked    !== next.post.isLocked)    return false;
+  if (prev.initialSlide     !== next.initialSlide)     return false;
   if (prev.isSubscribedExternal !== next.isSubscribedExternal) return false;
   if (prev.initialSavedPost !== next.initialSavedPost) return false;
   if (prev.initialSavedCreator !== next.initialSavedCreator) return false;
+  if (prev.is_renewal       !== next.is_renewal)       return false;
   return true;
 });
 
