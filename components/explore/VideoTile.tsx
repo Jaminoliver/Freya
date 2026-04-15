@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Play, Heart, MessageCircle } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 
 export interface VideoTileData {
   type: "video";
@@ -17,6 +15,8 @@ export interface VideoTileData {
   like_count: number;
   comment_count: number;
   duration_seconds: number | null;
+  subscriber_count: number;
+  likes_count: number;
 }
 
 const STREAM_CDN =
@@ -24,7 +24,7 @@ const STREAM_CDN =
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, "")     + "K";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
   return String(n);
 }
 
@@ -35,261 +35,158 @@ function formatDuration(seconds: number | null): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-const FALLBACK_AVATAR = "https://i.pravatar.cc/150?img=1";
+interface VideoTileProps {
+  data: VideoTileData;
+  isActive: boolean;
+  onTileRef: (id: number, el: HTMLDivElement | null) => void;
+  onUserInteract: (id: number) => void;
+}
 
-export function VideoTile({ data }: { data: VideoTileData }) {
-  const router     = useRouter();
-  const tileRef    = useRef<HTMLDivElement>(null);
-  const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [viewed, setViewed] = useState(false);
+export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTileProps) {
+  const router = useRouter();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [srcLoaded, setSrcLoaded] = useState(false);
+  const [thumbError, setThumbError] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
 
-  const thumbnail =
-    data.thumbnail_url ||
-    (data.bunny_video_id
-      ? `https://${STREAM_CDN}/${data.bunny_video_id}/thumbnail.jpg`
-      : null);
+  const previewUrl = data.bunny_video_id
+    ? `https://${STREAM_CDN}/${data.bunny_video_id}/play_360p.mp4`
+    : null;
 
-  // ── Mark post as viewed (idempotent) ──────────────────────────────────────
-  const markViewed = useCallback(async () => {
-    if (viewed) return;
-    setViewed(true); // optimistic — prevents double upsert
-    try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      await supabase.from("viewed_content").upsert(
-        {
-          user_id:    user.id,
-          post_id:    data.post_id,
-          creator_id: data.creator_id,
-        },
-        { onConflict: "user_id,post_id", ignoreDuplicates: true }
-      );
-    } catch (err) {
-      console.error("[VideoTile] markViewed:", err);
-    }
-  }, [viewed, data.post_id, data.creator_id]);
-
-  // ── Dwell tracking: 0.5 threshold, 2s timer ───────────────────────────────
   useEffect(() => {
-    const el = tileRef.current;
-    if (!el || viewed) return;
+    if (isActive && !srcLoaded) setSrcLoaded(true);
+  }, [isActive, srcLoaded]);
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          // Start 2s dwell timer
-          timerRef.current = setTimeout(markViewed, 2000);
-        } else {
-          // Tile left viewport before 2s — cancel
-          if (timerRef.current) {
-            clearTimeout(timerRef.current);
-            timerRef.current = null;
-          }
-        }
-      },
-      { threshold: 0.5 }
-    );
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
 
-    observer.observe(el);
+    if (isActive) {
+      const tryPlay = () => {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      };
+      if (video.readyState >= 3) {
+        tryPlay();
+      } else {
+        video.addEventListener("canplay", tryPlay, { once: true });
+        return () => video.removeEventListener("canplay", tryPlay);
+      }
+    } else {
+      video.pause();
+    }
+  }, [isActive, srcLoaded]);
 
-    return () => {
-      observer.disconnect();
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [viewed, markViewed]);
+  // ── Only change: use scrollTo param instead of post ──────────────────────
+  const handleClick = () => router.push(`/${data.username}?scrollTo=${data.post_id}`);
 
-  // ── Click: instant mark + navigate ────────────────────────────────────────
-  const handleClick = () => {
-    markViewed();
-    router.push(`/${data.username}?post=${data.post_id}`);
-  };
-
+  const thumbnail = data.thumbnail_url ?? null;
   const duration = formatDuration(data.duration_seconds);
+  const name = data.display_name || data.username;
+  const initials = (name[0] ?? "?").toUpperCase();
 
   return (
     <div
-      ref={tileRef}
+      ref={(el) => onTileRef(data.post_id, el)}
       onClick={handleClick}
+      onMouseEnter={() => onUserInteract(data.post_id)}
+      onTouchStart={() => onUserInteract(data.post_id)}
       style={{
-        position:        "relative",
-        width:           "100%",
-        height:          "280px",
-        borderRadius:    "12px",
-        overflow:        "hidden",
-        cursor:          "pointer",
+        position: "relative",
+        width: "100%",
+        height: "280px",
+        borderRadius: "12px",
+        overflow: "hidden",
+        cursor: "pointer",
         backgroundColor: "#1A1A2E",
-        userSelect:      "none",
+        userSelect: "none",
+        WebkitUserSelect: "none",
       }}
     >
-      {/* Thumbnail */}
-      {thumbnail && (
+      {thumbnail && !thumbError ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={thumbnail}
           alt=""
+          onError={() => setThumbError(true)}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      ) : (
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #1A1A2E 0%, #2A2A3D 100%)" }} />
+      )}
+
+      {previewUrl && (
+        <video
+          ref={videoRef}
+          src={srcLoaded ? previewUrl : undefined}
+          muted
+          playsInline
+          preload="auto"
           style={{
-            position:   "absolute",
-            inset:      0,
-            width:      "100%",
-            height:     "100%",
-            objectFit:  "cover",
+            position: "absolute", inset: 0, width: "100%", height: "100%",
+            objectFit: "cover",
+            opacity: isActive ? 1 : 0,
+            transition: "opacity 0.3s ease",
           }}
         />
       )}
 
-      {/* Gradient overlay */}
-      <div
-        style={{
-          position:   "absolute",
-          inset:      0,
-          background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 45%, transparent 100%)",
-        }}
-      />
+      <div style={{
+        position: "absolute", inset: 0,
+        background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 45%, transparent 100%)",
+      }} />
 
-      {/* Play button — centred slightly above middle */}
-      <div
-        style={{
-          position:  "absolute",
-          top:       "50%",
-          left:      "50%",
-          transform: "translate(-50%, -60%)",
-        }}
-      >
-        <div
-          style={{
-            width:           "38px",
-            height:          "38px",
-            borderRadius:    "50%",
-            backgroundColor: "rgba(255,255,255,0.18)",
-            backdropFilter:  "blur(6px)",
-            display:         "flex",
-            alignItems:      "center",
-            justifyContent:  "center",
-          }}
-        >
-          <Play size={16} fill="#fff" color="#fff" style={{ marginLeft: "2px" }} />
-        </div>
-      </div>
-
-      {/* Duration badge — top right */}
       {duration && (
-        <div
-          style={{
-            position:        "absolute",
-            top:             "8px",
-            right:           "8px",
-            backgroundColor: "rgba(0,0,0,0.55)",
-            backdropFilter:  "blur(4px)",
-            color:           "#fff",
-            fontSize:        "10px",
-            fontWeight:      600,
-            padding:         "2px 6px",
-            borderRadius:    "4px",
-            fontFamily:      "'Inter', sans-serif",
-            letterSpacing:   "0.3px",
-          }}
-        >
+        <div style={{
+          position: "absolute", top: "8px", right: "8px",
+          backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
+          color: "#fff", fontSize: "10px", fontWeight: 600,
+          padding: "2px 6px", borderRadius: "4px",
+          fontFamily: "'Inter', sans-serif", letterSpacing: "0.3px",
+        }}>
           {duration}
         </div>
       )}
 
-      {/* Bottom info */}
-      <div
-        style={{
-          position: "absolute",
-          bottom:   "10px",
-          left:     "10px",
-          right:    "10px",
-        }}
-      >
-        {/* Creator avatar + name */}
-        <div
-          style={{
-            display:     "flex",
-            alignItems:  "center",
-            gap:         "6px",
-            marginBottom: "6px",
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={data.avatar_url || FALLBACK_AVATAR}
-            alt={data.display_name || data.username}
-            style={{
-              width:        "20px",
-              height:       "20px",
-              borderRadius: "50%",
-              border:       "1.5px solid #8B5CF6",
-              objectFit:    "cover",
-              flexShrink:   0,
-            }}
-          />
-          <p
-            style={{
-              margin:       0,
-              fontSize:     "11px",
-              fontWeight:   700,
-              color:        "#fff",
-              fontFamily:   "'Inter', sans-serif",
-              whiteSpace:   "nowrap",
-              overflow:     "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {data.display_name || data.username}
-          </p>
+      <div style={{ position: "absolute", bottom: "10px", left: "10px", right: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+          <div style={{ width: "45px", height: "45px", borderRadius: "50%", padding: "1.5px", background: "conic-gradient(#C45F8C, #8B3FBF, #C45F8C)", flexShrink: 0 }}>
+            <div style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden", border: "1.5px solid #0A0A0F" }}>
+              {avatarError || !data.avatar_url ? (
+                <div style={{ width: "100%", height: "100%", background: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "13px", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
+                  {initials}
+                </div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={data.avatar_url} alt={name} onError={() => setAvatarError(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              )}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1px", overflow: "hidden", marginBottom: "4px" }}>
+            <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {name}
+            </p>
+            <p style={{ margin: 0, fontSize: "11px", fontWeight: 400, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              @{data.username}
+            </p>
+          </div>
         </div>
 
-        {/* Engagement stats */}
-        <div
-          style={{
-            display:    "flex",
-            alignItems: "center",
-            gap:        "10px",
-          }}
-        >
-          <div
-            style={{
-              display:    "flex",
-              alignItems: "center",
-              gap:        "3px",
-            }}
-          >
-            <Heart size={11} fill="rgba(255,255,255,0.75)" color="rgba(255,255,255,0.75)" />
-            <span
-              style={{
-                fontSize:  "10px",
-                color:     "rgba(255,255,255,0.75)",
-                fontFamily: "'Inter', sans-serif",
-                fontWeight: 500,
-              }}
-            >
-              {formatCount(data.like_count)}
-            </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 18h20" /><path d="M4 18L2 8l4.5 4L12 4l5.5 8L22 8l-2 10H4z" />
+              <circle cx="12" cy="4" r="1.2" fill="#F5C842" stroke="none" />
+              <circle cx="6.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
+              <circle cx="17.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
+            </svg>
+            <span style={{ fontSize: "12px", color: "#F5C842", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>{formatCount(data.subscriber_count)}</span>
           </div>
-
-          <div
-            style={{
-              display:    "flex",
-              alignItems: "center",
-              gap:        "3px",
-            }}
-          >
-            <MessageCircle size={11} color="rgba(255,255,255,0.75)" />
-            <span
-              style={{
-                fontSize:  "10px",
-                color:     "rgba(255,255,255,0.75)",
-                fontFamily: "'Inter', sans-serif",
-                fontWeight: 500,
-              }}
-            >
-              {formatCount(data.comment_count)}
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+            <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.85)", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>{formatCount(data.likes_count)}</span>
           </div>
         </div>
       </div>
