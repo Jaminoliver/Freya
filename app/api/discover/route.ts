@@ -290,7 +290,7 @@ export async function GET(req: NextRequest) {
           username: creator.username,
           display_name: creator.display_name,
           avatar_url: creator.avatar_url,
-          thumbnail_url: video.bunny_video_id ? `https://${process.env.BUNNY_STREAM_CDN_HOSTNAME}/${video.bunny_video_id}/thumbnail.jpg` : video.thumbnail_url,
+          thumbnail_url: video.bunny_video_id ? `https://vz-8bc100f4-3c0.b-cdn.net/${video.bunny_video_id}/thumbnail.jpg` : video.thumbnail_url,
           bunny_video_id: video.bunny_video_id,
           like_count: video.like_count,
           comment_count: video.comment_count,
