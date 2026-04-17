@@ -165,12 +165,12 @@ export default function ProfileBanner({
       id: "followers",
       value: formatCount(stats.followers),
       icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="8" r="4"/>
           <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
         </svg>
       ),
-      color: "#FFFFFF",
+      color: "#60A5FA",
       onClick: undefined as ((e: React.MouseEvent) => void) | undefined,
     },
     {

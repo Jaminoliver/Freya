@@ -1,28 +1,162 @@
+// components/auth/LoginForm.tsx
 "use client";
 
-import { useState } from "react";
-import { Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { useState, useRef, useEffect, Suspense } from "react";
+import { Eye, EyeOff, ArrowLeft, AlertCircle, CheckCircle2, Check } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export function LoginForm() {
+type FieldErrors = {
+  email?: string;
+  password?: string;
+};
+
+type BannerState =
+  | { type: "error"; message: string; action?: { label: string; href: string } }
+  | { type: "info"; message: string }
+  | null;
+
+function LoginFormInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [banner, setBanner] = useState<BannerState>(null);
+
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  // Read query params on mount (prefill email, show context banners)
+  useEffect(() => {
+    const prefillEmail = searchParams.get("email");
+    const reason = searchParams.get("reason");
+    const error = searchParams.get("error");
+
+    if (prefillEmail) {
+      setFormData((prev) => ({ ...prev, email: prefillEmail }));
+      // Focus password since email is already there
+      setTimeout(() => passwordRef.current?.focus(), 100);
+    } else {
+      setTimeout(() => emailRef.current?.focus(), 100);
+    }
+
+    if (reason === "account_exists") {
+      setBanner({
+        type: "info",
+        message: "Looks like you already have an account. Log in below to continue.",
+      });
+    } else if (error === "oauth_failed") {
+      setBanner({
+        type: "error",
+        message: "Google sign-in didn't complete. Please try again.",
+      });
+    } else if (error === "session_expired") {
+      setBanner({
+        type: "info",
+        message: "Your session has expired. Please log in again.",
+      });
+    }
+  }, [searchParams]);
+
+  // ───── Validation ─────
+  const validateEmail = (v: string): string | undefined => {
+    const trimmed = v.trim();
+    if (!trimmed) return "Please enter your email";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return "Please enter a valid email (e.g. name@example.com)";
+    return undefined;
+  };
+
+  const validatePassword = (v: string): string | undefined => {
+    if (!v) return "Please enter your password";
+    return undefined;
+  };
+
+  // ───── Handlers ─────
+  const updateField = (field: keyof typeof formData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (fieldErrors[field]) {
+      setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+    if (banner?.type === "error") setBanner(null);
+  };
+
+  const handleBlur = (field: keyof typeof formData) => {
+    // Don't validate empty fields on blur — only validate if user typed something
+    // This prevents errors when clicking links/buttons outside the form
+    if (!formData[field]) return;
+
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    let error: string | undefined;
+    if (field === "email") error = validateEmail(formData.email);
+    else if (field === "password") error = validatePassword(formData.password);
+    setFieldErrors((prev) => ({ ...prev, [field]: error }));
+  };
+
+  const isFieldValid = (field: keyof typeof formData): boolean => {
+    if (!touched[field]) return false;
+    if (fieldErrors[field]) return false;
+    if (field === "email") return !validateEmail(formData.email);
+    // No success indicator on password for login (we don't know if it's correct until submit)
+    return false;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setBanner(null);
+
+    const errors: FieldErrors = {
+      email: validateEmail(formData.email),
+      password: validatePassword(formData.password),
+    };
+    setTouched({ email: true, password: true });
+    setFieldErrors(errors);
+
+    if (errors.email) { emailRef.current?.focus(); return; }
+    if (errors.password) { passwordRef.current?.focus(); return; }
+
     setLoading(true);
+    console.log("🚀 LOGIN STARTED", { email: formData.email });
+
     const supabase = createClient();
-    const { error: loginError } = await supabase.auth.signInWithPassword({
-      email: formData.email,
+    const { data, error: loginError } = await supabase.auth.signInWithPassword({
+      email: formData.email.trim(),
       password: formData.password,
     });
-    if (loginError) { setError(loginError.message); setLoading(false); return; }
+
+    console.log("📦 LOGIN RESPONSE", { data, error: loginError });
+
+    if (loginError) {
+      const msg = loginError.message.toLowerCase();
+      console.log("❌ LOGIN ERROR", loginError.message);
+
+      if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
+        setBanner({
+          type: "error",
+          message: "The email or password you entered is incorrect.",
+          action: { label: "Forgot password?", href: "/forgot-password" },
+        });
+      } else if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
+        setBanner({
+          type: "error",
+          message: "Please verify your email before logging in.",
+          action: { label: "Resend verification code", href: `/verify-otp?email=${encodeURIComponent(formData.email.trim())}` },
+        });
+      } else if (msg.includes("rate limit") || msg.includes("too many")) {
+        setBanner({ type: "error", message: "Too many login attempts. Please wait a few minutes and try again." });
+      } else if (msg.includes("network") || msg.includes("fetch") || msg.includes("failed to fetch")) {
+        setBanner({ type: "error", message: "Connection error. Please check your internet and try again." });
+      } else {
+        setBanner({ type: "error", message: "Something went wrong. Please try again." });
+      }
+      setLoading(false);
+      return;
+    }
+
+    console.log("✅ LOGIN SUCCESS");
     router.push("/dashboard");
   };
 
@@ -34,10 +168,45 @@ export function LoginForm() {
     });
   };
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%", borderRadius: "10px", padding: "15px 16px", fontSize: "16px",
-    outline: "none", backgroundColor: "#141420", border: "1.5px solid #1F1F2A",
-    color: "#F1F5F9", boxSizing: "border-box",
+  // ───── Styles ─────
+  const getInputStyle = (field: keyof typeof formData): React.CSSProperties => {
+    const hasError = !!fieldErrors[field];
+    const isValid = isFieldValid(field);
+    let borderColor = "#1F1F2A";
+    if (hasError) borderColor = "#EF4444";
+    else if (isValid) borderColor = "#10B981";
+
+    return {
+      width: "100%",
+      borderRadius: "10px",
+      padding: "15px 16px",
+      fontSize: "16px",
+      outline: "none",
+      backgroundColor: "#141420",
+      border: `1.5px solid ${borderColor}`,
+      color: "#F1F5F9",
+      boxSizing: "border-box",
+      transition: "border-color 0.15s ease",
+    };
+  };
+
+  const fieldErrorStyle: React.CSSProperties = {
+    margin: "6px 2px 0",
+    fontSize: "12px",
+    color: "#EF4444",
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    lineHeight: 1.4,
+  };
+
+  const successIconStyle: React.CSSProperties = {
+    position: "absolute",
+    right: "14px",
+    top: "50%",
+    transform: "translateY(-50%)",
+    color: "#10B981",
+    pointerEvents: "none",
   };
 
   return (
@@ -59,22 +228,125 @@ export function LoginForm() {
       <div style={{ padding: "32px 24px 120px", display: "flex", flexDirection: "column", gap: "20px" }}>
         <h2 style={{ color: "#F1F5F9", fontSize: "18px", fontWeight: 500, margin: 0 }}>Log In</h2>
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <input type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required style={inputStyle} />
-          <div style={{ position: "relative" }}>
-            <input type={showPassword ? "text" : "password"} placeholder="Password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required style={{ ...inputStyle, paddingRight: "48px" }} />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: 0 }}>
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
+        {/* ───── Banner ───── */}
+        {banner && (
+          <div
+            role="alert"
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "10px",
+              padding: "12px 14px",
+              borderRadius: "10px",
+              backgroundColor: banner.type === "error" ? "rgba(239, 68, 68, 0.08)" : "rgba(139, 92, 246, 0.08)",
+              border: `1px solid ${banner.type === "error" ? "rgba(239, 68, 68, 0.3)" : "rgba(139, 92, 246, 0.3)"}`,
+            }}
+          >
+            {banner.type === "error" ? (
+              <AlertCircle size={18} color="#EF4444" style={{ flexShrink: 0, marginTop: "1px" }} />
+            ) : (
+              <CheckCircle2 size={18} color="#8B5CF6" style={{ flexShrink: 0, marginTop: "1px" }} />
+            )}
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontSize: "13px", color: banner.type === "error" ? "#FCA5A5" : "#C4B5FD", lineHeight: 1.5 }}>
+                {banner.message}
+              </p>
+              {banner.type === "error" && banner.action && (
+                <Link
+                  href={banner.action.href}
+                  style={{
+                    display: "inline-block",
+                    marginTop: "6px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "#FCA5A5",
+                    textDecoration: "underline",
+                  }}
+                >
+                  {banner.action.label}
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          {/* Email */}
+          <div>
+            <div style={{ position: "relative" }}>
+              <input
+                ref={emailRef}
+                type="email"
+                placeholder="Email"
+                value={formData.email}
+                onChange={(e) => updateField("email", e.target.value)}
+                onBlur={() => handleBlur("email")}
+                style={{ ...getInputStyle("email"), paddingRight: isFieldValid("email") ? "42px" : "16px" }}
+                aria-invalid={!!fieldErrors.email}
+                aria-describedby={fieldErrors.email ? "email-error" : undefined}
+                autoComplete="email"
+              />
+              {isFieldValid("email") && <Check size={18} style={successIconStyle} />}
+            </div>
+            {fieldErrors.email && (
+              <p id="email-error" style={fieldErrorStyle}>
+                <AlertCircle size={12} /> {fieldErrors.email}
+              </p>
+            )}
           </div>
 
-          {error && <p style={{ margin: 0, fontSize: "13px", color: "#EF4444", textAlign: "center" }}>{error}</p>}
+          {/* Password */}
+          <div>
+            <div style={{ position: "relative" }}>
+              <input
+                ref={passwordRef}
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={formData.password}
+                onChange={(e) => updateField("password", e.target.value)}
+                onBlur={() => handleBlur("password")}
+                style={{ ...getInputStyle("password"), paddingRight: "48px" }}
+                aria-invalid={!!fieldErrors.password}
+                aria-describedby={fieldErrors.password ? "password-error" : undefined}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: 0 }}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {fieldErrors.password && (
+              <p id="password-error" style={fieldErrorStyle}>
+                <AlertCircle size={12} /> {fieldErrors.password}
+              </p>
+            )}
+          </div>
 
-          <button type="submit" disabled={loading} style={{ width: "100%", borderRadius: "12px", padding: "16px", fontSize: "16px", fontWeight: 700, border: "none", cursor: loading ? "not-allowed" : "pointer", backgroundColor: loading ? "#6d44c4" : "#8B5CF6", color: "#FFFFFF", boxShadow: "0 4px 24px rgba(139,92,246,0.35)" }}>
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: "100%",
+              borderRadius: "12px",
+              padding: "16px",
+              fontSize: "16px",
+              fontWeight: 700,
+              border: "none",
+              cursor: loading ? "not-allowed" : "pointer",
+              backgroundColor: loading ? "#6d44c4" : "#8B5CF6",
+              color: "#FFFFFF",
+              boxShadow: "0 4px 24px rgba(139,92,246,0.35)",
+              marginTop: "4px",
+            }}
+          >
             {loading ? "Logging in..." : "Log In"}
           </button>
 
-          <p style={{ textAlign: "center", fontSize: "11px", color: "#6B6B8A", margin: "4px 0 0" }}>
+          <p style={{ textAlign: "center", fontSize: "11px", color: "#6B6B8A", margin: "4px 0 0", lineHeight: 1.5 }}>
             By logging in, you agree to our{" "}
             <Link href="/terms" style={{ color: "#8B5CF6", textDecoration: "none" }}>Terms of Service</Link>{" "}and{" "}
             <Link href="/privacy" style={{ color: "#8B5CF6", textDecoration: "none" }}>Privacy Policy</Link>, and confirm you are at least 18 years old.
@@ -101,9 +373,22 @@ export function LoginForm() {
               <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M11.8992 8.40503L19.3934 0H17.6094L11.1172 7.29695L5.95699 0H0L7.84458 11.1196L0 20H1.78407L8.62637 12.3216L14.043 20H20L11.8988 8.40503H11.8992ZM9.5241 11.2817L8.74638 10.1456L2.40243 1.34219H5.10938L10.2752 8.5118L11.0529 9.6479L17.6103 18.7284H14.9033L9.5241 11.2821V11.2817Z" /></svg>
               Sign in with X
             </button>
+            <p style={{ textAlign: "center", fontSize: "11px", color: "#6B6B8A", margin: "2px 0 0", lineHeight: 1.5 }}>
+              By continuing with Google, you agree to our{" "}
+              <Link href="/terms" style={{ color: "#8B5CF6", textDecoration: "none" }}>Terms</Link>{" "}and confirm you're 18+.
+            </p>
           </div>
         </form>
       </div>
     </div>
+  );
+}
+
+// Wrap in Suspense because useSearchParams requires it
+export function LoginForm() {
+  return (
+    <Suspense fallback={<div style={{ width: "390px", minHeight: "100vh", backgroundColor: "#0A0A0F" }} />}>
+      <LoginFormInner />
+    </Suspense>
   );
 }

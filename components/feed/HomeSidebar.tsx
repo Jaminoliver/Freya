@@ -1,7 +1,8 @@
+// components/layout/HomeSidebar.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { BadgeCheck, Heart, Users, RefreshCw, Filter, ChevronLeft, ChevronRight } from "lucide-react";
+import { BadgeCheck, UserPlus, RefreshCw, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -13,6 +14,7 @@ interface SuggestedCreator {
   banner_url:       string | null;
   isVerified:       boolean;
   subscriber_count: number;
+  follower_count:   number;
   likes_count:      number;
   is_online?:       boolean;
 }
@@ -25,6 +27,7 @@ interface ProfileRow {
   banner_url:       string | null;
   is_verified:      boolean | null;
   subscriber_count: number | null;
+  follower_count:   number | null;
   likes_count:      number | null;
 }
 
@@ -49,7 +52,7 @@ export function HomeSidebar() {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, display_name, username, avatar_url, banner_url, is_verified, subscriber_count, likes_count")
+      .select("id, display_name, username, avatar_url, banner_url, is_verified, subscriber_count, follower_count, likes_count")
       .eq("role", "creator")
       .eq("is_active", true)
       .eq("is_suspended", false)
@@ -66,6 +69,7 @@ export function HomeSidebar() {
           banner_url:       p.banner_url,
           isVerified:       p.is_verified ?? false,
           subscriber_count: p.subscriber_count ?? 0,
+          follower_count:   p.follower_count ?? 0,
           likes_count:      p.likes_count ?? 0,
           is_online:        Math.random() > 0.5,
         }))
@@ -260,16 +264,38 @@ function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: ()
           <div style={{ fontSize: "11px", color: "#9A8FA8", marginTop: "2px" }}>
             @{creator.username}
           </div>
-          <div style={{ display: "flex", gap: "12px", marginTop: "7px" }}>
+
+          {/* Stats — matches CreatorCard style */}
+          <div style={{ display: "flex", gap: "10px", marginTop: "7px" }}>
+
+            {/* Subscribers — crown (gold) */}
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <Users size={11} color="#6E6480" />
-              <span style={{ fontSize: "11px", color: "#9A8FA8", fontWeight: 500 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 18h20" />
+                <path d="M4 18L2 8l4.5 4L12 4l5.5 8L22 8l-2 10H4z" />
+                <circle cx="12" cy="4" r="1.2" fill="#F5C842" stroke="none" />
+                <circle cx="6.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
+                <circle cx="17.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
+              </svg>
+              <span style={{ fontSize: "12px", color: "#F5C842", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
                 {formatCount(creator.subscriber_count)}
               </span>
             </div>
+
+            {/* Followers — user plus (soft blue) */}
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <Heart size={11} color="#C45F8C" fill="#C45F8C" />
-              <span style={{ fontSize: "11px", color: "#C45F8C", fontWeight: 500 }}>
+              <UserPlus size={14} color="#60A5FA" strokeWidth={1.8} />
+              <span style={{ fontSize: "12px", color: "#60A5FA", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
+                {formatCount(creator.follower_count)}
+              </span>
+            </div>
+
+            {/* Likes — heart outline (white) */}
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
+              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.85)", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
                 {formatCount(creator.likes_count)}
               </span>
             </div>
