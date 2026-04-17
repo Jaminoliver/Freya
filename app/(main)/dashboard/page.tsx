@@ -19,7 +19,8 @@ const SUGGESTIONS_EVERY = 5;
 
 interface FeedCursors {
   subOffset:   number;
-  unsubOffset: number;
+  freshOffset: number;
+  hotOffset:   number;
 }
 
 interface FeedPost {
@@ -113,7 +114,7 @@ function parseCursors(raw: string | undefined | null): FeedCursors | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    if (typeof parsed.subOffset === "number" && typeof parsed.unsubOffset === "number") {
+    if (typeof parsed.subOffset === "number" && typeof parsed.freshOffset === "number" && typeof parsed.hotOffset === "number") {
       return parsed as FeedCursors;
     }
     return null;
@@ -205,7 +206,8 @@ export default function HomePage() {
       const params = new URLSearchParams();
       if (cursors) {
         params.set("subOffset",   String(cursors.subOffset));
-        params.set("unsubOffset", String(cursors.unsubOffset));
+        params.set("freshOffset", String(cursors.freshOffset));
+params.set("hotOffset",   String(cursors.hotOffset));
       }
       const qs  = params.toString();
       const url = `/api/posts/feed${qs ? `?${qs}` : ""}`;
@@ -221,7 +223,8 @@ export default function HomePage() {
 
       const merged: FeedPost[] = data.posts.map(mergeSync);
       const newCursors: FeedCursors | null = data.hasMore
-        ? { subOffset: data.nextSubOffset ?? 0, unsubOffset: data.nextUnsubOffset ?? 0 }
+        ? { subOffset: data.nextSubOffset ?? 0, freshOffset: data.nextFreshOffset ?? 0, hotOffset: data.nextHotOffset ?? 0 }
+
         : null;
 
       if (cursors) {
