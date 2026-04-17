@@ -389,7 +389,8 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
 
       {/* SEARCH OVERLAY */}
       {searchOpen && (
-        <div className="md:hidden" style={{ position: "fixed", top: "56px", left: 0, right: 0, bottom: "64px", backgroundColor: "#0A0A0F", zIndex: 99, overflowY: "auto", animation: "fadeIn 0.2s ease", fontFamily: "'Inter', sans-serif" }}>
+        <div className="md:hidden" style={{ position: "fixed", top: "56px", left: 0, right: 0,
+bottom: "calc(64px + env(safe-area-inset-bottom))", backgroundColor: "#0A0A0F", zIndex: 99, overflowY: "auto", animation: "fadeIn 0.2s ease", fontFamily: "'Inter', sans-serif" }}>
 
           {/* Discover grid — when no query */}
           {!hasQuery && (

@@ -2,7 +2,6 @@
 "use client";
 
 import { BadgeCheck, UserPlus } from "lucide-react";
-import { Avatar } from "@/components/ui/Avatar";
 
 export interface SearchRowCreator {
   id: string;
@@ -81,15 +80,27 @@ export function CreatorSearchRow({ creator, query, highlighted = false, onSelect
         if (!highlighted) e.currentTarget.style.backgroundColor = "transparent";
       }}
     >
-      <Avatar src={creator.avatar_url ?? undefined} alt={name} size="sm" showRing />
+      <div style={{
+  width: "48px", height: "48px", borderRadius: "50%", flexShrink: 0,
+  border: "2px solid #2A2A3D", overflow: "hidden",
+}}>
+  <div style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden" }}>
+    <img
+      src={creator.avatar_url ?? ""}
+      alt={name}
+      loading="lazy"
+      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+    />
+  </div>
+</div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Top line: name + verified */}
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
           <span
             style={{
-              fontSize: "14px",
-              fontWeight: 600,
+              fontSize: "16px",
+fontWeight: 700,
               color: "#E5E5F0",
               whiteSpace: "nowrap",
               overflow: "hidden",
@@ -106,12 +117,12 @@ export function CreatorSearchRow({ creator, query, highlighted = false, onSelect
         <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
           <span
             style={{
-              fontSize: "12px",
-              color: "#6B6B8A",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              maxWidth: "100px",
+              fontSize: "13px",
+color: "#6B6B8A",
+whiteSpace: "nowrap",
+overflow: "hidden",
+textOverflow: "ellipsis",
+maxWidth: "120px",
             }}
           >
             @<HighlightedText text={creator.username} query={query} />
@@ -121,8 +132,8 @@ export function CreatorSearchRow({ creator, query, highlighted = false, onSelect
 
           {/* Followers */}
           <span style={{ display: "flex", alignItems: "center", gap: "3px", flexShrink: 0 }}>
-            <UserPlus size={11} color="#60A5FA" strokeWidth={1.8} />
-            <span style={{ fontSize: "11px", color: "#60A5FA", fontWeight: 700 }}>
+            <UserPlus size={14} color="#60A5FA" strokeWidth={1.8} />
+<span style={{ fontSize: "12px", color: "#60A5FA", fontWeight: 700 }}>
               {formatCount(creator.follower_count)}
             </span>
           </span>
@@ -132,18 +143,18 @@ export function CreatorSearchRow({ creator, query, highlighted = false, onSelect
           {/* Likes */}
           <span style={{ display: "flex", alignItems: "center", gap: "3px", flexShrink: 0 }}>
             <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="rgba(255,255,255,0.15)"
-              stroke="rgba(255,255,255,0.9)"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
-            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.85)", fontWeight: 700 }}>
+  width="14"
+  height="14"
+  viewBox="0 0 24 24"
+  fill="rgba(255,255,255,0.15)"
+  stroke="rgba(255,255,255,0.9)"
+  strokeWidth="1.7"
+  strokeLinecap="round"
+  strokeLinejoin="round"
+>
+  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+</svg>
+<span style={{ fontSize: "12px", color: "rgba(255,255,255,0.85)", fontWeight: 700 }}>
               {formatCount(creator.likes_count)}
             </span>
           </span>
