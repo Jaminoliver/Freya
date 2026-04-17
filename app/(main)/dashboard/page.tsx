@@ -13,15 +13,14 @@ import type { PollData } from "@/components/feed/PollDisplay";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import type { User } from "@/lib/types/profile";
 
-const SCROLL_KEY        = "home_feed_scroll";
-const SLIDES_KEY        = "home_feed_slides";
+const SCROLL_KEY       = "home_feed_scroll";
+const SLIDES_KEY       = "home_feed_slides";
 const SUGGESTIONS_EVERY = 5;
 
 interface FeedCursors {
-  subOffset:     number;
-  freshOffset:   number;
-  hotOffset:     number;
-  renewalOffset: number;
+  subOffset:   number;
+  freshOffset: number;
+  hotOffset:   number;
 }
 
 interface FeedPost {
@@ -115,12 +114,7 @@ function parseCursors(raw: string | undefined | null): FeedCursors | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    if (
-      typeof parsed.subOffset     === "number" &&
-      typeof parsed.freshOffset   === "number" &&
-      typeof parsed.hotOffset     === "number" &&
-      typeof parsed.renewalOffset === "number"
-    ) {
+    if (typeof parsed.subOffset === "number" && typeof parsed.freshOffset === "number" && typeof parsed.hotOffset === "number") {
       return parsed as FeedCursors;
     }
     return null;
@@ -129,8 +123,8 @@ function parseCursors(raw: string | undefined | null): FeedCursors | null {
   }
 }
 
-function saveScroll(y: number)                { try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {} }
-function loadScroll(): number                 { try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; } }
+function saveScroll(y: number)          { try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {} }
+function loadScroll(): number           { try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; } }
 function saveSlides(m: Record<string, number>) { try { sessionStorage.setItem(SLIDES_KEY, JSON.stringify(m)); } catch {} }
 function loadSlides(): Record<string, number>  { try { return JSON.parse(sessionStorage.getItem(SLIDES_KEY) ?? "{}"); } catch { return {}; } }
 
@@ -188,7 +182,7 @@ export default function HomePage() {
     };
   }, []);
 
-  // ── Scroll restore ─────────────────────────────────────────────────────
+  // ── Scroll restore (double rAF for reliable paint timing) ──────────────
   useEffect(() => {
     if (apiLoading || scrollRestoredRef.current) return;
     scrollRestoredRef.current = true;
@@ -211,10 +205,9 @@ export default function HomePage() {
     try {
       const params = new URLSearchParams();
       if (cursors) {
-        params.set("subOffset",     String(cursors.subOffset));
-        params.set("freshOffset",   String(cursors.freshOffset));
-        params.set("hotOffset",     String(cursors.hotOffset));
-        params.set("renewalOffset", String(cursors.renewalOffset));
+        params.set("subOffset",   String(cursors.subOffset));
+        params.set("freshOffset", String(cursors.freshOffset));
+params.set("hotOffset",   String(cursors.hotOffset));
       }
       const qs  = params.toString();
       const url = `/api/posts/feed${qs ? `?${qs}` : ""}`;
@@ -230,19 +223,16 @@ export default function HomePage() {
 
       const merged: FeedPost[] = data.posts.map(mergeSync);
       const newCursors: FeedCursors | null = data.hasMore
-        ? {
-            subOffset:     data.nextSubOffset     ?? 0,
-            freshOffset:   data.nextFreshOffset   ?? 0,
-            hotOffset:     data.nextHotOffset     ?? 0,
-            renewalOffset: data.nextRenewalOffset ?? 0,
-          }
+        ? { subOffset: data.nextSubOffset ?? 0, freshOffset: data.nextFreshOffset ?? 0, hotOffset: data.nextHotOffset ?? 0 }
+
         : null;
 
       if (cursors) {
+        // Paginated append — use functional updater to avoid stale ref
         setPosts((prev) => {
           const updated = [...prev, ...merged];
           setFeed({
-            posts:      updated,
+            posts:     updated,
             nextCursor: newCursors ? JSON.stringify(newCursors) : "",
             fetchedAt:  Date.now(),
           });
@@ -251,10 +241,11 @@ export default function HomePage() {
         setNextCursors(newCursors);
         setLoadingMore(false);
       } else {
+        // Fresh load
         setPosts(merged);
         setNextCursors(newCursors);
         setFeed({
-          posts:      merged,
+          posts:     merged,
           nextCursor: newCursors ? JSON.stringify(newCursors) : "",
           fetchedAt:  Date.now(),
         });
@@ -369,8 +360,8 @@ export default function HomePage() {
   const feedItems = useMemo(() => {
     const items: React.ReactNode[] = [];
     posts.forEach((post, index) => {
-      const showBanner = !post.is_subscribed || post.is_renewal;
-      const subPrice   = post.profiles?.subscription_price ?? undefined;
+      const showBanner   = !post.is_subscribed || post.is_renewal;
+      const subPrice     = post.profiles?.subscription_price ?? undefined;
       items.push(
         <PostCard
           key={post.id}
