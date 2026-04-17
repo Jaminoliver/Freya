@@ -336,7 +336,10 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
       >
         {/* Default bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
-          <img src="/freya_logo.png" alt="Fréya" style={{ height: "91px", width: "auto", marginTop: "12px", marginLeft: "-30px" }} />
+  <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none" }}>
+    <img src="/freya_logo.png" alt="Fréya" style={{ height: "100px", width: "auto", marginTop: "12px" }} />
+  </div>
+  <div style={{ width: "38px" }} />
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             <button onClick={() => setSearchOpen(true)} aria-label="Search" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
               <Search size={22} strokeWidth={1.8} />
