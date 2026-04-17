@@ -1,19 +1,21 @@
 // app/api/posts/feed/route.ts
-// Unified feed: subbed + unsubbed posts with deterministic interleave and cursor-based pagination
+// Unified feed: hot_score ordering (view) + fresh/hot split + per-creator cap + reserved fresh slots
 import { NextRequest, NextResponse } from "next/server";
 import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
-const PAGE_SIZE       = 20;
-const SUB_FETCH_SIZE  = 12;   // Need ~8 per page (4/10 ratio), buffer for filterReady
-const UNSUB_FETCH_SIZE = 16;  // Need ~12 per page (6/10 ratio), buffer for filterReady
-const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
+const PAGE_SIZE        = 20;
+const SUB_FETCH_SIZE   = 12;   // 4/10 ratio × buffer
+const FRESH_FETCH_SIZE = 8;    // 2/10 ratio × buffer
+const HOT_FETCH_SIZE   = 14;   // 4/10 ratio × buffer
+const STREAM_CDN_HOST  = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
 
 const LAPSED_STATUSES = ["expired", "cancelled", "renewal_failed"];
 
-// Deterministic interleave pattern per 10 slots: 4 sub + 6 unsub
-// Positions 0,3,6,9 = sub; 1,2,4,5,7,8 = unsub
-const SUB_SLOTS = new Set([0, 3, 6, 9]);
+// Slot pattern per 10 slots: 4 sub + 2 fresh + 4 hot
+// Sub at 0,3,6,9 | Fresh at 1,7 | Hot at 2,4,5,8
+const SUB_SLOTS   = new Set([0, 3, 6, 9]);
+const FRESH_SLOTS = new Set([1, 7]);
 
 function extractBunnyPath(url: string | null): string | null {
   if (!url) return null;
@@ -47,33 +49,69 @@ function filterReady(posts: Record<string, unknown>[]) {
 }
 
 /**
- * Deterministic interleave: 4 sub + 6 unsub per 10 slots.
- * When one pool is exhausted, the other fills remaining slots.
- * Returns exactly `limit` posts (or fewer if both pools exhausted).
+ * Deterministic interleave with per-creator cap (max 2 per creator per page).
+ * Pattern per 10 slots: 4 sub + 2 fresh-unsub + 4 hot-unsub.
+ * When a slot's primary pool is empty, falls back to other pools (hot > fresh > sub priority
+ * for unsub slots; sub > hot > fresh for sub slots).
  */
 function deterministicInterleave(
   subPosts: Record<string, unknown>[],
-  unsubPosts: Record<string, unknown>[],
+  freshPosts: Record<string, unknown>[],
+  hotPosts: Record<string, unknown>[],
   limit: number
-): { posts: Record<string, unknown>[]; subConsumed: number; unsubConsumed: number } {
+): {
+  posts: Record<string, unknown>[];
+  subConsumed: number;
+  freshConsumed: number;
+  hotConsumed: number;
+} {
   const result: Record<string, unknown>[] = [];
-  let si = 0, ui = 0;
-  let slot = 0;
+  const creatorCounts = new Map<string, number>();
+  const indices = { sub: 0, fresh: 0, hot: 0 };
 
-  while (result.length < limit && (si < subPosts.length || ui < unsubPosts.length)) {
-    const wantSub = SUB_SLOTS.has(slot % 10);
-
-    if (wantSub) {
-      if (si < subPosts.length)      result.push(subPosts[si++]);
-      else if (ui < unsubPosts.length) result.push(unsubPosts[ui++]);
-    } else {
-      if (ui < unsubPosts.length)    result.push(unsubPosts[ui++]);
-      else if (si < subPosts.length) result.push(subPosts[si++]);
+  const tryAdd = (
+    pool: Record<string, unknown>[],
+    key: "sub" | "fresh" | "hot"
+  ): boolean => {
+    while (indices[key] < pool.length) {
+      const post = pool[indices[key]];
+      const creatorId = post.creator_id as string;
+      const count = creatorCounts.get(creatorId) ?? 0;
+      if (count < 2) {
+        result.push(post);
+        creatorCounts.set(creatorId, count + 1);
+        indices[key]++;
+        return true;
+      }
+      indices[key]++; // creator capped for this page, skip this post
     }
+    return false;
+  };
+
+  let slot = 0;
+  while (result.length < limit) {
+    const slotType = slot % 10;
+    let added = false;
+
+    if (SUB_SLOTS.has(slotType)) {
+      added = tryAdd(subPosts, "sub") || tryAdd(hotPosts, "hot") || tryAdd(freshPosts, "fresh");
+    } else if (FRESH_SLOTS.has(slotType)) {
+      added = tryAdd(freshPosts, "fresh") || tryAdd(hotPosts, "hot") || tryAdd(subPosts, "sub");
+    } else {
+      // hot slot
+      added = tryAdd(hotPosts, "hot") || tryAdd(freshPosts, "fresh") || tryAdd(subPosts, "sub");
+    }
+
+    if (!added) break;
     slot++;
   }
 
-  return { posts: result, subConsumed: si, unsubConsumed: ui };
+  return {
+    posts: result,
+    subConsumed: indices.sub,
+    freshConsumed: indices.fresh,
+    hotConsumed: indices.hot,
+  };
 }
 
 const POST_SELECT = `
@@ -96,7 +134,8 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const subOffset   = Math.max(0, parseInt(searchParams.get("subOffset")   ?? "0"));
-    const unsubOffset = Math.max(0, parseInt(searchParams.get("unsubOffset") ?? "0"));
+    const freshOffset = Math.max(0, parseInt(searchParams.get("freshOffset") ?? "0"));
+    const hotOffset   = Math.max(0, parseInt(searchParams.get("hotOffset")   ?? "0"));
     const service     = createServiceSupabaseClient();
 
     // ── Fetch active subs + lapsed subs in parallel ──────────────────────
@@ -112,7 +151,11 @@ export async function GET(req: NextRequest) {
     const subscribedSet = new Set<string>(subscribedIds);
     const lapsedSet     = new Set<string>(lapsedIds);
 
-    // ── Fetch subscribed posts + public posts in parallel ─────────────────
+    // ── Time boundaries ──────────────────────────────────────────────────
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+    // ── Sub pool: chronological from posts table ─────────────────────────
     const subPostsPromise = subscribedIds.length > 0
       ? service.from("posts").select(POST_SELECT)
           .eq("is_published", true).eq("is_deleted", false)
@@ -122,56 +165,68 @@ export async function GET(req: NextRequest) {
           .range(subOffset, subOffset + SUB_FETCH_SIZE - 1)
       : Promise.resolve({ data: [] });
 
-    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-
-    let unsubQuery = service.from("posts").select(POST_SELECT)
+    // ── Fresh pool: unsub posts < 24h, ordered by hot_score from view ────
+    let freshQuery = service.from("posts_ranked").select(POST_SELECT)
       .eq("is_published", true).eq("is_deleted", false)
       .eq("audience", "everyone")
       .neq("creator_id", user.id)
-      .order("like_count", { ascending: false })
-      .order("published_at", { ascending: false })
-      .range(unsubOffset, unsubOffset + UNSUB_FETCH_SIZE - 1);
+      .gt("published_at", twentyFourHoursAgo)
+      .order("hot_score", { ascending: false })
+      .range(freshOffset, freshOffset + FRESH_FETCH_SIZE - 1);
 
-    // Exclude only active subs from the unsub pool
-    // Lapsed creators stay in discovery with "Resubscribe" banner
     if (subscribedIds.length > 0)
-      unsubQuery = unsubQuery.not("creator_id", "in", `(${subscribedIds.join(",")})`);
+      freshQuery = freshQuery.not("creator_id", "in", `(${subscribedIds.join(",")})`);
 
-    const [{ data: rawSubPosts }, { data: rawUnsubPosts }] = await Promise.all([
-      subPostsPromise,
-      unsubQuery,
-    ]);
+    // ── Hot pool: unsub posts >= 24h, ordered by hot_score from view ─────
+    let hotQuery = service.from("posts_ranked").select(POST_SELECT)
+      .eq("is_published", true).eq("is_deleted", false)
+      .eq("audience", "everyone")
+      .neq("creator_id", user.id)
+      .lte("published_at", twentyFourHoursAgo)
+      .order("hot_score", { ascending: false })
+      .range(hotOffset, hotOffset + HOT_FETCH_SIZE - 1);
+
+    if (subscribedIds.length > 0)
+      hotQuery = hotQuery.not("creator_id", "in", `(${subscribedIds.join(",")})`);
+
+    const [
+      { data: rawSubPosts },
+      { data: rawFreshPosts },
+      { data: rawHotPosts },
+    ] = await Promise.all([subPostsPromise, freshQuery, hotQuery]);
 
     const rawSubArr   = (rawSubPosts   ?? []) as Record<string, unknown>[];
-    const rawUnsubArr = (rawUnsubPosts ?? []) as Record<string, unknown>[];
+    const rawFreshArr = (rawFreshPosts ?? []) as Record<string, unknown>[];
+    const rawHotArr   = (rawHotPosts   ?? []) as Record<string, unknown>[];
 
-    // ── Boost new creators to front of unsub pool ─────────────────────────
-    const newCreatorPosts = rawUnsubArr.filter((p) => {
+    // ── Boost new-creator (<48h old account) posts to front of hot pool ──
+    const newCreatorHot = rawHotArr.filter((p) => {
       const profile = p.profiles as Record<string, unknown> | null;
       return profile && (profile.created_at as string) > fortyEightHoursAgo;
     });
-    const regularPosts = rawUnsubArr.filter((p) => {
+    const regularHot = rawHotArr.filter((p) => {
       const profile = p.profiles as Record<string, unknown> | null;
       return !profile || (profile.created_at as string) <= fortyEightHoursAgo;
     });
-    const sortedUnsubRaw = [...newCreatorPosts, ...regularPosts];
+    const sortedHotRaw = [...newCreatorHot, ...regularHot];
 
-    // ── Filter out unready videos ─────────────────────────────────────────
+    // ── Filter unready videos ────────────────────────────────────────────
     const subReady   = filterReady(rawSubArr);
-    const unsubReady = filterReady(sortedUnsubRaw);
+    const freshReady = filterReady(rawFreshArr);
+    const hotReady   = filterReady(sortedHotRaw);
 
-    // ── Deterministic interleave: 4 sub + 6 unsub per 10 slots ───────────
-    const { posts: merged } = deterministicInterleave(subReady, unsubReady, PAGE_SIZE);
+    // ── Interleave: 4 sub + 2 fresh + 4 hot per 10 slots, creator cap 2 ──
+    const { posts: merged } = deterministicInterleave(subReady, freshReady, hotReady, PAGE_SIZE);
 
-    // ── Pagination cursors ────────────────────────────────────────────────
-    // Advance offsets by the number of rows fetched from DB (not consumed)
-    // This ensures no duplicates across pages
+    // ── Pagination cursors: advance by DB rows fetched (not consumed) ────
     const nextSubOffset   = subOffset   + rawSubArr.length;
-    const nextUnsubOffset = unsubOffset + rawUnsubArr.length;
+    const nextFreshOffset = freshOffset + rawFreshArr.length;
+    const nextHotOffset   = hotOffset   + rawHotArr.length;
 
     const subHasMore   = rawSubArr.length   === SUB_FETCH_SIZE;
-    const unsubHasMore = rawUnsubArr.length === UNSUB_FETCH_SIZE;
-    const hasMore      = (subHasMore || unsubHasMore) && merged.length > 0;
+    const freshHasMore = rawFreshArr.length === FRESH_FETCH_SIZE;
+    const hotHasMore   = rawHotArr.length   === HOT_FETCH_SIZE;
+    const hasMore      = (subHasMore || freshHasMore || hotHasMore) && merged.length > 0;
 
     // ── Parallel lookups ──────────────────────────────────────────────────
     const postIds        = merged.map((p) => Number(p.id));
@@ -279,7 +334,8 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.json({
       posts:           processed,
       nextSubOffset,
-      nextUnsubOffset,
+      nextFreshOffset,
+      nextHotOffset,
       hasMore,
     });
     res.headers.set("Cache-Control", "private, s-maxage=30, stale-while-revalidate=60");
