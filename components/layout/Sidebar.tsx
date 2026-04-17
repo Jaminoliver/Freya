@@ -61,12 +61,9 @@ export function Sidebar() {
 
       {/* DESKTOP SIDEBAR */}
       <div className="hidden md:flex" style={{ width: "280px", flexShrink: 0, height: "100vh", backgroundColor: "#13131F", borderRight: "1px solid #1F1F2A", flexDirection: "column", padding: "24px 16px", position: "sticky", top: 0, overflowY: "hidden", fontFamily: "'Inter', sans-serif" }}>
-        <div style={{ padding: "0 12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: "26px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Fréya</span>
-          <button onClick={() => handleNav("/become-a-creator")} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 10px", borderRadius: "20px", cursor: "pointer", background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(109,40,217,0.15))", border: "1px solid rgba(139,92,246,0.35)", fontSize: "11px", fontWeight: 600, color: "#A78BFA", whiteSpace: "nowrap", fontFamily: "'Inter', sans-serif" }}>
-            ✦ Creator
-          </button>
-        </div>
+        <div style={{ padding: "0 12px 0", marginBottom: "-16px" }}>
+  <img src="/freya_logo.png" alt="Fréya" style={{ height: "110px", width: "auto", display: "block", marginTop: "-44px", marginLeft: "-35px" }} />
+</div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
           {navItems.map(({ label, href, icon: Icon }) => {
@@ -116,14 +113,14 @@ export function Sidebar() {
             More
           </button>
 
-          <button onClick={() => handleNav("/create")}
+          {viewer?.role === "creator" && <button onClick={() => handleNav("/create")}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "13px 16px", borderRadius: "30px", border: "none", cursor: "pointer", background: "linear-gradient(to right, #8B5CF6, #EC4899)", color: "#fff", fontSize: "15px", fontWeight: 700, marginTop: "16px", transition: "opacity 0.15s ease", fontFamily: "'Inter', sans-serif" }}
             onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
             <Plus size={20} strokeWidth={2.5} />
             New Post
-          </button>
+          </button>}
         </nav>
       </div>
 

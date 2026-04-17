@@ -262,7 +262,7 @@ export function RightPanel() {
   const hasRecent = recentSearches.length > 0;
 
   return (
-    <div style={{ width: "380px", flexShrink: 0, minHeight: "100vh", backgroundColor: "#13131F", borderLeft: "1px solid #1F1F2A", padding: "24px 20px", display: "flex", flexDirection: "column", gap: "24px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", fontFamily: "'Inter', sans-serif", scrollbarWidth: "none" }}>
+    <div style={{ width: "380px", flexShrink: 0, minHeight: "100vh", backgroundColor: "#13131F", borderLeft: "1px solid #1F1F2A", padding: "8px 20px 24px", display: "flex", flexDirection: "column", gap: "24px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", fontFamily: "'Inter', sans-serif", scrollbarWidth: "none" }}>
 
       {/* Search */}
       <div ref={containerRef} style={{ position: "relative" }}>
