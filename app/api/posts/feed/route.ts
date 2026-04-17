@@ -5,9 +5,9 @@ import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
 const PAGE_SIZE        = 20;
-const SUB_FETCH_SIZE   = 12;   // 4/10 ratio × buffer
-const FRESH_FETCH_SIZE = 8;    // 2/10 ratio × buffer
-const HOT_FETCH_SIZE   = 14;   // 4/10 ratio × buffer
+const SUB_FETCH_SIZE   = 40;
+const FRESH_FETCH_SIZE = 30;
+const HOT_FETCH_SIZE   = 50;
 const STREAM_CDN_HOST  = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
 
 const LAPSED_STATUSES = ["expired", "cancelled", "renewal_failed"];
@@ -49,10 +49,11 @@ function filterReady(posts: Record<string, unknown>[]) {
 }
 
 /**
- * Deterministic interleave with per-creator cap (max 2 per creator per page).
+ * Interleave with per-creator cap (max 2 per creator within PAGE_SIZE slots).
+ * Posts that exceed the cap are collected into a leftover queue and appended after.
  * Pattern per 10 slots: 4 sub + 2 fresh-unsub + 4 hot-unsub.
- * When a slot's primary pool is empty, falls back to other pools (hot > fresh > sub priority
- * for unsub slots; sub > hot > fresh for sub slots).
+ * When a slot's primary pool is empty, falls back to other pools.
+ * NO posts are ever lost — all appear either in the interleaved section or the leftover queue.
  */
 function deterministicInterleave(
   subPosts: Record<string, unknown>[],
@@ -66,24 +67,39 @@ function deterministicInterleave(
   hotConsumed: number;
 } {
   const result: Record<string, unknown>[] = [];
+  const leftovers: Record<string, unknown>[] = [];
   const creatorCounts = new Map<string, number>();
+  const used = new Set<unknown>();
+
+  // Track which posts have been consumed (added to result or leftovers)
+  const subConsumedSet   = new Set<number>();
+  const freshConsumedSet = new Set<number>();
+  const hotConsumedSet   = new Set<number>();
+
   const indices = { sub: 0, fresh: 0, hot: 0 };
 
-  const tryAdd = (
-    pool: Record<string, unknown>[],
-    key: "sub" | "fresh" | "hot"
-  ): boolean => {
+  const pools = { sub: subPosts, fresh: freshPosts, hot: hotPosts };
+  const consumed = { sub: subConsumedSet, fresh: freshConsumedSet, hot: hotConsumedSet };
+
+  const tryAdd = (key: "sub" | "fresh" | "hot"): boolean => {
+    const pool = pools[key];
     while (indices[key] < pool.length) {
       const post = pool[indices[key]];
+      const postId = post.id;
+      indices[key]++;
+      if (used.has(postId)) continue;
+      used.add(postId);
+      consumed[key].add(indices[key] - 1);
       const creatorId = post.creator_id as string;
       const count = creatorCounts.get(creatorId) ?? 0;
       if (count < 2) {
         result.push(post);
         creatorCounts.set(creatorId, count + 1);
-        indices[key]++;
         return true;
+      } else {
+        // Creator capped — queue for leftovers, don't lose the post
+        leftovers.push(post);
       }
-      indices[key]++; // creator capped for this page, skip this post
     }
     return false;
   };
@@ -94,23 +110,40 @@ function deterministicInterleave(
     let added = false;
 
     if (SUB_SLOTS.has(slotType)) {
-      added = tryAdd(subPosts, "sub") || tryAdd(hotPosts, "hot") || tryAdd(freshPosts, "fresh");
+      added = tryAdd("sub") || tryAdd("hot") || tryAdd("fresh");
     } else if (FRESH_SLOTS.has(slotType)) {
-      added = tryAdd(freshPosts, "fresh") || tryAdd(hotPosts, "hot") || tryAdd(subPosts, "sub");
+      added = tryAdd("fresh") || tryAdd("hot") || tryAdd("sub");
     } else {
       // hot slot
-      added = tryAdd(hotPosts, "hot") || tryAdd(freshPosts, "fresh") || tryAdd(subPosts, "sub");
+      added = tryAdd("hot") || tryAdd("fresh") || tryAdd("sub");
     }
 
     if (!added) break;
     slot++;
   }
 
+  // Drain remaining unvisited posts from all pools into leftovers
+  for (; indices.sub < subPosts.length; indices.sub++) {
+    const post = subPosts[indices.sub];
+    if (!used.has(post.id)) { used.add(post.id); leftovers.push(post); }
+  }
+  for (; indices.fresh < freshPosts.length; indices.fresh++) {
+    const post = freshPosts[indices.fresh];
+    if (!used.has(post.id)) { used.add(post.id); leftovers.push(post); }
+  }
+  for (; indices.hot < hotPosts.length; indices.hot++) {
+    const post = hotPosts[indices.hot];
+    if (!used.has(post.id)) { used.add(post.id); leftovers.push(post); }
+  }
+
+  // Append leftovers after the interleaved page
+  const allPosts = [...result, ...leftovers];
+
   return {
-    posts: result,
-    subConsumed: indices.sub,
+    posts: allPosts,
+    subConsumed:   indices.sub,
     freshConsumed: indices.fresh,
-    hotConsumed: indices.hot,
+    hotConsumed:   indices.hot,
   };
 }
 
@@ -216,12 +249,14 @@ export async function GET(req: NextRequest) {
     const hotReady   = filterReady(sortedHotRaw);
 
     // ── Interleave: 4 sub + 2 fresh + 4 hot per 10 slots, creator cap 2 ──
-    const { posts: merged } = deterministicInterleave(subReady, freshReady, hotReady, PAGE_SIZE);
+    // Capped posts go into leftover queue and are appended after PAGE_SIZE slots
+    const { posts: merged, subConsumed, freshConsumed, hotConsumed } =
+      deterministicInterleave(subReady, freshReady, hotReady, PAGE_SIZE);
 
-    // ── Pagination cursors: advance by DB rows fetched (not consumed) ────
-    const nextSubOffset   = subOffset   + rawSubArr.length;
-    const nextFreshOffset = freshOffset + rawFreshArr.length;
-    const nextHotOffset   = hotOffset   + rawHotArr.length;
+    // ── Pagination cursors: advance by rows actually consumed ────────────
+    const nextSubOffset   = subOffset   + subConsumed;
+    const nextFreshOffset = freshOffset + freshConsumed;
+    const nextHotOffset   = hotOffset   + hotConsumed;
 
     const subHasMore   = rawSubArr.length   === SUB_FETCH_SIZE;
     const freshHasMore = rawFreshArr.length === FRESH_FETCH_SIZE;
