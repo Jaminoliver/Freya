@@ -216,14 +216,12 @@ export async function GET(req: NextRequest) {
     const hotReady   = filterReady(sortedHotRaw);
 
     // ── Interleave: 4 sub + 2 fresh + 4 hot per 10 slots, creator cap 2 ──
-    const { posts: merged, subConsumed, freshConsumed, hotConsumed } = deterministicInterleave(subReady, freshReady, hotReady, PAGE_SIZE);
-
-
+    const { posts: merged } = deterministicInterleave(subReady, freshReady, hotReady, PAGE_SIZE);
 
     // ── Pagination cursors: advance by DB rows fetched (not consumed) ────
-    const nextSubOffset   = subOffset   + subConsumed;
-const nextFreshOffset = freshOffset + freshConsumed;
-const nextHotOffset   = hotOffset   + hotConsumed;
+    const nextSubOffset   = subOffset   + rawSubArr.length;
+    const nextFreshOffset = freshOffset + rawFreshArr.length;
+    const nextHotOffset   = hotOffset   + rawHotArr.length;
 
     const subHasMore   = rawSubArr.length   === SUB_FETCH_SIZE;
     const freshHasMore = rawFreshArr.length === FRESH_FETCH_SIZE;
