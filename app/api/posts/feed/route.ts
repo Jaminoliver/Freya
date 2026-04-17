@@ -4,18 +4,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
 
-const PAGE_SIZE        = 20;
-const SUB_FETCH_SIZE   = 12;   // 4/10 ratio × buffer
-const FRESH_FETCH_SIZE = 8;    // 2/10 ratio × buffer
-const HOT_FETCH_SIZE   = 14;   // 4/10 ratio × buffer
-const STREAM_CDN_HOST  = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
+const PAGE_SIZE          = 20;
+const SUB_FETCH_SIZE     = 12;
+const FRESH_FETCH_SIZE   = 8;
+const HOT_FETCH_SIZE     = 14;
+const RENEWAL_FETCH_SIZE = 8;
+const STREAM_CDN_HOST    = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
 
 const LAPSED_STATUSES = ["expired", "cancelled", "renewal_failed"];
 
-// Slot pattern per 10 slots: 4 sub + 2 fresh + 4 hot
-// Sub at 0,3,6,9 | Fresh at 1,7 | Hot at 2,4,5,8
-const SUB_SLOTS   = new Set([0, 3, 6, 9]);
-const FRESH_SLOTS = new Set([1, 7]);
+// Slot pattern per 10 slots: 4 sub + 2 fresh + 2 hot + 2 renewal
+// Sub at 0,3,6,9 | Fresh at 1,7 | Hot at 2,5 | Renewal at 4,8
+const SUB_SLOTS     = new Set([0, 3, 6, 9]);
+const FRESH_SLOTS   = new Set([1, 7]);
+const RENEWAL_SLOTS = new Set([4, 8]);
 
 function extractBunnyPath(url: string | null): string | null {
   if (!url) return null;
@@ -50,28 +52,33 @@ function filterReady(posts: Record<string, unknown>[]) {
 
 /**
  * Deterministic interleave with per-creator cap (max 2 per creator per page).
- * Pattern per 10 slots: 4 sub + 2 fresh-unsub + 4 hot-unsub.
- * When a slot's primary pool is empty, falls back to other pools (hot > fresh > sub priority
- * for unsub slots; sub > hot > fresh for sub slots).
+ * Pattern per 10 slots: 4 sub + 2 fresh + 2 hot + 2 renewal.
+ * Fallback order when primary pool is empty:
+ *   sub slots    → hot > fresh
+ *   fresh slots  → hot > sub
+ *   renewal slots→ hot > sub
+ *   hot slots    → fresh > sub
  */
 function deterministicInterleave(
   subPosts: Record<string, unknown>[],
   freshPosts: Record<string, unknown>[],
   hotPosts: Record<string, unknown>[],
+  renewalPosts: Record<string, unknown>[],
   limit: number
 ): {
   posts: Record<string, unknown>[];
   subConsumed: number;
   freshConsumed: number;
   hotConsumed: number;
+  renewalConsumed: number;
 } {
   const result: Record<string, unknown>[] = [];
   const creatorCounts = new Map<string, number>();
-  const indices = { sub: 0, fresh: 0, hot: 0 };
+  const indices = { sub: 0, fresh: 0, hot: 0, renewal: 0 };
 
   const tryAdd = (
     pool: Record<string, unknown>[],
-    key: "sub" | "fresh" | "hot"
+    key: "sub" | "fresh" | "hot" | "renewal"
   ): boolean => {
     while (indices[key] < pool.length) {
       const post = pool[indices[key]];
@@ -83,7 +90,7 @@ function deterministicInterleave(
         indices[key]++;
         return true;
       }
-      indices[key]++; // creator capped for this page, skip this post
+      indices[key]++;
     }
     return false;
   };
@@ -97,6 +104,8 @@ function deterministicInterleave(
       added = tryAdd(subPosts, "sub") || tryAdd(hotPosts, "hot") || tryAdd(freshPosts, "fresh");
     } else if (FRESH_SLOTS.has(slotType)) {
       added = tryAdd(freshPosts, "fresh") || tryAdd(hotPosts, "hot") || tryAdd(subPosts, "sub");
+    } else if (RENEWAL_SLOTS.has(slotType)) {
+      added = tryAdd(renewalPosts, "renewal") || tryAdd(hotPosts, "hot") || tryAdd(subPosts, "sub");
     } else {
       // hot slot
       added = tryAdd(hotPosts, "hot") || tryAdd(freshPosts, "fresh") || tryAdd(subPosts, "sub");
@@ -111,6 +120,7 @@ function deterministicInterleave(
     subConsumed: indices.sub,
     freshConsumed: indices.fresh,
     hotConsumed: indices.hot,
+    renewalConsumed: indices.renewal,
   };
 }
 
@@ -133,10 +143,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
-    const subOffset   = Math.max(0, parseInt(searchParams.get("subOffset")   ?? "0"));
-    const freshOffset = Math.max(0, parseInt(searchParams.get("freshOffset") ?? "0"));
-    const hotOffset   = Math.max(0, parseInt(searchParams.get("hotOffset")   ?? "0"));
-    const service     = createServiceSupabaseClient();
+    const subOffset     = Math.max(0, parseInt(searchParams.get("subOffset")     ?? "0"));
+    const freshOffset   = Math.max(0, parseInt(searchParams.get("freshOffset")   ?? "0"));
+    const hotOffset     = Math.max(0, parseInt(searchParams.get("hotOffset")     ?? "0"));
+    const renewalOffset = Math.max(0, parseInt(searchParams.get("renewalOffset") ?? "0"));
+    const service       = createServiceSupabaseClient();
 
     // ── Fetch active subs + lapsed subs in parallel ──────────────────────
     const [{ data: activeSubs }, { data: lapsedSubs }] = await Promise.all([
@@ -176,6 +187,8 @@ export async function GET(req: NextRequest) {
 
     if (subscribedIds.length > 0)
       freshQuery = freshQuery.not("creator_id", "in", `(${subscribedIds.join(",")})`);
+    if (lapsedIds.length > 0)
+      freshQuery = freshQuery.not("creator_id", "in", `(${lapsedIds.join(",")})`);
 
     // ── Hot pool: unsub posts >= 24h, ordered by hot_score from view ─────
     let hotQuery = service.from("posts_ranked").select(POST_SELECT)
@@ -188,16 +201,30 @@ export async function GET(req: NextRequest) {
 
     if (subscribedIds.length > 0)
       hotQuery = hotQuery.not("creator_id", "in", `(${subscribedIds.join(",")})`);
+    if (lapsedIds.length > 0)
+      hotQuery = hotQuery.not("creator_id", "in", `(${lapsedIds.join(",")})`);
+
+    // ── Renewal pool: lapsed creator posts, ordered by hot_score ─────────
+    const renewalPostsPromise = lapsedIds.length > 0
+      ? service.from("posts_ranked").select(POST_SELECT)
+          .eq("is_published", true).eq("is_deleted", false)
+          .eq("audience", "everyone")
+          .in("creator_id", lapsedIds)
+          .order("hot_score", { ascending: false })
+          .range(renewalOffset, renewalOffset + RENEWAL_FETCH_SIZE - 1)
+      : Promise.resolve({ data: [] });
 
     const [
       { data: rawSubPosts },
       { data: rawFreshPosts },
       { data: rawHotPosts },
-    ] = await Promise.all([subPostsPromise, freshQuery, hotQuery]);
+      { data: rawRenewalPosts },
+    ] = await Promise.all([subPostsPromise, freshQuery, hotQuery, renewalPostsPromise]);
 
-    const rawSubArr   = (rawSubPosts   ?? []) as Record<string, unknown>[];
-    const rawFreshArr = (rawFreshPosts ?? []) as Record<string, unknown>[];
-    const rawHotArr   = (rawHotPosts   ?? []) as Record<string, unknown>[];
+    const rawSubArr     = (rawSubPosts     ?? []) as Record<string, unknown>[];
+    const rawFreshArr   = (rawFreshPosts   ?? []) as Record<string, unknown>[];
+    const rawHotArr     = (rawHotPosts     ?? []) as Record<string, unknown>[];
+    const rawRenewalArr = (rawRenewalPosts ?? []) as Record<string, unknown>[];
 
     // ── Boost new-creator (<48h old account) posts to front of hot pool ──
     const newCreatorHot = rawHotArr.filter((p) => {
@@ -211,24 +238,26 @@ export async function GET(req: NextRequest) {
     const sortedHotRaw = [...newCreatorHot, ...regularHot];
 
     // ── Filter unready videos ────────────────────────────────────────────
-    const subReady   = filterReady(rawSubArr);
-    const freshReady = filterReady(rawFreshArr);
-    const hotReady   = filterReady(sortedHotRaw);
+    const subReady     = filterReady(rawSubArr);
+    const freshReady   = filterReady(rawFreshArr);
+    const hotReady     = filterReady(sortedHotRaw);
+    const renewalReady = filterReady(rawRenewalArr);
 
-    // ── Interleave: 4 sub + 2 fresh + 4 hot per 10 slots, creator cap 2 ──
-    const { posts: merged, subConsumed, freshConsumed, hotConsumed } = deterministicInterleave(subReady, freshReady, hotReady, PAGE_SIZE);
+    // ── Interleave: 4 sub + 2 fresh + 2 hot + 2 renewal per 10 slots ────
+    const { posts: merged, subConsumed, freshConsumed, hotConsumed, renewalConsumed } =
+      deterministicInterleave(subReady, freshReady, hotReady, renewalReady, PAGE_SIZE);
 
+    // ── Pagination cursors: advance by consumed (not fetched) ────────────
+    const nextSubOffset     = subOffset     + subConsumed;
+    const nextFreshOffset   = freshOffset   + freshConsumed;
+    const nextHotOffset     = hotOffset     + hotConsumed;
+    const nextRenewalOffset = renewalOffset + renewalConsumed;
 
-
-    // ── Pagination cursors: advance by DB rows fetched (not consumed) ────
-    const nextSubOffset   = subOffset   + subConsumed;
-const nextFreshOffset = freshOffset + freshConsumed;
-const nextHotOffset   = hotOffset   + hotConsumed;
-
-    const subHasMore   = rawSubArr.length   === SUB_FETCH_SIZE;
-    const freshHasMore = rawFreshArr.length === FRESH_FETCH_SIZE;
-    const hotHasMore   = rawHotArr.length   === HOT_FETCH_SIZE;
-    const hasMore      = (subHasMore || freshHasMore || hotHasMore) && merged.length > 0;
+    const subHasMore     = rawSubArr.length     === SUB_FETCH_SIZE;
+    const freshHasMore   = rawFreshArr.length   === FRESH_FETCH_SIZE;
+    const hotHasMore     = rawHotArr.length     === HOT_FETCH_SIZE;
+    const renewalHasMore = rawRenewalArr.length === RENEWAL_FETCH_SIZE;
+    const hasMore        = (subHasMore || freshHasMore || hotHasMore || renewalHasMore) && merged.length > 0;
 
     // ── Parallel lookups ──────────────────────────────────────────────────
     const postIds        = merged.map((p) => Number(p.id));
@@ -334,10 +363,11 @@ const nextHotOffset   = hotOffset   + hotConsumed;
     });
 
     const res = NextResponse.json({
-      posts:           processed,
+      posts:             processed,
       nextSubOffset,
       nextFreshOffset,
       nextHotOffset,
+      nextRenewalOffset,
       hasMore,
     });
     res.headers.set("Cache-Control", "private, s-maxage=30, stale-while-revalidate=60");
