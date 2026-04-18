@@ -26,6 +26,7 @@ export async function GET() {
           current_period_end,
           created_at,
           creator_id,
+          is_favourite,
           creator:profiles!subscriptions_creator_id_fkey (
             id,
             username,
@@ -50,48 +51,90 @@ export async function GET() {
       });
     }
 
-    const subscriptions = (rows ?? []).map((s: any) => {
-      const creator = (Array.isArray(s.creator) ? s.creator[0] : s.creator) as {
-        id: string;
-        username: string;
-        display_name: string;
-        avatar_url: string | null;
-        banner_url: string | null;
-        is_verified: boolean;
-      };
+    // Fetch tier prices for all unique creators in one query
+    const creatorIds = Array.from(
+      new Set(
+        (rows ?? [])
+          .map((s: any) => {
+            const c = Array.isArray(s.creator) ? s.creator[0] : s.creator;
+            return c?.id;
+          })
+          .filter(Boolean)
+      )
+    );
 
-      const expiresAt = new Date(s.current_period_end).toLocaleDateString("en-NG", {
-        day: "numeric",
-        month: "short",
-      });
+    const tiersByCreator: Record<string, {
+      monthly_price: number;
+      three_month_price: number | null;
+      six_month_price: number | null;
+    }> = {};
 
-      let status: "active" | "expired" | "attention" = "active";
-      if (s.status === "expired" || s.status === "cancelled") status = "expired";
-      else if (s.status === "grace_period") status = "attention";
+    if (creatorIds.length > 0) {
+      const { data: tiers } = await supabase
+        .from("subscription_tiers")
+        .select("creator_id, price_monthly, three_month_price, six_month_price, is_active")
+        .in("creator_id", creatorIds)
+        .eq("is_active", true);
 
-      return {
-        id: s.id,
-        creatorId: creator.id,
-        creatorName: creator.display_name ?? creator.username,
-        username: creator.username,
-        avatar_url: creator.avatar_url,
-        banner_url: creator.banner_url,
-        isVerified: creator.is_verified,
-        status,
-        price: s.price_paid,
-        autoRenew: s.auto_renew,
-        expiresAt,
-        newPosts: s.new_posts_count ?? 0,
-      };
-    });
+      for (const t of tiers ?? []) {
+        tiersByCreator[t.creator_id] = {
+          monthly_price:     t.price_monthly,
+          three_month_price: t.three_month_price,
+          six_month_price:   t.six_month_price,
+        };
+      }
+    }
+
+    const subscriptions = (rows ?? [])
+      .map((s: any) => {
+        const creator = (Array.isArray(s.creator) ? s.creator[0] : s.creator) as {
+          id: string;
+          username: string;
+          display_name: string;
+          avatar_url: string | null;
+          banner_url: string | null;
+          is_verified: boolean;
+        } | null;
+
+        if (!creator) return null;
+
+        const expiresAt = new Date(s.current_period_end).toLocaleDateString("en-NG", {
+          day: "numeric",
+          month: "short",
+        });
+
+        let status: "active" | "expired" | "attention" = "active";
+        if (s.status === "expired" || s.status === "cancelled") status = "expired";
+        else if (s.status === "grace_period" || s.status === "renewal_failed") status = "attention";
+
+        const tier = tiersByCreator[creator.id] ?? null;
+        const isFreeCreator = tier === null;
+
+        return {
+          id:               s.id,
+          creatorId:        creator.id,
+          creatorName:      creator.display_name ?? creator.username,
+          username:         creator.username,
+          avatar_url:       creator.avatar_url,
+          banner_url:       creator.banner_url,
+          isVerified:       creator.is_verified,
+          status,
+          price:            s.price_paid,
+          autoRenew:        s.auto_renew,
+          expiresAt,
+          newPosts:         s.new_posts_count ?? 0,
+          isFavourite:      s.is_favourite ?? false,
+          isFreeCreator,
+          monthlyPrice:     tier?.monthly_price     ?? 0,
+          threeMonthPrice:  tier?.three_month_price ?? null,
+          sixMonthPrice:    tier?.six_month_price   ?? null,
+        };
+      })
+      .filter(Boolean);
 
     return NextResponse.json(
       { subscriptions },
-      {
-        headers: {
-          "Cache-Control": "no-store",
-        },
-      }
+      { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
     console.error("[Subscriptions Mine Error]", err);

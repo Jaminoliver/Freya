@@ -7,8 +7,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { HomeSidebar } from "@/components/feed/HomeSidebar";
 import { CreatorSearchRow, CreatorSearchRowSkeleton, type SearchRowCreator } from "@/components/search/CreatorSearchRow";
 
-const SAMPLE_STATS = { active: 3, expired: 1, total: 4, monthlySpend: 6000, totalSpent: 24000 };
-const fmt = (n: number) => "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 0 });
 
 const RECENT_SEARCHES_KEY = "freya_recent_searches";
 const MAX_RECENT = 5;
@@ -67,7 +65,6 @@ export function RightPanel() {
   const [focused, setFocused] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
-  const [autoRenewAll, setAutoRenewAll] = useState(true);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -202,59 +199,7 @@ export function RightPanel() {
   };
 
   // ── Subscriptions stats panel ────────────────────────────────────────────
-  if (isSubscriptions) {
-    return (
-      <div style={{ width: "380px", flexShrink: 0, backgroundColor: "#13131F", borderLeft: "1px solid #1F1F2A", padding: "24px 20px", display: "flex", flexDirection: "column", gap: "20px", position: "sticky", top: 0, height: "100vh", overflowY: "auto", fontFamily: "'Inter', sans-serif", scrollbarWidth: "none" }}>
-        <div>
-          <p style={{ fontSize: "10px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 6px" }}>Subscriptions</p>
-          <p style={{ fontSize: "26px", fontWeight: 700, color: "#F1F5F9", margin: 0 }}>{SAMPLE_STATS.active} Active</p>
-        </div>
-        <div style={{ backgroundColor: "#1C1C2E", border: "1.5px solid #2A2A3D", borderRadius: "10px", overflow: "hidden" }}>
-          {[
-            { label: "Active", value: SAMPLE_STATS.active, color: "#10B981" },
-            { label: "Expired", value: SAMPLE_STATS.expired, color: "#EF4444" },
-            { label: "Total", value: SAMPLE_STATS.total, color: "#F1F5F9" },
-          ].map((row, i, arr) => (
-            <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", borderBottom: i < arr.length - 1 ? "1px solid #2A2A3D" : "none" }}>
-              <span style={{ fontSize: "13px", color: "#94A3B8" }}>{row.label}</span>
-              <span style={{ fontSize: "13px", fontWeight: 700, color: row.color }}>{row.value}</span>
-            </div>
-          ))}
-        </div>
-        <div style={{ backgroundColor: "#1C1C2E", border: "1.5px solid #2A2A3D", borderRadius: "10px", overflow: "hidden" }}>
-          {[
-            { label: "Monthly Spend", value: fmt(SAMPLE_STATS.monthlySpend) },
-            { label: "Total Spent", value: fmt(SAMPLE_STATS.totalSpent) },
-          ].map((row, i, arr) => (
-            <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 14px", borderBottom: i < arr.length - 1 ? "1px solid #2A2A3D" : "none" }}>
-              <span style={{ fontSize: "13px", color: "#94A3B8" }}>{row.label}</span>
-              <span style={{ fontSize: "13px", fontWeight: 700, color: "#F1F5F9" }}>{row.value}</span>
-            </div>
-          ))}
-        </div>
-        <div style={{ backgroundColor: "#1C1C2E", border: "1.5px solid #2A2A3D", borderRadius: "10px", padding: "14px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-            <span style={{ fontSize: "13px", fontWeight: 600, color: "#F1F5F9" }}>Auto-renew all</span>
-            <button
-              onClick={() => setAutoRenewAll(!autoRenewAll)}
-              style={{ width: "40px", height: "22px", borderRadius: "11px", border: "none", cursor: "pointer", padding: "2px", backgroundColor: autoRenewAll ? "#8B5CF6" : "#2A2A3D", display: "flex", alignItems: "center", justifyContent: autoRenewAll ? "flex-end" : "flex-start", transition: "all 0.2s ease", flexShrink: 0 }}
-            >
-              <div style={{ width: "18px", height: "18px", borderRadius: "50%", backgroundColor: "#fff" }} />
-            </button>
-          </div>
-          <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>Applies to all active subscriptions</p>
-        </div>
-        <button
-          onClick={() => router.push("/explore")}
-          style={{ width: "100%", padding: "11px", borderRadius: "10px", border: "1.5px solid #8B5CF6", backgroundColor: "transparent", color: "#8B5CF6", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s ease" }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(139,92,246,0.1)")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-        >
-          Explore Creators
-        </button>
-      </div>
-    );
-  }
+  
 
   // ── Default panel (all other pages) ──────────────────────────────────────
   const showDropdown = focused;

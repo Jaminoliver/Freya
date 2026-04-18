@@ -253,7 +253,7 @@ function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: ()
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <span style={{
-              fontSize: "14px", fontWeight: 600, color: "#F2EDF8",
+              fontSize: "16px", fontWeight: 700, color: "#F2EDF8",
               whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
               maxWidth: "140px",
             }}>
@@ -261,7 +261,7 @@ function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: ()
             </span>
             {creator.isVerified && <BadgeCheck size={13} color="#C45F8C" />}
           </div>
-          <div style={{ fontSize: "11px", color: "#9A8FA8", marginTop: "2px" }}>
+          <div style={{ fontSize: "13px", color: "#9A8FA8", marginTop: "2px" }}>
             @{creator.username}
           </div>
 

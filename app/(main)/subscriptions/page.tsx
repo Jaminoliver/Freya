@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { SubscriptionList } from "@/components/subscription/SubscriptionCard";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { MoreHorizontal, Rows3, LayoutGrid } from "lucide-react";
+import { SubscriptionList } from "@/components/subscription/SubscriptionList";
+import { SubscriptionFilterTabs } from "@/components/subscription/SubscriptionFilterTabs";
+import { SubscriptionSearchBar } from "@/components/subscription/SubscriptionSearchBar";
+import { FavouritesRail } from "@/components/subscription/FavouritesRail";
 import { SubscriptionsSkeleton } from "@/components/loadscreen/SubscriptionsSkeleton";
-import { Search, SlidersHorizontal, ArrowUpDown, UserX, UserMinus } from "lucide-react";
-import { useAppStore, isStale } from "@/lib/store/appStore";
+import type { CardView, Subscription } from "@/lib/types/subscription";
 
-type ContentTab = "creators" | "blocked" | "restricted";
-
-const CACHE_KEY = "__subscriptions__";
+type FilterKey = "all" | "active" | "expired" | "attention" | "starred";
 
 function preloadImages(urls: string[]): void {
   for (const url of urls) {
@@ -18,164 +19,23 @@ function preloadImages(urls: string[]): void {
   }
 }
 
-function UserRow({
-  user,
-  actionLabel,
-  actionColor,
-  onAction,
-}: {
-  user:         { id: string; username: string; display_name: string | null; avatar_url: string | null };
-  actionLabel:  string;
-  actionColor:  string;
-  onAction:     () => Promise<void>;
-}) {
-  const [loading, setLoading] = useState(false);
-
-  const handle = async () => {
-    setLoading(true);
-    try { await onAction(); } finally { setLoading(false); }
-  };
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "13px", padding: "12px 0", borderBottom: "1px solid #1E1E2E", fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ width: "44px", height: "44px", borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "#2A2A3D" }}>
-        {user.avatar_url ? (
-          <img src={user.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        ) : (
-          <div style={{ width: "100%", height: "100%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "16px", fontWeight: 700 }}>
-            {(user.display_name ?? user.username)[0].toUpperCase()}
-          </div>
-        )}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: "14px", fontWeight: 600, color: "#FFFFFF" }}>
-          {user.display_name ?? user.username}
-        </p>
-        <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#6B6B8A" }}>@{user.username}</p>
-      </div>
-      <button
-        onClick={handle}
-        disabled={loading}
-        style={{ padding: "7px 16px", borderRadius: "8px", border: `1px solid ${actionColor}`, backgroundColor: "transparent", color: actionColor, fontSize: "13px", fontWeight: 600, cursor: loading ? "default" : "pointer", fontFamily: "'Inter', sans-serif", opacity: loading ? 0.5 : 1, transition: "all 0.15s ease", flexShrink: 0 }}
-        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.backgroundColor = `${actionColor}18`; }}
-        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
-      >
-        {loading ? "..." : actionLabel}
-      </button>
-    </div>
-  );
-}
-
-function BlockedList() {
-  const [users,   setUsers]   = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/users/block")
-      .then((r) => r.json())
-      .then((d) => setUsers(d.blockedUsers ?? []))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const unblock = async (userId: string) => {
-    await fetch("/api/users/block", {
-      method:  "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ userId }),
-    });
-    setUsers((prev) => prev.filter((u) => u.blocked_user_id !== userId));
-  };
-
-  if (loading) return <SubscriptionsSkeleton count={3} />;
-
-  if (users.length === 0) {
-    return (
-      <div style={{ backgroundColor: "#1C1C2E", border: "1.5px dashed #2A2A3D", borderRadius: "10px", padding: "32px 16px", textAlign: "center" }}>
-        <p style={{ fontSize: "13px", color: "#6B6B8A", margin: 0, fontFamily: "'Inter', sans-serif" }}>No blocked users</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {users.map((u) => (
-        <UserRow
-          key={u.id}
-          user={u.blocked_user}
-          actionLabel="Unblock"
-          actionColor="#10B981"
-          onAction={() => unblock(u.blocked_user_id)}
-        />
-      ))}
-    </div>
-  );
-}
-
-function RestrictedList() {
-  const [users,   setUsers]   = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/users/restrict")
-      .then((r) => r.json())
-      .then((d) => setUsers(d.restrictedUsers ?? []))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const unrestrict = async (userId: string) => {
-    await fetch("/api/users/restrict", {
-      method:  "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ userId }),
-    });
-    setUsers((prev) => prev.filter((u) => u.restricted_user_id !== userId));
-  };
-
-  if (loading) return <SubscriptionsSkeleton count={3} />;
-
-  if (users.length === 0) {
-    return (
-      <div style={{ backgroundColor: "#1C1C2E", border: "1.5px dashed #2A2A3D", borderRadius: "10px", padding: "32px 16px", textAlign: "center" }}>
-        <p style={{ fontSize: "13px", color: "#6B6B8A", margin: 0, fontFamily: "'Inter', sans-serif" }}>No restricted users</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {users.map((u) => (
-        <UserRow
-          key={u.id}
-          user={u.restricted_user}
-          actionLabel="Remove"
-          actionColor="#F59E0B"
-          onAction={() => unrestrict(u.restricted_user_id)}
-        />
-      ))}
-    </div>
-  );
-}
-
 export default function SubscriptionsPage() {
-  const [contentTab, setContentTab] = useState<ContentTab>("creators");
-
-  const { contentFeeds, setContentFeed, clearContentFeed } = useAppStore();
-
-  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [revealed,      setRevealed]      = useState(false);
+  const [filter,        setFilter]        = useState<FilterKey>("all");
+  const [query,         setQuery]         = useState("");
+  const [view,          setView]          = useState<CardView>("detailed");
 
-  const fetchSubscriptions = async (force = false) => {
+  const fetchSubscriptions = useCallback(async () => {
     setLoading(true);
     try {
       const res  = await fetch("/api/subscriptions/mine");
       const data = await res.json();
       if (data.subscriptions) {
-        const subs = data.subscriptions;
-        setSubscriptions(subs);
-        setContentFeed(CACHE_KEY, { posts: subs, media: [], fetchedAt: Date.now() });
+        setSubscriptions(data.subscriptions);
         const urls: string[] = [];
-        for (const s of subs.slice(0, 6)) {
+        for (const s of data.subscriptions.slice(0, 6)) {
           if (s.banner_url) urls.push(s.banner_url);
           if (s.avatar_url) urls.push(s.avatar_url);
         }
@@ -187,91 +47,159 @@ export default function SubscriptionsPage() {
       setLoading(false);
       requestAnimationFrame(() => setRevealed(true));
     }
-  };
+  }, []);
 
-  // Always refetch on mount — 30s cache was causing stale counts
-  useEffect(() => {
-    clearContentFeed(CACHE_KEY);
-    fetchSubscriptions(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchSubscriptions(); }, [fetchSubscriptions]);
 
-  const tabs: { key: ContentTab; label: string; icon?: React.ReactNode }[] = [
-    { key: "creators",   label: "Creators"   },
-    { key: "blocked",    label: "Blocked",    icon: <UserX     size={13} strokeWidth={1.8} /> },
-    { key: "restricted", label: "Restricted", icon: <UserMinus size={13} strokeWidth={1.8} /> },
-  ];
+  // Counts for filter pills (before search applies)
+  const counts = useMemo(() => ({
+    all:       subscriptions.length,
+    active:    subscriptions.filter((s) => s.status === "active").length,
+    expired:   subscriptions.filter((s) => s.status === "expired").length,
+    attention: subscriptions.filter((s) => s.status === "attention").length,
+    starred:   subscriptions.filter((s) => s.isFavourite).length,
+  }), [subscriptions]);
+
+  // Filter by pill
+  const filteredByStatus = useMemo(() => {
+    if (filter === "all")     return subscriptions;
+    if (filter === "starred") return subscriptions.filter((s) => s.isFavourite);
+    return subscriptions.filter((s) => s.status === filter);
+  }, [subscriptions, filter]);
+
+  // Filter by search query
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    if (!q) return filteredByStatus;
+    return filteredByStatus.filter((s) =>
+      s.creatorName.toLowerCase().includes(q) ||
+      s.username.toLowerCase().includes(q)
+    );
+  }, [filteredByStatus, query]);
+
+  const favourites = useMemo(
+    () => subscriptions.filter((s) => s.isFavourite),
+    [subscriptions]
+  );
+
+  const handleSearch = useCallback((q: string) => setQuery(q), []);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif" }}>
+    <div style={{
+      display: "flex", flexDirection: "column", minHeight: "100vh",
+      backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif",
+    }}>
 
-      <div style={{ padding: "28px 28px 0", borderBottom: "1px solid #1F1F2A" }}>
-        <h1 style={{ fontSize: "20px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 3px" }}>
+      {/* Header — matches Notifications page */}
+      <div style={{
+        padding: "18px 18px 10px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <h1 style={{
+          fontSize: "22px", fontWeight: 500, color: "#8B5CF6",
+          margin: 0, letterSpacing: "-0.3px",
+        }}>
           Subscriptions
         </h1>
-        <p style={{ fontSize: "13px", color: "#6B6B8A", margin: "0 0 18px" }}>
-          Manage your active and expired subscriptions
-        </p>
-
-        <div style={{ display: "flex", width: "100%" }}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setContentTab(tab.key)}
-              style={{
-                flex:           1,
-                display:        "flex",
-                alignItems:     "center",
-                justifyContent: "center",
-                gap:            "5px",
-                padding:        "14px 8px",
-                background:     "none",
-                border:         "none",
-                cursor:         "pointer",
-                fontFamily:     "'Inter', sans-serif",
-                fontSize:       "13px",
-                fontWeight:     contentTab === tab.key ? 600 : 400,
-                color:          contentTab === tab.key ? "#8B5CF6" : "#64748B",
-                borderBottom:   contentTab === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
-                marginBottom:   "-1px",
-                transition:     "all 0.15s",
-                whiteSpace:     "nowrap",
-              }}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <button
+          aria-label="More"
+          style={{
+            width: "28px", height: "28px", borderRadius: "50%",
+            border: "none", background: "none",
+            color: "#F1F5F9", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <MoreHorizontal size={20} />
+        </button>
       </div>
 
-      {contentTab === "creators" && (
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "6px", padding: "14px 28px" }}>
-          {[Search, SlidersHorizontal, ArrowUpDown].map((Icon, i) => (
-            <button
-              key={i}
-              style={{ width: "32px", height: "32px", borderRadius: "8px", border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#6B6B8A", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s ease" }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#6B6B8A"; }}
-            >
-              <Icon size={14} />
-            </button>
-          ))}
+      {/* Caps label */}
+      <p style={{
+        fontSize: "10px", fontWeight: 500, color: "#6B6B8A",
+        letterSpacing: "0.1em", textTransform: "uppercase",
+        padding: "0 18px 10px", margin: 0,
+      }}>
+        Manage your creators
+      </p>
+
+      {/* Filter pills */}
+      <SubscriptionFilterTabs
+        active={filter}
+        counts={counts}
+        onChange={(v) => setFilter(v as FilterKey)}
+      />
+
+      {/* Search bar */}
+      <div style={{ marginTop: "14px" }}>
+        <SubscriptionSearchBar onSearch={handleSearch} />
+      </div>
+
+      {/* Favourites rail — shown on All tab with starred subs */}
+      {filter === "all" && favourites.length > 0 && !query && (
+        <div style={{ marginTop: "18px" }}>
+          <FavouritesRail favourites={favourites} />
         </div>
       )}
 
-      <div style={{ padding: "0 28px 28px" }}>
-        {contentTab === "creators" && (
-          loading
-            ? <SubscriptionsSkeleton count={6} />
-            : (
-              <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
-                <SubscriptionList subscriptions={subscriptions} onRefresh={() => fetchSubscriptions(true)} />
-              </div>
-            )
-        )}
+      {/* View toggle */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "18px 18px 12px",
+      }}>
+        <span style={{ fontSize: "11px", color: "#6B6B8A" }}>
+          {filtered.length} {filtered.length === 1 ? "creator" : "creators"}
+        </span>
 
-        {contentTab === "blocked"    && <BlockedList    />}
-        {contentTab === "restricted" && <RestrictedList />}
+        <div style={{
+          display: "flex", gap: "2px",
+          backgroundColor: "#1A1A2A", border: "1px solid #2A2A3D",
+          borderRadius: "10px", padding: "3px",
+        }}>
+          <button
+            onClick={() => setView("detailed")}
+            aria-label="1 per row"
+            style={{
+              width: "30px", height: "26px", borderRadius: "7px",
+              border: "none", cursor: "pointer",
+              backgroundColor: view === "detailed" ? "#8B5CF6" : "transparent",
+              color:           view === "detailed" ? "#fff"    : "#6B6B8A",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.15s",
+            }}
+          >
+            <Rows3 size={13} strokeWidth={2} />
+          </button>
+          <button
+            onClick={() => setView("compact")}
+            aria-label="2 per row"
+            style={{
+              width: "30px", height: "26px", borderRadius: "7px",
+              border: "none", cursor: "pointer",
+              backgroundColor: view === "compact" ? "#8B5CF6" : "transparent",
+              color:           view === "compact" ? "#fff"    : "#6B6B8A",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.15s",
+            }}
+          >
+            <LayoutGrid size={13} strokeWidth={2} />
+          </button>
+        </div>
+      </div>
+
+      {/* Grid / list */}
+      <div style={{ padding: "0 18px 28px" }}>
+        {loading ? (
+          <SubscriptionsSkeleton count={6} />
+        ) : (
+          <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
+            <SubscriptionList
+              subscriptions={filtered}
+              view={view}
+              onRefresh={fetchSubscriptions}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

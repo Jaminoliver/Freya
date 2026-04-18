@@ -36,7 +36,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const isExplore       = pathname === "/explore";
   const isPostPage      = pathname.startsWith("/posts/");
 
-  const showRightPanel = !isSettings && !isSubscriptions && !isMessages;
+  const showRightPanel = !isSettings && !isMessages;
   const noTopbar = (!isDashboard && !isExplore) || isPostPage || isNotifications;
 
   const [headerVisible, setHeaderVisible] = useState(true);
