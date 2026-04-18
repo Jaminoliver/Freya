@@ -147,7 +147,7 @@ export default function SubscriptionsPage() {
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "18px 18px 12px",
       }}>
-        <span style={{ fontSize: "11px", color: "#6B6B8A" }}>
+        <span style={{ fontSize: "16px", color: "#A3A3C2", fontWeight: 600 }}>
           {filtered.length} {filtered.length === 1 ? "creator" : "creators"}
         </span>
 

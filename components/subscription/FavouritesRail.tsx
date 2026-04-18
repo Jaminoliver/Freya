@@ -24,11 +24,11 @@ export function FavouritesRail({
         padding: "0 18px 10px",
       }}>
         <span style={{
-          fontSize: "11px", fontWeight: 500, color: "#F1F5F9",
-          letterSpacing: "0.08em", textTransform: "uppercase",
+          fontSize: "16px", fontWeight: 400, color: "#A3A3C2",
+          letterSpacing: "0", textTransform: "none",
           display: "flex", alignItems: "center", gap: "6px",
         }}>
-          <Star size={11} fill="#F59E0B" color="#F59E0B" strokeWidth={0} />
+          <Star size={16} fill="#F59E0B" color="#F59E0B" strokeWidth={0} />
           Favourites
         </span>
         {onEdit && (
