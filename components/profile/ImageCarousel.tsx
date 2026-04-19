@@ -348,22 +348,19 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
               ) : (
                 shouldLoad ? (
                   <>
-                    <div
-                      className="ic-blur-bg"
-                      style={{ display: "none", position: "absolute", inset: 0, zIndex: 0 }}
-                    >
-                      <img
-                        src={item.file_url ?? ""}
-                        alt=""
-                        aria-hidden
-                        style={{
-                          width: "100%", height: "100%",
-                          objectFit: "cover",
-                          filter: "blur(24px) brightness(0.5)",
-                          transform: "scale(1.08)",
-                        }}
-                      />
-                    </div>
+                    <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
+  <img
+    src={item.file_url ?? ""}
+    alt=""
+    aria-hidden
+    style={{
+      width: "100%", height: "100%",
+      objectFit: "cover",
+      filter: "blur(24px) brightness(0.5)",
+      transform: "scale(1.08)",
+    }}
+  />
+</div>
                     <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%" }}>
                       <ProgressiveImage
                         src={item.file_url}

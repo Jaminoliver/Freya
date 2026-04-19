@@ -575,25 +575,24 @@ export default function PostMediaViewer({
           overflow:        "hidden",
         }}
       >
-        {/* BlurHash placeholder */}
-        {first.blurHash && !imgLoaded && (
-          <BlurHashCanvas
-            hash={first.blurHash}
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }}
-          />
-        )}
-
-        {/* Blurred preview while loading */}
-        {!imgLoaded && (
+        {/* Blurred background — always shown */}
+        <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
           <img
             src={first.url ?? ""}
             alt=""
             aria-hidden
             style={{
-              position: "absolute", inset: 0, width: "100%", height: "100%",
-              objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)",
-              zIndex: 1,
+              width: "100%", height: "100%", objectFit: "cover",
+              filter: "blur(24px) brightness(0.5)", transform: "scale(1.08)",
             }}
+          />
+        </div>
+
+        {/* BlurHash placeholder while loading */}
+        {first.blurHash && !imgLoaded && (
+          <BlurHashCanvas
+            hash={first.blurHash}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 1 }}
           />
         )}
 
