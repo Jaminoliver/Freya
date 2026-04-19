@@ -5,6 +5,7 @@ import { Search, Bell, ArrowLeft, X, Plus } from "lucide-react";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useNav } from "@/lib/hooks/useNav";
+import { useAppStore } from "@/lib/store/appStore";
 import { useUnreadNotificationCount } from "@/lib/notifications/store";
 import { CreatorSearchRow, CreatorSearchRowSkeleton, type SearchRowCreator } from "@/components/search/CreatorSearchRow";
 
@@ -211,6 +212,8 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
   const pathname = usePathname();
   const { navigate } = useNav();
   const router = useRouter();
+  const { viewer } = useAppStore();
+  const isCreator = viewer?.role === "creator";
   useEffect(() => { router.prefetch("/create"); }, [router]);
 
   const unreadNotificationCount = useUnreadNotificationCount();
@@ -344,9 +347,11 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
       >
         {/* Default bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
-  <button onClick={() => navigate("/create")} aria-label="Create post" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
-    <Plus size={30} strokeWidth={1.8} />
-  </button>
+  {isCreator ? (
+    <button onClick={() => navigate("/create")} aria-label="Create post" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
+      <Plus size={30} strokeWidth={1.8} />
+    </button>
+  ) : <div style={{ width: "46px" }} />}
   <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none" }}>
     <img src="/freya_logo.png" alt="Fréya" style={{ height: "110px", width: "auto", marginTop: "12px" }} />
   </div>

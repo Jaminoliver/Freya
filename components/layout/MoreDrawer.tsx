@@ -93,14 +93,14 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
           </button>
         ))}
 
-        <button onClick={() => handleNav("/become-a-creator")}
+        {viewer?.role === "fan" && <button onClick={() => handleNav("/become-a-creator")}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "background 0.15s" }}
           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
           <Sparkles size={20} color="#8B5CF6" strokeWidth={1.8} />
           <span style={{ fontSize: "15px", color: "#8B5CF6", fontWeight: 500 }}>Become a Creator</span>
-        </button>
+        </button>}
 
         <div style={{ height: "1px", backgroundColor: "#1F1F2A", margin: "8px 0" }} />
 
