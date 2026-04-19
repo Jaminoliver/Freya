@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Search, Bell, ArrowLeft, X, Plus } from "lucide-react";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -210,6 +210,8 @@ function MobileCreatorCard({ creator, onClick }: { creator: DiscoverCreator; onC
 export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean }) {
   const pathname = usePathname();
   const { navigate } = useNav();
+  const router = useRouter();
+  useEffect(() => { router.prefetch("/create"); }, [router]);
 
   const unreadNotificationCount = useUnreadNotificationCount();
 

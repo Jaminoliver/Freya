@@ -12,13 +12,16 @@ export function useNav() {
 
   const navigate = useCallback(
     (href: string) => {
-      // Already on this page — do nothing
       if (href === pathname) return;
 
-      setNavigating(true);
-      startTransition(() => {
+     if (href === "/create") {
         router.push(href);
-      });
+      } else {
+        setNavigating(true);
+        startTransition(() => {
+          router.push(href);
+        });
+      }
     },
     [router, pathname, setNavigating, startTransition]
   );
