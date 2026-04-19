@@ -55,11 +55,17 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <style>{`
+        @keyframes ic-sharpen {
+          from { filter: blur(20px); transform: scale(1.05); }
+          to   { filter: blur(0px);  transform: scale(1); }
+        }
+      `}</style>
       {blurHash && !loaded && (
         <BlurHashCanvas hash={blurHash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />
       )}
-      {placeholder && !loaded && (
-        <img src={placeholder} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)", zIndex: 1 }} />
+      {!loaded && (
+        <img src={src ?? ""} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)", zIndex: 1 }} />
       )}
       <img
         ref={imgRef}
@@ -68,7 +74,13 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
         draggable={false}
         loading={eager ? "eager" : "lazy"}
         onLoad={() => setLoaded(true)}
-        style={{ ...style, opacity: loaded ? 1 : 0, transition: "opacity 0.25s ease", position: "relative", zIndex: 2 }}
+        style={{
+          ...style,
+          position: "relative", zIndex: 2,
+          animation: loaded ? "ic-sharpen 0.4s ease forwards" : undefined,
+          filter:    loaded ? undefined : "blur(20px)",
+          transform: loaded ? undefined : "scale(1.05)",
+        }}
       />
     </div>
   );

@@ -541,7 +541,7 @@ export default function PostMediaViewer({
     );
   }
 
-  // ── Single image ──────────────────────────────────────────────────────────
+ // ── Single image ──────────────────────────────────────────────────────────
   const imageRatio = (() => {
     if (first?.aspectRatio != null && first.aspectRatio > 0) {
       return Math.min(Math.max(first.aspectRatio, 0.4), 1.91);
@@ -552,11 +552,17 @@ export default function PostMediaViewer({
     return ratio;
   })();
 
+  const [imgLoaded, setImgLoaded] = React.useState(false);
+
   return (
     <DoubleTapLike onSingleTap={singleTapAt0} onDoubleTap={doubleTap} style={{ width: "100%", cursor: "zoom-in" }}>
       <style>{`
         @media (min-width: 768px) {
           .pmv-blur-bg { display: block !important; }
+        }
+        @keyframes pmv-sharpen {
+          from { filter: blur(20px); transform: scale(1.05); }
+          to   { filter: blur(0px);  transform: scale(1); }
         }
       `}</style>
       <div
@@ -565,39 +571,49 @@ export default function PostMediaViewer({
           width:           "100%",
           aspectRatio:     String(imageRatio),
           maxHeight:       "85svh",
-          backgroundColor: "#000",
+          backgroundColor: "#0A0A0F",
           overflow:        "hidden",
         }}
       >
-        {/* Blurred background — desktop only */}
-        <div
-          className="pmv-blur-bg"
-          style={{ display: "none", position: "absolute", inset: 0, zIndex: 0 }}
-        >
+        {/* BlurHash placeholder */}
+        {first.blurHash && !imgLoaded && (
+          <BlurHashCanvas
+            hash={first.blurHash}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }}
+          />
+        )}
+
+        {/* Blurred preview while loading */}
+        {!imgLoaded && (
           <img
             src={first.url ?? ""}
             alt=""
             aria-hidden
             style={{
-              width: "100%", height: "100%", objectFit: "cover",
-              filter: "blur(24px) brightness(0.5)", transform: "scale(1.08)",
+              position: "absolute", inset: 0, width: "100%", height: "100%",
+              objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)",
+              zIndex: 1,
             }}
           />
-        </div>
+        )}
 
-        {/* Main image */}
+        {/* Main image — animates blur-to-sharp on load */}
         <img
           src={first.url ?? ""}
           alt=""
           draggable={false}
           loading="lazy"
+          onLoad={() => setImgLoaded(true)}
           style={{
-            position:   "relative",
-            zIndex:     1,
-            width:      "100%",
-            height:     "100%",
-            objectFit:  "contain",
-            display:    "block",
+            position:  "relative",
+            zIndex:    2,
+            width:     "100%",
+            height:    "100%",
+            objectFit: "contain",
+            display:   "block",
+            animation: imgLoaded ? "pmv-sharpen 0.4s ease forwards" : undefined,
+            filter:    imgLoaded ? undefined : "blur(20px)",
+            transform: imgLoaded ? undefined : "scale(1.05)",
           }}
         />
 
