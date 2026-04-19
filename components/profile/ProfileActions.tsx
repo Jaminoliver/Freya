@@ -125,23 +125,21 @@ export default function ProfileActions({
         <button
           onClick={() => onTip?.(undefined)}
           style={{
-            display: "flex", alignItems: "center", gap: "7px",
+            display: "flex", alignItems: "center",
+            background: "none", border: "1px solid #3A3A4D",
             padding: "9px 16px", borderRadius: "999px",
-            background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
-            border: "none", cursor: "pointer",
-            fontFamily: "'Inter', sans-serif", transition: "opacity 0.15s",
+            cursor: "pointer", transition: "border-color 0.15s",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 12 20 22 4 22 4 12"/>
             <rect x="2" y="7" width="20" height="5"/>
             <line x1="12" y1="22" x2="12" y2="7"/>
             <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
             <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
           </svg>
-          <span style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>Tip</span>
         </button>
 
       </div>

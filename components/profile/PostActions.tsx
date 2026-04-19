@@ -61,14 +61,13 @@ export default function PostActions({
           onClick={handleLike}
           title={canLike ? "Like" : "Subscribe to like"}
           style={{
-            display: "flex", alignItems: "center", gap: "6px",
-            background: "none", border: "none", padding: 0,
-            color: liked ? "#EC4899" : "#C4C4D4",
-            fontSize: "14px", fontWeight: 500,
-            fontFamily: "'Inter', sans-serif",
-            cursor: canLike ? "pointer" : "not-allowed",
-            transition: "color 0.15s",
-          }}
+  display: "flex", alignItems: "center", gap: "6px",
+  background: "none", border: "none", padding: 0,
+  color: "#C4C4D4", fontSize: "14px", fontWeight: 500,
+  fontFamily: "'Inter', sans-serif",
+  cursor: "pointer",
+  transition: "color 0.15s",
+}}
         >
           <Heart size={22} fill={liked ? "#EC4899" : "none"} strokeWidth={1.8} />
           <span>{likes.toLocaleString()}</span>
@@ -97,25 +96,22 @@ export default function PostActions({
             onClick={onTip}
             style={{
               display: "flex", alignItems: "center", gap: "6px",
-              padding: "7px 14px", borderRadius: "999px",
-              background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
-              border: "none",
-              color: "#FFFFFF", fontSize: "13px", fontWeight: 500,
+              background: "none", border: "none", padding: 0,
+              color: "#C4C4D4", fontSize: "14px", fontWeight: 500,
               fontFamily: "'Inter', sans-serif",
-              cursor: "pointer",
-              transition: "opacity 0.15s",
+              cursor: "pointer", transition: "color 0.15s",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 12 20 22 4 22 4 12"/>
               <rect x="2" y="7" width="20" height="5"/>
               <line x1="12" y1="22" x2="12" y2="7"/>
               <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
               <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
             </svg>
-            <span>Tip</span>
+            {showTipsEarned && (
+  <span>₦{(tips! / 100).toLocaleString("en-NG")}</span>
+)}
           </button>
         )}
 
@@ -137,17 +133,7 @@ export default function PostActions({
       </div>
 
       {/* Tips earned — creator + subscribers only, when > 0 */}
-      {showTipsEarned && (
-  <div style={{
-    marginTop: "6px",
-    fontSize: "13px",
-    fontWeight: 500,
-    color: "#8B5CF6",
-    fontFamily: "'Inter', sans-serif",
-  }}>
-    Tipped ₦{tipsFormatted}
-  </div>
-)}
+      
     </div>
   );
 }
