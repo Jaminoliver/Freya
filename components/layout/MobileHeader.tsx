@@ -216,6 +216,11 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
   const showMobileHeader = pathname === "/dashboard" || pathname === "/explore";
 
   const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+  if (searchOpen) document.body.classList.add("search-open");
+  else document.body.classList.remove("search-open");
+  return () => document.body.classList.remove("search-open");
+}, [searchOpen]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchRowCreator[]>([]);
   const [searching, setSearching] = useState(false);
