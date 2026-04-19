@@ -323,12 +323,19 @@ export default function ContentFeed({
   const openLightbox = (p: LightboxPost, index: number) => { setLightboxMediaIndex(index); setLightboxPost(p); };
 
   const renderPostRow = (post: ApiPost) => (
+  <div key={post.id} style={{
+    margin: "10px 12px",
+    borderRadius: "14px",
+    border: "1px solid #1E1E2E",
+    overflow: "hidden",
+  }}>
     <PostRow
-      key={post.id} post={post} isOwnProfile={isOwnProfile} isSubscribed={isSubscribed}
+      post={post} isOwnProfile={isOwnProfile} isSubscribed={isSubscribed}
       viewer={viewer} onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
       onDelete={handleDeletePost} onImageClick={(p, index) => openLightbox(p, index)} onPPVUpdated={handlePPVUpdated}
     />
-  );
+  </div>
+);
 
   const renderGridPost = (post: ApiPost) => {
     const m     = post.media?.[0];

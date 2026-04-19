@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ApiPost } from "@/components/profile/PostRow";
 
-const STALE_MS          = 3 * 60 * 1000; // 3 minutes (was 30s — too aggressive for slow Nigerian connections)
+const STALE_MS          = 20 * 1000; // 20s — instant SPA nav, fresh on hard refresh
 const FEED_KEY          = "freya_feed_cache";
 const PROFILES_KEY      = "freya_profiles_cache";
 const CONTENT_FEEDS_KEY = "freya_content_feeds_cache";

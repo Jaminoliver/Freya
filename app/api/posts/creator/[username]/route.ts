@@ -1,3 +1,4 @@
+// app/api/posts/creator/[username]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
@@ -135,8 +136,8 @@ export async function GET(
       ? service.from("saved_creators").select("creator_id").eq("user_id", user.id).eq("creator_id", creator.id)
       : Promise.resolve({ data: [] });
 
-    // ── Tip totals — only fetched for own profile ─────────────────────────
-    const tipTotalsPromise = isOwnProfile && postIds.length > 0
+    // ── Tip totals — fetched for own profile OR active subscribers ────────
+    const tipTotalsPromise = (isOwnProfile || isSubscribed) && postIds.length > 0
       ? service
           .from("tips")
           .select("post_id, amount")
@@ -255,7 +256,7 @@ export async function GET(
         poll: pollByPostId.get(postId) ?? null,
         saved_post: savedPostSet.has(postId),
         saved_creator: isSavedCreator,
-        ...(isOwnProfile && { tip_total: tipTotalMap.get(postId) ?? 0 }),
+        ...((isOwnProfile || isSubscribed) && { tip_total: tipTotalMap.get(postId) ?? 0 }),
       };
     });
 

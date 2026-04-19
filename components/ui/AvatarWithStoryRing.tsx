@@ -6,7 +6,7 @@ interface AvatarWithStoryRingProps {
   size:        number;
   hasStory:    boolean;
   hasUnviewed: boolean;
-  onClick:     (e: React.MouseEvent) => void;
+  onClick?:    (e: React.MouseEvent) => void;
   borderColor?: string;
 }
 

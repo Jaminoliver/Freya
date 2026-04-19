@@ -260,16 +260,18 @@ params.set("hotOffset",   String(cursors.hotOffset));
 
   // ── Initial load (use cache if fresh) ─────────────────────────────────
   useEffect(() => {
-    if (feed && !isStale(feed.fetchedAt) && feed.posts.length > 0) {
-      const merged = feed.posts.map(mergeSync);
-      setPosts(merged);
-      setNextCursors(parseCursors(feed.nextCursor));
-      setApiLoading(false);
-      return;
-    }
+  if (feed && !isStale(feed.fetchedAt) && feed.posts.length > 0) {
+    // Show cache instantly for SPA nav
+    const merged = feed.posts.map(mergeSync);
+    setPosts(merged);
+    setNextCursors(parseCursors(feed.nextCursor));
+    setApiLoading(false);
+    // Always revalidate in background — mirrors subscriptions page
     fetchFeed();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return;
+  }
+  fetchFeed();
+}, []);
 
   // ── Infinite scroll ────────────────────────────────────────────────────
   useEffect(() => {
@@ -363,22 +365,28 @@ params.set("hotOffset",   String(cursors.hotOffset));
       const showBanner   = !post.is_subscribed || post.is_renewal;
       const subPrice     = post.profiles?.subscription_price ?? undefined;
       items.push(
-        <PostCard
-          key={post.id}
-          post={adaptPost(post)}
-          onLike={() => {}}
-          onUnlock={handleUnlock}
-          initialSlide={slideMap[String(post.id)] ?? 0}
-          onSlideChange={handleSlideChange}
-          showSubscribeBanner={showBanner}
-          is_renewal={post.is_renewal}
-          onSubscribed={showBanner ? handleSubscribed : undefined}
-          subscriptionPrice={showBanner ? subPrice : undefined}
-          isSubscribedExternal={subscribedCreatorIds.has(post.creator_id)}
-          initialSavedPost={post.saved_post ?? false}
-          initialSavedCreator={post.saved_creator ?? false}
-        />
-      );
+  <div key={post.id} style={{
+    margin: "10px 12px",
+    borderRadius: "14px",
+    border: "1px solid #1E1E2E",
+    overflow: "hidden",
+  }}>
+    <PostCard
+      post={adaptPost(post)}
+      onLike={() => {}}
+      onUnlock={handleUnlock}
+      initialSlide={slideMap[String(post.id)] ?? 0}
+      onSlideChange={handleSlideChange}
+      showSubscribeBanner={showBanner}
+      is_renewal={post.is_renewal}
+      onSubscribed={showBanner ? handleSubscribed : undefined}
+      subscriptionPrice={showBanner ? subPrice : undefined}
+      isSubscribedExternal={subscribedCreatorIds.has(post.creator_id)}
+      initialSavedPost={post.saved_post ?? false}
+      initialSavedCreator={post.saved_creator ?? false}
+    />
+  </div>
+);
       if ((index + 1) % SUGGESTIONS_EVERY === 0 && index < posts.length - 1) {
         items.push(<FeedSuggestions key={`suggestions-${index}`} />);
       }
@@ -451,4 +459,5 @@ params.set("hotOffset",   String(cursors.hotOffset));
       </div>
     </div>
   );
+  
 }

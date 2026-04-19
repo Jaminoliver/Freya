@@ -1,31 +1,38 @@
+// components/feed/PostCard.tsx
 "use client";
 
-import { useState, useEffect, useCallback, useRef, memo } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
-import { BadgeCheck } from "lucide-react";
+import { BadgeCheck, MoreHorizontal } from "lucide-react";
 import dynamic from "next/dynamic";
+
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
 import PostTextViewer from "@/components/shared/PostTextViewer";
 import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
-import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
-import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
-import type { LightboxPost } from "@/components/profile/Lightbox";
-import { createClient } from "@/lib/supabase/client";
-import { postSyncStore } from "@/lib/store/postSyncStore";
+import PostHeader from "@/components/shared/PostHeader";
+import SubscribeBannerPill from "@/components/feed/SubscribeBannerPill";
 import { PollDisplay } from "@/components/feed/PollDisplay";
-import type { PollData } from "@/components/feed/PollDisplay";
-import type { User } from "@/lib/types/profile";
+
+import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
 import { useNav } from "@/lib/hooks/useNav";
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
-import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+import { useViewer } from "@/lib/hooks/useViewer";
+import { useRelativeTimestamp } from "@/lib/hooks/useRelativeTimestamp";
+import { usePostEngagement } from "@/lib/hooks/usePostEngagement";
+import { createClient } from "@/lib/supabase/client";
+
+import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
+import type { LightboxPost } from "@/components/profile/Lightbox";
+import type { PollData } from "@/components/feed/PollDisplay";
+import type { User } from "@/lib/types/profile";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 
-const StoryViewer    = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
-const CheckoutModal  = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
-const Lightbox       = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
-const ReportModal    = dynamic(() => import("@/components/messages/ReportModal").then((m) => ({ default: m.ReportModal })), { ssr: false });
+const StoryViewer       = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
+const CheckoutModal     = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
+const Lightbox          = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
+const ReportModal       = dynamic(() => import("@/components/messages/ReportModal").then((m) => ({ default: m.ReportModal })), { ssr: false });
 const BlockConfirmModal = dynamic(() => import("@/components/ui/BlockConfirmModal"), { ssr: false });
 
 interface MediaItem {
@@ -67,60 +74,6 @@ interface Post {
   liked:           boolean;
   poll?:           PollData | null;
   taggedCreators?: TaggedCreator[];
-}
-
-interface Viewer {
-  id: string; username: string; display_name: string; avatar_url: string;
-}
-
-// ── Module-level viewer cache with auth invalidation ─────────────────────
-let cachedViewer: Viewer | null = null;
-let viewerPromise: Promise<Viewer | null> | null = null;
-let authListenerSet = false;
-
-function setupAuthListener() {
-  if (authListenerSet) return;
-  authListenerSet = true;
-  try {
-    const supabase = createClient();
-    supabase.auth.onAuthStateChange((event: string) => {
-      if (event === "SIGNED_OUT") {
-        cachedViewer = null;
-        viewerPromise = null;
-      }
-    });
-  } catch {}
-}
-
-function fetchViewer(): Promise<Viewer | null> {
-  setupAuthListener();
-  if (cachedViewer) return Promise.resolve(cachedViewer);
-  if (viewerPromise) return viewerPromise;
-  viewerPromise = (async () => {
-    try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { cachedViewer = null; return null; }
-      const { data } = await supabase.from("profiles")
-        .select("username, display_name, avatar_url").eq("id", user.id).single();
-      if (data) {
-        cachedViewer = { id: user.id, username: data.username, display_name: data.display_name || data.username, avatar_url: data.avatar_url || "" };
-        return cachedViewer;
-      }
-      return null;
-    } catch { return null; }
-    finally { viewerPromise = null; }
-  })();
-  return viewerPromise;
-}
-
-function useViewer() {
-  const [viewer, setViewer] = useState<Viewer | null>(cachedViewer);
-  useEffect(() => {
-    if (cachedViewer) { setViewer(cachedViewer); return; }
-    fetchViewer().then((v) => { if (v) setViewer(v); });
-  }, []);
-  return viewer;
 }
 
 function toLightboxPost(post: Post): LightboxPost {
@@ -168,79 +121,54 @@ function PostCardInner({
   const { group: storyGroup, hasUnviewed, refresh } = useCreatorStory(post.creator.id);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
 
-  const [commentOpen,       setCommentOpen]       = useState(false);
+  const timestamp = useRelativeTimestamp(post.timestamp);
+
+  const engagement = usePostEngagement({
+    postId:              post.id,
+    creatorId:           post.creator.id,
+    initialLiked:        post.liked,
+    initialLikeCount:    post.likes,
+    initialCommentCount: post.comments,
+    initialSavedPost,
+    initialSavedCreator,
+    onLikeSuccess:       onLike,
+  });
+
+  // ── Subscribe state ──────────────────────────────────────────────────
+  const [subscribed,  setSubscribed]  = useState(isSubscribedExternal);
+  const [subLoading,  setSubLoading]  = useState(false);
+  const [freeSubbing, setFreeSubbing] = useState(false);
+
+  // ── Modals ───────────────────────────────────────────────────────────
   const [sheetOpen,         setSheetOpen]         = useState(false);
+  const [sheetDataFetched,  setSheetDataFetched]  = useState(false);
   const [tipOpen,           setTipOpen]           = useState(false);
   const [subOpen,           setSubOpen]           = useState(false);
   const [subMonthly,        setSubMonthly]        = useState(0);
   const [subThreeMonth,     setSubThreeMonth]     = useState<number | undefined>(undefined);
   const [subSixMonth,       setSubSixMonth]       = useState<number | undefined>(undefined);
-  const [subLoading,        setSubLoading]        = useState(false);
-  const [subscribed,        setSubscribed]        = useState(isSubscribedExternal);
-  const [freeSubbing,       setFreeSubbing]       = useState(false);
-  const [liked,             setLiked]             = useState(post.liked);
-  const [likeCount,         setLikeCount]         = useState(post.likes);
-  const [commentCount,      setCommentCount]      = useState(post.comments);
-  const [comments,          setComments]          = useState<any[]>([]);
-  const [commentsLoading,   setCommentsLoading]   = useState(false);
-  const [commentsFetched,   setCommentsFetched]   = useState(false);
   const [lightboxOpen,      setLightboxOpen]      = useState(false);
   const [lightboxMediaIdx,  setLightboxMediaIdx]  = useState(0);
-  const [pollData,          setPollData]          = useState<PollData | null>(post.poll ?? null);
-  const [savedPost,         setSavedPost]         = useState(initialSavedPost);
-  const [savedCreator,      setSavedCreator]      = useState(initialSavedCreator);
-  const [sheetDataFetched,  setSheetDataFetched]  = useState(false);
-  const [timestamp,         setTimestamp]         = useState("");
   const [reportOpen,        setReportOpen]        = useState(false);
   const [blockConfirm,      setBlockConfirm]      = useState(false);
   const [unblockConfirm,    setUnblockConfirm]    = useState(false);
   const [restrictConfirm,   setRestrictConfirm]   = useState(false);
   const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
 
+  const [pollData, setPollData] = useState<PollData | null>(post.poll ?? null);
+
   const { isBlocked, isRestricted, block, unblock, restrict, unrestrict, fetchStatus } = useBlockRestrict({ userId: post.creator.id });
 
-  const isFree = (subscriptionPrice ?? 0) === 0;
-
-  // ── Refs for stable access in callbacks (fixes stale closures) ────────
-  const isLiking     = useRef(false);
-  const prevPostId   = useRef(post.id);
-  const likedRef     = useRef(liked);
-  const likeCountRef = useRef(likeCount);
-
-  useEffect(() => { likedRef.current     = liked;     }, [liked]);
-  useEffect(() => { likeCountRef.current = likeCount; }, [likeCount]);
-
-  // ── Banner text & colors ──────────────────────────────────────────────
-  const bannerGradient = is_renewal
-    ? "linear-gradient(135deg, #F97316, #EF4444)"
-    : "linear-gradient(135deg, #8B5CF6, #EC4899)";
-
-  const buttonBg    = subscribed ? "#22C55E" : is_renewal ? "#FFFFFF" : "#FFFFFF";
-  const buttonColor = subscribed ? "#FFFFFF" : is_renewal ? "#F97316" : "#8B5CF6";
-
-  const buttonLabel = subscribed
-    ? "Subscribed ✓"
-    : freeSubbing
-      ? (is_renewal ? "Resubscribing..." : "Subscribing...")
-      : subLoading
-        ? "..."
-        : is_renewal
-          ? isFree ? "Resubscribe for Free" : "Resubscribe"
-          : isFree ? "Subscribe for Free"  : "Subscribe";
+  const isFree    = (subscriptionPrice ?? 0) === 0;
+  const isLoading = subLoading || freeSubbing;
 
   useEffect(() => {
     if (isSubscribedExternal) setSubscribed(true);
   }, [isSubscribedExternal]);
 
   useEffect(() => {
-    const unsub = postSyncStore.subscribe((event) => {
-      if (event.postId !== post.id) return;
-      setLiked(event.liked);
-      setLikeCount(event.like_count);
-      if (event.comment_count !== undefined) setCommentCount(event.comment_count);
-    });
-    return unsub;
-  }, [post.id]);
+    setPollData(post.poll ?? null);
+  }, [post.poll]);
 
   const handleOpenSheet = useCallback(async () => {
     setSheetOpen(true);
@@ -248,154 +176,6 @@ function PostCardInner({
     setSheetDataFetched(true);
     await fetchStatus();
   }, [sheetDataFetched, fetchStatus]);
-
-  // ── Fixed: side effects moved outside setState updater ─────────────────
-  const handleToggleComment = useCallback(() => {
-    const willOpen = !commentOpen;
-    setCommentOpen(willOpen);
-    if (willOpen && !commentsFetched) {
-      setCommentsLoading(true);
-      setCommentsFetched(true);
-      fetch(`/api/posts/${post.id}/comments`)
-        .then((r) => r.json())
-        .then((d) => { if (d.comments) setComments(d.comments); })
-        .catch(() => {})
-        .finally(() => setCommentsLoading(false));
-    }
-  }, [commentOpen, commentsFetched, post.id]);
-
-  useEffect(() => {
-    function getRelativeTime(dateStr: string): string {
-      const diff  = Date.now() - new Date(dateStr).getTime();
-      const mins  = Math.floor(diff / 60000);
-      const hours = Math.floor(diff / 3600000);
-      const days  = Math.floor(diff / 86400000);
-      if (mins  < 1)  return "just now";
-      if (mins  < 60) return `${mins}m ago`;
-      if (hours < 24) return `${hours}h ago`;
-      if (days  < 7)  return `${days}d ago`;
-      return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    }
-    setTimestamp(getRelativeTime(post.timestamp));
-    const interval = setInterval(() => setTimestamp(getRelativeTime(post.timestamp)), 60000);
-    return () => clearInterval(interval);
-  }, [post.timestamp]);
-
-  useEffect(() => {
-    if (prevPostId.current !== post.id) {
-      prevPostId.current = post.id;
-      setLiked(post.liked);
-      setLikeCount(post.likes);
-      setCommentCount(post.comments);
-      setPollData(post.poll ?? null);
-    }
-  }, [post.id, post.liked, post.likes, post.comments, post.poll]);
-
-  const handleLike = async () => {
-    if (isLiking.current) return;
-    isLiking.current = true;
-    const wasLiked = liked;
-    const oldCount = likeCount;
-    const newLiked = !wasLiked;
-    const newCount = newLiked ? oldCount + 1 : Math.max(0, oldCount - 1);
-    setLiked(newLiked);
-    setLikeCount(newCount);
-    postSyncStore.emit({ postId: post.id, liked: newLiked, like_count: newCount, comment_count: commentCount });
-    try {
-      const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        setLiked(data.liked);
-        setLikeCount(data.like_count);
-        postSyncStore.emit({ postId: post.id, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
-        onLike?.(post.id);
-      } else {
-        setLiked(wasLiked);
-        setLikeCount(oldCount);
-        postSyncStore.emit({ postId: post.id, liked: wasLiked, like_count: oldCount, comment_count: commentCount });
-      }
-    } catch {
-      setLiked(wasLiked);
-      setLikeCount(oldCount);
-      postSyncStore.emit({ postId: post.id, liked: wasLiked, like_count: oldCount, comment_count: commentCount });
-    }
-    isLiking.current = false;
-  };
-
-  const handleDoubleTapLike = async () => {
-    if (liked || isLiking.current) return;
-    isLiking.current = true;
-    const oldCount = likeCount;
-    setLiked(true);
-    setLikeCount(oldCount + 1);
-    postSyncStore.emit({ postId: post.id, liked: true, like_count: oldCount + 1, comment_count: commentCount });
-    try {
-      const res  = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        setLiked(data.liked);
-        setLikeCount(data.like_count);
-        postSyncStore.emit({ postId: post.id, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
-        onLike?.(post.id);
-      } else {
-        setLiked(false);
-        setLikeCount(oldCount);
-        postSyncStore.emit({ postId: post.id, liked: false, like_count: oldCount, comment_count: commentCount });
-      }
-    } catch {
-      setLiked(false);
-      setLikeCount(oldCount);
-      postSyncStore.emit({ postId: post.id, liked: false, like_count: oldCount, comment_count: commentCount });
-    }
-    isLiking.current = false;
-  };
-
-  // ── Fixed: uses refs to avoid stale closures for liked/likeCount ───────
-  const handleAddComment = useCallback(async (
-    id: string, text: string, gif_url?: string,
-    parent_comment_id?: string | number,
-    reply_to_username?: string | null,
-    reply_to_id?: string | number | null
-  ) => {
-    await fetch(`/api/posts/${id}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text, gif_url: gif_url ?? null, parent_comment_id: parent_comment_id ?? null, reply_to_username: reply_to_username ?? null, reply_to_id: reply_to_id ?? null }),
-    });
-    setCommentCount((c) => {
-      const newCount = c + 1;
-      postSyncStore.emit({ postId: id, liked: likedRef.current, like_count: likeCountRef.current, comment_count: newCount });
-      return newCount;
-    });
-    if (!parent_comment_id) {
-      const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
-      if (d.comments) setComments(d.comments);
-    }
-  }, []);
-
-  // ── Fixed: uses refs to avoid stale closures ───────────────────────────
-  const handleDeleteComment = useCallback(() => {
-    setCommentCount((c) => {
-      const newCount = Math.max(0, c - 1);
-      postSyncStore.emit({ postId: post.id, liked: likedRef.current, like_count: likeCountRef.current, comment_count: newCount });
-      return newCount;
-    });
-  }, [post.id]);
-
-  const handleSavePost = useCallback(async () => {
-    const next = !savedPost;
-    setSavedPost(next);
-    try {
-      await fetch("/api/saved/posts", { method: next ? "POST" : "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ post_id: post.id }) });
-    } catch { setSavedPost(!next); }
-  }, [savedPost, post.id]);
-
-  const handleSaveCreator = useCallback(async () => {
-    const next = !savedCreator;
-    setSavedCreator(next);
-    try {
-      await fetch("/api/saved/creators", { method: next ? "POST" : "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creator_id: post.creator.id }) });
-    } catch { setSavedCreator(!next); }
-  }, [savedCreator, post.creator.id]);
 
   const handleAvatarClick = useCallback(() => {
     if (hasUnviewed && storyGroup) setStoryViewerOpen(true);
@@ -468,11 +248,9 @@ function PostCardInner({
   const isTextPost   = post.content_type === "text";
   const isPollPost   = post.content_type === "poll";
 
-  // ── Fixed: only open lightbox for image taps, not video ────────────────
   const handleSingleTap = useCallback((index: number) => {
     const tappedMedia = normalizedMedia[index];
     if (!tappedMedia || tappedMedia.type !== "image") return;
-    // Map the carousel index to the image-only lightbox index
     const imageOnlyMedia = normalizedMedia.filter((m) => m.type === "image");
     const lightboxIdx = imageOnlyMedia.findIndex((m) => m.url === tappedMedia.url);
     if (lightboxIdx >= 0) {
@@ -482,6 +260,44 @@ function PostCardInner({
   }, [normalizedMedia]);
 
   if (isBlocked) return null;
+
+  // ── Header right slot ─────────────────────────────────────────────────
+  const moreButton = (
+    <button
+      onClick={handleOpenSheet}
+      style={{
+        width: "30px", height: "30px", borderRadius: "6px", border: "none",
+        backgroundColor: "transparent", color: "#C4C4D4",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
+      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+    >
+      <MoreHorizontal size={18} />
+    </button>
+  );
+
+  const rightSlot = showSubscribeBanner ? (
+    <>
+      <SubscribeBannerPill
+        isSubscribed={subscribed}
+        isRenewal={is_renewal}
+        isFree={isFree}
+        loading={isLoading}
+        onClick={handleSubscribeBannerClick}
+      />
+      {subscribed && moreButton}
+    </>
+  ) : moreButton;
+
+  // "· Free" inline suffix only shown when there's a pill AND creator is free
+  const freeSuffix = (showSubscribeBanner && isFree) ? (
+    <>
+      <span>·</span>
+      <span style={{ color: "#22C55E", fontWeight: 500 }}>Free</span>
+    </>
+  ) : undefined;
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
@@ -522,40 +338,31 @@ function PostCardInner({
 
       <PostOptionsSheet
         isOpen={sheetOpen} onClose={() => setSheetOpen(false)}
-        onSavePost={handleSavePost} onSaveCreator={handleSaveCreator}
+        onSavePost={engagement.handleSavePost} onSaveCreator={engagement.handleSaveCreator}
         onNotInterested={() => {}}
         onReport={() => { setSheetOpen(false); setReportOpen(true); }}
         onBlockCreator={() => { setSheetOpen(false); setBlockConfirm(true); }}
         onUnblockCreator={() => { setSheetOpen(false); setUnblockConfirm(true); }}
         onRestrictCreator={() => { setSheetOpen(false); setRestrictConfirm(true); }}
         onUnrestrictCreator={() => { setSheetOpen(false); setUnrestrictConfirm(true); }}
-        savedPost={savedPost} savedCreator={savedCreator}
+        savedPost={engagement.savedPost} savedCreator={engagement.savedCreator}
         isBlocked={isBlocked} isRestricted={isRestricted}
       />
 
       {/* Header */}
-      <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <AvatarWithStoryRing
-            src={post.creator.avatar_url || ""} alt={post.creator.name}
-            size={48} hasStory={!!storyGroup} hasUnviewed={hasUnviewed}
-            onClick={handleAvatarClick}
-          />
-          <div style={{ cursor: "pointer" }} onClick={() => navigate(`/${post.creator.username}`)}>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
-              {post.creator.isVerified && <BadgeCheck size={15} color="#8B5CF6" />}
-            </div>
-            <span style={{ fontSize: "13px", color: "#6B6B8A" }}>@{post.creator.username}</span>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{timestamp}</span>
-          <button onClick={handleOpenSheet} style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "transparent", color: "#C4C4D4", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
-          </button>
-        </div>
-      </div>
+      <PostHeader
+        avatarUrl={post.creator.avatar_url || null}
+        displayName={post.creator.name}
+        username={post.creator.username}
+        isVerified={post.creator.isVerified}
+        timestamp={showSubscribeBanner ? "" : timestamp}
+        hasStory={!!storyGroup}
+        hasUnviewedStory={hasUnviewed}
+        onAvatarClick={handleAvatarClick}
+        onNameClick={() => navigate(`/${post.creator.username}`)}
+        suffix={freeSuffix}
+        rightSlot={rightSlot}
+      />
 
       {/* Caption */}
       {post.caption && !isTextPost && (
@@ -568,54 +375,6 @@ function PostCardInner({
         <PostTextViewer caption={post.caption} textBackground={post.text_background} />
       )}
 
-      {/* ── Subscribe / Resubscribe banner ─────────────────────────────── */}
-      {showSubscribeBanner && (
-        <div style={{
-          margin: "0 0 10px", padding: "12px 16px",
-          background: subscribed ? "linear-gradient(135deg, #22C55E, #16A34A)" : bannerGradient,
-          display: "flex", alignItems: "center", gap: "12px",
-          transition: "background 0.5s ease, opacity 0.15s",
-          opacity: (subLoading || freeSubbing) ? 0.7 : 1,
-        }}>
-          <div onClick={() => navigate(`/${post.creator.username}`)} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}>
-            <img src={post.creator.avatar_url || ""} alt={post.creator.name} style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.3)", flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                <span style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>{post.creator.name}</span>
-                {post.creator.isVerified && <BadgeCheck size={14} color="#FFFFFF" />}
-              </div>
-              <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)" }}>
-                {is_renewal && !subscribed ? "You were a fan" : `@${post.creator.username}`}
-              </span>
-            </div>
-          </div>
-
-          <>
-            <style>{`
-              @keyframes subscribePulse  { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-              @keyframes subscribedPop   { 0% { transform: scale(1); } 40% { transform: scale(1.15); } 100% { transform: scale(1); } }
-            `}</style>
-            <div
-              onClick={handleSubscribeBannerClick}
-              style={{
-                marginLeft: "auto", padding: "8px 20px", borderRadius: "8px",
-                backgroundColor: buttonBg,
-                fontSize: "14px", fontWeight: 700, color: buttonColor,
-                whiteSpace: "nowrap", flexShrink: 0,
-                fontFamily: "'Inter', sans-serif",
-                cursor: subscribed ? "default" : (subLoading || freeSubbing) ? "wait" : "pointer",
-                animation: subscribed
-                  ? "subscribedPop 0.4s ease-out"
-                  : "subscribePulse 2s ease-in-out infinite",
-                transition: "background-color 0.3s ease, color 0.3s ease",
-              }}
-            >
-              {buttonLabel}
-            </div>
-          </>
-        </div>
-      )}
-
       {isPollPost && pollData && (
         <PollDisplay poll={pollData} postId={post.id} onVoted={(updated) => setPollData(updated)} />
       )}
@@ -624,7 +383,7 @@ function PostCardInner({
         <PostMediaViewer
           media={normalizedMedia} isLocked={post.isLocked} price={post.price}
           isPPV={post.is_ppv} isUnlockedPPV={post.is_ppv && !post.isLocked}
-          onDoubleTap={handleDoubleTapLike}
+          onDoubleTap={engagement.handleDoubleTapLike}
           onSingleTap={handleSingleTap}
           onUnlock={() => onUnlock?.(post.id)}
           initialSlide={initialSlide}
@@ -643,18 +402,18 @@ function PostCardInner({
       {!post.isLocked && (
         <div style={{ padding: "0 16px" }}>
           <PostActions
-            likes={likeCount} comments={commentCount} liked={liked}
-            bookmarked={savedPost} isSubscribed={true} isOwnProfile={false}
-            onLike={handleLike} onComment={handleToggleComment}
-            onTip={() => setTipOpen(true)} onBookmark={handleSavePost}
+            likes={engagement.likeCount} comments={engagement.commentCount} liked={engagement.liked}
+            bookmarked={engagement.savedPost} isSubscribed={true} isOwnProfile={false}
+            onLike={engagement.handleLike} onComment={engagement.handleToggleComment}
+            onTip={() => setTipOpen(true)} onBookmark={engagement.handleSavePost}
           />
           <CommentSection
-            postId={post.id} comments={comments}
+            postId={post.id} comments={engagement.comments}
             viewer={viewer ? { username: viewer.username, display_name: viewer.display_name, avatar_url: viewer.avatar_url } : null}
             viewerUserId={viewer?.id}
-            isOpen={commentOpen} onAddComment={handleAddComment}
-            onDeleteComment={handleDeleteComment} isLoading={commentsLoading}
-            totalCommentCount={commentCount} onClose={() => setCommentOpen(false)}
+            isOpen={engagement.commentOpen} onAddComment={engagement.handleAddComment}
+            onDeleteComment={engagement.handleDeleteComment} isLoading={engagement.commentsLoading}
+            totalCommentCount={engagement.commentCount} onClose={engagement.closeCommentSection}
           />
         </div>
       )}
@@ -663,16 +422,16 @@ function PostCardInner({
 }
 
 export const PostCard = memo(PostCardInner, (prev, next) => {
-  if (prev.post.id          !== next.post.id)          return false;
-  if (prev.post.liked       !== next.post.liked)       return false;
-  if (prev.post.likes       !== next.post.likes)       return false;
-  if (prev.post.comments    !== next.post.comments)    return false;
-  if (prev.post.isLocked    !== next.post.isLocked)    return false;
-  if (prev.initialSlide     !== next.initialSlide)     return false;
+  if (prev.post.id              !== next.post.id)              return false;
+  if (prev.post.liked           !== next.post.liked)           return false;
+  if (prev.post.likes           !== next.post.likes)           return false;
+  if (prev.post.comments        !== next.post.comments)        return false;
+  if (prev.post.isLocked        !== next.post.isLocked)        return false;
+  if (prev.initialSlide         !== next.initialSlide)         return false;
   if (prev.isSubscribedExternal !== next.isSubscribedExternal) return false;
-  if (prev.initialSavedPost !== next.initialSavedPost) return false;
-  if (prev.initialSavedCreator !== next.initialSavedCreator) return false;
-  if (prev.is_renewal       !== next.is_renewal)       return false;
+  if (prev.initialSavedPost     !== next.initialSavedPost)     return false;
+  if (prev.initialSavedCreator  !== next.initialSavedCreator)  return false;
+  if (prev.is_renewal           !== next.is_renewal)           return false;
   return true;
 });
 

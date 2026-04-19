@@ -1,25 +1,27 @@
+// components/profile/PostActions.tsx
 "use client";
 
 import * as React from "react";
 import { Heart, MessageCircle, Bookmark } from "lucide-react";
 
 interface PostActionsProps {
-  likes: number;
-  comments: number;
-  tips?: number; // kobo
-  liked?: boolean;
-  bookmarked?: boolean;
-  isSubscribed: boolean;
-  isFree?: boolean;
+  likes:         number;
+  comments:      number;
+  tips?:         number; // kobo
+  liked?:        boolean;
+  bookmarked?:   boolean;
+  isSubscribed:  boolean;
+  isFree?:       boolean;
   isOwnProfile?: boolean;
-  onLike?: () => void;
-  onComment?: () => void;
-  onTip?: () => void;
-  onBookmark?: () => void;
+  onLike?:       () => void;
+  onComment?:    () => void;
+  onTip?:        () => void;
+  onBookmark?:   () => void;
 }
 
 export default function PostActions({
-  likes, comments, tips = 0, liked = false,
+  likes, comments, tips,
+  liked = false,
   bookmarked: bookmarkedProp = false,
   isSubscribed, isFree = false, isOwnProfile = false,
   onLike, onComment, onTip, onBookmark,
@@ -42,125 +44,110 @@ export default function PostActions({
     onBookmark?.();
   };
 
-  const tipsNaira = tips / 100;
+  const tipsNaira      = (tips ?? 0) / 100;
+  const showTipsEarned = tips !== undefined && tips > 0;
+  const tipsFormatted  = tipsNaira.toLocaleString("en-NG", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 
   return (
-    <div style={{ padding: "4px 0 4px", fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ padding: "8px 0", fontFamily: "'Inter', sans-serif" }}>
 
-      {/* ── Icon row ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
 
         {/* Like */}
         <button
           onClick={handleLike}
           title={canLike ? "Like" : "Subscribe to like"}
           style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: "38px", height: "38px", borderRadius: "10px", border: "none",
-            background: liked ? "rgba(239,68,68,0.1)" : "transparent",
-            color: liked ? "#EF4444" : "#E2E8F0",
+            display: "flex", alignItems: "center", gap: "6px",
+            background: "none", border: "none", padding: 0,
+            color: liked ? "#EC4899" : "#C4C4D4",
+            fontSize: "14px", fontWeight: 500,
+            fontFamily: "'Inter', sans-serif",
             cursor: canLike ? "pointer" : "not-allowed",
-            transition: "all 0.15s",
+            transition: "color 0.15s",
           }}
-          onMouseEnter={(e) => { if (canLike && !liked) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
-          onMouseLeave={(e) => { if (!liked) e.currentTarget.style.backgroundColor = "transparent"; }}
         >
-          <Heart size={24} fill={liked ? "#EF4444" : "none"} strokeWidth={1.8} />
+          <Heart size={22} fill={liked ? "#EC4899" : "none"} strokeWidth={1.8} />
+          <span>{likes.toLocaleString()}</span>
         </button>
 
         {/* Comment */}
         <button
           onClick={onComment}
           style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: "38px", height: "38px", borderRadius: "10px", border: "none",
-            background: "transparent", color: "#E2E8F0", cursor: "pointer",
-            transition: "all 0.15s",
+            display: "flex", alignItems: "center", gap: "6px",
+            background: "none", border: "none", padding: 0,
+            color: "#C4C4D4",
+            fontSize: "14px", fontWeight: 500,
+            fontFamily: "'Inter', sans-serif",
+            cursor: "pointer",
+            transition: "color 0.15s",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
-          <MessageCircle size={24} strokeWidth={1.8} />
+          <MessageCircle size={22} strokeWidth={1.8} />
+          <span>{comments.toLocaleString()}</span>
         </button>
 
-        {/* Send Tip */}
+        {/* Tip — hidden on own profile */}
         {!isOwnProfile && (
-          <>
-          <style>{`
-            @keyframes tipPulse {
-              0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
-              50%      { transform: scale(1.08); box-shadow: 0 0 12px 4px rgba(139,92,246,0.3); }
-            }
-          `}</style>
           <button
             onClick={onTip}
             style={{
-              display: "flex", alignItems: "center", gap: "7px",
-              padding: "8px 16px", borderRadius: "999px",
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "7px 14px", borderRadius: "999px",
               background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
-              border: "none", cursor: "pointer",
+              border: "none",
+              color: "#FFFFFF", fontSize: "13px", fontWeight: 500,
               fontFamily: "'Inter', sans-serif",
+              cursor: "pointer",
               transition: "opacity 0.15s",
-              animation: "tipPulse 2s ease-in-out infinite",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; e.currentTarget.style.animationPlayState = "paused"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.animationPlayState = "running"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 12 20 22 4 22 4 12"/>
               <rect x="2" y="7" width="20" height="5"/>
               <line x1="12" y1="22" x2="12" y2="7"/>
               <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
               <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
             </svg>
-            <span style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>Send Tip</span>
+            <span>Tip</span>
           </button>
-          </>
         )}
 
-        {/* Bookmark — pushed to right */}
+        <div style={{ flex: 1 }} />
+
+        {/* Bookmark — far right */}
         <button
           onClick={handleBookmark}
           style={{
-            marginLeft: "auto",
             display: "flex", alignItems: "center", justifyContent: "center",
-            width: "38px", height: "38px", borderRadius: "10px", border: "none",
-            background: bookmarked ? "rgba(139,92,246,0.1)" : "transparent",
-            color: bookmarked ? "#8B5CF6" : "#E2E8F0",
-            cursor: "pointer", transition: "all 0.15s",
+            background: "none", border: "none", padding: 0,
+            color: bookmarked ? "#8B5CF6" : "#C4C4D4",
+            cursor: "pointer",
+            transition: "color 0.15s",
           }}
-          onMouseEnter={(e) => { if (!bookmarked) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
-          onMouseLeave={(e) => { if (!bookmarked) e.currentTarget.style.backgroundColor = "transparent"; }}
         >
           <Bookmark size={22} fill={bookmarked ? "#8B5CF6" : "none"} strokeWidth={1.8} />
         </button>
       </div>
 
-      {/* ── Stats line ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px", paddingLeft: "4px" }}>
-        <span style={{ fontSize: "13px", fontWeight: 600, color: "#C4C4D4" }}>
-          {likes.toLocaleString()} likes
-        </span>
-        <span style={{ fontSize: "13px", color: "#4A4A6A" }}>·</span>
-        <span style={{ fontSize: "13px", fontWeight: 600, color: "#C4C4D4" }}>
-          {comments.toLocaleString()} comments
-        </span>
-        {tipsNaira > 0 && (
-          <>
-            <span style={{ fontSize: "13px", color: "#4A4A6A" }}>·</span>
-            <span style={{ fontSize: "13px", fontWeight: 600, color: "#8B5CF6" }}>
-              ₦{tipsNaira.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tips
-            </span>
-          </>
-        )}
-      </div>
-
-      {/* Subscribe nudge — only for locked posts */}
-      {!isSubscribed && !isOwnProfile && !isFree && (
-        <p style={{ margin: "8px 0 0 4px", fontSize: "12px", color: "#4A4A6A", fontFamily: "'Inter', sans-serif" }}>
-          Subscribe to like this post
-        </p>
-      )}
+      {/* Tips earned — creator + subscribers only, when > 0 */}
+      {showTipsEarned && (
+  <div style={{
+    marginTop: "6px",
+    fontSize: "13px",
+    fontWeight: 500,
+    color: "#8B5CF6",
+    fontFamily: "'Inter', sans-serif",
+  }}>
+    Tipped ₦{tipsFormatted}
+  </div>
+)}
     </div>
   );
 }
