@@ -68,12 +68,12 @@ border: "1px solid #1F1F2A",
         }}
       >
         <button onClick={() => navigate("/dashboard")} style={btn(pathname === "/dashboard")}>
-  <House size={26} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
+  <House size={30}strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
 </button>
 
        <button onClick={() => navigate("/messages")} style={{ ...btn(pathname === "/messages"), position: "relative" }}>
   <div style={{ position: "relative", display: "inline-flex" }}>
-    <Mail size={26} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
+    <Mail size={30} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
     {unreadCount > 0 && (
       <span style={{
         position: "absolute", top: "-6px", right: "-10px",
@@ -90,11 +90,11 @@ border: "1px solid #1F1F2A",
 </button>
 
 <button onClick={() => navigate("/explore")} style={btn(pathname === "/explore")}>
-  <Compass size={26} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
+  <Compass size={30} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
 </button>
 
 <button onClick={() => navigate("/subscriptions")} style={btn(pathname === "/subscriptions")}>
-  <CreditCard size={26} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
+  <CreditCard size={30} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
 </button>
 
 <button onClick={() => setMoreOpen(true)} style={btn(moreOpen)}>
@@ -103,12 +103,12 @@ border: "1px solid #1F1F2A",
       src={viewer.avatar_url}
       alt="profile"
       style={{
-        width: "28px", height: "28px", borderRadius: "50%", objectFit: "cover",
+        width: "36px", height: "36px",borderRadius: "50%", objectFit: "cover",
         border: moreOpen ? "2px solid #A78BFA" : "2px solid #8888AA",
       }}
     />
   ) : (
-    <AlignJustify size={26} strokeWidth={1.8} />
+    <AlignJustify size={30} strokeWidth={1.8} />
   )}
 </button>
       </nav>
