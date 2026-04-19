@@ -66,7 +66,7 @@ export default function ProfileActions({
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
           <span style={{ fontSize: "13px", fontWeight: 600, color: "#C4C4D4" }}>Message</span>
@@ -94,8 +94,8 @@ export default function ProfileActions({
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = isFollowing ? "#8B5CF6" : "#3A3A4D"; }}
         >
           {isFollowing
-            ? <UserCheck size={15} strokeWidth={1.8} color="#8B5CF6" />
-            : <UserPlus  size={15} strokeWidth={1.8} color="#C4C4D4" />
+            ? <UserCheck size={22} strokeWidth={1.8} color="#8B5CF6" />
+            : <UserPlus  size={22} strokeWidth={1.8} color="#C4C4D4" />
           }
           <span style={{ fontSize: "13px", fontWeight: 600, color: isFollowing ? "#8B5CF6" : "#C4C4D4" }}>
             {isFollowing ? "Following" : "Follow"}
@@ -108,14 +108,14 @@ export default function ProfileActions({
             onClick={() => onMessage?.()}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
-              width: "40px", height: "40px", borderRadius: "999px",
+              width: "44px", height: "44px", borderRadius: "999px",
               background: "transparent", border: "1px solid #3A3A4D",
               cursor: "pointer", transition: "border-color 0.15s",
             }}
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
           </button>
@@ -133,7 +133,7 @@ export default function ProfileActions({
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 12 20 22 4 22 4 12"/>
             <rect x="2" y="7" width="20" height="5"/>
             <line x1="12" y1="22" x2="12" y2="7"/>

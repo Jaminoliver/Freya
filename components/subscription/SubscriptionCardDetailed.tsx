@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, Star, MessageCircle } from "lucide-react";
+import { BadgeCheck, Star } from "lucide-react";
 import Image from "next/image";
 import { useNav } from "@/lib/hooks/useNav";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
@@ -82,9 +82,9 @@ export function SubscriptionCardDetailed({
   } as unknown as User;
 
   const iconButtonStyle: React.CSSProperties = {
-    width: "42px", height: "38px", borderRadius: "10px",
+    width: "46px", height: "42px", borderRadius: "10px",
     border: "1px solid #2A2A3D", backgroundColor: "transparent",
-    color: "#94A3B8", cursor: "pointer",
+    color: "#C4C4D4", cursor: "pointer",
     display: "flex", alignItems: "center", justifyContent: "center",
     flexShrink: 0, transition: "all 0.15s ease",
   };
@@ -277,9 +277,9 @@ export function SubscriptionCardDetailed({
                   aria-label="Tip"
                   style={iconButtonStyle}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#94A3B8"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#C4C4D4"; }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 12 20 22 4 22 4 12"/>
                     <rect x="2" y="7" width="20" height="5"/>
                     <line x1="12" y1="22" x2="12" y2="7"/>
@@ -294,9 +294,11 @@ export function SubscriptionCardDetailed({
                   aria-label="Message"
                   style={iconButtonStyle}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#94A3B8"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#C4C4D4"; }}
                 >
-                  <MessageCircle size={16} strokeWidth={1.8} />
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
                 </button>
               </>
             )}

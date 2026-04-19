@@ -46,6 +46,19 @@ export function SubscriptionCardCompact({
     else                        navigate(`/${s.username}`);
   };
 
+  const handleMessage = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const params = new URLSearchParams({
+      targetUserId: s.creatorId,
+      name:         s.creatorName,
+      username:     s.username,
+      avatar:       s.avatar_url ?? "",
+      verified:     s.isVerified ? "1" : "0",
+    });
+    navigate(`/messages/new?${params.toString()}`);
+  };
+
   const handleResub = () => {
     if (s.isFreeCreator) freeResubscribe();
     else                 setCheckoutOpen(true);
@@ -60,23 +73,47 @@ export function SubscriptionCardCompact({
     banner_url:   s.banner_url,
   } as unknown as User;
 
-  // Primary button
   const renderButton = () => {
-    const base = {
+    const base: React.CSSProperties = {
       width: "100%", padding: "7px", borderRadius: "8px",
       border: "none", cursor: "pointer",
       fontSize: "11px", fontWeight: 700,
       fontFamily: "'Inter', sans-serif",
-    } as const;
+    };
 
     if (s.status === "active") {
       return (
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setManageOpen(true); }}
-          style={{ ...base, background: "linear-gradient(135deg, #8B5CF6, #EC4899)", color: "#fff" }}
-        >
-          Manage
-        </button>
+        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setManageOpen(true); }}
+            style={{
+              ...base,
+              flex: 1,
+              background: "#1E1E2E",
+              border: "1px solid #3A3A4D",
+              color: "#A78BFA",
+            }}
+          >
+            Manage
+          </button>
+          <button
+            onClick={handleMessage}
+            aria-label="Message"
+            style={{
+          width: "42px", height: "38px", borderRadius: "8px",
+            border: "1px solid #2A2A3D", backgroundColor: "transparent",
+            color: "#C4C4D4", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0, transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#C4C4D4"; }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+        </div>
       );
     }
 
@@ -92,7 +129,6 @@ export function SubscriptionCardCompact({
       );
     }
 
-    // expired
     return (
       <button
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleResub(); }}
@@ -140,13 +176,13 @@ export function SubscriptionCardCompact({
       <div
         onClick={() => navigate(`/${s.username}`)}
         style={{
-          border:     "1px solid #1E1E2E",
+          border:       "1px solid #1E1E2E",
           borderRadius: "12px",
-          overflow:   "hidden",
-          fontFamily: "'Inter', sans-serif",
-          position:   "relative",
-          cursor:     "pointer",
-          minHeight:  "220px",
+          overflow:     "hidden",
+          fontFamily:   "'Inter', sans-serif",
+          position:     "relative",
+          cursor:       "pointer",
+          minHeight:    "220px",
         }}
       >
         {/* Full card banner */}
@@ -157,10 +193,6 @@ export function SubscriptionCardCompact({
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #312E81, #7C2D62)" }} />
           )}
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.75) 100%)" }} />
-
-          
-
-         
 
           {/* Star */}
           <button
@@ -197,7 +229,7 @@ export function SubscriptionCardCompact({
               borderColor="#0D0D18"
             />
           </div>
-         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
                 <span style={{ fontSize: "14px", fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
