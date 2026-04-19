@@ -16,9 +16,11 @@ import type { User } from "@/lib/types/profile";
 export function SubscriptionCardDetailed({
   subscription: s,
   onRefresh,
+  onTip,
 }: {
   subscription: Subscription;
   onRefresh?:   () => void;
+  onTip?:       (creatorId: string) => void;
 }) {
   const { navigate } = useNav();
 
@@ -59,6 +61,12 @@ export function SubscriptionCardDetailed({
     navigate(`/messages/new?${params.toString()}`);
   };
 
+  const handleTip = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onTip?.(s.creatorId);
+  };
+
   const handleResub = () => {
     if (s.isFreeCreator) freeResubscribe();
     else                 setCheckoutOpen(true);
@@ -73,19 +81,32 @@ export function SubscriptionCardDetailed({
     banner_url:   s.banner_url,
   } as unknown as User;
 
+  const iconButtonStyle: React.CSSProperties = {
+    width: "42px", height: "38px", borderRadius: "10px",
+    border: "1px solid #2A2A3D", backgroundColor: "transparent",
+    color: "#94A3B8", cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0, transition: "all 0.15s ease",
+  };
+
   const renderButton = () => {
-    const base = {
-      width: "100%", padding: "10px", borderRadius: "10px",
+    const base: React.CSSProperties = {
+      width: "100%", padding: "8px", borderRadius: "10px",
       border: "none", cursor: "pointer",
       fontSize: "13px", fontWeight: 700,
       fontFamily: "'Inter', sans-serif",
-    } as const;
+    };
 
     if (s.status === "active") {
       return (
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setManageOpen(true); }}
-          style={{ ...base, background: "linear-gradient(135deg, #8B5CF6, #EC4899)", color: "#fff" }}
+          style={{
+            ...base,
+            background: "#1E1E2E",
+            border: "1px solid #3A3A4D",
+            color: "#A78BFA",
+          }}
         >
           Manage
         </button>
@@ -201,7 +222,7 @@ export function SubscriptionCardDetailed({
             />
           </button>
 
-          {/* Avatar + name (bottom-left) */}
+          {/* Avatar + name */}
           <div style={{ position: "absolute", bottom: "12px", left: "12px", display: "flex", alignItems: "center", gap: "10px" }}>
             <AvatarWithStoryRing
               src={s.avatar_url}
@@ -221,7 +242,7 @@ export function SubscriptionCardDetailed({
             </div>
           </div>
 
-          {/* Status pill (bottom-right) */}
+          {/* Status pill */}
           <div style={{
             position: "absolute", bottom: "12px", right: "12px",
             display: "flex", alignItems: "center", gap: "6px",
@@ -246,24 +267,38 @@ export function SubscriptionCardDetailed({
             )}
           </div>
 
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             <div style={{ flex: 1 }}>{renderButton()}</div>
             {s.status === "active" && (
-              <button
-                onClick={handleMessage}
-                aria-label="Message"
-                style={{
-                  width: "42px", height: "40px", borderRadius: "10px",
-                  border: "1px solid #2A2A3D", backgroundColor: "transparent",
-                  color: "#94A3B8", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  flexShrink: 0, transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#94A3B8"; }}
-              >
-                <MessageCircle size={16} strokeWidth={1.8} />
-              </button>
+              <>
+                {/* Tip button */}
+                <button
+                  onClick={handleTip}
+                  aria-label="Tip"
+                  style={iconButtonStyle}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#94A3B8"; }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 12 20 22 4 22 4 12"/>
+                    <rect x="2" y="7" width="20" height="5"/>
+                    <line x1="12" y1="22" x2="12" y2="7"/>
+                    <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+                    <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+                  </svg>
+                </button>
+
+                {/* Message button */}
+                <button
+                  onClick={handleMessage}
+                  aria-label="Message"
+                  style={iconButtonStyle}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#94A3B8"; }}
+                >
+                  <MessageCircle size={16} strokeWidth={1.8} />
+                </button>
+              </>
             )}
           </div>
         </div>

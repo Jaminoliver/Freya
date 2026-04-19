@@ -12,15 +12,30 @@ export async function GET() {
 
     const service = createServiceSupabaseClient();
 
-    const { data, error } = await service
+    // Fetch creator IDs the user is already subscribed to (active or in grace period)
+    const { data: subData } = await service
+      .from("subscriptions")
+      .select("creator_id")
+      .eq("fan_id", user.id)
+      .in("status", ["active", "grace_period"]);
+
+    const subscribedIds = (subData ?? []).map((s) => s.creator_id);
+
+    let query = service
       .from("profiles")
-      .select("id, display_name, username, avatar_url, banner_url, is_verified, subscriber_count, likes_count")
+      .select("id, display_name, username, avatar_url, banner_url, is_verified, subscriber_count, likes_count, subscription_price")
       .eq("role", "creator")
       .eq("is_active", true)
       .eq("is_suspended", false)
       .neq("id", user.id)
       .order("likes_count", { ascending: false })
       .limit(10);
+
+    if (subscribedIds.length > 0) {
+      query = query.not("id", "in", `(${subscribedIds.join(",")})`);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("[SuggestedCreators:ERROR]", error.message);
@@ -36,11 +51,11 @@ export async function GET() {
       isVerified:       p.is_verified ?? false,
       subscriber_count: p.subscriber_count ?? 0,
       likes_count:      p.likes_count ?? 0,
+      is_free:          (p.subscription_price ?? 0) === 0,
     }));
 
     const res = NextResponse.json({ creators });
 
-    // Suggestions change slowly — cache for 5 minutes, stale for 10
     res.headers.set("Cache-Control", "private, s-maxage=300, stale-while-revalidate=600");
 
     return res;

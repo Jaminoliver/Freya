@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { BadgeCheck, Heart, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface SuggestedCreator {
@@ -13,6 +12,7 @@ interface SuggestedCreator {
   isVerified:       boolean;
   subscriber_count: number;
   likes_count:      number;
+  is_free:          boolean;
 }
 
 function formatCount(n: number): string {
@@ -24,8 +24,8 @@ function formatCount(n: number): string {
 let cachedCreators: SuggestedCreator[] | null = null;
 
 export function FeedSuggestions() {
-  const router     = useRouter();
-  const scrollRef  = useRef<HTMLDivElement>(null);
+  const router    = useRouter();
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [creators, setCreators] = useState<SuggestedCreator[]>(cachedCreators ?? []);
   const [loading,  setLoading]  = useState(!cachedCreators);
 
@@ -67,42 +67,43 @@ export function FeedSuggestions() {
         }
         .feed-creator-card {
           flex-shrink: 0;
-          width: 160px;
-          height: 220px;
+          width: 200px;
+          height: 270px;
           border-radius: 14px;
           overflow: hidden;
           cursor: pointer;
           position: relative;
           scroll-snap-align: start;
           border: 1px solid #2A2A3D;
+          background-color: #1A1A2E;
           transition: border-color 0.15s ease, transform 0.15s ease;
         }
         .feed-creator-card:hover {
-          border-color: #C45F8C;
+          border-color: #8B5CF6;
           transform: translateY(-2px);
         }
         @media (max-width: 480px) {
           .feed-creator-card {
-            width: 140px;
-            height: 200px;
+            width: 170px;
+            height: 240px;
           }
         }
         .skeleton-card {
           flex-shrink: 0;
-          width: 160px;
-          height: 220px;
+          width: 200px;
+          height: 270px;
           border-radius: 14px;
           background-color: #1A1A2E;
           animation: pulse 1.5s ease-in-out infinite;
         }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          50%       { opacity: 0.5; }
         }
         @media (max-width: 480px) {
           .skeleton-card {
-            width: 140px;
-            height: 200px;
+            width: 170px;
+            height: 240px;
           }
         }
       `}</style>
@@ -120,12 +121,12 @@ export function FeedSuggestions() {
           padding: "0 16px", marginBottom: "12px",
         }}>
           <span style={{
-            fontSize: "10px", fontWeight: 700, color: "#6B6B8A",
-            letterSpacing: "0.12em", textTransform: "uppercase",
+            fontSize: "13px", fontWeight: 700, color: "#E0E0F0",
+            letterSpacing: "0.04em",
           }}>
             Suggested for you
           </span>
-          <span style={{ fontSize: "10px", color: "#6B6B8A" }}>Scroll →</span>
+          <span style={{ fontSize: "11px", color: "#6B6B8A" }}>Scroll →</span>
         </div>
 
         {/* Scroll track */}
@@ -156,59 +157,77 @@ function FeedCreatorCard({
   creator: SuggestedCreator;
   onClick: () => void;
 }) {
+  const [bannerError, setBannerError] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
+
+  const initials = (creator.name[0] ?? "?").toUpperCase();
+
   return (
     <div className="feed-creator-card" onClick={onClick}>
-      {/* Cover — lazy loaded, no external fallback */}
-      {creator.banner_url ? (
+
+      {/* Banner */}
+      {creator.banner_url && !bannerError ? (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={creator.banner_url}
           alt=""
           loading="lazy"
+          onError={() => setBannerError(true)}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
         />
       ) : (
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #1A1A2E 0%, #2A2A3D 100%)" }} />
       )}
 
-      {/* Gradient */}
+      {/* Gradient overlay */}
       <div style={{
         position: "absolute", inset: 0,
         background: "linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,0.92) 100%)",
       }} />
 
-      {/* Free tag */}
-      <div style={{
-        position: "absolute", top: "8px", left: "8px",
-        background: "#3abf7a", color: "#fff",
-        fontSize: "8px", fontWeight: 700, letterSpacing: "0.4px",
-        padding: "2px 6px", borderRadius: "4px", zIndex: 2,
-      }}>
-        Free
-      </div>
+      {/* Free badge */}
+      {creator.is_free && (
+        <div style={{
+          position: "absolute", top: "10px", left: "10px",
+          background: "#3abf7a", color: "#fff",
+          fontSize: "9px", fontWeight: 700, letterSpacing: "0.4px",
+          padding: "3px 7px", borderRadius: "4px", zIndex: 2,
+          fontFamily: "'Inter', sans-serif",
+        }}>
+          Free
+        </div>
+      )}
 
-      {/* Avatar — lazy loaded */}
+      {/* Avatar */}
       <div style={{
         position: "absolute", top: "50%", left: "50%",
         transform: "translate(-50%, -38%)", zIndex: 2,
       }}>
         <div style={{
-          width: "56px", height: "56px", borderRadius: "50%", padding: "2px",
+          width: "68px", height: "68px", borderRadius: "50%", padding: "2px",
           background: "conic-gradient(#C45F8C, #8B3FBF, #C45F8C)",
         }}>
           <div style={{
             width: "100%", height: "100%", borderRadius: "50%",
             overflow: "hidden", border: "2px solid #0A0A0F",
           }}>
-            {creator.avatar_url ? (
+            {creator.avatar_url && !avatarError ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={creator.avatar_url}
                 alt={creator.name}
                 loading="lazy"
+                onError={() => setAvatarError(true)}
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
             ) : (
-              <div style={{ width: "100%", height: "100%", background: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "20px", fontWeight: 700 }}>
-                {(creator.name[0] ?? "?").toUpperCase()}
+              <div style={{
+                width: "100%", height: "100%", background: "#8B5CF6",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#fff", fontSize: "24px", fontWeight: 700,
+                fontFamily: "'Inter', sans-serif",
+              }}>
+                {initials}
               </div>
             )}
           </div>
@@ -217,39 +236,47 @@ function FeedCreatorCard({
 
       {/* Name + handle */}
       <div style={{
-        position: "absolute", bottom: "28px", left: 0, right: 0, zIndex: 2,
+        position: "absolute", bottom: "36px", left: 0, right: 0, zIndex: 2,
         display: "flex", flexDirection: "column", alignItems: "center",
-        padding: "0 8px", gap: "2px",
+        padding: "0 10px", gap: "3px",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-          <span style={{
-            fontSize: "12px", fontWeight: 700, color: "#fff",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            maxWidth: "110px",
-          }}>
-            {creator.name}
-          </span>
-          {creator.isVerified && <BadgeCheck size={11} color="#C45F8C" />}
-        </div>
-        <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.5)" }}>
+        <span style={{
+          fontSize: "15px", fontWeight: 700, color: "#fff",
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          maxWidth: "160px", fontFamily: "'Inter', sans-serif",
+        }}>
+          {creator.name}
+        </span>
+        <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", fontFamily: "'Inter', sans-serif" }}>
           @{creator.username}
         </span>
       </div>
 
       {/* Stats */}
       <div style={{
-        position: "absolute", bottom: "10px", left: 0, right: 0, zIndex: 2,
-        display: "flex", justifyContent: "center", gap: "10px",
+        position: "absolute", bottom: "12px", left: 0, right: 0, zIndex: 2,
+        display: "flex", justifyContent: "center", gap: "14px",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-          <Users size={9} color="rgba(255,255,255,0.5)" />
-          <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.75)", fontWeight: 600 }}>
+        {/* Subscribers */}
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 18h20" />
+            <path d="M4 18L2 8l4.5 4L12 4l5.5 8L22 8l-2 10H4z" />
+            <circle cx="12" cy="4" r="1.2" fill="#F5C842" stroke="none" />
+            <circle cx="6.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
+            <circle cx="17.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
+          </svg>
+          <span style={{ fontSize: "12px", color: "#F5C842", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
             {formatCount(creator.subscriber_count)}
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-          <Heart size={9} color="#C45F8C" />
-          <span style={{ fontSize: "9px", color: "#C45F8C", fontWeight: 600 }}>
+
+        {/* Likes */}
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+          </svg>
+          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.85)", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
             {formatCount(creator.likes_count)}
           </span>
         </div>
