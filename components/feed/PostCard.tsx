@@ -292,12 +292,7 @@ function PostCardInner({
   ) : moreButton;
 
   // "· Free" inline suffix only shown when there's a pill AND creator is free
-  const freeSuffix = (showSubscribeBanner && isFree) ? (
-    <>
-      <span>·</span>
-      <span style={{ color: "#22C55E", fontWeight: 500 }}>Free</span>
-    </>
-  ) : undefined;
+  const freeSuffix = undefined;
 
   return (
     <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
