@@ -1,15 +1,16 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { House, Mail, Compass, BadgeDollarSign, AlignJustify } from "lucide-react";
 import { useState } from "react";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useNav } from "@/lib/hooks/useNav";
 import { useUnreadConversationCount } from "@/app/(main)/messages/page";
-
+import { House, Mail, Compass, CreditCard, User, AlignJustify } from "lucide-react";
+import { useAppStore } from "@/lib/store/appStore";
 export function MobileBottomNav() {
   const pathname     = usePathname();
   const { navigate } = useNav();
+  const { viewer } = useAppStore(); // add this line
   const [moreOpen, setMoreOpen] = useState(false);
   const unreadCount = useUnreadConversationCount();
 
@@ -17,7 +18,7 @@ export function MobileBottomNav() {
   if (inChat) return null;
 
   const activeColor   = "#A78BFA";
-  const inactiveColor = "#c9c9df";
+const inactiveColor = "#A3A3C2";
 
   const btn = (active: boolean): React.CSSProperties => ({
     display: "flex", flexDirection: "column", alignItems: "center",
@@ -55,8 +56,8 @@ body.search-open .mobile-bottom-nav { display: none !important; }
         className="mobile-bottom-nav"
         style={{
           position: "fixed", bottom: "0", left: "0", right: "0",
-          backgroundColor: "#16162A",
-          border: "1px solid #2A2A3D",
+          backgroundColor: "#13131F",
+border: "1px solid #1F1F2A",
           borderRadius: "20px 20px 0 0",
           zIndex: 200,
           fontFamily: "'Inter', sans-serif",
@@ -80,7 +81,7 @@ body.search-open .mobile-bottom-nav { display: none !important; }
         backgroundColor: "#EF4444", color: "#FFFFFF",
         fontSize: "11px", fontWeight: 700, lineHeight: 1,
         display: "inline-flex", alignItems: "center", justifyContent: "center",
-        padding: "0 4px", border: "2px solid #16162A",
+        padding: "0 4px", border: "2px solid #13131F",
       }}>
         {unreadCount > 9 ? "9+" : unreadCount}
       </span>
@@ -92,12 +93,23 @@ body.search-open .mobile-bottom-nav { display: none !important; }
   <Compass size={26} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
 </button>
 
-<button onClick={() => navigate("/subscriptions")} style={btn(pathname.startsWith("/subscriptions"))}>
-  <BadgeDollarSign size={26} strokeWidth={pathname.startsWith("/subscriptions") ? 2.2 : 1.8} />
+<button onClick={() => navigate("/subscriptions")} style={btn(pathname === "/subscriptions")}>
+  <CreditCard size={26} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
 </button>
 
 <button onClick={() => setMoreOpen(true)} style={btn(moreOpen)}>
-  <AlignJustify size={26} strokeWidth={1.8} />
+  {viewer?.avatar_url ? (
+    <img
+      src={viewer.avatar_url}
+      alt="profile"
+      style={{
+        width: "28px", height: "28px", borderRadius: "50%", objectFit: "cover",
+        border: moreOpen ? "2px solid #A78BFA" : "2px solid #8888AA",
+      }}
+    />
+  ) : (
+    <AlignJustify size={26} strokeWidth={1.8} />
+  )}
 </button>
       </nav>
 
