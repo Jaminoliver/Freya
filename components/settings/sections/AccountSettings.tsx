@@ -6,6 +6,67 @@ import { createClient } from "@/lib/supabase/client";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+// ─── Skeleton ─────────────────────────────────
+
+const SHIMMER_KEYFRAMES = `
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+`;
+
+const shimmerStyle: React.CSSProperties = {
+  backgroundImage: "linear-gradient(90deg, #0F0F1A 0px, #1A1A2E 80px, #0F0F1A 160px)",
+  backgroundSize: "600px 100%",
+  animation: "shimmer 1.6s infinite linear",
+  borderRadius: "6px",
+};
+
+function SkeletonBlock({
+  width, height, style,
+}: {
+  width?: string | number; height?: string | number; style?: React.CSSProperties;
+}) {
+  return <div style={{ ...shimmerStyle, width: width ?? "100%", height: height ?? "14px", borderRadius: "6px", ...style }} />;
+}
+
+function AccountSkeleton() {
+  return (
+    <>
+      <style>{SHIMMER_KEYFRAMES}</style>
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* Email block */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <SkeletonBlock width="30%" height={12} />
+          <SkeletonBlock width="100%" height={44} style={{ borderRadius: "10px" }} />
+          <SkeletonBlock width="100%" height={44} style={{ borderRadius: "10px" }} />
+        </div>
+        {/* Phone block */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <SkeletonBlock width="30%" height={12} />
+          <SkeletonBlock width="100%" height={44} style={{ borderRadius: "10px" }} />
+        </div>
+        {/* Divider */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "8px 0" }}>
+          <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
+          <SkeletonBlock width={60} height={11} />
+          <div style={{ flex: 1, height: "1px", backgroundColor: "#2A2A3D" }} />
+        </div>
+        {/* Password block */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <SkeletonBlock width="35%" height={12} />
+          <SkeletonBlock width="100%" height={44} style={{ borderRadius: "10px" }} />
+          <SkeletonBlock width="100%" height={44} style={{ borderRadius: "10px" }} />
+          <SkeletonBlock width="100%" height={44} style={{ borderRadius: "10px" }} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Sub-components ────────────────────────────
+
 const PasswordInput = ({ value, onChange, placeholder, show, onToggle }: {
   value: string; onChange: (v: string) => void; placeholder: string; show: boolean; onToggle: () => void;
 }) => (
@@ -27,7 +88,7 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
   const [currentEmail, setCurrentEmail] = useState("");
   const [currentUsername, setCurrentUsername] = useState("");
   const [currentPhone, setCurrentPhone] = useState("");
-
+  const [loading, setLoading] = useState(true);
 
   const [newEmail, setNewEmail] = useState("");
   const [emailStep, setEmailStep] = useState<"input" | "otp">("input");
@@ -68,6 +129,7 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
         setCurrentUsername(data.username ?? "");
         setCurrentPhone(data.phone ?? "");
       }
+      setLoading(false);
     };
     load();
   }, []);
@@ -166,7 +228,6 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
     if (newPassword !== confirmPassword) { setPasswordError("Passwords do not match."); return; }
     setPasswordSave("saving"); setPasswordError(null);
     const supabase = createClient();
-    // Verify current password first
     const { error: signInError } = await supabase.auth.signInWithPassword({ email: currentEmail, password: currentPassword });
     if (signInError) { setPasswordSave("error"); setPasswordError("Current password is incorrect."); return; }
     const { error } = await supabase.auth.updateUser({ password: newPassword });
@@ -183,148 +244,141 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", paddingBottom: "80px" }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{SHIMMER_KEYFRAMES}</style>
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
-        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B6B8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5M12 5l-7 7 7 7" />
-          </svg>
-        </button>
-        <div>
-          <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 3px" }}>Account</h2>
-          <p style={{ fontSize: "13px", color: "#A3A3C2", margin: 0 }}>Manage your login credentials and identity</p>
-        </div>
-      </div>
+      {loading ? (
+        <AccountSkeleton />
+      ) : (
+        <>
+          {/* ── Identity ── */}
+          <p style={{ fontSize: "11px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 14px" }}>Identity</p>
 
-      {/* ── Identity ── */}
-      <p style={{ fontSize: "11px", fontWeight: 600, color: "#6B6B8A", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 14px" }}>Identity</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {/* Email */}
+            <div>
+              <label style={labelStyle}>Email</label>
+              <input type="email" readOnly value={currentEmail} style={readOnlyStyle} />
+              <div style={{ height: "10px" }} />
 
-        {/* Email */}
-        <div>
-          <label style={labelStyle}>Email</label>
-          <input type="email" readOnly value={currentEmail} style={readOnlyStyle} />
-          <div style={{ height: "10px" }} />
+              {emailStep === "input" ? (
+                <>
+                  <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="New email address" style={inputBase}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+                  <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "5px", display: "block", fontStyle: "italic" }}>
+                    A confirmation code will be sent to your new email
+                  </span>
+                  <ErrorNote msg={emailError} />
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
+                    <SaveButton onSave={handleEmailSave} state={emailSave} label="Send Code" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ backgroundColor: "rgba(139,92,246,0.06)", border: "1.5px solid rgba(139,92,246,0.2)", borderRadius: "10px", padding: "12px 14px", marginBottom: "10px" }}>
+                    <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2", lineHeight: 1.5 }}>
+                      A 8-digit code was sent to <strong style={{ color: "#F1F5F9" }}>{newEmail}</strong>. Enter it below to confirm.
+                    </p>
+                  </div>
+                  <input
+                    type="text"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                    placeholder="00000000"
+                    maxLength={8}
+                    style={{ ...inputBase, letterSpacing: "0.25em", fontSize: "18px", textAlign: "center" }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
+                  />
+                  <ErrorNote msg={emailError} />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px" }}>
+                    <button type="button" onClick={() => { setEmailStep("input"); setOtpCode(""); setEmailError(null); }}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif", padding: 0 }}>
+                      ← Use a different email
+                    </button>
+                    <SaveButton onSave={handleEmailVerify} state={emailSave} label="Confirm Email" />
+                  </div>
+                </>
+              )}
+            </div>
 
-          {emailStep === "input" ? (
-            <>
-              <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="New email address" style={inputBase}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
-              <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "5px", display: "block", fontStyle: "italic" }}>
-                A confirmation code will be sent to your new email
-              </span>
-              <ErrorNote msg={emailError} />
+            {/* Phone */}
+            <div>
+              <label style={labelStyle}>Phone Number</label>
+              {currentPhone && (
+                <input type="text" readOnly value={currentPhone} style={{ ...readOnlyStyle, marginBottom: "10px" }} />
+              )}
+              <input type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
+                placeholder={currentPhone ? "Change phone number" : "Add phone number"} style={inputBase}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
+              <ErrorNote msg={phoneError} />
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
-                <SaveButton onSave={handleEmailSave} state={emailSave} label="Send Code" />
+                <SaveButton onSave={handlePhoneSave} state={phoneSave} label={currentPhone ? "Update Phone" : "Add Phone"} />
               </div>
-            </>
-          ) : (
-            <>
-              <div style={{ backgroundColor: "rgba(139,92,246,0.06)", border: "1.5px solid rgba(139,92,246,0.2)", borderRadius: "10px", padding: "12px 14px", marginBottom: "10px" }}>
-                <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2", lineHeight: 1.5 }}>
-                  A 8-digit code was sent to <strong style={{ color: "#F1F5F9" }}>{newEmail}</strong>. Enter it below to confirm.
-                </p>
-              </div>
-              <input
-                type="text"
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                placeholder="00000000"
-                maxLength={8}
-                style={{ ...inputBase, letterSpacing: "0.25em", fontSize: "18px", textAlign: "center" }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")}
-              />
-              <ErrorNote msg={emailError} />
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px" }}>
-                <button type="button" onClick={() => { setEmailStep("input"); setOtpCode(""); setEmailError(null); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif", padding: 0 }}>
-                  ← Use a different email
-                </button>
-                <SaveButton onSave={handleEmailVerify} state={emailSave} label="Confirm Email" />
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Phone */}
-        <div>
-          <label style={labelStyle}>Phone Number</label>
-          {currentPhone && (
-            <input type="text" readOnly value={currentPhone} style={{ ...readOnlyStyle, marginBottom: "10px" }} />
-          )}
-          <input type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
-            placeholder={currentPhone ? "Change phone number" : "Add phone number"} style={inputBase}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
-          <ErrorNote msg={phoneError} />
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
-            <SaveButton onSave={handlePhoneSave} state={phoneSave} label={currentPhone ? "Update Phone" : "Add Phone"} />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Security ── */}
-      <DividerSection label="Security" />
-
-      <div>
-        <label style={labelStyle}>Change Password</label>
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <PasswordInput value={currentPassword} onChange={setCurrentPassword} placeholder="Current password" show={showCurrent} onToggle={() => setShowCurrent((p) => !p)} />
-          <PasswordInput value={newPassword} onChange={setNewPassword} placeholder="New password" show={showNew} onToggle={() => setShowNew((p) => !p)} />
-          <PasswordInput value={confirmPassword} onChange={setConfirmPassword} placeholder="Confirm new password" show={showConfirm} onToggle={() => setShowConfirm((p) => !p)} />
-        </div>
-        <ErrorNote msg={passwordError} />
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
-          <SaveButton onSave={handlePasswordSave} state={passwordSave} label="Update Password" />
-        </div>
-      </div>
-
-      {/* ── Danger Zone ── */}
-      <DividerSection label="Danger Zone" danger />
-
-      <div>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
-          <div>
-            <p style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 600, color: "#F1F5F9" }}>Delete Account</p>
-            <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A", lineHeight: 1.5 }}>
-              Permanently delete your account and all your data. This cannot be undone.
-            </p>
-          </div>
-          <button type="button" onClick={() => setDeleteOpen((p) => !p)}
-            style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "6px", padding: "9px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, border: "1.5px solid rgba(239,68,68,0.4)", backgroundColor: "transparent", color: "#EF4444", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}>
-            <Trash2 size={13} /> Delete
-          </button>
-        </div>
-
-        {deleteOpen && (
-          <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid rgba(239,68,68,0.15)" }}>
-            <p style={{ margin: "0 0 10px", fontSize: "13px", color: "#A3A3C2" }}>
-              Type <strong style={{ color: "#F1F5F9" }}>@{currentUsername}</strong> to confirm deletion:
-            </p>
-            <input type="text" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)}
-              placeholder={`@${currentUsername}`}
-              style={{ ...inputBase, border: "1.5px solid rgba(239,68,68,0.3)", marginBottom: "12px" }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#EF4444")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)")} />
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-              <button type="button" onClick={() => { setDeleteOpen(false); setDeleteConfirm(""); }}
-                style={{ padding: "9px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: 500, border: "1.5px solid #2A2A3D", backgroundColor: "transparent", color: "#A3A3C2", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
-                Cancel
-              </button>
-              <button type="button" onClick={handleDeleteAccount} disabled={deleteConfirm !== currentUsername || deleting}
-                style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, border: "none", backgroundColor: deleteConfirm === currentUsername ? "#EF4444" : "rgba(239,68,68,0.2)", color: deleteConfirm === currentUsername ? "#fff" : "#6B6B8A", cursor: deleteConfirm === currentUsername ? "pointer" : "not-allowed", fontFamily: "'Inter', sans-serif", transition: "all 0.2s" }}>
-                {deleting && <Loader2 size={13} style={{ animation: "spin 0.9s linear infinite" }} />}
-                {deleting ? "Deleting…" : "Permanently Delete"}
-              </button>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* ── Security ── */}
+          <DividerSection label="Security" />
+
+          <div>
+            <label style={labelStyle}>Change Password</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <PasswordInput value={currentPassword} onChange={setCurrentPassword} placeholder="Current password" show={showCurrent} onToggle={() => setShowCurrent((p) => !p)} />
+              <PasswordInput value={newPassword} onChange={setNewPassword} placeholder="New password" show={showNew} onToggle={() => setShowNew((p) => !p)} />
+              <PasswordInput value={confirmPassword} onChange={setConfirmPassword} placeholder="Confirm new password" show={showConfirm} onToggle={() => setShowConfirm((p) => !p)} />
+            </div>
+            <ErrorNote msg={passwordError} />
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
+              <SaveButton onSave={handlePasswordSave} state={passwordSave} label="Update Password" />
+            </div>
+          </div>
+
+          {/* ── Danger Zone ── */}
+          <DividerSection label="Danger Zone" danger />
+
+          <div>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 600, color: "#F1F5F9" }}>Delete Account</p>
+                <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A", lineHeight: 1.5 }}>
+                  Permanently delete your account and all your data. This cannot be undone.
+                </p>
+              </div>
+              <button type="button" onClick={() => setDeleteOpen((p) => !p)}
+                style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "6px", padding: "9px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, border: "1.5px solid rgba(239,68,68,0.4)", backgroundColor: "transparent", color: "#EF4444", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}>
+                <Trash2 size={13} /> Delete
+              </button>
+            </div>
+
+            {deleteOpen && (
+              <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid rgba(239,68,68,0.15)" }}>
+                <p style={{ margin: "0 0 10px", fontSize: "13px", color: "#A3A3C2" }}>
+                  Type <strong style={{ color: "#F1F5F9" }}>@{currentUsername}</strong> to confirm deletion:
+                </p>
+                <input type="text" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)}
+                  placeholder={`@${currentUsername}`}
+                  style={{ ...inputBase, border: "1.5px solid rgba(239,68,68,0.3)", marginBottom: "12px" }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "#EF4444")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)")} />
+                <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                  <button type="button" onClick={() => { setDeleteOpen(false); setDeleteConfirm(""); }}
+                    style={{ padding: "9px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: 500, border: "1.5px solid #2A2A3D", backgroundColor: "transparent", color: "#A3A3C2", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleDeleteAccount} disabled={deleteConfirm !== currentUsername || deleting}
+                    style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, border: "none", backgroundColor: deleteConfirm === currentUsername ? "#EF4444" : "rgba(239,68,68,0.2)", color: deleteConfirm === currentUsername ? "#fff" : "#6B6B8A", cursor: deleteConfirm === currentUsername ? "pointer" : "not-allowed", fontFamily: "'Inter', sans-serif", transition: "all 0.2s" }}>
+                    {deleting && <Loader2 size={13} style={{ animation: "spin 0.9s linear infinite" }} />}
+                    {deleting ? "Deleting…" : "Permanently Delete"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

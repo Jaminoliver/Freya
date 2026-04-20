@@ -2,12 +2,16 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { MoreHorizontal, Rows3, LayoutGrid } from "lucide-react";
+import dynamic from "next/dynamic";
 import { SubscriptionList } from "@/components/subscription/SubscriptionList";
 import { SubscriptionFilterTabs } from "@/components/subscription/SubscriptionFilterTabs";
 import { SubscriptionSearchBar } from "@/components/subscription/SubscriptionSearchBar";
 import { FavouritesRail } from "@/components/subscription/FavouritesRail";
 import { SubscriptionsSkeleton } from "@/components/loadscreen/SubscriptionsSkeleton";
 import type { CardView, Subscription } from "@/lib/types/subscription";
+import type { User } from "@/lib/types/profile";
+
+const CheckoutModal = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
 
 type FilterKey = "all" | "active" | "expired" | "attention" | "starred";
 
@@ -26,6 +30,10 @@ export default function SubscriptionsPage() {
   const [filter,        setFilter]        = useState<FilterKey>("all");
   const [query,         setQuery]         = useState("");
   const [view,          setView]          = useState<CardView>("detailed");
+
+  // Tip modal state
+  const [tipOpen,      setTipOpen]      = useState(false);
+  const [tipCreator,   setTipCreator]   = useState<User | null>(null);
 
   const fetchSubscriptions = useCallback(async () => {
     setLoading(true);
@@ -51,7 +59,20 @@ export default function SubscriptionsPage() {
 
   useEffect(() => { fetchSubscriptions(); }, [fetchSubscriptions]);
 
-  // Counts for filter pills (before search applies)
+  const handleTip = useCallback((creatorId: string) => {
+    const sub = subscriptions.find((s) => s.creatorId === creatorId);
+    if (!sub) return;
+    setTipCreator({
+      id:           sub.creatorId,
+      username:     sub.username,
+      display_name: sub.creatorName,
+      avatar_url:   sub.avatar_url,
+      banner_url:   sub.banner_url,
+      is_verified:  sub.isVerified,
+    } as unknown as User);
+    setTipOpen(true);
+  }, [subscriptions]);
+
   const counts = useMemo(() => ({
     all:       subscriptions.length,
     active:    subscriptions.filter((s) => s.status === "active").length,
@@ -60,14 +81,12 @@ export default function SubscriptionsPage() {
     starred:   subscriptions.filter((s) => s.isFavourite).length,
   }), [subscriptions]);
 
-  // Filter by pill
   const filteredByStatus = useMemo(() => {
     if (filter === "all")     return subscriptions;
     if (filter === "starred") return subscriptions.filter((s) => s.isFavourite);
     return subscriptions.filter((s) => s.status === filter);
   }, [subscriptions, filter]);
 
-  // Filter by search query
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     if (!q) return filteredByStatus;
@@ -90,7 +109,18 @@ export default function SubscriptionsPage() {
       backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif",
     }}>
 
-      {/* Header — matches Notifications page */}
+      {/* Tip modal */}
+      {tipCreator && (
+        <CheckoutModal
+          isOpen={tipOpen}
+          onClose={() => setTipOpen(false)}
+          type="tips"
+          creator={tipCreator}
+          monthlyPrice={0}
+        />
+      )}
+
+      {/* Header */}
       <div style={{
         padding: "18px 18px 10px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -135,7 +165,7 @@ export default function SubscriptionsPage() {
         <SubscriptionSearchBar onSearch={handleSearch} />
       </div>
 
-      {/* Favourites rail — shown on All tab with starred subs */}
+      {/* Favourites rail */}
       {filter === "all" && favourites.length > 0 && !query && (
         <div style={{ marginTop: "18px" }}>
           <FavouritesRail favourites={favourites} />
@@ -197,6 +227,7 @@ export default function SubscriptionsPage() {
               subscriptions={filtered}
               view={view}
               onRefresh={fetchSubscriptions}
+              onTip={handleTip}
             />
           </div>
         )}

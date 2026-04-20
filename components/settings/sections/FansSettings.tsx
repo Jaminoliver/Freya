@@ -23,16 +23,73 @@ const STATUS_COLOR: Record<string, string> = {
   cancelled: "#EF4444",
 };
 
+// ─── Skeleton ─────────────────────────────────
+
+const SHIMMER_KEYFRAMES = `
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+`;
+
+const shimmerStyle: React.CSSProperties = {
+  backgroundImage: "linear-gradient(90deg, #0F0F1A 0px, #1A1A2E 80px, #0F0F1A 160px)",
+  backgroundSize: "600px 100%",
+  animation: "shimmer 1.6s infinite linear",
+  borderRadius: "6px",
+};
+
+function SkeletonBlock({
+  width, height, style,
+}: {
+  width?: string | number; height?: string | number; style?: React.CSSProperties;
+}) {
+  return <div style={{ ...shimmerStyle, width: width ?? "100%", height: height ?? "14px", borderRadius: "6px", ...style }} />;
+}
+
+function FansSkeleton() {
+  return (
+    <>
+      <style>{SHIMMER_KEYFRAMES}</style>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex", alignItems: "center", gap: "12px",
+              padding: "12px 0",
+              borderBottom: i < 4 ? "1px solid #1A1A2E" : "none",
+            }}
+          >
+            {/* Avatar */}
+            <SkeletonBlock width={40} height={40} style={{ borderRadius: "50%", flexShrink: 0 }} />
+
+            {/* Info */}
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+              <SkeletonBlock width="40%" height={12} />
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <SkeletonBlock width="25%" height={10} />
+                <SkeletonBlock width="45px" height={16} style={{ borderRadius: "4px" }} />
+              </div>
+              <SkeletonBlock width="55%" height={10} />
+            </div>
+
+            {/* Spent */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", flexShrink: 0 }}>
+              <SkeletonBlock width="70px" height={13} />
+              <SkeletonBlock width="50px" height={10} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ─── Main ─────────────────────────────────────
+
 export default function FansSettings({ onBack }: { onBack?: () => void }) {
   const { navigate } = useNav();
-
-  const handleBack = () => {
-    if (window.history.length > 1) {
-      window.history.back();
-    } else if (onBack) {
-      onBack();
-    }
-  };
 
   const [fans, setFans] = useState<Fan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,19 +126,6 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-        <button
-          onClick={handleBack}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B6B8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5M12 5l-7 7 7 7" />
-          </svg>
-        </button>
-        <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#F1F5F9", margin: 0 }}>My Fans</h2>
-      </div>
-
       {/* Tabs */}
       <div style={{ display: "flex", borderBottom: "1px solid #1E1E2E", marginBottom: "20px" }}>
         {filters.map((f) => (
@@ -111,7 +155,7 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
 
       {/* List */}
       {loading ? (
-        <p style={{ fontSize: "12px", color: "#6B6B8A" }}>Loading...</p>
+        <FansSkeleton />
       ) : fans.length === 0 ? (
         <div style={{ backgroundColor: "#1C1C2E", border: "1.5px dashed #2A2A3D", borderRadius: "10px", padding: "32px 16px", textAlign: "center" }}>
           <p style={{ fontSize: "13px", color: "#6B6B8A", margin: 0 }}>No fans yet</p>

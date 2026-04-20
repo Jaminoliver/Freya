@@ -11,6 +11,79 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 
 const fmt = (n: number) => "₦" + n.toLocaleString("en-NG");
 
+// ─── Skeleton ─────────────────────────────────
+
+const SHIMMER_KEYFRAMES = `
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+`;
+
+const shimmerStyle: React.CSSProperties = {
+  backgroundImage: "linear-gradient(90deg, #0F0F1A 0px, #1A1A2E 80px, #0F0F1A 160px)",
+  backgroundSize: "600px 100%",
+  animation: "shimmer 1.6s infinite linear",
+  borderRadius: "6px",
+};
+
+function SkeletonBlock({
+  width, height, style,
+}: {
+  width?: string | number; height?: string | number; style?: React.CSSProperties;
+}) {
+  return <div style={{ ...shimmerStyle, width: width ?? "100%", height: height ?? "14px", borderRadius: "6px", ...style }} />;
+}
+
+function SubscriptionSkeleton() {
+  return (
+    <>
+      <style>{SHIMMER_KEYFRAMES}</style>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
+        {/* Monthly price section */}
+        <div style={{ marginBottom: "20px" }}>
+          <SkeletonBlock width="30%" height={12} style={{ marginBottom: "8px" }} />
+          <SkeletonBlock width="100%" height={52} style={{ borderRadius: "12px" }} />
+          <SkeletonBlock width="50%" height={10} style={{ marginTop: "8px" }} />
+        </div>
+
+        {/* Divider */}
+        <div style={{ height: "1px", background: "#1A1A2E", marginBottom: "20px" }} />
+
+        {/* Bundle discounts section */}
+        <div style={{ marginBottom: "20px" }}>
+          <SkeletonBlock width="35%" height={12} style={{ marginBottom: "6px" }} />
+          <SkeletonBlock width="65%" height={10} style={{ marginBottom: "16px" }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+            {[0, 1].map((i) => (
+              <div key={i} style={{ background: "#0E0E20", border: "1px solid #1E1E35", borderRadius: "14px", padding: "14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                  <SkeletonBlock width="60px" height={12} />
+                  <SkeletonBlock width="50px" height={20} style={{ borderRadius: "20px" }} />
+                </div>
+                <SkeletonBlock width="70px" height={20} style={{ marginBottom: "4px" }} />
+                <SkeletonBlock width="50px" height={10} style={{ marginBottom: "12px" }} />
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                  <SkeletonBlock width={28} height={28} style={{ borderRadius: "8px", flexShrink: 0 }} />
+                  <SkeletonBlock width="40px" height={12} />
+                  <SkeletonBlock width={28} height={28} style={{ borderRadius: "8px", flexShrink: 0 }} />
+                </div>
+                <SkeletonBlock width="100%" height={4} style={{ borderRadius: "2px" }} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Save button */}
+        <SkeletonBlock width="100%" height={46} style={{ borderRadius: "50px" }} />
+      </div>
+    </>
+  );
+}
+
+// ─── Main ─────────────────────────────────────
+
 export default function SubscriptionTiersTab({ username }: { username: string }) {
   const router = useRouter();
 
@@ -118,13 +191,7 @@ export default function SubscriptionTiersTab({ username }: { username: string })
     }
   };
 
-  if (loading) {
-    return (
-      <p style={{ fontSize: "13px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>
-        Loading…
-      </p>
-    );
-  }
+  if (loading) return <SubscriptionSkeleton />;
 
   const bundles = [
     { months: 3, discount: threeMonthDiscount, setDiscount: setThreeMonthDiscount, total: threeMonthPrice, base: threeBase },
@@ -140,8 +207,6 @@ export default function SubscriptionTiersTab({ username }: { username: string })
           border-color: #8B5CF6 !important;
         }
       `}</style>
-
-
 
       {/* ── Monthly price ── */}
       <div style={{ marginBottom: "20px" }}>
@@ -218,7 +283,6 @@ export default function SubscriptionTiersTab({ username }: { username: string })
               opacity: monthlyPrice === 0 ? 0.4 : 1,
               transition: "opacity 0.2s",
             }}>
-              {/* header: name + discount badge */}
               <div style={{
                 display: "flex", alignItems: "center",
                 justifyContent: "space-between", marginBottom: "10px",
@@ -240,7 +304,6 @@ export default function SubscriptionTiersTab({ username }: { username: string })
                 )}
               </div>
 
-              {/* price + savings */}
               <div style={{ marginBottom: "12px" }}>
                 <div style={{ fontSize: "17px", fontWeight: 700, color: monthlyPrice > 0 ? "#fff" : "#2A2A40" }}>
                   {monthlyPrice > 0 ? fmt(total) : "—"}
@@ -252,7 +315,6 @@ export default function SubscriptionTiersTab({ username }: { username: string })
                 )}
               </div>
 
-              {/* stepper: − | percentage | + */}
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
                 <button
                   type="button"
@@ -299,7 +361,6 @@ export default function SubscriptionTiersTab({ username }: { username: string })
                 </button>
               </div>
 
-              {/* progress bar */}
               <div style={{ height: "4px", background: "#1E1E35", borderRadius: "2px", overflow: "hidden" }}>
                 <div style={{
                   height: "100%", borderRadius: "2px",

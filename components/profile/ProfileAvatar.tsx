@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Camera, X, Pencil, BookImage } from "lucide-react";
-import { ImageCropModal } from "@/components/ui/ImageCropModal";
+import { Camera } from "lucide-react";
+import { AvatarCropModal } from "@/components/ui/AvatarCropModal";
+import AvatarPreviewModal from "@/components/ui/AvatarPreviewModal";
 import { uploadImage } from "@/lib/utils/uploadImage";
 import { createClient } from "@/lib/supabase/client";
-import { Avatar } from "@/components/ui/Avatar";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 import StoryUploadModal from "@/components/story/StoryUploadModal";
 import type { UploadJob } from "@/lib/context/StoryUploadContext";
@@ -25,8 +25,6 @@ interface ProfileAvatarProps {
   isCreator?:       boolean;
 }
 
-const GRADIENT = "linear-gradient(to right, #8B5CF6, #EC4899)";
-
 export default function ProfileAvatar({
   avatarUrl: initialAvatarUrl,
   displayName,
@@ -38,35 +36,49 @@ export default function ProfileAvatar({
   onAvatarUpdated,
   isCreator = false,
 }: ProfileAvatarProps) {
-  const [avatarUrl,      setAvatarUrl]      = useState(initialAvatarUrl);
-  const [cropSrc,        setCropSrc]        = useState<string | null>(null);
-  const [preview,        setPreview]        = useState(false);
-  const [uploading,      setUploading]      = useState(false);
-  const [storyOpen,      setStoryOpen]      = useState(false);
-  const [storyUploading, setStoryUploading] = useState(false);
-  const [sheetOpen,      setSheetOpen]      = useState(false);
+  const [avatarUrl,       setAvatarUrl]       = useState(initialAvatarUrl);
+  const [cropSrc,         setCropSrc]         = useState<string | null>(null);
+  const [preview,         setPreview]         = useState(false);
+  const [uploading,       setUploading]       = useState(false);
+  const [storyOpen,       setStoryOpen]       = useState(false);
+  const [storyUploading,  setStoryUploading]  = useState(false);
+  const [sheetOpen,       setSheetOpen]       = useState(false);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
-  const [dropdownPos,    setDropdownPos]    = useState({ top: 0, left: 0 });
+  const [dropdownPos,     setDropdownPos]     = useState({ top: 0, left: 0 });
 
   const fileInputRef  = useRef<HTMLInputElement>(null);
   const avatarWrapRef = useRef<HTMLDivElement>(null);
 
   const { group: storyGroup, hasStory, hasUnviewed, refresh } = useCreatorStory(creatorId ?? userId);
 
-  const firstLetter = (displayName || "?").charAt(0).toUpperCase();
-
   const handleAvatarClick = () => {
     if (avatarWrapRef.current) {
       const rect = avatarWrapRef.current.getBoundingClientRect();
-      setDropdownPos({
-        top:  rect.bottom + 8,
-        left: rect.left,
-      });
+      const dropdownWidth          = 190;
+      const dropdownHeightEstimate = 130;
+      const padding                = 8;
+
+      let top  = rect.bottom + 8;
+      let left = rect.left;
+
+      // Clamp horizontally to viewport
+      if (left + dropdownWidth > window.innerWidth - padding) {
+        left = window.innerWidth - dropdownWidth - padding;
+      }
+      if (left < padding) left = padding;
+
+      // Clamp vertically
+      if (top + dropdownHeightEstimate > window.innerHeight - padding) {
+        top = window.innerHeight - dropdownHeightEstimate - padding;
+      }
+      if (top < padding) top = padding;
+
+      setDropdownPos({ top, left });
     }
     setSheetOpen(true);
   };
 
-  // Close on outside click
+  // Close on outside click / Esc
   useEffect(() => {
     if (!sheetOpen) return;
     const handler = (e: MouseEvent) => {
@@ -128,15 +140,27 @@ export default function ProfileAvatar({
       setStoryUploading(false);
       refresh();
     }
-  }, []);
+  }, [refresh]);
+
+  const triggerEditPhoto = () => {
+    setSheetOpen(false);
+    setPreview(false);
+    fileInputRef.current?.click();
+  };
+
+  const triggerAddToStory = () => {
+    setSheetOpen(false);
+    setPreview(false);
+    setStoryOpen(true);
+  };
 
   const menuItems = [
-    ...(hasStory ? [{ label: "View story",        action: () => { setSheetOpen(false); setStoryViewerOpen(true); } }] : []),
+    ...(hasStory ? [{ label: "View story", action: () => { setSheetOpen(false); setStoryViewerOpen(true); } }] : []),
     ...(isEditable
-      ? [{ label: "Edit profile photo", action: () => { setSheetOpen(false); fileInputRef.current?.click(); } }]
+      ? [{ label: "Edit profile photo", action: triggerEditPhoto }]
       : [{ label: "View profile photo", action: () => { setSheetOpen(false); setPreview(true); } }]
     ),
-    ...(isCreator && isEditable ? [{ label: storyUploading ? "Posting…" : "Add to Story", action: () => { setSheetOpen(false); setStoryOpen(true); } }] : []),
+    ...(isCreator && isEditable ? [{ label: storyUploading ? "Posting…" : "Add to Story", action: triggerAddToStory }] : []),
   ];
 
   return (
@@ -167,7 +191,7 @@ export default function ProfileAvatar({
       `}</style>
 
       {cropSrc && (
-        <ImageCropModal imageSrc={cropSrc} type="avatar" onSave={handleCropSave} onCancel={() => setCropSrc(null)} />
+        <AvatarCropModal imageSrc={cropSrc} onSave={handleCropSave} onCancel={() => setCropSrc(null)} />
       )}
 
       {storyOpen && (
@@ -182,37 +206,21 @@ export default function ProfileAvatar({
         />
       )}
 
-      {/* Preview Modal */}
+      {/* Modern fullscreen avatar viewer */}
       {preview && (
-        <div onClick={() => setPreview(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, backgroundColor: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", backgroundColor: "#13131F", borderRadius: "16px", border: "1px solid #2A2A3D", overflow: "hidden", maxWidth: "320px", width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}>
-            <div style={{ width: "100%", aspectRatio: "1 / 1", background: avatarUrl ? `url(${avatarUrl}) center/cover no-repeat` : GRADIENT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "72px", fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
-              {!avatarUrl && firstLetter}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", gap: "8px" }}>
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "#F1F5F9", fontFamily: "'Inter', sans-serif", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
-              {isEditable && (
-                <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-                  {isCreator && (
-                    <button onClick={() => { setPreview(false); setStoryOpen(true); }} disabled={storyUploading} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "6px", background: storyUploading ? "rgba(139,92,246,0.4)" : GRADIENT, border: "none", color: "#fff", fontSize: "12px", fontWeight: 600, fontFamily: "'Inter', sans-serif", cursor: storyUploading ? "not-allowed" : "pointer", whiteSpace: "nowrap", transition: "opacity 0.15s" }} onMouseEnter={(e) => { if (!storyUploading) e.currentTarget.style.opacity = "0.85"; }} onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                      <BookImage size={12} />
-                      {storyUploading ? "Posting…" : "Add to Story"}
-                    </button>
-                  )}
-                  <button onClick={() => { setPreview(false); fileInputRef.current?.click(); }} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "6px", backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", color: "#C4C4D4", fontSize: "12px", fontWeight: 600, fontFamily: "'Inter', sans-serif", cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#2A2A3D"; e.currentTarget.style.color = "#fff"; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#1C1C2E"; e.currentTarget.style.color = "#C4C4D4"; }}>
-                    <Pencil size={12} /> Edit Photo
-                  </button>
-                </div>
-              )}
-            </div>
-            <button onClick={() => setPreview(false)} style={{ position: "absolute", top: "10px", right: "10px", background: "rgba(0,0,0,0.5)", border: "none", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", backdropFilter: "blur(4px)" }}>
-              <X size={14} />
-            </button>
-          </div>
-        </div>
+        <AvatarPreviewModal
+          avatarUrl={avatarUrl}
+          displayName={displayName}
+          isEditable={isEditable}
+          isCreator={isCreator}
+          storyUploading={storyUploading}
+          onClose={() => setPreview(false)}
+          onEditAvatar={triggerEditPhoto}
+          onAddToStory={triggerAddToStory}
+        />
       )}
 
-      {/* Dropdown portal — drops below avatar */}
+      {/* Dropdown portal — viewport-clamped */}
       {sheetOpen && typeof document !== "undefined" && createPortal(
         <>
           <div
@@ -237,26 +245,26 @@ export default function ProfileAvatar({
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div style={{ padding: "6px 0" }}>
-              {menuItems.map((item, i) => (
+              {menuItems.map((item) => (
                 <button
                   key={item.label}
                   className="avatar-ctx-item"
                   onClick={item.action}
                   onTouchEnd={(e) => { e.preventDefault(); item.action(); }}
                   style={{
-                    display:    "flex",
-                    alignItems: "center",
-                    width:      "100%",
-                    padding:    "10px 14px",
-                    background: "none",
-                    border:     "none",
-                    cursor:     "pointer",
-                    color:      "rgba(255,255,255,0.85)",
-                    fontSize:   "13px",
-                    fontFamily: "'Inter', sans-serif",
-                    textAlign:  "left",
+                    display:       "flex",
+                    alignItems:    "center",
+                    width:         "100%",
+                    padding:       "10px 14px",
+                    background:    "none",
+                    border:        "none",
+                    cursor:        "pointer",
+                    color:         "rgba(255,255,255,0.85)",
+                    fontSize:      "13px",
+                    fontFamily:    "'Inter', sans-serif",
+                    textAlign:     "left",
                     letterSpacing: "0.01em",
-                    transition: "background-color 0.12s ease",
+                    transition:    "background-color 0.12s ease",
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.color = "#fff")}
                   onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
@@ -283,23 +291,46 @@ export default function ProfileAvatar({
             onClick={handleAvatarClick}
             borderColor="#0A0A0F"
           />
-          {isEditable && (
-            <div
-              style={{ position: "absolute", inset: 0, borderRadius: "50%", backgroundColor: "rgba(10,10,15,0.7)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", opacity: avatarUrl ? 0 : 1, transition: "opacity 0.2s ease" }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = avatarUrl ? "0" : "1"; }}
-            >
-              <div style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(31,31,42,0.8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {uploading
-                  ? <div style={{ width: "14px", height: "14px", borderRadius: "50%", border: "2px solid #555", borderTop: "2px solid #A3A3C2", animation: "spin 0.9s linear infinite" }} />
-                  : <Camera size={16} color="#A3A3C2" strokeWidth={1.8} />}
-              </div>
-              <span style={{ fontSize: "10px", fontWeight: 500, color: "#A3A3C2", fontFamily: "'Inter', sans-serif" }}>
-                {avatarUrl ? "View" : "Add Photo"}
-              </span>
-            </div>
-          )}
         </div>
+
+        {/* Camera badge — outside inner click div to avoid story-ring clipping, always visible when editable */}
+        {isEditable && (
+          <button
+            type="button"
+            onClick={handleAvatarClick}
+            aria-label="Edit profile photo"
+            style={{
+              position:        "absolute",
+              bottom:          "0",
+              right:           "0",
+              width:           "32px",
+              height:          "32px",
+              borderRadius:    "50%",
+              background:      "linear-gradient(135deg, #8B5CF6, #7C3AED)",
+              border:          "3px solid #0A0A0F",
+              display:         "flex",
+              alignItems:      "center",
+              justifyContent:  "center",
+              cursor:          "pointer",
+              zIndex:          10,
+              boxShadow:       "0 2px 12px rgba(139,92,246,0.5)",
+              padding:         0,
+              transition:      "transform 0.15s ease, box-shadow 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "scale(1.08)";
+              e.currentTarget.style.boxShadow = "0 4px 16px rgba(139,92,246,0.7)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "scale(1)";
+              e.currentTarget.style.boxShadow = "0 2px 12px rgba(139,92,246,0.5)";
+            }}
+          >
+            {uploading
+              ? <div style={{ width: "13px", height: "13px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid #fff", animation: "spin 0.9s linear infinite" }} />
+              : <Camera size={15} color="#fff" strokeWidth={2.2} />}
+          </button>
+        )}
       </div>
     </>
   );

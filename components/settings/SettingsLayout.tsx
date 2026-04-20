@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { User, Shield, CreditCard, Lock, Bell, ChevronRight, TrendingUp, Wallet, Users, ArrowLeft } from "lucide-react";
-import ProfileSettings from "@/components/settings/sections/ProfileSettings";
+import ProfileSettings from "@/components/settings/profile/ProfileSettings";
 import AccountSettings from "@/components/settings/sections/AccountSettings";
 import PricingSettings from "@/components/settings/sections/pricing/PricingSettings";
 import PrivacySettings from "@/components/settings/sections/PrivacySettings";

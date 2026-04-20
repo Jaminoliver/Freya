@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, MoreVertical, Flag, Ban, ShieldOff } from "lucide-react";
-import { ImageCropModal } from "@/components/ui/ImageCropModal";
+import { BannerCropModal } from "@/components/ui/BannerCropModal";
 import { ReportModal } from "@/components/messages/ReportModal";
 import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 
 interface ProfileBannerProps {
   bannerUrl?:       string | null;
+  avatarUrl?:       string | null;     // NEW — passed to BannerCropModal for live preview
   displayName?:     string | null;
   isEditable?:      boolean;
   isCreator?:       boolean;
@@ -36,6 +37,7 @@ function formatCount(n: number): string {
 
 export default function ProfileBanner({
   bannerUrl: initialBannerUrl,
+  avatarUrl,
   displayName,
   isEditable = false,
   isCreator  = false,
@@ -192,10 +194,21 @@ export default function ProfileBanner({
     },
   ] : [];
 
+  // Fallback background when no banner image
+  const fallbackBg = isCreator
+    ? "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)"
+    : "#1F1F2A";
+
   return (
     <>
       {cropSrc && (
-        <ImageCropModal imageSrc={cropSrc} type="banner" onSave={handleCropSave} onCancel={() => setCropSrc(null)} />
+        <BannerCropModal
+          imageSrc={cropSrc}
+          displayName={displayName}
+          avatarUrl={avatarUrl}
+          onSave={handleCropSave}
+          onCancel={() => setCropSrc(null)}
+        />
       )}
 
       {reportOpen && (
@@ -218,18 +231,34 @@ export default function ProfileBanner({
       <div
         onClick={handleClick}
         style={{
-          position:   "relative",
-          width:      "100%",
-          height:     "180px",
-          background: bannerUrl
-            ? `url(${bannerUrl}) center/cover no-repeat`
-            : isCreator
-            ? "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)"
-            : "#1F1F2A",
-          cursor:   isEditable ? "pointer" : "default",
-          overflow: "hidden",
+          position:    "relative",
+          width:       "100%",
+          aspectRatio: "3 / 1",       // ← LOCKED: matches what user crops
+          minHeight:   "120px",       // safety clamp for very narrow viewports
+          background:  bannerUrl ? "transparent" : fallbackBg,
+          cursor:      isEditable ? "pointer" : "default",
+          overflow:    "hidden",
         }}
       >
+        {/* ── Banner image ── */}
+        {bannerUrl && (
+          <img
+            src={bannerUrl}
+            alt="Profile banner"
+            style={{
+              position:       "absolute",
+              inset:          0,
+              width:          "100%",
+              height:         "100%",
+              objectFit:      "cover",
+              objectPosition: "center center",
+              display:        "block",
+              pointerEvents:  "none",
+            }}
+          />
+        )}
+
+        {/* Gradient overlay */}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, transparent 40%, transparent 50%, rgba(0,0,0,0.55) 100%)", pointerEvents: "none" }} />
 
         {/* Top-left: back button + display name */}

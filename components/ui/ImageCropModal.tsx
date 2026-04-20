@@ -1,15 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
-import ReactCrop, {
-  type Crop,
-  type PixelCrop,
-  centerCrop,
-  makeAspectCrop,
-  convertToPixelCrop,
-} from "react-image-crop";
-import "react-image-crop/dist/ReactCrop.css";
+import Cropper from "react-easy-crop";
+import type { Area, Point } from "react-easy-crop";
 import { X, Check } from "lucide-react";
 
 interface ImageCropModalProps {
@@ -19,132 +13,97 @@ interface ImageCropModalProps {
   onCancel: () => void;
 }
 
-const BANNER_RATIOS: { label: string; value: number }[] = [
+const BANNER_RATIOS = [
   { label: "16:9", value: 16 / 9 },
   { label: "3:2",  value: 3 / 2  },
   { label: "4:3",  value: 4 / 3  },
   { label: "1:1",  value: 1      },
 ];
 
-/**
- * CORRECT: makeAspectCrop + centerCrop require naturalWidth/naturalHeight
- * per official react-image-crop docs. Returns a % crop.
- */
-function makeCentered(
-  naturalWidth: number,
-  naturalHeight: number,
-  aspect: number
-): Crop {
-  return centerCrop(
-    makeAspectCrop({ unit: "%", width: 90 }, aspect, naturalWidth, naturalHeight),
-    naturalWidth,
-    naturalHeight
-  );
-}
-
-/**
- * Canvas draw using official pattern:
- *   scaleX = naturalWidth / renderedWidth
- *   scaleY = naturalHeight / renderedHeight
- * completedCrop (PixelCrop) is in rendered-pixel space, so we scale up to natural space.
- */
 async function getCroppedBlob(
-  image: HTMLImageElement,
-  pixelCrop: PixelCrop,
+  imageSrc: string,
+  pixelCrop: Area,
   type: "avatar" | "banner"
 ): Promise<Blob> {
-  const scaleX = image.naturalWidth / image.width;
-  const scaleY = image.naturalHeight / image.height;
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = imageSrc;
+  });
 
-  let outW: number;
-  let outH: number;
-
+  let outW: number, outH: number;
   if (type === "avatar") {
-    outW = 500;
-    outH = 500;
+    outW = outH = 500;
   } else {
-    // Preserve the exact crop ratio at high resolution
-    const cropRatio = pixelCrop.width / pixelCrop.height;
+    const ratio = pixelCrop.width / pixelCrop.height;
     outW = 1500;
-    outH = Math.round(1500 / cropRatio);
+    outH = Math.round(1500 / ratio);
   }
 
   const canvas = document.createElement("canvas");
-  canvas.width = outW;
+  canvas.width  = outW;
   canvas.height = outH;
 
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not get canvas context");
+  if (!ctx) throw new Error("No canvas context");
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-
   ctx.drawImage(
     image,
-    pixelCrop.x * scaleX,
-    pixelCrop.y * scaleY,
-    pixelCrop.width * scaleX,
-    pixelCrop.height * scaleY,
-    0,
-    0,
-    outW,
-    outH
+    pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
+    0, 0, outW, outH
   );
 
-  return new Promise<Blob>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("Failed to create blob"));
-      },
+      (blob) => (blob ? resolve(blob) : reject(new Error("Blob creation failed"))),
       "image/jpeg",
       0.92
     );
   });
 }
 
-export function ImageCropModal({
-  imageSrc,
-  type,
-  onSave,
-  onCancel,
-}: ImageCropModalProps) {
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  // Store % crop — resize-safe per official docs
-  const [crop, setCrop] = useState<Crop | undefined>(undefined);
-  const [completedCrop, setCompletedCrop] = useState<PixelCrop | undefined>(undefined);
-  const [saving, setSaving] = useState(false);
-  const [aspect, setAspect] = useState<number>(type === "avatar" ? 1 : 16 / 9);
-
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-
+export function ImageCropModal({ imageSrc, type, onSave, onCancel }: ImageCropModalProps) {
   const isAvatar = type === "avatar";
 
-  const onImageLoad = useCallback(
-    (e: React.SyntheticEvent<HTMLImageElement>) => {
-      const img = e.currentTarget;
-      // CORRECT: use naturalWidth/naturalHeight for makeAspectCrop
-      const { naturalWidth, naturalHeight } = img;
-      const initialAspect = isAvatar ? 1 : aspect;
-      const percentCrop = makeCentered(naturalWidth, naturalHeight, initialAspect);
-      setCrop(percentCrop);
+  const [crop,             setCrop]             = useState<Point>({ x: 0, y: 0 });
+  const [zoom,             setZoom]             = useState(1);
+  const [aspect,           setAspect]           = useState(isAvatar ? 1 : 16 / 9);
+  const [croppedAreaPx,    setCroppedAreaPx]    = useState<Area | null>(null);
+  const [croppedAreaPct,   setCroppedAreaPct]   = useState<Area | null>(null);
+  const [saving,           setSaving]           = useState(false);
+  const [mounted,          setMounted]          = useState(false);
+  const [isMobile,         setIsMobile]         = useState(false);
 
-      // Initialize completedCrop immediately so Save works without user interaction
-      // convertToPixelCrop maps % → rendered pixels correctly
-      const pixel = convertToPixelCrop(percentCrop, img.width, img.height);
-      setCompletedCrop(pixel);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isAvatar]
-  );
+  useEffect(() => {
+    setMounted(true);
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const onCropComplete = useCallback((_: Area, pixels: Area) => {
+    setCroppedAreaPx(pixels);
+  }, []);
+
+  // For live preview we need percentage crop
+  const onCropChange = useCallback((c: Point) => setCrop(c), []);
+
+  // react-easy-crop also gives percentage area on every change via onCropComplete
+  // We track it separately for the preview
+  const onCropCompleteWithPct = useCallback((pct: Area, pixels: Area) => {
+    setCroppedAreaPct(pct);
+    setCroppedAreaPx(pixels);
+  }, []);
 
   const handleSave = async () => {
-    if (!completedCrop || !imgRef.current) return;
+    if (!croppedAreaPx) return;
     setSaving(true);
     try {
-      const blob = await getCroppedBlob(imgRef.current, completedCrop, type);
+      const blob = await getCroppedBlob(imageSrc, croppedAreaPx, type);
       onSave(blob);
     } catch (err) {
       console.error("Crop error:", err);
@@ -155,177 +114,229 @@ export function ImageCropModal({
 
   const switchAspect = (newAspect: number) => {
     setAspect(newAspect);
-    if (imgRef.current) {
-      const { naturalWidth, naturalHeight } = imgRef.current;
-      const percentCrop = makeCentered(naturalWidth, naturalHeight, newAspect);
-      setCrop(percentCrop);
-
-      // Keep completedCrop in sync after aspect switch
-      const pixel = convertToPixelCrop(percentCrop, imgRef.current.width, imgRef.current.height);
-      setCompletedCrop(pixel);
-    }
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
   };
 
   if (!mounted) return null;
 
-  // maxHeight accounts for header (60px) + bottom bar (120px) + padding (48px) + safe areas
-  const maxImageHeight = `calc(100svh - 228px - env(safe-area-inset-top) - env(safe-area-inset-bottom))`;
+  // ── Live banner preview ───────────────────────────────────────────────────
+  // croppedAreaPct values are 0-100 (percentage of natural image dimensions)
+  const previewBgStyle: React.CSSProperties = croppedAreaPct
+    ? {
+        backgroundImage:    `url(${imageSrc})`,
+        backgroundRepeat:   "no-repeat",
+        backgroundSize:     `${100 * 100 / croppedAreaPct.width}% ${100 * 100 / croppedAreaPct.height}%`,
+        backgroundPosition: `${-croppedAreaPct.x * (100 / croppedAreaPct.width)}% ${-croppedAreaPct.y * (100 / croppedAreaPct.height)}%`,
+      }
+    : { backgroundColor: "#1F1F2A" };
+
+  // ── Layout: fullscreen on mobile, centered card on desktop ───────────────
+  const overlayStyle: React.CSSProperties = isMobile
+    ? { position: "fixed", inset: 0, zIndex: 99999, backgroundColor: "#000", display: "flex", flexDirection: "column" }
+    : { position: "fixed", inset: 0, zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" };
+
+  const cardStyle: React.CSSProperties = isMobile
+    ? { flex: 1, display: "flex", flexDirection: "column", width: "100%", height: "100%" }
+    : {
+        display: "flex", flexDirection: "column",
+        width: "min(500px, 95vw)",
+        maxHeight: "92vh",
+        borderRadius: "20px",
+        overflow: "hidden",
+        backgroundColor: "#0A0A12",
+        border: "1px solid rgba(255,255,255,0.07)",
+        boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.08)",
+      };
 
   const modal = (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 99999,
-        backgroundColor: "#000",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "16px 20px",
-          paddingTop: "calc(16px + env(safe-area-inset-top))",
+    <div style={overlayStyle} onClick={isMobile ? undefined : onCancel}>
+      <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
+
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "0 16px",
+          paddingTop: isMobile ? "calc(14px + env(safe-area-inset-top))" : "14px",
+          paddingBottom: "14px",
           backgroundColor: "#0A0A12",
-          borderBottom: "1px solid #1C1C2E",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
           flexShrink: 0,
-        }}
-      >
-        <button
-          type="button"
-          onClick={onCancel}
-          style={{
-            display: "flex", alignItems: "center", gap: "6px",
-            background: "none", border: "none", cursor: "pointer",
-            color: "#A3A3C2", fontSize: "15px",
-            fontFamily: "'Inter', sans-serif", padding: "4px 0",
-          }}
-        >
-          <X size={18} />
-          Cancel
-        </button>
-
-        <span
-          style={{
-            fontSize: "15px", fontWeight: 600, color: "#F1F5F9",
-            fontFamily: "'Inter', sans-serif",
-          }}
-        >
-          {isAvatar ? "Crop Avatar" : "Crop Banner"}
-        </span>
-
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            display: "flex", alignItems: "center", gap: "6px",
-            background: saving ? "rgba(139,92,246,0.4)" : "#8B5CF6",
-            border: "none",
-            cursor: saving ? "not-allowed" : "pointer",
-            color: "#FFFFFF", fontSize: "15px", fontWeight: 600,
-            fontFamily: "'Inter', sans-serif",
-            padding: "8px 16px", borderRadius: "8px",
-          }}
-        >
-          <Check size={16} />
-          {saving ? "Saving…" : "Save"}
-        </button>
-      </div>
-
-      {/* Image + Crop */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#000",
-          overflow: "hidden",
-          padding: "24px",
-        }}
-      >
-        <ReactCrop
-          crop={crop}
-          // CORRECT: store percentCrop (second arg) — stays accurate on resize
-          onChange={(_px: PixelCrop, pct: Crop) => setCrop(pct)}
-          onComplete={(c: PixelCrop) => setCompletedCrop(c)}
-          aspect={aspect}
-          circularCrop={isAvatar}
-          keepSelection
-        >
-          <img
-            ref={imgRef}
-            src={imageSrc}
-            alt="Crop preview"
-            onLoad={onImageLoad}
+          gap: "12px",
+        }}>
+          {/* Cancel */}
+          <button
+            type="button"
+            onClick={onCancel}
             style={{
-              maxWidth: "calc(100vw - 48px)",
-              maxHeight: maxImageHeight,
-              width: "auto",
-              height: "auto",
-              display: "block",
-              objectFit: "contain",
-            }}
-          />
-        </ReactCrop>
-      </div>
-
-      {/* Bottom bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-evenly",
-          padding: "16px 16px",
-          paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
-          backgroundColor: "#0A0A12",
-          borderTop: "1px solid #1C1C2E",
-          flexShrink: 0,
-        }}
-      >
-        {isAvatar ? (
-          <span
-            style={{
-              fontSize: "13px", color: "#6B6B8A",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: "6px",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              cursor: "pointer",
+              color: "#A3A3C2",
+              fontSize: "14px",
               fontFamily: "'Inter', sans-serif",
+              padding: "8px 14px",
+              borderRadius: "10px",
+              minHeight: "40px",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.09)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+          >
+            <X size={15} strokeWidth={2} />
+            {!isMobile && "Cancel"}
+          </button>
+
+          {/* Title */}
+          <span style={{
+            fontSize: "15px", fontWeight: 600, color: "#F1F5F9",
+            fontFamily: "'Inter', sans-serif", letterSpacing: "-0.01em",
+          }}>
+            {isAvatar ? "Crop Avatar" : "Crop Banner"}
+          </span>
+
+          {/* Save */}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: "6px",
+              background: saving ? "rgba(139,92,246,0.4)" : "linear-gradient(135deg, #8B5CF6, #7C3AED)",
+              border: "none",
+              cursor: saving ? "not-allowed" : "pointer",
+              color: "#FFFFFF",
+              fontSize: "14px", fontWeight: 600,
+              fontFamily: "'Inter', sans-serif",
+              padding: "8px 16px",
+              borderRadius: "10px",
+              minHeight: "40px",
+              boxShadow: saving ? "none" : "0 2px 12px rgba(139,92,246,0.4)",
+              transition: "all 0.15s",
             }}
           >
-            Drag to reposition · Pinch to resize
-          </span>
-        ) : (
-          BANNER_RATIOS.map(({ label, value }) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => switchAspect(value)}
-              style={{
-                padding: "12px 0",
-                borderRadius: "10px",
-                fontSize: "15px",
-                fontWeight: 600,
-                border: "1.5px solid",
-                borderColor: aspect === value ? "#8B5CF6" : "#2A2A3D",
-                backgroundColor:
-                  aspect === value ? "rgba(139,92,246,0.15)" : "transparent",
-                color: aspect === value ? "#8B5CF6" : "#6B6B8A",
-                cursor: "pointer",
-                fontFamily: "'Inter', sans-serif",
-                transition: "all 0.15s",
-                minWidth: "80px",
-                flex: 1,
-                maxWidth: "110px",
-              }}
-            >
-              {label}
-            </button>
-          ))
-        )}
+            <Check size={15} strokeWidth={2.5} />
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+
+        {/* ── Crop canvas ────────────────────────────────────────────────── */}
+        <div style={{
+          position: "relative",
+          flex: 1,
+          minHeight: isMobile ? 0 : "280px",
+          backgroundColor: "#000",
+        }}>
+          <Cropper
+            image={imageSrc}
+            crop={crop}
+            zoom={zoom}
+            aspect={aspect}
+            onCropChange={onCropChange}
+            onZoomChange={setZoom}
+            onCropComplete={onCropCompleteWithPct}
+            cropShape={isAvatar ? "round" : "rect"}
+            showGrid
+            zoomWithScroll
+            style={{
+              containerStyle: { backgroundColor: "#000" },
+              cropAreaStyle: {
+                border: "2px solid rgba(139,92,246,0.85)",
+                boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)",
+              },
+            }}
+          />
+        </div>
+
+
+
+        {/* ── Bottom controls ─────────────────────────────────────────────── */}
+        <div style={{
+          backgroundColor: "#0A0A12",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          padding: "14px 16px",
+          paddingBottom: isMobile ? "calc(14px + env(safe-area-inset-bottom))" : "14px",
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+        }}>
+
+          {/* Zoom slider */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "11px", color: "#4B4B6B", fontFamily: "'Inter', sans-serif", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0, width: "36px" }}>
+              Zoom
+            </span>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "13px", color: "#4B4B6B" }}>−</span>
+              <input
+                type="range"
+                min={1} max={3} step={0.01}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                style={{
+                  flex: 1,
+                  accentColor: "#8B5CF6",
+                  cursor: "pointer",
+                  height: "4px",
+                }}
+              />
+              <span style={{ fontSize: "13px", color: "#4B4B6B" }}>+</span>
+            </div>
+          </div>
+
+          {/* Aspect ratio pills — banner only */}
+          {!isAvatar && (
+            <div style={{ display: "flex", gap: "8px" }}>
+              {BANNER_RATIOS.map(({ label, value }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => switchAspect(value)}
+                  style={{
+                    flex: 1,
+                    minHeight: "44px",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    border: "1.5px solid",
+                    borderColor: aspect === value ? "#8B5CF6" : "rgba(255,255,255,0.08)",
+                    backgroundColor: aspect === value ? "rgba(139,92,246,0.15)" : "transparent",
+                    color: aspect === value ? "#8B5CF6" : "#6B6B8A",
+                    cursor: "pointer",
+                    fontFamily: "'Inter', sans-serif",
+                    transition: "all 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (aspect !== value) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (aspect !== value) e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Avatar hint */}
+          {isAvatar && (
+            <p style={{ margin: 0, fontSize: "12px", color: "#4B4B6B", fontFamily: "'Inter', sans-serif", textAlign: "center" }}>
+              Drag or pinch to reposition · Scroll to zoom
+            </p>
+          )}
+        </div>
       </div>
+
+      {/* Inject slider thumb styles */}
+      <style>{`
+        input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; }
+        input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #8B5CF6; border: none; }
+      `}</style>
     </div>
   );
 

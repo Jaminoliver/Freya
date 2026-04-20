@@ -8,6 +8,7 @@ interface Props {
   subscriptions:   Subscription[];
   view:            CardView;
   onRefresh?:      () => void;
+  onTip?:          (creatorId: string) => void;
   hideEmptyState?: boolean;
 }
 
@@ -15,6 +16,7 @@ export function SubscriptionList({
   subscriptions,
   view,
   onRefresh,
+  onTip,
   hideEmptyState = false,
 }: Props) {
   if (subscriptions.length === 0) {
@@ -34,18 +36,15 @@ export function SubscriptionList({
     );
   }
 
-  const gridCols = view === "compact"
-    ? "repeat(2, minmax(0, 1fr))"
-    : "1fr";
-
-  const gap = view === "compact" ? "10px" : "14px";
+  const gridCols = view === "compact" ? "repeat(2, minmax(0, 1fr))" : "1fr";
+  const gap      = view === "compact" ? "10px" : "14px";
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: gridCols, gap }}>
       {subscriptions.map((s) =>
         view === "compact"
           ? <SubscriptionCardCompact key={s.id} subscription={s} onRefresh={onRefresh} />
-          : <SubscriptionCardDetailed key={s.id} subscription={s} onRefresh={onRefresh} />
+          : <SubscriptionCardDetailed key={s.id} subscription={s} onRefresh={onRefresh} onTip={onTip} />
       )}
     </div>
   );

@@ -64,9 +64,9 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
       {blurHash && !loaded && (
         <BlurHashCanvas hash={blurHash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />
       )}
-      {!loaded && (
-        <img src={src ?? ""} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)", zIndex: 1 }} />
-      )}
+      {!loaded && src && (
+  <img src={src} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)", zIndex: 1 }} />
+)}
       <img
         ref={imgRef}
         src={src ?? undefined}
@@ -350,7 +350,7 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
                   <>
                     <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
   <img
-    src={item.file_url ?? ""}
+    src={item.file_url ?? undefined}
     alt=""
     aria-hidden
     style={{

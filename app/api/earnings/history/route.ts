@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
-// Derive earning type from prefixed reference_id (wallet payments)
 function categoryFromPrefix(refId: string | null): string | null {
   if (!refId) return null;
   if (refId.startsWith("sub_")) return "SUBSCRIPTION_PAYMENT";
@@ -13,7 +12,6 @@ function categoryFromPrefix(refId: string | null): string | null {
   return null;
 }
 
-// Extract numeric ID from prefixed reference_id
 function parseRefId(refId: string): { prefix: string | null; numericId: string } {
   const match = refId.match(/^(sub_|autosub_|tip_|ppv_|msg_)(.+)$/);
   if (match) return { prefix: match[1], numericId: match[2] };
@@ -32,12 +30,13 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const filter = searchParams.get("type") ?? "all";
     const page = parseInt(searchParams.get("page") ?? "1");
-    const limit = 20;
+    const limit = 15;
     const offset = (page - 1) * limit;
 
-    const { data: entries, error } = await supabase
+    // ✅ FIX: use count from Supabase, not entries.length
+    const { data: entries, error, count } = await supabase
       .from("ledger")
-      .select("id, amount, reference_id, created_at")
+      .select("id, amount, reference_id, created_at", { count: "exact" })
       .eq("user_id", user.id)
       .eq("category", "CREATOR_EARNING")
       .eq("type", "CREDIT")
@@ -46,12 +45,11 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error;
     if (!entries || entries.length === 0) {
-      return NextResponse.json({ history: [] });
+      return NextResponse.json({ history: [], total: count ?? 0, page, limit });
     }
 
     const serviceSupabase = createServiceSupabaseClient();
 
-    // Separate prefixed vs non-prefixed reference_ids
     const prefixedEntries: { refId: string; category: string; prefix: string; numericId: string }[] = [];
     const fallbackRefIds: string[] = [];
 
@@ -66,11 +64,9 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // --- Fan lookup for prefixed entries: query the source table directly ---
-    let fanIdMap: Record<string, string> = {}; // reference_id → fan user_id
-    let txCategoryMap: Record<string, string> = {}; // reference_id → category
+    let fanIdMap: Record<string, string> = {};
+    let txCategoryMap: Record<string, string> = {};
 
-    // Subscriptions
     const subIds = prefixedEntries.filter((p) => p.prefix === "sub_" || p.prefix === "autosub_").map((p) => p.numericId);
     if (subIds.length > 0) {
       const { data: subs } = await serviceSupabase
@@ -85,7 +81,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Tips
     const tipIds = prefixedEntries.filter((p) => p.prefix === "tip_").map((p) => p.numericId);
     if (tipIds.length > 0) {
       const { data: tips } = await serviceSupabase
@@ -100,7 +95,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // PPV unlocks
     const ppvIds = prefixedEntries.filter((p) => p.prefix === "ppv_").map((p) => p.numericId);
     if (ppvIds.length > 0) {
       const { data: unlocks } = await serviceSupabase
@@ -115,12 +109,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Set category map for prefixed entries
     prefixedEntries.forEach((p) => {
       txCategoryMap[p.refId] = p.category;
     });
 
-    // --- Fallback for Monnify / legacy entries (no prefix) ---
     let fallbackFanMap: Record<string, { category: string; userId: string }> = {};
 
     if (fallbackRefIds.length > 0) {
@@ -141,7 +133,6 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Fallback: transactions table for bank transfer payments
       const stillMissing = fallbackRefIds.filter((r) => !fallbackFanMap[r]);
       if (stillMissing.length > 0) {
         const { data: txRows } = await serviceSupabase
@@ -167,18 +158,17 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Fetch fan profiles
     const allFanIds = [...new Set(Object.values(fanIdMap).filter(Boolean))];
-    let fanProfileMap: Record<string, { display_name: string; username: string }> = {};
+    let fanProfileMap: Record<string, { display_name: string; username: string; avatar_url: string | null }> = {};
 
     if (allFanIds.length > 0) {
       const { data: fans } = await serviceSupabase
         .from("profiles")
-        .select("id, display_name, username")
+        .select("id, display_name, username, avatar_url")
         .in("id", allFanIds);
 
       fanProfileMap = Object.fromEntries(
-        (fans ?? []).map((f) => [f.id, { display_name: f.display_name, username: f.username }])
+        (fans ?? []).map((f) => [f.id, { display_name: f.display_name, username: f.username, avatar_url: f.avatar_url ?? null }])
       );
     }
 
@@ -209,12 +199,14 @@ export async function GET(req: NextRequest) {
           }),
           fan: fan?.display_name ?? "Anonymous",
           username: fan?.username ? `@${fan.username}` : "",
+          avatar_url: fan?.avatar_url ?? null,
           status: "completed",
         };
       })
       .filter(Boolean);
 
-    return NextResponse.json({ history });
+    // ✅ FIX: return the real DB count, not history.length
+    return NextResponse.json({ history, total: count ?? 0, page, limit });
   } catch (err) {
     console.error("[Earnings History Error]", err);
     return NextResponse.json({ error: "Failed to fetch history" }, { status: 500 });

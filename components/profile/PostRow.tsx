@@ -274,7 +274,7 @@ export default function PostRow({
       {viewerMedia.length > 0 && (
         <PostMediaViewer
           media={viewerMedia}
-          isLocked={post.locked}
+          isLocked={post.locked && !(isSubscribed && !post.is_ppv) && !isOwnProfile}
           price={ppvPrice}
           isPPV={isPPV}
           isFreeSubscription={post.is_free}
@@ -285,7 +285,7 @@ export default function PostRow({
         />
       )}
 
-      {!post.locked && (
+      {(!post.locked || (isSubscribed && !post.is_ppv) || isOwnProfile) && (
         <div style={{ padding: "0 16px" }}>
           <PostActions
             likes={engagement.likeCount}
