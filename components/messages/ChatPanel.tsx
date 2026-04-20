@@ -1,3 +1,4 @@
+// components/messages/ChatPanel.tsx
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -18,8 +19,10 @@ import { ReportModal } from "@/components/messages/ReportModal";
 import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
 import StoryViewer from "@/components/story/StoryViewer";
 import { ChatSkeleton } from "@/components/loadscreen/ChatSkeleton";
+import CheckoutModal from "@/components/checkout/CheckoutModal";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import type { Conversation, Message } from "@/lib/types/messages";
+import type { User } from "@/lib/types/profile";
 
 interface Props {
   conversation:           Conversation;
@@ -54,7 +57,7 @@ export function ChatPanel({
   const fromArchived    = searchParams.get("from") === "archived";
   const handleBack      = () => router.push(fromArchived ? "/messages/archived" : "/messages");
 
-  const { messages, setMessages, appendMessage } = useMessageStore();
+  const { messages, setMessages, appendMessage, patchMessage } = useMessageStore();
 
   const [desktopModalOpen,  setDesktopModalOpen]  = useState(false);
   const [desktopModalPos,   setDesktopModalPos]   = useState({ x: 0, y: 0 });
@@ -66,6 +69,10 @@ export function ChatPanel({
   const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
   const [sending,           setSending]           = useState(false);
   const [replyTo,           setReplyTo]           = useState<Message | null>(null);
+
+  // ── Tip + PPV unlock modals ─────────────────────────────────────────────
+  const [tipModalOpen,     setTipModalOpen]     = useState(false);
+  const [ppvUnlockTarget,  setPpvUnlockTarget]  = useState<Message | null>(null);
 
   const [storyViewerGroups,     setStoryViewerGroups]     = useState<CreatorStoryGroup[]>([]);
   const [storyViewerStartIndex, setStoryViewerStartIndex] = useState(0);
@@ -83,6 +90,14 @@ export function ChatPanel({
 
   const { startMessageUpload, uploads } = useUpload();
   const desktopMenuBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Build User-shaped object for CheckoutModal from conversation participant
+  const participantAsUser: User = {
+    id:           participant.id,
+    username:     participant.username,
+    display_name: participant.name,
+    avatar_url:   participant.avatarUrl,
+  } as User;
 
   const handleOpenDesktopModal = () => {
     fetchStatus();
@@ -312,6 +327,28 @@ export function ChatPanel({
     }
   }, [sending, conversation, currentUserId, replyTo, startMessageUpload, appendMessage, setMessages, realConversationIdRef]);
 
+  // ── Tip success: append tip message to chat ─────────────────────────────
+  const handleTipSuccess = useCallback((data: any) => {
+    if (!data?.message) return;
+    appendMessage(data.message as Message);
+    updateConversations((prev) => prev.map((c) =>
+      c.id === conversation.id
+        ? { ...c, lastMessage: `💰 Tipped ₦${(data.message.tip?.amount / 100).toLocaleString("en-NG")}`, lastMessageAt: data.message.createdAt }
+        : c
+    ));
+  }, [appendMessage, conversation.id]);
+
+  // ── PPV unlock success: patch message to unlocked with media ────────────
+  const handlePPVUnlockSuccess = useCallback((data: any) => {
+    if (!ppvUnlockTarget) return;
+    patchMessage(ppvUnlockTarget.id, {
+      mediaUrls: data.mediaUrls ?? [],
+      ppv: ppvUnlockTarget.ppv
+        ? { ...ppvUnlockTarget.ppv, isUnlocked: true }
+        : undefined,
+    } as any);
+  }, [ppvUnlockTarget, patchMessage]);
+
   const handleMessagesUpdate  = useCallback((updater: (msgs: Message[]) => Message[]) => { setMessages((prev) => updater(prev)); }, [setMessages]);
   const handleBlockConfirm    = useCallback(async () => { await block();    handleBack(); }, [block]);
   const handleRestrictConfirm = useCallback(async () => { await restrict(); handleBack(); }, [restrict]);
@@ -368,6 +405,30 @@ export function ChatPanel({
           onClose={() => setStoryViewerOpen(false)}
         />
       )}
+
+      {/* Chat tip modal */}
+      <CheckoutModal
+        isOpen={tipModalOpen}
+        onClose={() => setTipModalOpen(false)}
+        type="tips"
+        creator={participantAsUser}
+        conversationId={conversation.id}
+        onChatPaymentSuccess={handleTipSuccess}
+      />
+
+      {/* Chat PPV unlock modal */}
+      <CheckoutModal
+        isOpen={!!ppvUnlockTarget}
+        onClose={() => setPpvUnlockTarget(null)}
+        type="ppv"
+        creator={participantAsUser}
+        postPrice={ppvUnlockTarget?.ppv ? ppvUnlockTarget.ppv.price / 100 : 0}
+        postTitle="PPV message"
+        conversationId={conversation.id}
+        messageId={ppvUnlockTarget?.id}
+        onChatPaymentSuccess={handlePPVUnlockSuccess}
+        autoCloseOnSuccess
+      />
 
       {avatarOpen && (
         <div onClick={() => setAvatarOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 999, backgroundColor: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -488,6 +549,7 @@ export function ChatPanel({
                 onToggleSelect={handleToggleSelect}
                 onSelectMessage={handleSelectMessage}
                 onStoryReplyClick={handleStoryReplyClick}
+                onRequestPPVUnlock={(msg) => setPpvUnlockTarget(msg)}
               />
             </div>
 
@@ -504,7 +566,14 @@ export function ChatPanel({
                 </div>
               </div>
             ) : (
-              <MessageInput onSend={handleSend} onTyping={handleTyping} disabled={false} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
+              <MessageInput
+                onSend={handleSend}
+                onTyping={handleTyping}
+                onTipClick={() => setTipModalOpen(true)}
+                disabled={false}
+                replyTo={replyTo}
+                onCancelReply={() => setReplyTo(null)}
+              />
             )}
           </>
         )}

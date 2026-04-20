@@ -1,3 +1,4 @@
+// components/messages/MessagesList.tsx
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -7,6 +8,7 @@ import { MediaGrid } from "@/components/messages/MediaGrid";
 import { MediaLightbox } from "@/components/messages/MediaLightbox";
 import { TypingBubble } from "@/components/messages/TypingBubble";
 import { ReadTick } from "@/components/messages/ReadTick";
+import { TipMessage } from "@/components/messages/TipMessage";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
@@ -26,6 +28,7 @@ interface Props {
   onToggleSelect?:      (messageId: number) => void;
   onSelectMessage?:     (messageId: number) => void;
   onStoryReplyClick?:   (storyId: number) => void;
+  onRequestPPVUnlock?:  (message: Message) => void;
 }
 
 interface LightboxState {
@@ -165,6 +168,7 @@ export function MessagesList({
   onToggleSelect,
   onSelectMessage,
   onStoryReplyClick,
+  onRequestPPVUnlock,
 }: Props) {
   const scrollRef         = useRef<HTMLDivElement>(null);
   const prevMessageIdsRef = useRef<Set<string>>(new Set(messages.map((m) => String(m.tempId ?? m.id))));
@@ -246,7 +250,13 @@ export function MessagesList({
     if (distanceFromTop < 200) onLoadMore();
   }, [onLoadMore, hasMore, loadingMore, updateNearBottom]);
 
+  // ── PPV unlock: route through CheckoutModal via parent callback ─────────
   const handleUnlock = useCallback(async (msg: Message) => {
+    if (onRequestPPVUnlock) {
+      onRequestPPVUnlock(msg);
+      return;
+    }
+    // Fallback: direct POST (legacy path)
     if (unlocking.has(msg.id)) return;
     setUnlocking((s) => new Set(s).add(msg.id));
     try {
@@ -268,7 +278,7 @@ export function MessagesList({
     } finally {
       setUnlocking((s) => { const n = new Set(s); n.delete(msg.id); return n; });
     }
-  }, [unlocking, onMessagesUpdate]);
+  }, [unlocking, onMessagesUpdate, onRequestPPVUnlock]);
 
   const openLightbox = useCallback((msg: Message, clickedIndex: number) => {
     if (selectMode) return;
@@ -412,6 +422,34 @@ export function MessagesList({
               const msgKey     = String(msg.tempId ?? msg.id);
               const animClass  = olderAnimIds.has(msgKey) ? "msg-older" : newerAnimIds.has(msgKey) ? "msg-newer" : "";
               const isSelected = selectMode && selectedIds?.has(msg.id);
+
+              // ── Tip bubble renders centered, no avatar, no bubble wrapper ──
+              if (msg.type === "tip") {
+                return (
+                  <div
+                    key={msgKey}
+                    className={animClass}
+                    style={{
+                      display:       "flex",
+                      flexDirection: "column",
+                      gap:           "2px",
+                      marginTop:     isSameGroup ? "2px" : "10px",
+                    }}
+                  >
+                    {showTime && (
+                      <div style={{ textAlign: "center", margin: "6px 0" }}>
+                        <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{formatMessageTime(msg.createdAt)}</span>
+                      </div>
+                    )}
+                    <TipMessage
+                      message={msg}
+                      conversation={conversation}
+                      isOwn={isOwn}
+                      time={formatMessageTime(msg.createdAt)}
+                    />
+                  </div>
+                );
+              }
 
               return (
                 <div

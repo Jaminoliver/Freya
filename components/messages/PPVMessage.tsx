@@ -1,3 +1,4 @@
+// components/messages/PPVMessage.tsx
 "use client";
 
 import { Lock, CheckCircle } from "lucide-react";
@@ -65,7 +66,9 @@ export function PPVMessage({ message, conversation, isOwn, onUnlock, onClickMedi
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderTop: "1px solid #2A2A3D" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <Lock size={14} color="#F5A623" strokeWidth={1.8} />
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "#F5A623" }}>₦{price.toLocaleString()} to unlock</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#F5A623" }}>
+                ₦{(price / 100).toLocaleString("en-NG")} to unlock
+              </span>
             </div>
             <button
               onClick={() => onUnlock?.(String(message.id))}
@@ -82,14 +85,16 @@ export function PPVMessage({ message, conversation, isOwn, onUnlock, onClickMedi
           <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 14px", borderTop: "1px solid #2A2A3D" }}>
             <CheckCircle size={14} color="#10B981" strokeWidth={1.8} />
             <span style={{ fontSize: "13px", color: "#10B981", fontWeight: 500 }}>Unlocked</span>
-            <span style={{ fontSize: "12px", color: "#4A4A6A", marginLeft: "auto" }}>₦{price.toLocaleString()} paid</span>
+            <span style={{ fontSize: "12px", color: "#4A4A6A", marginLeft: "auto" }}>
+              ₦{(price / 100).toLocaleString("en-NG")} paid
+            </span>
           </div>
         )}
 
         {isOwn && (
           <div style={{ padding: "6px 14px 10px" }}>
             <span style={{ fontSize: "11px", color: isUnlocked ? "#10B981" : "#4A4A6A" }}>
-              Sent · ₦{price.toLocaleString()} · {unlockedCount} unlocked
+              Sent · ₦{(price / 100).toLocaleString("en-NG")} · {unlockedCount} unlocked
             </span>
           </div>
         )}

@@ -1,3 +1,4 @@
+// components/messages/MessageInput.tsx
 "use client";
 
 import { useState, useRef } from "react";
@@ -9,12 +10,13 @@ import type { Message } from "@/lib/types/messages";
 interface Props {
   onSend:         (text: string, mediaFiles?: File[], ppvPrice?: number) => void;
   onTyping?:      () => void;
+  onTipClick?:    () => void;
   disabled?:      boolean;
   replyTo?:       Message | null;
   onCancelReply?: () => void;
 }
 
-export function MessageInput({ onSend, onTyping, disabled = false, replyTo, onCancelReply }: Props) {
+export function MessageInput({ onSend, onTyping, onTipClick, disabled = false, replyTo, onCancelReply }: Props) {
   const [text,       setText]       = useState("");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [ppvEnabled, setPpvEnabled] = useState(false);
@@ -107,7 +109,7 @@ export function MessageInput({ onSend, onTyping, disabled = false, replyTo, onCa
           <ImageIcon size={21} strokeWidth={1.8} />
         </button>
 
-        <button title="Tip" onClick={() => {}} disabled={disabled}
+        <button title="Tip" onClick={() => onTipClick?.()} disabled={disabled}
           style={{ background: "none", border: "none", cursor: disabled ? "default" : "pointer", color: "#F5A623", display: "flex", alignItems: "center", justifyContent: "center", padding: "7px", borderRadius: "8px", transition: "all 0.15s ease", flexShrink: 0, opacity: disabled ? 0.4 : 1 }}
           onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}

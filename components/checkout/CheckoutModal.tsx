@@ -1,3 +1,4 @@
+// components/payments/CheckoutModal.tsx
 "use client";
 
 import * as React from "react";
@@ -28,6 +29,10 @@ interface CheckoutModalProps {
   onViewContent?: () => void;
   onGoToSubscriptions?: () => void;
   autoCloseOnSuccess?: boolean;
+  // ── Chat context (tip or PPV unlock inside a conversation) ─────────────
+  conversationId?: number;
+  messageId?: number;
+  onChatPaymentSuccess?: (data: any) => void;
 }
 
 const TIER_LABEL: Record<SubscriptionTier, string> = {
@@ -42,6 +47,7 @@ export default function CheckoutModal({
   postPrice = 0, postTitle, postId,
   onSuccess, onSubscriptionSuccess, onViewContent, onGoToSubscriptions,
   autoCloseOnSuccess = false,
+  conversationId, messageId, onChatPaymentSuccess,
 }: CheckoutModalProps) {
   const [screen, setScreen] = React.useState<CheckoutScreen>(
     type === "tips" ? "tip_input"
@@ -62,6 +68,11 @@ export default function CheckoutModal({
 
   const successRef = React.useRef(false);
   const autoCloseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Whether this checkout is happening inside a conversation
+  const isChatContext =
+    (type === "tips" && !!conversationId) ||
+    (type === "ppv"  && !!conversationId && !!messageId);
 
   // Required for SSR — portal target only exists in browser
   React.useEffect(() => { setMounted(true); }, []);
@@ -132,11 +143,12 @@ export default function CheckoutModal({
     return postTitle ?? "Locked Content";
   };
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = (chatData?: any) => {
     successRef.current = true;
     setScreen("success");
     onSuccess?.();
     if (type === "subscription") onSubscriptionSuccess?.();
+    if (chatData) onChatPaymentSuccess?.(chatData);
 
     // Auto-close after brief success flash if enabled
     if (autoCloseOnSuccess) {
@@ -180,11 +192,37 @@ export default function CheckoutModal({
     if (screen === "payment") {
       setError(null);
 
-      console.log("[CheckoutModal] handleNext postId:", postId, "type:", type);
+      console.log("[CheckoutModal] handleNext postId:", postId, "type:", type, "chatContext:", isChatContext);
 
       if (selectedMethod === "freya_wallet") {
         setLoading(true);
         try {
+          // ── Chat tip → dedicated chat tip endpoint ──────────────────────
+          if (isChatContext && type === "tips") {
+            const res = await fetch(`/api/conversations/${conversationId}/tip`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ amount: getAmount() }),
+            });
+            const data = await res.json();
+            if (!res.ok) { setError(data.error ?? "Tip failed"); return; }
+            handlePaymentSuccess(data);
+            return;
+          }
+
+          // ── Chat PPV unlock → dedicated message unlock endpoint ─────────
+          if (isChatContext && type === "ppv") {
+            const res = await fetch(
+              `/api/conversations/${conversationId}/messages/${messageId}/unlock`,
+              { method: "POST" }
+            );
+            const data = await res.json();
+            if (!res.ok) { setError(data.error ?? "Unlock failed"); return; }
+            handlePaymentSuccess(data);
+            return;
+          }
+
+          // ── Standard checkout (post tip, post PPV, subscription) ────────
           const payload = {
             type: type === "tips" ? "tip" : type === "subscription" ? "subscription" : "ppv",
             amount: getAmount(),
@@ -447,7 +485,7 @@ export default function CheckoutModal({
               animation: "successFade 0.4s ease-out 0.3s forwards",
               opacity: 0,
             }}>
-              Subscribed!
+              {type === "tips" ? "Tip sent!" : type === "ppv" ? "Unlocked!" : "Subscribed!"}
             </span>
             <span style={{
               fontSize: "13px",

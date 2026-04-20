@@ -1,3 +1,4 @@
+// app/api/notifications/route.ts
 import { NextResponse }               from "next/server";
 import { getUser, createServerSupabaseClient } from "@/lib/supabase/server";
 import { signBunnyUrl, signBunnyStoryThumbnail, getBunnyStreamUrls } from "@/lib/utils/bunny";
@@ -12,12 +13,39 @@ const TAB_TYPES: Record<string, NotificationType[]> = {
   payments:      ["tip_sent", "ppv_purchased", "wallet_topup", "renewal_success", "subscription_charged"],
 };
 
-function parseRef(raw: string | null): { kind: string; id: number; question?: string } | null {
+type ParsedRef =
+  | { kind: "post";         id: number }
+  | { kind: "poll";         id: number; question?: string }
+  | { kind: "story";        id: number }
+  | { kind: "tip";          id: number }
+  | { kind: "message_tip";  conversationId: number; messageId: number; tipId: number }
+  | { kind: "message_ppv";  conversationId: number; messageId: number; unlockId: number }
+  | null;
+
+function parseRef(raw: string | null): ParsedRef {
   if (!raw) return null;
   if (raw.startsWith("{")) {
     try {
       const p = JSON.parse(raw);
-      if (p.kind && p.id) return { kind: p.kind, id: Number(p.id), question: p.question ?? undefined };
+      if (p.kind === "message_tip" && p.conversationId && p.messageId) {
+        return {
+          kind:           "message_tip",
+          conversationId: Number(p.conversationId),
+          messageId:      Number(p.messageId),
+          tipId:          Number(p.tipId),
+        };
+      }
+      if (p.kind === "message_ppv" && p.conversationId && p.messageId) {
+        return {
+          kind:           "message_ppv",
+          conversationId: Number(p.conversationId),
+          messageId:      Number(p.messageId),
+          unlockId:       Number(p.unlockId),
+        };
+      }
+      if (p.kind && p.id) {
+        return { kind: p.kind, id: Number(p.id), question: p.question ?? undefined } as ParsedRef;
+      }
     } catch {}
     return null;
   }
@@ -59,16 +87,19 @@ export async function GET(req: Request) {
   const rows = data ?? [];
 
   // ── Collect IDs ───────────────────────────────────────────────────────────
-  const postIds:  number[] = [];
-  const storyIds: number[] = [];
-  const tipIds:   number[] = [];
+  const postIds:    number[] = [];
+  const storyIds:   number[] = [];
+  const tipIds:     number[] = [];
+  const messageIds: number[] = [];
 
   for (const row of rows) {
     const ref = parseRef(row.reference_id);
     if (!ref) continue;
     if (ref.kind === "post" || ref.kind === "poll") postIds.push(ref.id);
-    if (ref.kind === "story") storyIds.push(ref.id);
-    if (ref.kind === "tip")   tipIds.push(ref.id);
+    if (ref.kind === "story")        storyIds.push(ref.id);
+    if (ref.kind === "tip")          tipIds.push(ref.id);
+    if (ref.kind === "message_tip")  messageIds.push(ref.messageId);
+    if (ref.kind === "message_ppv")  messageIds.push(ref.messageId);
   }
 
   // ── Resolve legacy tip IDs → post IDs ────────────────────────────────────
@@ -143,31 +174,59 @@ export async function GET(req: Request) {
     }
   }
 
+  // ── Fresh signed thumbnails for chat messages (PPV unlocks) ──────────────
+  const messageThumbMap: Record<number, string | null> = {};
+
+  if (messageIds.length > 0) {
+    const { data: messageRows } = await supabase
+      .from("messages")
+      .select("id, thumbnail_url")
+      .in("id", [...new Set(messageIds)]);
+
+    for (const m of messageRows ?? []) {
+      const rawUrl = m.thumbnail_url ?? null;
+      const path   = rawUrl ? extractPath(rawUrl) : null;
+      messageThumbMap[m.id] = path ? signBunnyUrl(path) : rawUrl;
+    }
+  }
+
   // ── Build response ────────────────────────────────────────────────────────
   const notifications: NotificationItem[] = rows.map((row) => {
     let referenceId = row.reference_id ?? null;
 
     const ref = parseRef(row.reference_id);
     if (ref) {
-      let postId: number | null = null;
-      let thumbnail: string | null = null;
-
       if (ref.kind === "post") {
-        postId    = ref.id;
-        thumbnail = postThumbMap[postId] ?? null;
-        const postMeta = postContentMap[postId] ?? null;
-        referenceId = JSON.stringify({ kind: "post", id: postId, thumbnail, content_type: postMeta?.content_type ?? null, text_background: postMeta?.text_background ?? null, caption: postMeta?.caption ?? null });
+        const thumbnail = postThumbMap[ref.id] ?? null;
+        const postMeta  = postContentMap[ref.id] ?? null;
+        referenceId = JSON.stringify({ kind: "post", id: ref.id, thumbnail, content_type: postMeta?.content_type ?? null, text_background: postMeta?.text_background ?? null, caption: postMeta?.caption ?? null });
       } else if (ref.kind === "poll") {
-        postId    = ref.id;
-        thumbnail = postThumbMap[postId] ?? null;
-        referenceId = JSON.stringify({ kind: "poll", id: postId, question: ref.question ?? null, thumbnail });
+        const thumbnail = postThumbMap[ref.id] ?? null;
+        referenceId = JSON.stringify({ kind: "poll", id: ref.id, question: ref.question ?? null, thumbnail });
       } else if (ref.kind === "story") {
-        thumbnail = storyThumbMap[ref.id] ?? null;
+        const thumbnail = storyThumbMap[ref.id] ?? null;
         referenceId = JSON.stringify({ kind: "story", id: ref.id, thumbnail });
       } else if (ref.kind === "tip") {
-        postId    = tipPostMap[ref.id] ?? null;
-        thumbnail = postId ? (postThumbMap[postId] ?? null) : null;
+        const postId    = tipPostMap[ref.id] ?? null;
+        const thumbnail = postId ? (postThumbMap[postId] ?? null) : null;
         referenceId = JSON.stringify({ kind: "post", id: postId, thumbnail });
+      } else if (ref.kind === "message_tip") {
+        referenceId = JSON.stringify({
+          kind:           "message_tip",
+          conversationId: ref.conversationId,
+          messageId:      ref.messageId,
+          tipId:          ref.tipId,
+          thumbnail:      null,
+        });
+      } else if (ref.kind === "message_ppv") {
+        const thumbnail = messageThumbMap[ref.messageId] ?? null;
+        referenceId = JSON.stringify({
+          kind:           "message_ppv",
+          conversationId: ref.conversationId,
+          messageId:      ref.messageId,
+          unlockId:       ref.unlockId,
+          thumbnail,
+        });
       }
     }
 
