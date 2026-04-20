@@ -230,11 +230,12 @@ export default function ProfileBanner({
 
       <div
         onClick={handleClick}
-        style={{
+className="profile-banner"
+style={{
           position:    "relative",
           width:       "100%",
           aspectRatio: "3 / 1",       // ← LOCKED: matches what user crops
-          minHeight:   "120px",       // safety clamp for very narrow viewports
+          minHeight:   "200px",       // safety clamp for very narrow viewports
           background:  bannerUrl ? "transparent" : fallbackBg,
           cursor:      isEditable ? "pointer" : "default",
           overflow:    "hidden",
@@ -360,7 +361,10 @@ export default function ProfileBanner({
           </button>
         )}
 
-        <style>{"@keyframes spin { to { transform: rotate(360deg); } }"}</style>
+        <style>{`
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 768px) { .profile-banner { aspect-ratio: 1.8 / 1; min-height: 160px; } }
+`}</style>
       </div>
     </>
   );

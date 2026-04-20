@@ -1,9 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { ImagePlus, BarChart2, HelpCircle, Type } from "lucide-react";
+import { useState } from "react";
+import { ImagePlus, BarChart2, Type, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import type { User } from "@/lib/types/profile";
+import { useStoryUpload } from "@/lib/context/StoryUploadContext";
+import type { UploadJob } from "@/lib/context/StoryUploadContext";
+
+const StoryUploadModal = dynamic(() => import("@/components/story/StoryUploadModal"), { ssr: false });
 
 export interface PostComposerProps {
   user: User;
@@ -15,25 +21,24 @@ export interface PostComposerProps {
 
 export default function PostComposer({ user, className }: PostComposerProps) {
   const router = useRouter();
-
-  const iconBtnStyle: React.CSSProperties = {
-    width: "42px", height: "40px", borderRadius: "10px",
-    background: "#1C1C2E", border: "1px solid #3A3A4D",
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const { startUpload } = useStoryUpload();
+const iconBtnStyle: React.CSSProperties = {
+    background: "none", border: "none",
     display: "flex", alignItems: "center", justifyContent: "center",
-    cursor: "pointer", flexShrink: 0, transition: "border-color 0.15s ease",
+    cursor: "pointer", flexShrink: 0, padding: "4px",
   };
 
-  const handleHoverIn  = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.borderColor = "#8B5CF6"; };
-  const handleHoverOut = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.borderColor = "#3A3A4D"; };
-
+  const handleHoverIn  = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.opacity = "0.6"; };
+  const handleHoverOut = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.opacity = "1"; };
   const firstLetter = (user.display_name || user.username || "?").charAt(0).toUpperCase();
 
   return (
     <div
       style={{
-        backgroundColor: "#0D0D18",
-        borderRadius: "12px",
-        border: "1px solid #1E1E2E",
+        backgroundColor: "#0A0A0F",
+        border: "1px solid #1A1A2E",
+borderRadius: "12px",
         padding: "12px 14px",
         display: "flex",
         alignItems: "center",
@@ -43,16 +48,33 @@ export default function PostComposer({ user, className }: PostComposerProps) {
       className={className}
     >
       {/* Avatar */}
-      <div style={{
-        width: "36px", height: "36px", borderRadius: "50%",
-        background: user.avatar_url
-          ? `url(${user.avatar_url}) center/cover no-repeat`
-          : "linear-gradient(135deg, #8B5CF6, #EC4899)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: "14px", fontWeight: 700, color: "#fff",
-        flexShrink: 0,
-      }}>
-        {!user.avatar_url && firstLetter}
+      {uploadOpen && (
+        <StoryUploadModal
+          onClose={() => setUploadOpen(false)}
+          onUploadStart={(job: UploadJob) => { setUploadOpen(false); startUpload(job); }}
+        />
+      )}
+      <div style={{ position: "relative", flexShrink: 0 }} onClick={() => setUploadOpen(true)}>
+        <div style={{
+        width: "56px", height: "56px", borderRadius: "50%",
+          background: user.avatar_url
+            ? `url(${user.avatar_url}) center/cover no-repeat`
+            : "linear-gradient(135deg, #8B5CF6, #EC4899)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "16px", fontWeight: 700, color: "#fff", cursor: "pointer",
+        }}>
+          {!user.avatar_url && firstLetter}
+        </div>
+        <div style={{
+          position: "absolute", bottom: 0, right: 0,
+          width: "18px", height: "18px", borderRadius: "50%",
+          background: "linear-gradient(135deg, #8B5CF6, #7C3AED)",
+          border: "2px solid #0D0D18",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          pointerEvents: "none",
+        }}>
+          <Plus size={10} color="#fff" strokeWidth={2.8} />
+        </div>
       </div>
 
       {/* Buttons row */}
@@ -62,7 +84,7 @@ export default function PostComposer({ user, className }: PostComposerProps) {
         <button
           onClick={() => router.push("/create")}
           style={{
-            flex: 1, background: "#1C1C2E", border: "1px solid #3A3A4D",
+            flex: 1, background: "linear-gradient(135deg, #8B5CF6, #7C3AED)", border: "none",
             borderRadius: "20px", padding: "10px 18px", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
             gap: "7px", transition: "border-color 0.15s ease",
@@ -98,16 +120,7 @@ export default function PostComposer({ user, className }: PostComposerProps) {
           <BarChart2 size={22} strokeWidth={1.6} color="#B0B0C8" />
         </button>
 
-        {/* Quiz */}
-        <button
-          onClick={() => router.push("/create?type=quiz")}
-          style={iconBtnStyle}
-          onMouseEnter={handleHoverIn}
-          onMouseLeave={handleHoverOut}
-          aria-label="Create quiz"
-        >
-          <HelpCircle size={22} strokeWidth={1.6} color="#B0B0C8" />
-        </button>
+      
 
         {/* Text */}
         <button

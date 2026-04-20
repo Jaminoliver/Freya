@@ -3,7 +3,8 @@
 import { useState, useRef } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { ImageCropModal } from "@/components/ui/ImageCropModal";
+import { BannerCropModal } from "@/components/ui/BannerCropModal";
+import { AvatarCropModal } from "@/components/ui/AvatarCropModal";
 import { uploadImage } from "@/lib/utils/uploadImage";
 
 const SHIMMER_KEYFRAMES = `
@@ -59,14 +60,21 @@ export default function AvatarBannerUpload({ userId, displayName, username, init
     <>
       <style>{SHIMMER_KEYFRAMES}</style>
 
-      {cropImageSrc && (
-        <ImageCropModal
-          imageSrc={cropImageSrc}
-          type={cropType}
-          onSave={handleCropSave}
-          onCancel={() => setCropImageSrc(null)}
-        />
-      )}
+      {cropImageSrc && cropType === "banner" && (
+  <BannerCropModal
+    imageSrc={cropImageSrc}
+    displayName={displayName}
+    onSave={handleCropSave}
+    onCancel={() => setCropImageSrc(null)}
+  />
+)}
+{cropImageSrc && cropType === "avatar" && (
+  <AvatarCropModal
+    imageSrc={cropImageSrc}
+    onSave={handleCropSave}
+    onCancel={() => setCropImageSrc(null)}
+  />
+)}
 
       <div style={{ marginBottom: "16px" }}>
         {/* Banner */}
