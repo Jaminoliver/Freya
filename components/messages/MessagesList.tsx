@@ -9,6 +9,7 @@ import { MediaLightbox } from "@/components/messages/MediaLightbox";
 import { TypingBubble } from "@/components/messages/TypingBubble";
 import { ReadTick } from "@/components/messages/ReadTick";
 import { TipMessage } from "@/components/messages/TipMessage";
+import { GifMessage } from "@/components/messages/GifMessage";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
@@ -422,6 +423,35 @@ export function MessagesList({
               const msgKey     = String(msg.tempId ?? msg.id);
               const animClass  = olderAnimIds.has(msgKey) ? "msg-older" : newerAnimIds.has(msgKey) ? "msg-newer" : "";
               const isSelected = selectMode && selectedIds?.has(msg.id);
+
+              // ── GIF bubble ─────────────────────────────────────────────────
+              if (msg.type === "gif" && msg.gifUrl) {
+                return (
+                  <div
+                    key={msgKey}
+                    className={animClass}
+                    style={{
+                      display:       "flex",
+                      flexDirection: "column",
+                      gap:           "2px",
+                      marginTop:     isSameGroup ? "2px" : "10px",
+                    }}
+                  >
+                    {showTime && (
+                      <div style={{ textAlign: "center", margin: "6px 0" }}>
+                        <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{formatMessageTime(msg.createdAt)}</span>
+                      </div>
+                    )}
+                    <GifMessage
+                      message={msg}
+                      conversation={conversation}
+                      isOwn={isOwn}
+                      time={formatMessageTime(msg.createdAt)}
+                      isSameGroup={!!isSameGroup}
+                    />
+                  </div>
+                );
+              }
 
               // ── Tip bubble renders centered, no avatar, no bubble wrapper ──
               if (msg.type === "tip") {

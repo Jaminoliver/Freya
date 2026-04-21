@@ -1,5 +1,5 @@
 // lib/types/messages.ts
-export type MessageType   = "text" | "media" | "ppv" | "tip";
+export type MessageType   = "text" | "media" | "ppv" | "tip" | "gif";
 export type MessageStatus = "sending" | "sent" | "failed";
 
 export type FilterTab = "all" | "priority" | "unread" | "favourites";
@@ -44,6 +44,7 @@ export interface Message {
     amount: number; // in kobo
     tipId:  number;
   };
+  gifUrl?:         string | null;
   isRead?:         boolean;
   isDelivered?:    boolean;
   createdAt:       string;

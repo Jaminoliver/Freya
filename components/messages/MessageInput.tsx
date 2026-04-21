@@ -1,29 +1,34 @@
 // components/messages/MessageInput.tsx
 "use client";
 
-import { useState, useRef } from "react";
-import { ImageIcon, Send, Banknote, X, CornerUpLeft } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { ImageIcon, Send, X, CornerUpLeft } from "lucide-react";
 import { PPVToggle } from "@/components/messages/PPVToggle";
 import { MediaPreviewRow } from "@/components/messages/MediaPreviewRow";
+import { GifPicker, GifItem } from "@/components/gif/GifComponents";
 import type { Message } from "@/lib/types/messages";
 
 interface Props {
   onSend:         (text: string, mediaFiles?: File[], ppvPrice?: number) => void;
+  onSendGif?:     (gif: GifItem) => void;
   onTyping?:      () => void;
   onTipClick?:    () => void;
   disabled?:      boolean;
   replyTo?:       Message | null;
   onCancelReply?: () => void;
+  viewerUserId?:  string;
 }
 
-export function MessageInput({ onSend, onTyping, onTipClick, disabled = false, replyTo, onCancelReply }: Props) {
-  const [text,       setText]       = useState("");
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
-  const [ppvEnabled, setPpvEnabled] = useState(false);
-  const [ppvPrice,   setPpvPrice]   = useState(0);
-  const fileRef     = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const throttleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+export function MessageInput({ onSend, onSendGif, onTyping, onTipClick, disabled = false, replyTo, onCancelReply, viewerUserId }: Props) {
+  const [text,          setText]          = useState("");
+  const [mediaFiles,    setMediaFiles]    = useState<File[]>([]);
+  const [ppvEnabled,    setPpvEnabled]    = useState(false);
+  const [ppvPrice,      setPpvPrice]      = useState(0);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const fileRef      = useRef<HTMLInputElement>(null);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
+  const throttleRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputAreaRef = useRef<HTMLDivElement>(null);
 
   const canSend = !disabled && (text.trim().length > 0 || mediaFiles.length > 0);
 
@@ -57,8 +62,26 @@ export function MessageInput({ onSend, onTyping, onTipClick, disabled = false, r
     e.target.value = "";
   };
 
+  // Close GIF picker on outside click
+  useEffect(() => {
+    if (!gifPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (inputAreaRef.current && !inputAreaRef.current.contains(e.target as Node)) {
+        setGifPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [gifPickerOpen]);
+
+  const handleGifSelect = (gif: GifItem) => {
+    setGifPickerOpen(false);
+    onSendGif?.(gif);
+  };
+
   return (
     <div
+      ref={inputAreaRef}
       style={{
         borderTop:       "1px solid #1E1E2E",
         backgroundColor: "#0D0D1A",
@@ -68,6 +91,7 @@ export function MessageInput({ onSend, onTyping, onTipClick, disabled = false, r
         touchAction:     "none",
         userSelect:      "none",
         paddingBottom:   "env(safe-area-inset-bottom, 0px)",
+        position:        "relative",
       }}
     >
       {/* WhatsApp-style reply bar */}
@@ -98,31 +122,57 @@ export function MessageInput({ onSend, onTyping, onTipClick, disabled = false, r
         <PPVToggle enabled={ppvEnabled} price={ppvPrice} onToggle={setPpvEnabled} onPriceChange={setPpvPrice} />
       )}
 
+      {gifPickerOpen && (
+        <GifPicker
+          onSelect={handleGifSelect}
+          onClose={() => setGifPickerOpen(false)}
+          viewerUserId={viewerUserId}
+        />
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 12px", minHeight: "64px" }}>
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={handleFileChange} />
 
         <button title="Gallery" onClick={() => fileRef.current?.click()} disabled={disabled}
-          style={{ background: "none", border: "none", cursor: disabled ? "default" : "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", justifyContent: "center", padding: "7px", borderRadius: "8px", transition: "all 0.15s ease", flexShrink: 0, opacity: disabled ? 0.4 : 1 }}
+          style={{ background: "none", border: "none", cursor: disabled ? "default" : "pointer", color: "#C4C4D4", display: "flex", alignItems: "center", justifyContent: "center", padding: "7px", borderRadius: "8px", transition: "all 0.15s ease", flexShrink: 0, opacity: disabled ? 0.4 : 1 }}
           onMouseEnter={(e) => { if (!disabled) { e.currentTarget.style.backgroundColor = "#1C1C2E"; e.currentTarget.style.color = "#FFFFFF"; }}}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#C4C4D4"; }}
         >
-          <ImageIcon size={21} strokeWidth={1.8} />
+          <ImageIcon size={22} strokeWidth={1.8} />
         </button>
 
         <button title="Tip" onClick={() => onTipClick?.()} disabled={disabled}
-          style={{ background: "none", border: "none", cursor: disabled ? "default" : "pointer", color: "#F5A623", display: "flex", alignItems: "center", justifyContent: "center", padding: "7px", borderRadius: "8px", transition: "all 0.15s ease", flexShrink: 0, opacity: disabled ? 0.4 : 1 }}
-          onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+          style={{ background: "none", border: "none", cursor: disabled ? "default" : "pointer", color: "#C4C4D4", display: "flex", alignItems: "center", justifyContent: "center", padding: "7px", borderRadius: "8px", transition: "all 0.15s ease", flexShrink: 0, opacity: disabled ? 0.4 : 1 }}
+          onMouseEnter={(e) => { if (!disabled) { e.currentTarget.style.backgroundColor = "#1C1C2E"; e.currentTarget.style.color = "#FFFFFF"; }}}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#C4C4D4"; }}
         >
-          <Banknote size={21} strokeWidth={1.8} />
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 12 20 22 4 22 4 12"/>
+            <rect x="2" y="7" width="20" height="5"/>
+            <line x1="12" y1="22" x2="12" y2="7"/>
+            <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+            <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+          </svg>
         </button>
 
-        <button title="GIF" onClick={() => {}} disabled={disabled}
-          style={{ background: "none", border: "none", cursor: disabled ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "5px 6px", borderRadius: "8px", transition: "all 0.15s ease", flexShrink: 0, opacity: disabled ? 0.4 : 1 }}
-          onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+        <button title="GIF" onClick={() => setGifPickerOpen((o) => !o)} disabled={disabled}
+          style={{
+            background:      gifPickerOpen ? "#2D1F4E" : "none",
+            border:          `1px solid ${gifPickerOpen ? "#8B5CF6" : "transparent"}`,
+            cursor:          disabled ? "default" : "pointer",
+            display:         "flex",
+            alignItems:      "center",
+            justifyContent:  "center",
+            padding:         "5px 8px",
+            borderRadius:    "8px",
+            transition:      "all 0.15s ease",
+            flexShrink:      0,
+            opacity:         disabled ? 0.4 : 1,
+          }}
+          onMouseEnter={(e) => { if (!disabled && !gifPickerOpen) e.currentTarget.style.backgroundColor = "#1C1C2E"; }}
+          onMouseLeave={(e) => { if (!gifPickerOpen) e.currentTarget.style.backgroundColor = "transparent"; }}
         >
-          <span style={{ fontSize: "12px", fontWeight: 700, color: "#A3A3C2", letterSpacing: "0.5px", lineHeight: 1, fontFamily: "'Inter',sans-serif" }}>GIF</span>
+          <span style={{ fontSize: "13px", fontWeight: 700, color: gifPickerOpen ? "#8B5CF6" : "#C4C4D4", letterSpacing: "0.5px", lineHeight: 1, fontFamily: "'Inter',sans-serif" }}>GIF</span>
         </button>
 
         <textarea

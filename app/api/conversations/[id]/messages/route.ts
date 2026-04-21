@@ -1,3 +1,4 @@
+// app/api/conversations/[id]/messages/route.ts
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient, getUser } from "@/lib/supabase/server";
 import { signBunnyUrl } from "@/lib/utils/bunny";
@@ -51,7 +52,7 @@ export async function GET(
 
   let query = supabase
     .from("messages")
-    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, media_type, media_url, thumbnail_url, is_read, is_delivered, created_at, reply_to_id, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone, story_reply_story_id, story_reply_thumbnail_url")
+    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, is_tip, tip_id, gif_url, media_type, media_url, thumbnail_url, is_read, is_delivered, created_at, reply_to_id, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone, story_reply_story_id, story_reply_thumbnail_url")
     .eq("conversation_id", conversationId)
     .eq(deleteField, false)
     .order("created_at", { ascending: false })
@@ -86,17 +87,31 @@ export async function GET(
     }
   }
 
+  // ── PPV message unlocks (queries ppv_message_unlocks, NOT ppv_unlocks) ──
   let unlockedByCurrentUser  = new Set<number>();
   let unlockCountByMessageId = new Map<number, number>();
   const ppvMessageIds = rows.filter((r) => r.is_ppv).map((r) => r.id);
   if (ppvMessageIds.length > 0) {
     const { data: unlocks } = await supabase
-      .from("ppv_unlocks")
+      .from("ppv_message_unlocks")
       .select("message_id, fan_id")
       .in("message_id", ppvMessageIds);
     for (const u of unlocks ?? []) {
       if (u.fan_id === user.id) unlockedByCurrentUser.add(u.message_id);
       unlockCountByMessageId.set(u.message_id, (unlockCountByMessageId.get(u.message_id) ?? 0) + 1);
+    }
+  }
+
+  // ── Tips (resolve tip rows for is_tip messages) ─────────────────────────
+  const tipIds = rows.filter((r) => r.is_tip && r.tip_id).map((r) => r.tip_id as number);
+  const tipById = new Map<number, { amount: number }>();
+  if (tipIds.length > 0) {
+    const { data: tipRows } = await supabase
+      .from("tips")
+      .select("id, amount")
+      .in("id", tipIds);
+    for (const t of tipRows ?? []) {
+      tipById.set(t.id, { amount: t.amount });
     }
   }
 
@@ -135,6 +150,28 @@ export async function GET(
       storyReplyStoryId:      row.story_reply_story_id      ?? null,
       storyReplyThumbnailUrl: row.story_reply_thumbnail_url ?? null,
     };
+
+    // ── GIF bubble ─────────────────────────────────────────────────────────
+    if (row.gif_url) {
+      return {
+        ...base,
+        type:   "gif" as const,
+        gifUrl: row.gif_url,
+      };
+    }
+
+    // ── Tip bubble ─────────────────────────────────────────────────────────
+    if (row.is_tip && row.tip_id) {
+      const tip = tipById.get(row.tip_id);
+      return {
+        ...base,
+        type: "tip" as const,
+        tip: {
+          amount: tip?.amount ?? 0,
+          tipId:  row.tip_id,
+        },
+      };
+    }
 
     const mediaRows = mediaByMessageId.get(row.id) ?? [];
     const mediaUrls = mediaRows.length > 0
@@ -212,10 +249,14 @@ export async function POST(
     reply_to_id,
     story_reply_story_id,
     story_reply_thumbnail_url,
+    gif_url,
   } = body;
 
-  if (!content?.trim()) {
-    return NextResponse.json({ error: "Content is required" }, { status: 400 });
+  const hasContent = typeof content === "string" && content.trim().length > 0;
+  const hasGif     = typeof gif_url === "string" && gif_url.length > 0;
+
+  if (!hasContent && !hasGif) {
+    return NextResponse.json({ error: "Content or gif_url is required" }, { status: 400 });
   }
 
   const receiverId       = convo.creator_id === user.id ? convo.fan_id : convo.creator_id;
@@ -227,14 +268,15 @@ export async function POST(
       conversation_id:           conversationId,
       sender_id:                 user.id,
       receiver_id:               receiverId,
-      content:                   content.trim(),
+      content:                   hasContent ? content.trim() : null,
       is_ppv:                    false,
       is_unlocked:               true,
+      gif_url:                   hasGif ? gif_url : null,
       reply_to_id:               reply_to_id               ?? null,
       story_reply_story_id:      story_reply_story_id      ?? null,
       story_reply_thumbnail_url: story_reply_thumbnail_url ?? null,
     })
-    .select("id, conversation_id, sender_id, content, created_at, reply_to_id, story_reply_story_id, story_reply_thumbnail_url")
+    .select("id, conversation_id, sender_id, content, gif_url, created_at, reply_to_id, story_reply_story_id, story_reply_thumbnail_url")
     .single();
 
   if (insertError) {
@@ -244,9 +286,11 @@ export async function POST(
   const unreadField  = isCreatorSending ? "unread_count_fan"    : "unread_count_creator";
   const restoreField = isCreatorSending ? "deleted_for_fan"     : "deleted_for_creator";
 
+  const lastPreview = hasGif ? "🎞️ GIF" : content.trim().slice(0, 100);
+
   await supabase.from("conversations").update({ [restoreField]: false, updated_at: new Date().toISOString() }).eq("id", conversationId);
   await supabase.rpc("increment_unread_count", { p_conversation_id: conversationId, p_field: unreadField });
-  await supabase.from("conversations").update({ last_message_preview: content.trim().slice(0, 100), last_message_at: message.created_at, updated_at: new Date().toISOString() }).eq("id", conversationId);
+  await supabase.from("conversations").update({ last_message_preview: lastPreview, last_message_at: message.created_at, updated_at: new Date().toISOString() }).eq("id", conversationId);
 
   // Notification
   try {
@@ -263,13 +307,28 @@ export async function POST(
       actor_handle: senderProfile?.username ?? "",
       actor_avatar: senderProfile?.avatar_url ?? null,
       body_text:    "sent you a message",
-      sub_text:     content.trim().slice(0, 80),
+      sub_text:     hasGif ? "🎞️ GIF" : content.trim().slice(0, 80),
       reference_id: conversationId.toString(),
       is_read:      false,
     });
     if (notifInsertError) console.error("[notifications] insert failed:", notifInsertError.message);
   } catch (notifError) {
     console.error("[notifications] unexpected error:", notifError);
+  }
+
+  // Build response — gif takes precedence over text
+  if (hasGif) {
+    return NextResponse.json({
+      message: {
+        id:             message.id,
+        conversationId: message.conversation_id,
+        senderId:       message.sender_id,
+        type:           "gif",
+        gifUrl:         message.gif_url,
+        createdAt:      message.created_at,
+        replyToId:      message.reply_to_id ?? null,
+      },
+    }, { status: 201 });
   }
 
   return NextResponse.json({

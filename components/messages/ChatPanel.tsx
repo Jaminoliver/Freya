@@ -23,6 +23,7 @@ import CheckoutModal from "@/components/checkout/CheckoutModal";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import type { Conversation, Message } from "@/lib/types/messages";
 import type { User } from "@/lib/types/profile";
+import type { GifItem } from "@/components/gif/GifComponents";
 
 interface Props {
   conversation:           Conversation;
@@ -338,6 +339,64 @@ export function ChatPanel({
     ));
   }, [appendMessage, conversation.id]);
 
+  // ── Send GIF ─────────────────────────────────────────────────────────────
+  const handleSendGif = useCallback(async (gif: GifItem) => {
+    const tempId = `temp_gif_${Date.now()}_${Math.random()}`;
+    const createdAt = new Date().toISOString();
+
+    const optimistic: Message = {
+      id:             Date.now(),
+      conversationId: conversation.id,
+      senderId:       currentUserId,
+      type:           "gif",
+      gifUrl:         gif.url,
+      createdAt,
+      isRead:         false,
+      status:         "sending",
+      tempId,
+    };
+    appendMessage(optimistic);
+
+    try {
+      let convId = realConversationIdRef.current ?? conversation.id;
+      if (convId === 0) {
+        const createRes  = await fetch("/api/conversations", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ targetUserId: conversation.participant.id }),
+        });
+        const createData = await createRes.json();
+        convId = createData.conversationId;
+        realConversationIdRef.current = convId;
+        useMessageStore.getState().setConversationId(convId);
+        subscribeTypingForConversation(convId);
+        onConversationCreated?.(convId);
+        updateConversations((prev) => {
+          if (prev.some((c) => c.id === convId)) return prev;
+          return [{ ...conversation, id: convId, lastMessage: "🎞️ GIF", lastMessageAt: createdAt, unreadCount: 0 }, ...prev];
+        });
+      }
+
+      const res  = await fetch(`/api/conversations/${convId}/messages`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ gif_url: gif.url }),
+      });
+      const data = await res.json();
+
+      if (data.message) {
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m));
+        updateConversations((prev) => prev.map((c) =>
+          c.id === convId ? { ...c, lastMessage: "🎞️ GIF", lastMessageAt: createdAt } : c
+        ));
+      } else {
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
+      }
+    } catch {
+      setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
+    }
+  }, [conversation, currentUserId, appendMessage, setMessages, realConversationIdRef, onConversationCreated]);
+
   // ── PPV unlock success: patch message to unlocked with media ────────────
   const handlePPVUnlockSuccess = useCallback((data: any) => {
     if (!ppvUnlockTarget) return;
@@ -570,6 +629,8 @@ export function ChatPanel({
                 onSend={handleSend}
                 onTyping={handleTyping}
                 onTipClick={() => setTipModalOpen(true)}
+                onSendGif={handleSendGif}
+                viewerUserId={currentUserId}
                 disabled={false}
                 replyTo={replyTo}
                 onCancelReply={() => setReplyTo(null)}

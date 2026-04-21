@@ -1,3 +1,4 @@
+// app/(main)/messages/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -294,6 +295,58 @@ function startGlobalRealtime() {
               `/api/conversations/${row.conversation_id}/messages/${row.id}/deliver`,
               { method: "PATCH" }
             ).catch(() => {});
+          }
+
+          // ── GIF message ──
+          if (row.gif_url) {
+            const gifMessage: Message = {
+              id:             row.id,
+              conversationId: row.conversation_id,
+              senderId:       row.sender_id,
+              type:           "gif",
+              gifUrl:         row.gif_url,
+              isRead:         row.is_read ?? false,
+              isDelivered:    true,
+              createdAt:      row.created_at,
+              replyToId:      row.reply_to_id ?? null,
+            };
+
+            const store = useMessageStore.getState();
+            if (row.conversation_id === store.conversationId) {
+              store.appendMessage(gifMessage);
+              fetch(`/api/conversations/${row.conversation_id}/read`, { method: "PATCH" }).catch(() => {});
+            }
+            appendCachedMessage(row.conversation_id, gifMessage);
+
+            updateConversations((prev) =>
+              prev.map((c) =>
+                c.id !== row.conversation_id ? c : {
+                  ...c,
+                  lastMessage:   "🎬 GIF",
+                  lastMessageAt: row.created_at,
+                  unreadCount:   c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
+                  hasMedia:      true,
+                }
+              )
+            );
+            return;
+          }
+
+          // ── Tip message ──
+          if (row.is_tip) {
+            updateConversations((prev) =>
+              prev.map((c) =>
+                c.id !== row.conversation_id ? c : {
+                  ...c,
+                  lastMessage:   "💰 Tip",
+                  lastMessageAt: row.created_at,
+                  unreadCount:   c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
+                  hasMedia:      false,
+                }
+              )
+            );
+            // Tip message body is hydrated by /api/conversations/:id/messages on reload
+            return;
           }
 
           if (row.media_type && !row.is_ppv) {
