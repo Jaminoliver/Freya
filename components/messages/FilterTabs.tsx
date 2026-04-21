@@ -21,8 +21,7 @@ export function FilterTabs({ active, onChange, unreadCount, favouriteCount }: Pr
     <div
       style={{
         padding:          "12px 16px",
-        borderBottom:     "1px solid #1E1E2E",
-        backgroundColor:  "#0D0D1A",
+        backgroundColor:  "var(--background)",
         flexShrink:       0,
       }}
     >

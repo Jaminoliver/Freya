@@ -141,7 +141,7 @@ export default function SubscriptionsPage() {
           style={{
             alignItems: "center", justifyContent: "space-between",
             padding: "0 18px", height: "56px", flexShrink: 0,
-            backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A",
+            backgroundColor: "var(--background)",
           }}
         >
           <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>
@@ -154,8 +154,8 @@ export default function SubscriptionsPage() {
 
         {/* Filter pills */}
         <div style={{
-          padding: "12px 16px", borderBottom: "1px solid #1E1E2E",
-          backgroundColor: "#0D0D1A", flexShrink: 0,
+          padding: "12px 16px",
+          backgroundColor: "var(--background)", flexShrink: 0,
           position: "sticky", top: 0, zIndex: 10,
         }}>
           <p style={{

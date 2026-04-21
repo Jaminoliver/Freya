@@ -119,8 +119,7 @@ export function MessagesHeader({ searchQuery = "", onSearchChange }: MessagesHea
           right:           0,
           height:          "56px",
           flexShrink:      0,
-          backgroundColor: "#13131F",
-          borderBottom:    "1px solid #1F1F2A",
+          backgroundColor: "var(--background)",
           zIndex:          100,
           fontFamily:      "'Inter', sans-serif",
         }}

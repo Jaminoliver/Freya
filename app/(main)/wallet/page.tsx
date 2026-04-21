@@ -253,10 +253,11 @@ function WalletContent() {
         fontFamily: "'Inter', sans-serif",
       }}>
         {/* Header + tabs */}
-        <div style={{ padding: "16px 18px", backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A" }}>
+        <div style={{ padding: "16px 18px", backgroundColor: "var(--background)"
+        }}>
           <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", margin: 0 }}>Wallet</h1>
         </div>
-        <div style={{ padding: "14px 18px", backgroundColor: "#0D0D1A", borderBottom: "1px solid #1F1F2A", position: "sticky", top: 0, zIndex: 10 }}>
+        <div style={{ padding: "14px 18px", backgroundColor: "var(--background)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 10 }}>
           <div style={{ display: "flex", gap: "8px" }}>
             {TABS.map((tab) => (
               <button

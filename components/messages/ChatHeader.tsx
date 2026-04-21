@@ -178,7 +178,7 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
         style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "0 16px", height: "56px", flexShrink: 0,
-          backgroundColor: "#0D0D1A", borderBottom: "1px solid #1E1E2E",
+          backgroundColor: "var(--background)",
           fontFamily: "'Inter', sans-serif",
           position: "fixed", top: 0, left: 0, right: 0,
           zIndex: 101,
@@ -203,7 +203,7 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
               )}
             </div>
             {participant.isOnline && (
-              <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0D0D1A" }} />
+              <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid var(--background)" }} />
             )}
           </div>
 

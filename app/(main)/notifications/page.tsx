@@ -188,7 +188,7 @@ export default function NotificationsPage() {
           style={{
             alignItems: "center", justifyContent: "space-between",
             padding: "0 16px", height: "56px", flexShrink: 0,
-            backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A",          }}
+            backgroundColor: "var(--background)",          }}
         >
           <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>
             Notifications

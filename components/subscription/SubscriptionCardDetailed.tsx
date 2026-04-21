@@ -170,8 +170,8 @@ export function SubscriptionCardDetailed({
       )}
 
       <div style={{
-        backgroundColor: "#0D0D18",
-        border:          "1px solid #1E1E2E",
+        backgroundColor: "var(--background)",
+        border:          "1px solid var(--border)",
         borderRadius:    "14px",
         overflow:        "hidden",
         fontFamily:      "'Inter', sans-serif",
@@ -231,7 +231,7 @@ export function SubscriptionCardDetailed({
               hasStory={hasStory}
               hasUnviewed={hasUnviewed}
               onClick={handleAvatarClick}
-              borderColor="#0D0D18"
+              borderColor="var(--background)"
             />
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
