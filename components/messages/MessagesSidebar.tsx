@@ -166,8 +166,8 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
             position:        "relative",
             height:          "56px",
             flexShrink:      0,
-            backgroundColor: "#0A0A0F",   // ← matched
-            borderBottom:    "1px solid #1A1A2A",
+            backgroundColor: "#13131F",
+borderBottom:    "1px solid #1F1F2A",
             fontFamily:      "'Inter', sans-serif",
             zIndex:          50,
           }}

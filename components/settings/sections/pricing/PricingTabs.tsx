@@ -20,29 +20,31 @@ export default function PricingTabs({
     <div
       style={{
         display: "flex",
-        borderBottom: "1px solid #1E1E2E",
+        gap: "8px",
         overflowX: "auto",
         scrollbarWidth: "none",
+        padding: "0 0 12px",
+        marginBottom: "24px",
       }}
     >
+    
       {TABS.map((tab) => (
         <button
           key={tab.key}
           onClick={() => onChange(tab.key)}
           style={{
-            padding: "8px 14px",
-            fontSize: "13px",
-            fontWeight: 500,
-            fontFamily: "'Inter', sans-serif",
-            background: "none",
+            padding: "7px 16px",
+            borderRadius: "20px",
             border: "none",
+            backgroundColor: activeTab === tab.key ? "#FFFFFF" : "#1A1A2A",
+            color: activeTab === tab.key ? "#0A0A0F" : "#94A3B8",
+            fontSize: "12px",
+            fontWeight: activeTab === tab.key ? 600 : 500,
             cursor: "pointer",
+            fontFamily: "'Inter', sans-serif",
             whiteSpace: "nowrap",
             flexShrink: 0,
-            color: activeTab === tab.key ? "#8B5CF6" : "#64748B",
-            borderBottom: activeTab === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
-            marginBottom: "-1px",
-            transition: "color 0.15s ease",
+            transition: "all 0.15s",
           }}
         >
           {tab.label}

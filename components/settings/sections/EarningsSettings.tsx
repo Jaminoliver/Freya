@@ -95,18 +95,18 @@ export default function EarningsSettings({
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ display: "flex", borderBottom: "1px solid #1E1E2E", marginBottom: "24px" }}>
+      <div style={{ display: "flex", gap: "8px", overflowX: "auto", scrollbarWidth: "none", padding: "0 0 12px", marginBottom: "24px" }}>
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            style={{
-              padding: "8px 16px", fontSize: "13px", fontWeight: 500,
-              fontFamily: "'Inter', sans-serif", background: "none", border: "none",
-              cursor: "pointer",
-              color: activeTab === tab.key ? "#8B5CF6" : "#64748B",
-              borderBottom: activeTab === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
-              marginBottom: "-1px", transition: "color 0.15s ease",
+           style={{
+              padding: "7px 16px", borderRadius: "20px", border: "none",
+              backgroundColor: activeTab === tab.key ? "#FFFFFF" : "#1A1A2A",
+              color: activeTab === tab.key ? "#0A0A0F" : "#94A3B8",
+              fontSize: "12px", fontWeight: activeTab === tab.key ? 600 : 500,
+              cursor: "pointer", fontFamily: "'Inter', sans-serif",
+              whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.15s",
             }}
           >
             {tab.label}

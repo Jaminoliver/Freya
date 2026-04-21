@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { SubscriptionsHeader } from "@/components/subscription/SubscriptionsHeader";
 import { MoreHorizontal, Rows3, LayoutGrid } from "lucide-react";
 import dynamic from "next/dynamic";
 import { SubscriptionList } from "@/components/subscription/SubscriptionList";
@@ -31,9 +32,8 @@ export default function SubscriptionsPage() {
   const [query,         setQuery]         = useState("");
   const [view,          setView]          = useState<CardView>("detailed");
 
-  // Tip modal state
-  const [tipOpen,      setTipOpen]      = useState(false);
-  const [tipCreator,   setTipCreator]   = useState<User | null>(null);
+  const [tipOpen,    setTipOpen]    = useState(false);
+  const [tipCreator, setTipCreator] = useState<User | null>(null);
 
   const fetchSubscriptions = useCallback(async () => {
     setLoading(true);
@@ -104,12 +104,15 @@ export default function SubscriptionsPage() {
   const handleSearch = useCallback((q: string) => setQuery(q), []);
 
   return (
-    <div style={{
-      display: "flex", flexDirection: "column", minHeight: "100vh",
-      backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif",
-    }}>
+    <>
+      <style>{`
+        .subs-desktop-header { display: flex; }
+        @media (max-width: 767px) {
+          .subs-desktop-header { display: none !important; }
+          .subs-outer { padding-top: 56px; }
+        }
+      `}</style>
 
-      {/* Tip modal */}
       {tipCreator && (
         <CheckoutModal
           isOpen={tipOpen}
@@ -120,118 +123,132 @@ export default function SubscriptionsPage() {
         />
       )}
 
-      {/* Header */}
-      <div style={{
-        padding: "18px 18px 10px",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-      }}>
-        <h1 style={{
-          fontSize: "22px", fontWeight: 500, color: "#8B5CF6",
-          margin: 0, letterSpacing: "-0.3px",
-        }}>
-          Subscriptions
-        </h1>
-        <button
-          aria-label="More"
+      {/* Mobile fixed header */}
+      <SubscriptionsHeader />
+
+      <div
+        className="subs-outer"
+        style={{
+          width: "100%", height: "100vh",
+          backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif",
+          display: "flex", flexDirection: "column",
+          boxSizing: "border-box",
+        }}
+      >
+        {/* Desktop header */}
+        <div
+          className="subs-desktop-header"
           style={{
-            width: "28px", height: "28px", borderRadius: "50%",
-            border: "none", background: "none",
-            color: "#F1F5F9", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
+            alignItems: "center", justifyContent: "space-between",
+            padding: "0 18px", height: "56px", flexShrink: 0,
+            backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A",
           }}
         >
-          <MoreHorizontal size={20} />
-        </button>
-      </div>
-
-      {/* Caps label */}
-      <p style={{
-        fontSize: "10px", fontWeight: 500, color: "#6B6B8A",
-        letterSpacing: "0.1em", textTransform: "uppercase",
-        padding: "0 18px 10px", margin: 0,
-      }}>
-        Manage your creators
-      </p>
-
-      {/* Filter pills */}
-      <SubscriptionFilterTabs
-        active={filter}
-        counts={counts}
-        onChange={(v) => setFilter(v as FilterKey)}
-      />
-
-      {/* Search bar */}
-      <div style={{ marginTop: "14px" }}>
-        <SubscriptionSearchBar onSearch={handleSearch} />
-      </div>
-
-      {/* Favourites rail */}
-      {filter === "all" && favourites.length > 0 && !query && (
-        <div style={{ marginTop: "18px" }}>
-          <FavouritesRail favourites={favourites} />
+          <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>
+            Subscriptions
+          </span>
+          <button aria-label="More" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", padding: "8px", borderRadius: "8px" }}>
+            <MoreHorizontal size={22} strokeWidth={1.8} />
+          </button>
         </div>
-      )}
 
-      {/* View toggle */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "18px 18px 12px",
-      }}>
-        <span style={{ fontSize: "16px", color: "#A3A3C2", fontWeight: 600 }}>
-          {filtered.length} {filtered.length === 1 ? "creator" : "creators"}
-        </span>
-
+        {/* Filter pills */}
         <div style={{
-          display: "flex", gap: "2px",
-          backgroundColor: "#1A1A2A", border: "1px solid #2A2A3D",
-          borderRadius: "10px", padding: "3px",
+          padding: "12px 16px", borderBottom: "1px solid #1E1E2E",
+          backgroundColor: "#0D0D1A", flexShrink: 0,
+          position: "sticky", top: 0, zIndex: 10,
         }}>
-          <button
-            onClick={() => setView("detailed")}
-            aria-label="1 per row"
-            style={{
-              width: "30px", height: "26px", borderRadius: "7px",
-              border: "none", cursor: "pointer",
-              backgroundColor: view === "detailed" ? "#8B5CF6" : "transparent",
-              color:           view === "detailed" ? "#fff"    : "#6B6B8A",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all 0.15s",
-            }}
-          >
-            <Rows3 size={13} strokeWidth={2} />
-          </button>
-          <button
-            onClick={() => setView("compact")}
-            aria-label="2 per row"
-            style={{
-              width: "30px", height: "26px", borderRadius: "7px",
-              border: "none", cursor: "pointer",
-              backgroundColor: view === "compact" ? "#8B5CF6" : "transparent",
-              color:           view === "compact" ? "#fff"    : "#6B6B8A",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all 0.15s",
-            }}
-          >
-            <LayoutGrid size={13} strokeWidth={2} />
-          </button>
+          <p style={{
+            fontSize: "11px", fontWeight: 600, color: "#4A4A6A",
+            letterSpacing: "0.06em", textTransform: "uppercase",
+            fontFamily: "'Inter', sans-serif", margin: "0 0 10px",
+          }}>
+            MANAGE YOUR CREATORS
+          </p>
+          <SubscriptionFilterTabs
+            active={filter}
+            counts={counts}
+            onChange={(v) => setFilter(v as FilterKey)}
+          />
         </div>
-      </div>
 
-      {/* Grid / list */}
-      <div style={{ padding: "0 18px 28px" }}>
-        {loading ? (
-          <SubscriptionsSkeleton count={6} />
-        ) : (
-          <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
-            <SubscriptionList
-              subscriptions={filtered}
-              view={view}
-              onRefresh={fetchSubscriptions}
-              onTip={handleTip}
-            />
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" as any, minHeight: 0 }}>
+
+          {/* Search bar */}
+          <div style={{ marginTop: "14px" }}>
+            <SubscriptionSearchBar onSearch={handleSearch} />
           </div>
-        )}
+
+          {/* Favourites rail */}
+          {filter === "all" && favourites.length > 0 && !query && (
+            <div style={{ marginTop: "18px" }}>
+              <FavouritesRail favourites={favourites} />
+            </div>
+          )}
+
+          {/* View toggle */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "18px 18px 12px",
+          }}>
+            <span style={{ fontSize: "16px", color: "#A3A3C2", fontWeight: 600 }}>
+              {filtered.length} {filtered.length === 1 ? "creator" : "creators"}
+            </span>
+            <div style={{
+              display: "flex", gap: "2px",
+              backgroundColor: "#1A1A2A", border: "1px solid #2A2A3D",
+              borderRadius: "10px", padding: "3px",
+            }}>
+              <button
+                onClick={() => setView("detailed")}
+                aria-label="1 per row"
+                style={{
+                  width: "30px", height: "26px", borderRadius: "7px",
+                  border: "none", cursor: "pointer",
+                  backgroundColor: view === "detailed" ? "#8B5CF6" : "transparent",
+                  color:           view === "detailed" ? "#fff"    : "#6B6B8A",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.15s",
+                }}
+              >
+                <Rows3 size={13} strokeWidth={2} />
+              </button>
+              <button
+                onClick={() => setView("compact")}
+                aria-label="2 per row"
+                style={{
+                  width: "30px", height: "26px", borderRadius: "7px",
+                  border: "none", cursor: "pointer",
+                  backgroundColor: view === "compact" ? "#8B5CF6" : "transparent",
+                  color:           view === "compact" ? "#fff"    : "#6B6B8A",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.15s",
+                }}
+              >
+                <LayoutGrid size={13} strokeWidth={2} />
+              </button>
+            </div>
+          </div>
+
+          {/* Grid / list */}
+          <div style={{ padding: "0 18px 28px" }}>
+            {loading ? (
+              <SubscriptionsSkeleton count={6} />
+            ) : (
+              <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
+                <SubscriptionList
+                  subscriptions={filtered}
+                  view={view}
+                  onRefresh={fetchSubscriptions}
+                  onTip={handleTip}
+                />
+              </div>
+            )}
+          </div>
+
+        </div>{/* end scrollable */}
       </div>
-    </div>
+    </>
   );
 }
