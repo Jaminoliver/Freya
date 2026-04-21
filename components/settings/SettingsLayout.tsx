@@ -139,7 +139,7 @@ function SettingsLayoutInner() {
   return (
     <div style={{
       display: "flex", minHeight: "100vh",
-      backgroundColor: "#13131F",
+      backgroundColor: "var(--background)",
       fontFamily: "'Inter', sans-serif",
       overflow: "hidden",
     }}>
@@ -169,7 +169,7 @@ function SettingsLayoutInner() {
           transition: background-color 0.15s ease;
           font-family: 'Inter', sans-serif;
         }
-        .settings-tab-btn:hover { background-color: #1C1C2E; }
+        .settings-tab-btn:hover { background-color: var(--surface); }
         .settings-tab-btn.active { background-color: rgba(167,139,250,0.08); }
       `}</style>
 
@@ -180,8 +180,8 @@ function SettingsLayoutInner() {
           display: mobileView === "menu" ? "flex" : "none",
           width: "100%",
           flexDirection: "column",
-          borderRight: "1px solid #1F1F2A",
-          backgroundColor: "#13131F",
+          borderRight: "1px solid var(--border)",
+          backgroundColor: "var(--background)",
           position: "sticky",
           top: 0,
           height: "100vh",
@@ -195,7 +195,7 @@ function SettingsLayoutInner() {
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "16px 20px",
-          borderBottom: "1px solid #1F1F2A",
+          borderBottom: "1px solid var(--border)",
         }}>
           <button
             onClick={() => router.back()}
@@ -213,7 +213,7 @@ function SettingsLayoutInner() {
           <div style={{
             display: "flex", alignItems: "center", gap: "12px",
             padding: "16px 20px",
-            borderBottom: "1px solid #1F1F2A",
+            borderBottom: "1px solid var(--border)",
           }}>
             <Avatar src={viewer.avatar_url ?? undefined} alt={viewer.display_name || viewer.username} size="md" showRing />
             <div>
@@ -224,11 +224,11 @@ function SettingsLayoutInner() {
             </div>
           </div>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 20px", borderBottom: "1px solid #1F1F2A" }}>
-            <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "var(--border)", animation: "pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <div style={{ width: "100px", height: "12px", borderRadius: "6px", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
-              <div style={{ width: "70px",  height: "10px", borderRadius: "6px", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
+              <div style={{ width: "100px", height: "12px", borderRadius: "6px", backgroundColor: "var(--border)", animation: "pulse 1.5s ease-in-out infinite" }} />
+              <div style={{ width: "70px",  height: "10px", borderRadius: "6px", backgroundColor: "var(--border)", animation: "pulse 1.5s ease-in-out infinite" }} />
             </div>
           </div>
         )}
@@ -273,7 +273,7 @@ function SettingsLayoutInner() {
           flex: 1, minWidth: 0, flexDirection: "column",
           overflowY: "auto", scrollbarWidth: "none",
           height: "100vh", width: "100%",
-          backgroundColor: "#13131F",
+          backgroundColor: "var(--background)",
           animation: "slideInRight 0.2s ease forwards",
         }}
       >
@@ -283,8 +283,8 @@ function SettingsLayoutInner() {
           style={{
             display: "flex", alignItems: "center", gap: "12px",
             padding: "14px 16px",
-            borderBottom: "1px solid #1F1F2A",
-            backgroundColor: "#13131F",
+            borderBottom: "1px solid var(--border)",
+            backgroundColor: "var(--background)",
             position: "sticky", top: 0, zIndex: 10,
           }}
         >
