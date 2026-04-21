@@ -51,8 +51,8 @@ export default function WalletTab({
       />
       <AutoRechargeToggle enabled={autoRecharge} onChange={onAutoRechargeChange} />
 
-      <div style={{ padding: "20px 20px 0" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+      <div style={{ padding: "20px 20px 0", backgroundColor: "#0D0D1A" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "8px" }}>
           <p style={{
             fontSize: "10px", fontWeight: 600, color: "#6B6B8A",
             letterSpacing: "0.08em", textTransform: "uppercase",
@@ -60,18 +60,22 @@ export default function WalletTab({
           }}>
             Transactions
           </p>
-          <select
-            value={filter}
-            onChange={(e) => handleFilterChange(e.target.value)}
-            style={{
-              backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D",
-              borderRadius: "6px", color: "#F1F5F9", fontSize: "12px",
-              padding: "4px 8px", fontFamily: "'Inter', sans-serif",
-              outline: "none", cursor: "pointer", colorScheme: "dark",
-            }}
-          >
-            {filters.map((f) => <option key={f} value={f}>{f}</option>)}
-          </select>
+          <div style={{ display: "flex", gap: "6px", overflowX: "auto", scrollbarWidth: "none" }}>
+            {filters.map((f) => (
+              <button
+                key={f}
+                onClick={() => handleFilterChange(f)}
+                style={{
+                  padding: "5px 12px", borderRadius: "20px", border: "none",
+                  backgroundColor: filter === f ? "#FFFFFF" : "#1C1C2E",
+                  color: filter === f ? "#0A0A0F" : "#94A3B8",
+                  fontSize: "12px", fontWeight: filter === f ? 600 : 500,
+                  cursor: "pointer", fontFamily: "'Inter', sans-serif",
+                  whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.15s",
+                }}
+              >{f}</button>
+            ))}
+          </div>
         </div>
 
         {filtered.length === 0 ? (

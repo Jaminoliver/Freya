@@ -145,12 +145,12 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
       <div
         style={{
           width:           "100%",
-          height:          "100vh",
-          backgroundColor: "#0A0A0F",   // ← matched to notification page
-          borderRight:     "1px solid #1A1A2A",
-          display:         "flex",
-          flexDirection:   "column",
-          overflow:        "hidden",
+          height:          "100%",
+backgroundColor: "#0A0A0F",
+borderRight:     "1px solid #1A1A2A",
+display:         "flex",
+flexDirection:   "column",
+overflow:        "hidden",
         }}
       >
         <MessagesHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} />
@@ -261,7 +261,8 @@ borderBottom:    "1px solid #1F1F2A",
         )}
 
         {/* Conversation list or skeleton */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
+  <div style={{ position: "absolute", inset: 0, overflowY: "auto", paddingBottom: "72px" }}>
           {loading ? (
             <MessagesSkeleton count={12} />
           ) : (
@@ -273,6 +274,7 @@ borderBottom:    "1px solid #1F1F2A",
               favouritedIds={favouritedIds}
             />
           )}
+        </div>
         </div>
       </div>
     </>

@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 type EarningsTab = "overview" | "history";
 
 const fmt = (n: number) =>
-  "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 const TYPE_COLOR: Record<string, string> = {
   Subscription: "#8B5CF6",

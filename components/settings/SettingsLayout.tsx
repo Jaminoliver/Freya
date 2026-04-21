@@ -193,9 +193,8 @@ function SettingsLayoutInner() {
       >
         {/* Header */}
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "16px 20px",
-          borderBottom: "1px solid var(--border)",
+          display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "12px",
+          
         }}>
           <button
             onClick={() => router.back()}
@@ -204,8 +203,7 @@ function SettingsLayoutInner() {
           >
             <ArrowLeft size={22} strokeWidth={2} />
           </button>
-          <h1 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", margin: 0 }}>Settings</h1>
-          <div style={{ width: "30px" }} />
+          <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", margin: 0 }}>Settings</h1>
         </div>
 
         {/* Viewer info */}
@@ -251,10 +249,10 @@ function SettingsLayoutInner() {
                   <Icon size={18} color={active ? "#A78BFA" : "#A3A3C2"} strokeWidth={active ? 2.2 : 1.8} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: "15px", fontWeight: active ? 600 : 500, color: active ? "#F1F5F9" : "#F1F5F9", lineHeight: 1.3 }}>
+                  <p style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: active ? "#F1F5F9" : "#F1F5F9", lineHeight: 1.3 }}>
                     {label}
                   </p>
-                  <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A", marginTop: "2px" }}>
+                  <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", marginTop: "2px" }}>
                     {description}
                   </p>
                 </div>

@@ -253,21 +253,22 @@ function WalletContent() {
         fontFamily: "'Inter', sans-serif",
       }}>
         {/* Header + tabs */}
-        <div style={{ padding: "24px 24px 0", borderBottom: "1px solid #1E1E2E" }}>
-          <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 2px" }}>Wallet</h1>
-          <p style={{ fontSize: "13px", color: "#6B6B8A", margin: "0 0 20px" }}>Freya Credits</p>
-          <div style={{ display: "flex" }}>
+        <div style={{ padding: "16px 18px", backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A" }}>
+          <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", margin: 0 }}>Wallet</h1>
+        </div>
+        <div style={{ padding: "14px 18px", backgroundColor: "#0D0D1A", borderBottom: "1px solid #1F1F2A", position: "sticky", top: 0, zIndex: 10 }}>
+          <div style={{ display: "flex", gap: "8px" }}>
             {TABS.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 style={{
-                  padding: "10px 20px", fontSize: "15px", fontWeight: 500,
-                  background: "none", border: "none", cursor: "pointer",
-                  color: activeTab === tab.key ? "#8B5CF6" : "#64748B",
-                  borderBottom: activeTab === tab.key ? "2px solid #8B5CF6" : "2px solid transparent",
-                  marginBottom: "-1px", transition: "color 0.15s ease",
-                  fontFamily: "'Inter', sans-serif",
+                  padding: "7px 16px", borderRadius: "20px", border: "none",
+                  backgroundColor: activeTab === tab.key ? "#FFFFFF" : "#1A1A2A",
+                  color: activeTab === tab.key ? "#0A0A0F" : "#94A3B8",
+                  fontSize: "12px", fontWeight: activeTab === tab.key ? 600 : 500,
+                  cursor: "pointer", fontFamily: "'Inter', sans-serif",
+                  whiteSpace: "nowrap", transition: "all 0.15s",
                 }}
               >
                 {tab.label}
