@@ -510,7 +510,7 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
                   max={`${new Date().getFullYear() - 13}-12-31`}
                   min="1900-01-01"
                   onChange={(e) => set("date_of_birth", e.target.value)}
-                  style={{ ...inputBase, colorScheme: "dark", maxWidth: "100%", minWidth: 0 }}
+                  style={{ ...inputBase, colorScheme: "dark", maxWidth: "100%", minWidth: 0, WebkitAppearance: "none" }}
                   onFocus={focusBorder}
                   onBlur={blurReset}
                 />

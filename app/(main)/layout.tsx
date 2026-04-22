@@ -11,6 +11,8 @@ import { StoryUploadProvider } from "@/lib/context/StoryUploadContext";
 import UploadProgressBar from "@/components/layout/UploadProgressBar";
 import { AppStoreProvider } from "@/lib/providers/AppStoreProvider";
 import PageLoader from "@/components/ui/PageLoader";
+import SplashScreen from "@/components/ui/SplashScreen";
+import { useVisibilitySplash } from "@/lib/hooks/useVisibilitySplash";
 import { useAppStore } from "@/lib/store/appStore";
 
 function NavigationWatcher() {
@@ -40,9 +42,14 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const noTopbar = (!isDashboard && !isExplore) || isPostPage || isNotifications;
 
   const [headerVisible, setHeaderVisible] = useState(true);
+  const [initialSplash, setInitialSplash] = useState(true);
   const lastScrollY = useRef(0);
   const ticking     = useRef(false);
   const mainRef     = useRef<HTMLElement>(null);
+
+  const { showSplash: showVisibilitySplash, dismissVisibilitySplash } = useVisibilitySplash();
+
+  const showAnySplash = initialSplash || showVisibilitySplash;
 
   useEffect(() => {
     const el = mainRef.current;
@@ -72,6 +79,17 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#0A0A0F", overflow: "hidden", width: "100%" }}>
+
+      {/* Initial load splash */}
+      {initialSplash && (
+        <SplashScreen onDone={() => setInitialSplash(false)} />
+      )}
+
+      {/* 5-min away return splash */}
+      {!initialSplash && showVisibilitySplash && (
+        <SplashScreen onDone={dismissVisibilitySplash} />
+      )}
+
       <PageLoader />
       <Suspense fallback={null}>
         <NavigationWatcher />
