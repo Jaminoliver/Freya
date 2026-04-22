@@ -137,7 +137,7 @@ export function NewMessagePanel({ onClose, fans, creators, loading, isCreator }:
           }}>
             <Search size={16} color="#4A4A6A" strokeWidth={1.8} />
             <input
-              autoFocus
+              
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search..."
