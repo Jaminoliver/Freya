@@ -8,7 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 type FieldErrors = {
-  email?: string;
+  identifier?: string;
   password?: string;
 };
 
@@ -17,56 +17,56 @@ type BannerState =
   | { type: "info"; message: string }
   | null;
 
+async function resolveEmail(identifier: string): Promise<string | null> {
+  // If it looks like an email, return as-is
+  if (identifier.includes("@")) return identifier.trim();
+
+  // Otherwise treat as username — look up email via RPC
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("get_email_by_username", {
+    p_username: identifier.trim().toLowerCase().replace(/^@/, ""),
+  });
+  if (error || !data) return null;
+  return data as string;
+}
+
 function LoginFormInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [formData, setFormData] = useState({ identifier: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [banner, setBanner] = useState<BannerState>(null);
 
-  const emailRef = useRef<HTMLInputElement>(null);
-  const passwordRef = useRef<HTMLInputElement>(null);
+  const identifierRef = useRef<HTMLInputElement>(null);
+  const passwordRef   = useRef<HTMLInputElement>(null);
 
-  // Read query params on mount (prefill email, show context banners)
   useEffect(() => {
     const prefillEmail = searchParams.get("email");
     const reason = searchParams.get("reason");
-    const error = searchParams.get("error");
+    const error  = searchParams.get("error");
 
     if (prefillEmail) {
-      setFormData((prev) => ({ ...prev, email: prefillEmail }));
-      // Focus password since email is already there
+      setFormData((prev) => ({ ...prev, identifier: prefillEmail }));
       setTimeout(() => passwordRef.current?.focus(), 100);
     } else {
-      setTimeout(() => emailRef.current?.focus(), 100);
+      setTimeout(() => identifierRef.current?.focus(), 100);
     }
 
     if (reason === "account_exists") {
-      setBanner({
-        type: "info",
-        message: "Looks like you already have an account. Log in below to continue.",
-      });
+      setBanner({ type: "info", message: "Looks like you already have an account. Log in below to continue." });
     } else if (error === "oauth_failed") {
-      setBanner({
-        type: "error",
-        message: "Google sign-in didn't complete. Please try again.",
-      });
+      setBanner({ type: "error", message: "Google sign-in didn't complete. Please try again." });
     } else if (error === "session_expired") {
-      setBanner({
-        type: "info",
-        message: "Your session has expired. Please log in again.",
-      });
+      setBanner({ type: "info", message: "Your session has expired. Please log in again." });
     }
   }, [searchParams]);
 
-  // ───── Validation ─────
-  const validateEmail = (v: string): string | undefined => {
+  const validateIdentifier = (v: string): string | undefined => {
     const trimmed = v.trim();
-    if (!trimmed) return "Please enter your email";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return "Please enter a valid email (e.g. name@example.com)";
+    if (!trimmed) return "Please enter your email or username";
     return undefined;
   };
 
@@ -75,33 +75,21 @@ function LoginFormInner() {
     return undefined;
   };
 
-  // ───── Handlers ─────
   const updateField = (field: keyof typeof formData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    if (fieldErrors[field]) {
+    if (fieldErrors[field as keyof FieldErrors]) {
       setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
     }
     if (banner?.type === "error") setBanner(null);
   };
 
   const handleBlur = (field: keyof typeof formData) => {
-    // Don't validate empty fields on blur — only validate if user typed something
-    // This prevents errors when clicking links/buttons outside the form
     if (!formData[field]) return;
-
     setTouched((prev) => ({ ...prev, [field]: true }));
     let error: string | undefined;
-    if (field === "email") error = validateEmail(formData.email);
+    if (field === "identifier") error = validateIdentifier(formData.identifier);
     else if (field === "password") error = validatePassword(formData.password);
     setFieldErrors((prev) => ({ ...prev, [field]: error }));
-  };
-
-  const isFieldValid = (field: keyof typeof formData): boolean => {
-    if (!touched[field]) return false;
-    if (fieldErrors[field]) return false;
-    if (field === "email") return !validateEmail(formData.email);
-    // No success indicator on password for login (we don't know if it's correct until submit)
-    return false;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -109,41 +97,43 @@ function LoginFormInner() {
     setBanner(null);
 
     const errors: FieldErrors = {
-      email: validateEmail(formData.email),
-      password: validatePassword(formData.password),
+      identifier: validateIdentifier(formData.identifier),
+      password:   validatePassword(formData.password),
     };
-    setTouched({ email: true, password: true });
+    setTouched({ identifier: true, password: true });
     setFieldErrors(errors);
-
-    if (errors.email) { emailRef.current?.focus(); return; }
-    if (errors.password) { passwordRef.current?.focus(); return; }
+    if (errors.identifier) { identifierRef.current?.focus(); return; }
+    if (errors.password)   { passwordRef.current?.focus(); return; }
 
     setLoading(true);
-    console.log("🚀 LOGIN STARTED", { email: formData.email });
+
+    // Resolve username → email if needed
+    const email = await resolveEmail(formData.identifier);
+    if (!email) {
+      setBanner({ type: "error", message: "No account found with that username." });
+      setLoading(false);
+      return;
+    }
 
     const supabase = createClient();
     const { data, error: loginError } = await supabase.auth.signInWithPassword({
-      email: formData.email.trim(),
+      email,
       password: formData.password,
     });
 
-    console.log("📦 LOGIN RESPONSE", { data, error: loginError });
-
     if (loginError) {
       const msg = loginError.message.toLowerCase();
-      console.log("❌ LOGIN ERROR", loginError.message);
-
       if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
         setBanner({
           type: "error",
-          message: "The email or password you entered is incorrect.",
+          message: "The email/username or password you entered is incorrect.",
           action: { label: "Forgot password?", href: "/forgot-password" },
         });
       } else if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
         setBanner({
           type: "error",
           message: "Please verify your email before logging in.",
-          action: { label: "Resend verification code", href: `/verify-otp?email=${encodeURIComponent(formData.email.trim())}` },
+          action: { label: "Resend verification code", href: `/verify-otp?email=${encodeURIComponent(email)}` },
         });
       } else if (msg.includes("rate limit") || msg.includes("too many")) {
         setBanner({ type: "error", message: "Too many login attempts. Please wait a few minutes and try again." });
@@ -156,7 +146,6 @@ function LoginFormInner() {
       return;
     }
 
-    console.log("✅ LOGIN SUCCESS");
     router.push("/dashboard");
   };
 
@@ -168,45 +157,21 @@ function LoginFormInner() {
     });
   };
 
-  // ───── Styles ─────
-  const getInputStyle = (field: keyof typeof formData): React.CSSProperties => {
+  const getInputStyle = (field: keyof FieldErrors): React.CSSProperties => {
     const hasError = !!fieldErrors[field];
-    const isValid = isFieldValid(field);
     let borderColor = "#1F1F2A";
     if (hasError) borderColor = "#EF4444";
-    else if (isValid) borderColor = "#10B981";
-
     return {
-      width: "100%",
-      borderRadius: "10px",
-      padding: "15px 16px",
-      fontSize: "16px",
-      outline: "none",
-      backgroundColor: "#141420",
-      border: `1.5px solid ${borderColor}`,
-      color: "#F1F5F9",
-      boxSizing: "border-box",
-      transition: "border-color 0.15s ease",
+      width: "100%", borderRadius: "10px", padding: "15px 16px",
+      fontSize: "16px", outline: "none", backgroundColor: "#141420",
+      border: `1.5px solid ${borderColor}`, color: "#F1F5F9",
+      boxSizing: "border-box", transition: "border-color 0.15s ease",
     };
   };
 
   const fieldErrorStyle: React.CSSProperties = {
-    margin: "6px 2px 0",
-    fontSize: "12px",
-    color: "#EF4444",
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-    lineHeight: 1.4,
-  };
-
-  const successIconStyle: React.CSSProperties = {
-    position: "absolute",
-    right: "14px",
-    top: "50%",
-    transform: "translateY(-50%)",
-    color: "#10B981",
-    pointerEvents: "none",
+    margin: "6px 2px 0", fontSize: "12px", color: "#EF4444",
+    display: "flex", alignItems: "center", gap: "4px", lineHeight: 1.4,
   };
 
   return (
@@ -228,41 +193,18 @@ function LoginFormInner() {
       <div style={{ padding: "32px 24px 120px", display: "flex", flexDirection: "column", gap: "20px" }}>
         <h2 style={{ color: "#F1F5F9", fontSize: "18px", fontWeight: 500, margin: 0 }}>Log In</h2>
 
-        {/* ───── Banner ───── */}
         {banner && (
-          <div
-            role="alert"
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "10px",
-              padding: "12px 14px",
-              borderRadius: "10px",
-              backgroundColor: banner.type === "error" ? "rgba(239, 68, 68, 0.08)" : "rgba(139, 92, 246, 0.08)",
-              border: `1px solid ${banner.type === "error" ? "rgba(239, 68, 68, 0.3)" : "rgba(139, 92, 246, 0.3)"}`,
-            }}
-          >
-            {banner.type === "error" ? (
-              <AlertCircle size={18} color="#EF4444" style={{ flexShrink: 0, marginTop: "1px" }} />
-            ) : (
-              <CheckCircle2 size={18} color="#8B5CF6" style={{ flexShrink: 0, marginTop: "1px" }} />
-            )}
+          <div role="alert" style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "12px 14px", borderRadius: "10px", backgroundColor: banner.type === "error" ? "rgba(239, 68, 68, 0.08)" : "rgba(139, 92, 246, 0.08)", border: `1px solid ${banner.type === "error" ? "rgba(239, 68, 68, 0.3)" : "rgba(139, 92, 246, 0.3)"}` }}>
+            {banner.type === "error"
+              ? <AlertCircle size={18} color="#EF4444" style={{ flexShrink: 0, marginTop: "1px" }} />
+              : <CheckCircle2 size={18} color="#8B5CF6" style={{ flexShrink: 0, marginTop: "1px" }} />
+            }
             <div style={{ flex: 1 }}>
               <p style={{ margin: 0, fontSize: "13px", color: banner.type === "error" ? "#FCA5A5" : "#C4B5FD", lineHeight: 1.5 }}>
                 {banner.message}
               </p>
               {banner.type === "error" && banner.action && (
-                <Link
-                  href={banner.action.href}
-                  style={{
-                    display: "inline-block",
-                    marginTop: "6px",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#FCA5A5",
-                    textDecoration: "underline",
-                  }}
-                >
+                <Link href={banner.action.href} style={{ display: "inline-block", marginTop: "6px", fontSize: "13px", fontWeight: 600, color: "#FCA5A5", textDecoration: "underline" }}>
                   {banner.action.label}
                 </Link>
               )}
@@ -271,27 +213,25 @@ function LoginFormInner() {
         )}
 
         <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {/* Email */}
+
+          {/* Email or Username */}
           <div>
             <div style={{ position: "relative" }}>
               <input
-                ref={emailRef}
-                type="email"
-                placeholder="Email"
-                value={formData.email}
-                onChange={(e) => updateField("email", e.target.value)}
-                onBlur={() => handleBlur("email")}
-                style={{ ...getInputStyle("email"), paddingRight: isFieldValid("email") ? "42px" : "16px" }}
-                aria-invalid={!!fieldErrors.email}
-                aria-describedby={fieldErrors.email ? "email-error" : undefined}
-                autoComplete="email"
+                ref={identifierRef}
+                type="text"
+                placeholder="Email or username"
+                value={formData.identifier}
+                onChange={(e) => updateField("identifier", e.target.value)}
+                onBlur={() => handleBlur("identifier")}
+                style={getInputStyle("identifier")}
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
               />
-              {isFieldValid("email") && <Check size={18} style={successIconStyle} />}
             </div>
-            {fieldErrors.email && (
-              <p id="email-error" style={fieldErrorStyle}>
-                <AlertCircle size={12} /> {fieldErrors.email}
-              </p>
+            {fieldErrors.identifier && (
+              <p style={fieldErrorStyle}><AlertCircle size={12} /> {fieldErrors.identifier}</p>
             )}
           </div>
 
@@ -306,43 +246,19 @@ function LoginFormInner() {
                 onChange={(e) => updateField("password", e.target.value)}
                 onBlur={() => handleBlur("password")}
                 style={{ ...getInputStyle("password"), paddingRight: "48px" }}
-                aria-invalid={!!fieldErrors.password}
-                aria-describedby={fieldErrors.password ? "password-error" : undefined}
                 autoComplete="current-password"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: 0 }}
-              >
+              <button type="button" onClick={() => setShowPassword(!showPassword)}
+                style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: 0 }}>
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             {fieldErrors.password && (
-              <p id="password-error" style={fieldErrorStyle}>
-                <AlertCircle size={12} /> {fieldErrors.password}
-              </p>
+              <p style={fieldErrorStyle}><AlertCircle size={12} /> {fieldErrors.password}</p>
             )}
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: "100%",
-              borderRadius: "12px",
-              padding: "16px",
-              fontSize: "16px",
-              fontWeight: 700,
-              border: "none",
-              cursor: loading ? "not-allowed" : "pointer",
-              backgroundColor: loading ? "#6d44c4" : "#8B5CF6",
-              color: "#FFFFFF",
-              boxShadow: "0 4px 24px rgba(139,92,246,0.35)",
-              marginTop: "4px",
-            }}
-          >
+          <button type="submit" disabled={loading} style={{ width: "100%", borderRadius: "12px", padding: "16px", fontSize: "16px", fontWeight: 700, border: "none", cursor: loading ? "not-allowed" : "pointer", backgroundColor: loading ? "#6d44c4" : "#8B5CF6", color: "#FFFFFF", boxShadow: "0 4px 24px rgba(139,92,246,0.35)", marginTop: "4px" }}>
             {loading ? "Logging in..." : "Log In"}
           </button>
 
@@ -384,7 +300,6 @@ function LoginFormInner() {
   );
 }
 
-// Wrap in Suspense because useSearchParams requires it
 export function LoginForm() {
   return (
     <Suspense fallback={<div style={{ width: "390px", minHeight: "100vh", backgroundColor: "#0A0A0F" }} />}>

@@ -39,11 +39,11 @@ function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProper
 }
 
 function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
-  src?:            string | null;
-  placeholder?:    string | null;
-  blurHash?:       string | null;
-  style?:          React.CSSProperties;
-  eager?:          boolean;
+  src?:         string | null;
+  placeholder?: string | null;
+  blurHash?:    string | null;
+  style?:       React.CSSProperties;
+  eager?:       boolean;
 }) {
   const [loaded, setLoaded] = React.useState(false);
   const imgRef = React.useRef<HTMLImageElement>(null);
@@ -65,8 +65,8 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
         <BlurHashCanvas hash={blurHash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />
       )}
       {!loaded && src && (
-  <img src={src} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)", zIndex: 1 }} />
-)}
+        <img src={src} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)", zIndex: 1 }} />
+      )}
       <img
         ref={imgRef}
         src={src ?? undefined}
@@ -86,45 +86,32 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
   );
 }
 
-// ── UnlockedPPVBadge ──────────────────────────────────────────────────────────
 function UnlockedPPVBadge() {
   return (
-    <div
-      style={{
-        position:       "absolute",
-        top:            "10px",
-        left:           "10px",
-        zIndex:         20,
-        display:        "flex",
-        alignItems:     "center",
-        gap:            "5px",
-        padding:        "4px 10px 4px 7px",
-        borderRadius:   "20px",
-        background:     "rgba(139,92,246,0.18)",
-        border:         "1px solid rgba(139,92,246,0.5)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        boxShadow:      "0 2px 12px rgba(139,92,246,0.25)",
-      }}
-    >
+    <div style={{
+      position: "absolute", top: "10px", left: "10px", zIndex: 20,
+      display: "flex", alignItems: "center", gap: "5px",
+      padding: "4px 10px 4px 7px", borderRadius: "20px",
+      background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.5)",
+      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+      boxShadow: "0 2px 12px rgba(139,92,246,0.25)",
+    }}>
       <LockOpen size={13} color="#C4B5FD" strokeWidth={2.2} />
-      <span
-        style={{
-          fontSize:      "11px",
-          fontWeight:    700,
-          color:         "#C4B5FD",
-          fontFamily:    "'Inter', sans-serif",
-          letterSpacing: "0.04em",
-          lineHeight:    1,
-        }}
-      >
+      <span style={{ fontSize: "11px", fontWeight: 700, color: "#C4B5FD", fontFamily: "'Inter', sans-serif", letterSpacing: "0.04em", lineHeight: 1 }}>
         Unlocked
       </span>
     </div>
   );
 }
 
-export default function ImageCarousel({ media, onImageClick, initialIndex = 0, onSlideChange, containerRatio = 1, isUnlockedPPV = false }: {
+export default function ImageCarousel({
+  media,
+  onImageClick,
+  initialIndex = 0,
+  onSlideChange,
+  containerRatio = 1,
+  isUnlockedPPV = false,
+}: {
   media: MediaItem[];
   onImageClick?: (index: number) => void;
   initialIndex?: number;
@@ -136,14 +123,20 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
   const [isTransitioning, setIsTransitioning] = React.useState(false);
   const [isDesktop, setIsDesktop]             = React.useState(false);
 
+  // ── All drag state in refs — no state updates during drag ──
+  const stripRef          = React.useRef<HTMLDivElement>(null);
+  const liveOffsetRef     = React.useRef(0);
   const startXRef         = React.useRef<number | null>(null);
   const startYRef         = React.useRef<number | null>(null);
   const dragDeltaX        = React.useRef(0);
-  const [liveOffset, setLiveOffset] = React.useState(0);
   const isDragging        = React.useRef(false);
-  const touchWasUsed      = React.useRef(false);
-  const isHorizontalSwipe = React.useRef<boolean | null>(null);
-  const stripRef          = React.useRef<HTMLDivElement>(null);
+  const isHorizontal      = React.useRef<boolean | null>(null);
+  const activeIndexRef    = React.useRef(activeIndex);
+  const isTransitioningRef = React.useRef(false);
+
+  // Keep refs in sync with state
+  React.useEffect(() => { activeIndexRef.current = activeIndex; }, [activeIndex]);
+  React.useEffect(() => { isTransitioningRef.current = isTransitioning; }, [isTransitioning]);
 
   React.useEffect(() => {
     const check = () => setIsDesktop(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -152,102 +145,146 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  React.useEffect(() => {
+  // ── Direct DOM transform — zero state updates during drag ──
+  const applyTransform = React.useCallback((offset: number, animated: boolean) => {
     const el = stripRef.current;
     if (!el) return;
-    const onTouchMove = (e: TouchEvent) => {
-      if (startXRef.current === null || startYRef.current === null) return;
-      const dx = Math.abs(e.touches[0].clientX - startXRef.current);
-      const dy = Math.abs(e.touches[0].clientY - startYRef.current);
-      if (isHorizontalSwipe.current === null && (dx > 3 || dy > 3)) isHorizontalSwipe.current = dx > dy;
-      if (isHorizontalSwipe.current) e.preventDefault();
-    };
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    return () => el.removeEventListener("touchmove", onTouchMove);
+    const idx = activeIndexRef.current;
+    el.style.transition = animated ? "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)" : "none";
+    el.style.transform  = `translateX(calc(${-idx * 100}% + ${offset}px))`;
   }, []);
 
   const goTo = React.useCallback((index: number) => {
-    if (isTransitioning) return;
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
     setIsTransitioning(true);
-    setLiveOffset(0);
+    liveOffsetRef.current = 0;
     setActiveIndex(index);
+    activeIndexRef.current = index;
     onSlideChange?.(index);
-    setTimeout(() => setIsTransitioning(false), 380);
-  }, [isTransitioning, onSlideChange]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (isTransitioning) return;
-    startXRef.current = e.touches[0].clientX;
-    startYRef.current = e.touches[0].clientY;
+    // Apply animated transition directly
+    const el = stripRef.current;
+    if (el) {
+      el.style.transition = "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)";
+      el.style.transform  = `translateX(${-index * 100}%)`;
+    }
+
+    setTimeout(() => {
+      isTransitioningRef.current = false;
+      setIsTransitioning(false);
+    }, 380);
+  }, [onSlideChange]);
+
+  // ── Touch handlers ──
+  const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
+    if (isTransitioningRef.current) return;
+    startXRef.current  = e.touches[0].clientX;
+    startYRef.current  = e.touches[0].clientY;
     dragDeltaX.current = 0;
-    isHorizontalSwipe.current = null;
-  };
+    isHorizontal.current = null;
+    isDragging.current = false;
+  }, []);
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = React.useCallback((e: React.TouchEvent) => {
     if (startXRef.current === null || startYRef.current === null) return;
+
     const dx = e.touches[0].clientX - startXRef.current;
-    const dy = Math.abs(e.touches[0].clientY - startYRef.current);
-    if (isHorizontalSwipe.current === false) return;
-    if (dy > 10 && Math.abs(dx) < dy) return;
+    const dy = e.touches[0].clientY - startYRef.current;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    // Determine gesture direction once, early
+    if (isHorizontal.current === null && (absDx > 3 || absDy > 3)) {
+      isHorizontal.current = absDx > absDy;
+    }
+
+    // Not horizontal — let iOS scroll
+    if (isHorizontal.current === false) return;
+
+    // Horizontal confirmed — prevent iOS from stealing
+    e.preventDefault();
+    isDragging.current = true;
     dragDeltaX.current = dx;
-    const bounded = (dx > 0 && activeIndex === 0) || (dx < 0 && activeIndex === media.length - 1) ? dx * 0.25 : dx;
-    setLiveOffset(bounded);
-  };
 
-  const handleTouchEnd = () => {
-    touchWasUsed.current = true;
-    setTimeout(() => { touchWasUsed.current = false; }, 500);
+    const idx = activeIndexRef.current;
+    const atStart = idx === 0;
+    const atEnd   = idx === media.length - 1;
+    const bounded = (dx > 0 && atStart) || (dx < 0 && atEnd) ? dx * 0.25 : dx;
+
+    liveOffsetRef.current = bounded;
+    applyTransform(bounded, false);
+  }, [media.length, applyTransform]);
+
+  const handleTouchEnd = React.useCallback(() => {
     const dx = dragDeltaX.current;
-    startXRef.current = null;
-    startYRef.current = null;
-    isHorizontalSwipe.current = null;
-    if (dx < -50 && activeIndex < media.length - 1) goTo(activeIndex + 1);
-    else if (dx > 50 && activeIndex > 0) goTo(activeIndex - 1);
-    else setLiveOffset(0);
-    dragDeltaX.current = 0;
-  };
+    startXRef.current    = null;
+    startYRef.current    = null;
+    isHorizontal.current = null;
+    dragDeltaX.current   = 0;
+    isDragging.current   = false;
+    liveOffsetRef.current = 0;
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (touchWasUsed.current || isTransitioning) return;
-    startXRef.current = e.clientX;
+    const idx = activeIndexRef.current;
+    if (dx < -50 && idx < media.length - 1) goTo(idx + 1);
+    else if (dx > 50 && idx > 0) goTo(idx - 1);
+    else applyTransform(0, true); // snap back animated
+  }, [media.length, goTo, applyTransform]);
+
+  // ── Mouse handlers (desktop only) ──
+  const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
+    if (isTransitioningRef.current) return;
+    startXRef.current  = e.clientX;
     isDragging.current = false;
     dragDeltaX.current = 0;
-  };
+  }, []);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (touchWasUsed.current || startXRef.current === null) return;
+  const handleMouseMove = React.useCallback((e: React.MouseEvent) => {
+    if (startXRef.current === null) return;
     const dx = e.clientX - startXRef.current;
     if (Math.abs(dx) > 5) isDragging.current = true;
     dragDeltaX.current = dx;
-    const bounded = (dx > 0 && activeIndex === 0) || (dx < 0 && activeIndex === media.length - 1) ? dx * 0.25 : dx;
-    setLiveOffset(bounded);
-  };
 
-  const handleMouseUp = () => {
-    if (touchWasUsed.current) return;
-    const dx = dragDeltaX.current;
+    const idx = activeIndexRef.current;
+    const bounded = (dx > 0 && idx === 0) || (dx < 0 && idx === media.length - 1) ? dx * 0.25 : dx;
+    liveOffsetRef.current = bounded;
+    applyTransform(bounded, false);
+  }, [media.length, applyTransform]);
+
+  const handleMouseUp = React.useCallback(() => {
+    if (startXRef.current === null) return;
+    const dx     = dragDeltaX.current;
     const wasDrag = isDragging.current;
     startXRef.current  = null;
     isDragging.current = false;
     dragDeltaX.current = 0;
-    if (Math.abs(dx) > 50) {
-      if (dx < 0 && activeIndex < media.length - 1) goTo(activeIndex + 1);
-      else if (dx > 0 && activeIndex > 0) goTo(activeIndex - 1);
-      else setLiveOffset(0);
-    } else {
-      setLiveOffset(0);
-      if (!wasDrag) onImageClick?.(activeIndex);
-    }
-  };
+    liveOffsetRef.current = 0;
 
-  const handleMouseLeave = () => {
-    if (startXRef.current !== null) {
-      startXRef.current  = null;
-      isDragging.current = false;
-      dragDeltaX.current = 0;
-      setLiveOffset(0);
+    const idx = activeIndexRef.current;
+    if (Math.abs(dx) > 50) {
+      if (dx < 0 && idx < media.length - 1) goTo(idx + 1);
+      else if (dx > 0 && idx > 0) goTo(idx - 1);
+      else applyTransform(0, true);
+    } else {
+      applyTransform(0, true);
+      if (!wasDrag) onImageClick?.(idx);
     }
-  };
+  }, [media.length, goTo, applyTransform, onImageClick]);
+
+  const handleMouseLeave = React.useCallback(() => {
+    if (startXRef.current === null) return;
+    startXRef.current  = null;
+    isDragging.current = false;
+    dragDeltaX.current = 0;
+    liveOffsetRef.current = 0;
+    applyTransform(0, true);
+  }, [applyTransform]);
+
+  // Sync strip position when activeIndex changes from arrow/dot clicks
+  React.useEffect(() => {
+    applyTransform(0, false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex]);
 
   const arrowStyle = (side: "left" | "right"): React.CSSProperties => ({
     position: "absolute", [side]: "10px", top: "50%", transform: "translateY(-50%)",
@@ -257,8 +294,6 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
     display: "flex", alignItems: "center", justifyContent: "center",
     opacity: isTransitioning ? 0.5 : 1, transition: "opacity 0.2s",
   });
-
-  const translateX = `calc(${-activeIndex * 100}% + ${liveOffset}px)`;
 
   return (
     <div
@@ -270,10 +305,9 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
       onMouseLeave={handleMouseLeave}
     >
       <style>{`
-        @media (min-width: 768px) {
-          .ic-blur-bg {
-            display: block !important;
-          }
+        @keyframes ic-sharpen {
+          from { filter: blur(20px); transform: scale(1.05); }
+          to   { filter: blur(0px);  transform: scale(1); }
         }
       `}</style>
 
@@ -287,8 +321,8 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
         onMouseUp={handleMouseUp}
         style={{
           display: "flex", width: "100%", height: "100%",
-          transform: `translateX(${translateX})`,
-          transition: liveOffset === 0 ? "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)" : "none",
+          transform: `translateX(${-activeIndex * 100}%)`,
+          // No transition here — managed directly via applyTransform
           cursor: isDesktop ? (media.length > 1 ? "grab" : "pointer") : "default",
           willChange: "transform",
           touchAction: "pan-y",
@@ -314,17 +348,7 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
                   <>
                     <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
                       {videoBlurSrc && (
-                        <img
-                          src={videoBlurSrc}
-                          alt=""
-                          aria-hidden
-                          style={{
-                            width: "100%", height: "100%",
-                            objectFit: "cover",
-                            filter: "blur(24px) brightness(0.5)",
-                            transform: "scale(1.08)",
-                          }}
-                        />
+                        <img src={videoBlurSrc} alt="" aria-hidden style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(24px) brightness(0.5)", transform: "scale(1.08)" }} />
                       )}
                     </div>
                     <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%" }}>
@@ -349,18 +373,8 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
                 shouldLoad ? (
                   <>
                     <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
-  <img
-    src={item.file_url ?? undefined}
-    alt=""
-    aria-hidden
-    style={{
-      width: "100%", height: "100%",
-      objectFit: "cover",
-      filter: "blur(24px) brightness(0.5)",
-      transform: "scale(1.08)",
-    }}
-  />
-</div>
+                      <img src={item.file_url ?? undefined} alt="" aria-hidden style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(24px) brightness(0.5)", transform: "scale(1.08)" }} />
+                    </div>
                     <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%" }}>
                       <ProgressiveImage
                         src={item.file_url}
@@ -382,7 +396,6 @@ export default function ImageCarousel({ media, onImageClick, initialIndex = 0, o
         })}
       </div>
 
-      {/* Unlocked PPV badge — sits above the carousel strip */}
       {isUnlockedPPV && <UnlockedPPVBadge />}
 
       {media.length > 1 && (

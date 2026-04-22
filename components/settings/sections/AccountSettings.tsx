@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Eye, EyeOff, Loader2, Check, AlertCircle, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -325,8 +326,13 @@ export default function AccountSettings({ onBack }: { onBack?: () => void }) {
 
           <div>
             <label style={labelStyle}>Change Password</label>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               <PasswordInput value={currentPassword} onChange={setCurrentPassword} placeholder="Current password" show={showCurrent} onToggle={() => setShowCurrent((p) => !p)} />
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Link href={`/forgot-password?email=${encodeURIComponent(currentEmail)}`} style={{ fontSize: "12px", color: "#8B5CF6", textDecoration: "none", fontFamily: "'Inter', sans-serif" }}>
+                  Forgot password?
+                </Link>
+              </div>
               <PasswordInput value={newPassword} onChange={setNewPassword} placeholder="New password" show={showNew} onToggle={() => setShowNew((p) => !p)} />
               <PasswordInput value={confirmPassword} onChange={setConfirmPassword} placeholder="Confirm new password" show={showConfirm} onToggle={() => setShowConfirm((p) => !p)} />
             </div>
