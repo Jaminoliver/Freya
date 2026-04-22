@@ -270,6 +270,7 @@ function SettingsLayoutInner() {
           display: mobileView === "content" ? "flex" : "none",
           flex: 1, minWidth: 0, flexDirection: "column",
           overflowY: "auto", scrollbarWidth: "none",
+          overscrollBehavior: "contain",
           height: "100vh", width: "100%",
           backgroundColor: "var(--background)",
           animation: "slideInRight 0.2s ease forwards",

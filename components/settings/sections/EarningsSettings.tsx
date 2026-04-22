@@ -95,7 +95,7 @@ export default function EarningsSettings({
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ display: "flex", gap: "8px", overflowX: "auto", scrollbarWidth: "none", padding: "0 0 12px", marginBottom: "24px" }}>
+      <div style={{ display: "flex", gap: "8px", overflowX: "auto", scrollbarWidth: "none", padding: "0 0 12px", marginBottom: "24px", position: "sticky", top: 0, zIndex: 10, backgroundColor: "var(--background)" }}>
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -289,7 +289,7 @@ function HistoryTabContent() {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px", marginBottom: "16px", scrollbarWidth: "none" }}>
+      <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px", marginBottom: "16px", scrollbarWidth: "none", position: "sticky", top: 0, zIndex: 10, backgroundColor: "var(--background)", paddingTop: "8px" }}>
         {filters.map((f) => (
           <button
             key={f} onClick={() => setFilter(f)}

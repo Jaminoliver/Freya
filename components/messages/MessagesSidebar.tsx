@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, Plus, Settings, MessageCircle, CheckCircle, Archive } from "lucide-react";
+import { Plus, Settings, MessageCircle, CheckCircle, Archive } from "lucide-react";
 import { MessagesHeader } from "@/components/messages/MessagesHeader";
+import { NewMessagePanel } from "@/components/messages/NewMessagePanel";
 import { FilterTabs } from "@/components/messages/FilterTabs";
 import { ConversationList } from "@/components/messages/ConversationList";
 import { WelcomeMessageModal } from "@/components/messages/WelcomeMessageModal";
@@ -12,6 +13,15 @@ import { MessagesSkeleton } from "@/components/loadscreen/MessagesSkeleton";
 import { useConversations } from "@/app/(main)/messages/page";
 import { useAppStore } from "@/lib/store/appStore";
 import type { Conversation, FilterTab } from "@/lib/types/messages";
+
+interface Person {
+  id:          string;
+  name:        string;
+  username:    string;
+  avatar_url:  string | null;
+  is_verified: boolean;
+  role?:       string;
+}
 
 interface Props {
   conversations:        Conversation[];
@@ -36,7 +46,77 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
   const [searchQuery,      setSearchQuery]      = useState("");
   const [favouritedIds,    setFavouritedIds]    = useState<Set<number>>(new Set());
   const [archivedCount,    setArchivedCount]    = useState(0);
+  const [newMessageOpen,   setNewMessageOpen]   = useState(false);
+
+  // Preloaded data for NewMessagePanel
+  const [nmFans,     setNmFans]     = useState<Person[]>([]);
+  const [nmCreators, setNmCreators] = useState<Person[]>([]);
+  const [nmLoading,  setNmLoading]  = useState(true);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = () => setNewMessageOpen(true);
+    window.addEventListener("open-new-message", handler);
+    return () => window.removeEventListener("open-new-message", handler);
+  }, []);
+
+  // Preload fans + creators on mount
+  useEffect(() => {
+    const load = async () => {
+      setNmLoading(true);
+      try {
+        const promises: Promise<void>[] = [];
+
+        promises.push(
+          fetch("/api/subscriptions/mine")
+            .then((r) => r.json())
+            .then((data) => {
+              if (data.subscriptions) {
+                setNmCreators(
+                  data.subscriptions.map((s: any) => ({
+                    id:          s.creatorId,
+                    name:        s.creatorName,
+                    username:    s.username,
+                    avatar_url:  s.avatar_url ?? null,
+                    is_verified: s.isVerified ?? false,
+                    role:        "creator",
+                  }))
+                );
+              }
+            })
+        );
+
+        if (isCreator) {
+          promises.push(
+            fetch("/api/fans/list?status=active")
+              .then((r) => r.json())
+              .then((data) => {
+                if (data.fans) {
+                  setNmFans(
+                    data.fans.map((f: any) => ({
+                      id:          f.id,
+                      name:        f.display_name || f.username,
+                      username:    f.username,
+                      avatar_url:  f.avatar_url ?? null,
+                      is_verified: false,
+                      role:        "fan",
+                    }))
+                  );
+                }
+              })
+          );
+        }
+
+        await Promise.all(promises);
+      } catch (err) {
+        console.error("[MessagesSidebar] preload error:", err);
+      } finally {
+        setNmLoading(false);
+      }
+    };
+    load();
+  }, [isCreator]);
 
   useEffect(() => {
     const fetchFavourites = async () => {
@@ -144,124 +224,122 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
 
       <div
         style={{
+          position:        "relative",
           width:           "100%",
           height:          "100%",
-backgroundColor: "#0A0A0F",
-borderRight:     "1px solid #1A1A2A",
-display:         "flex",
-flexDirection:   "column",
-overflow:        "hidden",
+          backgroundColor: "#0A0A0F",
+          borderRight:     "1px solid #1A1A2A",
+          display:         "flex",
+          flexDirection:   "column",
+          overflow:        "hidden",
         }}
       >
-        <MessagesHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} />
-
-        {/* Mobile spacer for fixed header */}
-        <div className="mobile-header-spacer" style={{ height: "56px", flexShrink: 0 }} />
-        <style>{`@media (min-width: 768px) { .mobile-header-spacer { display: none !important; } }`}</style>
-
-        {/* Desktop header */}
-        <div
-          className="sidebar-desktop-header"
-          style={{
-            position:        "relative",
-            height:          "56px",
-            flexShrink:      0,
-            backgroundColor: "var(--background)",
-            fontFamily:      "'Inter', sans-serif",
-            zIndex:          50,
-          }}
-        >
-          <div className={`sb-normal${searchOpen ? " hidden" : ""}`}>
-            <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>
-              Messages
-            </span>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", position: "relative" }}>
-              <button
-                onClick={() => setSearchOpen(true)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#111120"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#6B6B8A"; e.currentTarget.style.backgroundColor = "transparent"; }}
-              >
-                <Search size={22} strokeWidth={1.8} />
-              </button>
-
-              <button
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#111120"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#6B6B8A"; e.currentTarget.style.backgroundColor = "transparent"; }}
-              >
-                <Plus size={22} strokeWidth={1.8} />
-              </button>
-
-              {isCreator && (
-                <div ref={dropdownRef} style={{ position: "relative" }}>
-                  <button
-                    onClick={() => setDropdownOpen((o) => !o)}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: dropdownOpen ? "#8B5CF6" : "#6B6B8A", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease", backgroundColor: dropdownOpen ? "rgba(139,92,246,0.1)" : "transparent" }}
-                    onMouseEnter={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#111120"; }}}
-                    onMouseLeave={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#6B6B8A";  e.currentTarget.style.backgroundColor = "transparent"; }}}
-                  >
-                    <Settings size={22} strokeWidth={1.8} />
-                  </button>
-
-                  {dropdownOpen && (
-                    <div
-                      className="gear-dropdown"
-                      style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, backgroundColor: "#111120", border: "1px solid #1A1A2A", borderRadius: "12px", padding: "6px", minWidth: "180px", zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}
-                    >
-                      {menuItems.map(({ icon: Icon, label, action, danger }) => (
-                        <button
-                          key={label}
-                          onClick={action}
-                          style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "10px 12px", borderRadius: "8px", border: "none", cursor: "pointer", backgroundColor: "transparent", color: danger ? "#EF4444" : "#FFFFFF", fontSize: "14px", fontFamily: "'Inter', sans-serif", textAlign: "left", transition: "background-color 0.15s ease" }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1A1A2A")}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                        >
-                          <Icon size={15} color={danger ? "#EF4444" : "#6B6B8A"} strokeWidth={1.8} />
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <ConversationSearch
-            query={searchQuery}
-            onChange={setSearchQuery}
-            onClose={() => { setSearchOpen(false); setSearchQuery(""); }}
-            isOpen={searchOpen}
+        {newMessageOpen && (
+          <NewMessagePanel
+            onClose={() => setNewMessageOpen(false)}
+            fans={nmFans}
+            creators={nmCreators}
+            loading={nmLoading}
+            isCreator={isCreator}
           />
-        </div>
-
-        <FilterTabs
-          active={filter}
-          onChange={setFilter}
-          unreadCount={unreadCount}
-          favouriteCount={favouriteCount}
-        />
-
-        {/* Archived row */}
-        {archivedCount > 0 && filter === "all" && !searchQuery && (
-          <button
-            className="archived-row"
-            onClick={() => router.push("/messages/archived")}
-            style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%", padding: "14px 16px", background: "none", border: "none", borderBottom: "1px solid #1A1A2A", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "background-color 0.15s ease", flexShrink: 0 }}
-          >
-            <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "#111120", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Archive size={20} color="#8B5CF6" strokeWidth={1.6} />
-            </div>
-            <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF", flex: 1, textAlign: "left" }}>Archived</span>
-            <span style={{ fontSize: "13px", color: "#4A4A6A" }}>{archivedCount}</span>
-          </button>
         )}
 
-        {/* Conversation list or skeleton */}
-        <div style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
-  <div style={{ position: "absolute", inset: 0, overflowY: "auto", paddingBottom: "72px" }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", paddingBottom: "16px" }}>
+
+          <MessagesHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} onNewMessage={() => setNewMessageOpen(true)} />
+
+          <div
+            className="sidebar-desktop-header"
+            style={{
+              position:        "relative",
+              height:          "56px",
+              flexShrink:      0,
+              backgroundColor: "var(--background)",
+              fontFamily:      "'Inter', sans-serif",
+              zIndex:          50,
+            }}
+          >
+            <div className={`sb-normal${searchOpen ? " hidden" : ""}`}>
+              <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>
+                Messages
+              </span>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", position: "relative" }}>
+                <button
+                  onClick={() => setNewMessageOpen(true)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#111120"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "#6B6B8A"; e.currentTarget.style.backgroundColor = "transparent"; }}
+                >
+                  <Plus size={22} strokeWidth={1.8} />
+                </button>
+
+                {isCreator && (
+                  <div ref={dropdownRef} style={{ position: "relative" }}>
+                    <button
+                      onClick={() => setDropdownOpen((o) => !o)}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: dropdownOpen ? "#8B5CF6" : "#6B6B8A", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", transition: "all 0.15s ease", backgroundColor: dropdownOpen ? "rgba(139,92,246,0.1)" : "transparent" }}
+                      onMouseEnter={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#FFFFFF"; e.currentTarget.style.backgroundColor = "#111120"; }}}
+                      onMouseLeave={(e) => { if (!dropdownOpen) { e.currentTarget.style.color = "#6B6B8A";  e.currentTarget.style.backgroundColor = "transparent"; }}}
+                    >
+                      <Settings size={22} strokeWidth={1.8} />
+                    </button>
+
+                    {dropdownOpen && (
+                      <div
+                        className="gear-dropdown"
+                        style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, backgroundColor: "#111120", border: "1px solid #1A1A2A", borderRadius: "12px", padding: "6px", minWidth: "180px", zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}
+                      >
+                        {menuItems.map(({ icon: Icon, label, action, danger }) => (
+                          <button
+                            key={label}
+                            onClick={action}
+                            style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "10px 12px", borderRadius: "8px", border: "none", cursor: "pointer", backgroundColor: "transparent", color: danger ? "#EF4444" : "#FFFFFF", fontSize: "14px", fontFamily: "'Inter', sans-serif", textAlign: "left", transition: "background-color 0.15s ease" }}
+                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1A1A2A")}
+                            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                          >
+                            <Icon size={15} color={danger ? "#EF4444" : "#6B6B8A"} strokeWidth={1.8} />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <ConversationSearch
+              query={searchQuery}
+              onChange={setSearchQuery}
+              onClose={() => { setSearchOpen(false); setSearchQuery(""); }}
+              isOpen={searchOpen}
+            />
+          </div>
+
+          <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "#0A0A0F" }}>
+            <FilterTabs
+              active={filter}
+              onChange={setFilter}
+              unreadCount={unreadCount}
+              favouriteCount={favouriteCount}
+            />
+          </div>
+
+          {archivedCount > 0 && filter === "all" && !searchQuery && (
+            <button
+              className="archived-row"
+              onClick={() => router.push("/messages/archived")}
+              style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%", padding: "14px 16px", background: "none", border: "none", borderBottom: "1px solid #1A1A2A", cursor: "pointer", fontFamily: "'Inter', sans-serif", transition: "background-color 0.15s ease", flexShrink: 0 }}
+            >
+              <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "#111120", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Archive size={20} color="#8B5CF6" strokeWidth={1.6} />
+              </div>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#FFFFFF", flex: 1, textAlign: "left" }}>Archived</span>
+              <span style={{ fontSize: "13px", color: "#4A4A6A" }}>{archivedCount}</span>
+            </button>
+          )}
+
           {loading ? (
             <MessagesSkeleton count={12} />
           ) : (
@@ -273,7 +351,7 @@ overflow:        "hidden",
               favouritedIds={favouritedIds}
             />
           )}
-        </div>
+
         </div>
       </div>
     </>

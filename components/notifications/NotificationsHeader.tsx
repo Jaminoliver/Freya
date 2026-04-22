@@ -50,10 +50,7 @@ export function NotificationsHeader({ onMarkAllRead, onDeleteAll }: Props) {
       <div
         className="notif-header-fixed"
         style={{
-          position:        "fixed",
-          top:             0,
-          left:            0,
-          right:           0,
+          position:        "relative",
           height:          "56px",
           flexShrink:      0,
           backgroundColor: "var(--background)",

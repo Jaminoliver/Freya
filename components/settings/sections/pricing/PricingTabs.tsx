@@ -25,6 +25,10 @@ export default function PricingTabs({
         scrollbarWidth: "none",
         padding: "0 0 12px",
         marginBottom: "24px",
+        position: "sticky",
+        top: 0,
+        zIndex: 10,
+        backgroundColor: "var(--background)",
       }}
     >
     

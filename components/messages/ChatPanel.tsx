@@ -38,8 +38,7 @@ interface Props {
   onConversationCreated?: (realId: number) => void;
 }
 
-const DOTS_PATTERN = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='2' cy='2' r='1.2' fill='rgba(255,255,255,0.12)'/%3E%3C/svg%3E")`;
-
+const DOTS_PATTERN = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect width='200' height='200' fill='%230D0D18'/%3E%3Cg opacity='0.07' fill='none' stroke='%238B5CF6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3C!-- heart --%3E%3Cpath d='M20 35 C20 32 16 28 12 31 C8 34 12 40 20 46 C28 40 32 34 28 31 C24 28 20 32 20 35Z' /%3E%3C!-- star --%3E%3Cpolygon points='80,10 83,20 93,20 85,26 88,36 80,30 72,36 75,26 67,20 77,20' /%3E%3C!-- music note --%3E%3Cpath d='M150 20 L150 35 M150 35 C150 38 146 40 144 38 C142 36 144 32 148 33' /%3E%3Cpath d='M157 18 L157 32 M157 32 C157 35 153 37 151 35 C149 33 151 29 155 30' /%3E%3Cline x1='150' y1='20' x2='157' y2='18' /%3E%3C!-- flower --%3E%3Ccircle cx='30' cy='100' r='3' /%3E%3Ccircle cx='30' cy='93' r='4' /%3E%3Ccircle cx='30' cy='107' r='4' /%3E%3Ccircle cx='23' cy='100' r='4' /%3E%3Ccircle cx='37' cy='100' r='4' /%3E%3C!-- diamond --%3E%3Cpolygon points='100,60 110,75 100,90 90,75' /%3E%3C!-- smile --%3E%3Ccircle cx='170' cy='80' r='12' /%3E%3Ccircle cx='166' cy='77' r='1.5' fill='%238B5CF6' /%3E%3Ccircle cx='174' cy='77' r='1.5' fill='%238B5CF6' /%3E%3Cpath d='M165 83 Q170 88 175 83' /%3E%3C!-- lightning --%3E%3Cpolyline points='55,55 50,68 56,68 51,82' /%3E%3C!-- crown --%3E%3Cpolyline points='120,130 120,120 127,126 133,115 139,126 146,120 146,130 120,130' /%3E%3C!-- sparkle --%3E%3Cline x1='180' y1='140' x2='180' y2='155' /%3E%3Cline x1='172' y1='147' x2='188' y2='147' /%3E%3Cline x1='174' y1='142' x2='186' y2='152' /%3E%3Cline x1='174' y1='152' x2='186' y2='142' /%3E%3C!-- butterfly --%3E%3Cpath d='M40 160 C30 150 20 155 25 163 C30 171 40 165 40 160Z' /%3E%3Cpath d='M40 160 C50 150 60 155 55 163 C50 171 40 165 40 160Z' /%3E%3Cpath d='M40 160 C33 167 30 175 38 173 C43 172 40 165 40 160Z' /%3E%3Cpath d='M40 160 C47 167 50 175 42 173 C37 172 40 165 40 160Z' /%3E%3C!-- small hearts scattered --%3E%3Cpath d='M100 170 C100 168 97 166 95 168 C93 170 95 173 100 176 C105 173 107 170 105 168 C103 166 100 168 100 170Z' /%3E%3Cpath d='M160 30 C160 28 157 26 155 28 C153 30 155 33 160 36 C165 33 167 30 165 28 C163 26 160 28 160 30Z' /%3E%3C/g%3E%3C/svg%3E")`;
 export function ChatPanel({
   conversation,
   currentUserId,
@@ -436,7 +435,7 @@ export function ChatPanel({
         .chat-messages-wall {
           flex: 1; min-height: 0; display: flex; flex-direction: column;
           overflow: hidden; background-color: #0D0D18;
-          background-image: ${DOTS_PATTERN}; background-size: 20px 20px;
+background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
         }
         .desktop-header-name { transition: transform 0.2s ease; }
         .desktop-header-name--up { transform: translateY(-2px); }

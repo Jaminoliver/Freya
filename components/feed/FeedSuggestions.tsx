@@ -14,7 +14,6 @@ interface SuggestedCreator {
   likes_count:      number;
   is_free:          boolean;
 }
-
 function formatCount(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "k";
@@ -35,6 +34,7 @@ export function FeedSuggestions() {
     try {
       const res  = await fetch("/api/creators/suggested");
       const data = await res.json();
+      console.log("[FeedSuggestions] data:", data.creators);
       if (res.ok && data.creators) {
         cachedCreators = data.creators;
         setCreators(data.creators);
@@ -140,6 +140,7 @@ export function FeedSuggestions() {
                   key={creator.id}
                   creator={creator}
                   onClick={() => router.push(`/${creator.username}`)}
+                  is_free={creator.is_free}
                 />
               ))
           }
@@ -153,9 +154,11 @@ export function FeedSuggestions() {
 function FeedCreatorCard({
   creator,
   onClick,
+  is_free,
 }: {
   creator: SuggestedCreator;
   onClick: () => void;
+  is_free?: boolean;
 }) {
   const [bannerError, setBannerError] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
@@ -186,16 +189,16 @@ function FeedCreatorCard({
       }} />
 
       {/* Free badge */}
-      {creator.is_free && (
-        <div style={{
+      {is_free && (
+        <span style={{
           position: "absolute", top: "10px", left: "10px",
-          background: "#3abf7a", color: "#fff",
-          fontSize: "9px", fontWeight: 700, letterSpacing: "0.4px",
-          padding: "3px 7px", borderRadius: "4px", zIndex: 2,
+          backgroundColor: "rgba(16,185,129,0.85)", backdropFilter: "blur(6px)",
+          borderRadius: "20px", padding: "4px 12px", fontSize: "11px",
+          fontWeight: 700, color: "#fff", zIndex: 2,
           fontFamily: "'Inter', sans-serif",
         }}>
           Free
-        </div>
+        </span>
       )}
 
       {/* Avatar */}

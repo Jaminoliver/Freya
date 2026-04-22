@@ -13,6 +13,7 @@ export interface IdentityCardData {
   subscriber_count: number;
   likes_count: number;
   categories: string[];
+  is_free?: boolean;
 }
 
 function formatCount(n: number): string {
@@ -88,6 +89,19 @@ export function IdentityCard({ data }: { data: IdentityCardData }) {
               "linear-gradient(to bottom, rgba(0,0,0,0) 25%, rgba(0,0,0,0.92) 100%)",
           }}
         />
+
+        {/* Free badge */}
+        {data.is_free && (
+          <span style={{
+            position: "absolute", top: "10px", left: "10px",
+            backgroundColor: "rgba(16,185,129,0.85)", backdropFilter: "blur(6px)",
+            borderRadius: "20px", padding: "4px 12px", fontSize: "11px",
+            fontWeight: 700, color: "#fff", zIndex: 2,
+            fontFamily: "'Inter', sans-serif",
+          }}>
+            Free
+          </span>
+        )}
 
         {/* Avatar */}
         <div
@@ -206,70 +220,23 @@ export function IdentityCard({ data }: { data: IdentityCardData }) {
             gap: "14px",
           }}
         >
-          {/* Subscribers */}
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="rgba(250,192,50,0.15)"
-              stroke="#F5C842"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 18h20" />
               <path d="M4 18L2 8l4.5 4L12 4l5.5 8L22 8l-2 10H4z" />
               <circle cx="12" cy="4" r="1.2" fill="#F5C842" stroke="none" />
-              <circle
-                cx="6.5"
-                cy="12"
-                r="1"
-                fill="rgba(245,200,66,0.7)"
-                stroke="none"
-              />
-              <circle
-                cx="17.5"
-                cy="12"
-                r="1"
-                fill="rgba(245,200,66,0.7)"
-                stroke="none"
-              />
+              <circle cx="6.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
+              <circle cx="17.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
             </svg>
-            <span
-              style={{
-                fontSize: "12px",
-                color: "#F5C842",
-                fontWeight: 700,
-                fontFamily: "'Inter', sans-serif",
-              }}
-            >
+            <span style={{ fontSize: "12px", color: "#F5C842", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
               {formatCount(data.subscriber_count)}
             </span>
           </div>
-
-          {/* Likes */}
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="rgba(255,255,255,0.15)"
-              stroke="rgba(255,255,255,0.9)"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
-            <span
-              style={{
-                fontSize: "12px",
-                color: "rgba(255,255,255,0.85)",
-                fontWeight: 700,
-                fontFamily: "'Inter', sans-serif",
-              }}
-            >
+            <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.85)", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
               {formatCount(data.likes_count)}
             </span>
           </div>

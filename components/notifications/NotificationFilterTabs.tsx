@@ -23,10 +23,6 @@ export function NotificationFilterTabs({ active, onChange, role }: Props) {
     <div style={{
       padding:         "12px 16px",
       backgroundColor: "var(--background)",
-      flexShrink:      0,
-      position:        "sticky",
-      top:             0,
-      zIndex:          10,
     }}>
       <div style={{
         display:        "flex",

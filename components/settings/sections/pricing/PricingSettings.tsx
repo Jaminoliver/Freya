@@ -14,12 +14,12 @@ export default function PricingSettings({ onBack, username }: { onBack?: () => v
 
   return (
     <div style={{ display: "flex", flexDirection: "column", fontFamily: "'Inter', sans-serif" }}>
-      <div style={{ marginBottom: "20px" }}>
-        <p style={{ fontSize: "13px", color: "#A3A3C2", margin: 0 }}>Manage subscriptions & bundles</p>
+      <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "var(--background)", paddingBottom: "4px" }}>
+        <div style={{ marginBottom: "8px" }}>
+          <p style={{ fontSize: "13px", color: "#A3A3C2", margin: 0 }}>Manage subscriptions & bundles</p>
+        </div>
+        <PricingTabs activeTab={activeTab} onChange={setActiveTab} />
       </div>
-
-      <PricingTabs activeTab={activeTab} onChange={setActiveTab} />
-
       <div style={{ marginTop: "20px" }}>
         {activeTab === "tiers"      && <SubscriptionTiersTab username={username} />}
         {activeTab === "promotions" && <PromotionsTab />}

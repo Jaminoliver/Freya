@@ -109,7 +109,6 @@ export default function SubscriptionsPage() {
         .subs-desktop-header { display: flex; }
         @media (max-width: 767px) {
           .subs-desktop-header { display: none !important; }
-          .subs-outer { padding-top: 56px; }
         }
       `}</style>
 
@@ -123,10 +122,7 @@ export default function SubscriptionsPage() {
         />
       )}
 
-      {/* Mobile fixed header */}
-      <SubscriptionsHeader />
-
-      <div
+     <div
         className="subs-outer"
         style={{
           width: "100%", height: "100vh",
@@ -135,45 +131,51 @@ export default function SubscriptionsPage() {
           boxSizing: "border-box",
         }}
       >
-        {/* Desktop header */}
-        <div
-          className="subs-desktop-header"
-          style={{
-            alignItems: "center", justifyContent: "space-between",
-            padding: "0 18px", height: "56px", flexShrink: 0,
-            backgroundColor: "var(--background)",
-          }}
-        >
-          <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>
-            Subscriptions
-          </span>
-          <button aria-label="More" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", padding: "8px", borderRadius: "8px" }}>
-            <MoreHorizontal size={22} strokeWidth={1.8} />
-          </button>
-        </div>
-
-        {/* Filter pills */}
-        <div style={{
-          padding: "12px 16px",
-          backgroundColor: "var(--background)", flexShrink: 0,
-          position: "sticky", top: 0, zIndex: 10,
-        }}>
-          <p style={{
-            fontSize: "11px", fontWeight: 600, color: "#4A4A6A",
-            letterSpacing: "0.06em", textTransform: "uppercase",
-            fontFamily: "'Inter', sans-serif", margin: "0 0 10px",
-          }}>
-            MANAGE YOUR CREATORS
-          </p>
-          <SubscriptionFilterTabs
-            active={filter}
-            counts={counts}
-            onChange={(v) => setFilter(v as FilterKey)}
-          />
-        </div>
-
         {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" as any, minHeight: 0 }}>
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" as any, minHeight: 0, overscrollBehavior: "contain" }}>
+
+          {/* Mobile header — scrolls away naturally */}
+          <SubscriptionsHeader />
+
+          {/* Desktop header — scrolls away naturally */}
+          <div
+            className="subs-desktop-header"
+            style={{
+              alignItems: "center", justifyContent: "space-between",
+              padding: "0 18px", height: "56px",
+              backgroundColor: "var(--background)",
+            }}
+          >
+            <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>
+              Subscriptions
+            </span>
+            <button aria-label="More" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", padding: "8px", borderRadius: "8px" }}>
+              <MoreHorizontal size={22} strokeWidth={1.8} />
+            </button>
+          </div>
+
+          {/* Filter pills — sticks once header scrolls out */}
+          <div style={{
+            padding: "12px 16px",
+            backgroundColor: "var(--background)",
+            position: "sticky", top: 0, zIndex: 10,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+            transition: "box-shadow 0.25s ease",
+          }}>
+            <p style={{
+              fontSize: "11px", fontWeight: 600, color: "#4A4A6A",
+              letterSpacing: "0.06em", textTransform: "uppercase",
+              fontFamily: "'Inter', sans-serif", margin: "0 0 10px",
+            }}>
+              MANAGE YOUR CREATORS
+            </p>
+            <SubscriptionFilterTabs
+              active={filter}
+              counts={counts}
+              onChange={(v) => setFilter(v as FilterKey)}
+            />
+          </div>
+            
 
           {/* Search bar */}
           <div style={{ marginTop: "14px" }}>

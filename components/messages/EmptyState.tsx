@@ -55,6 +55,7 @@ export function EmptyState() {
       </div>
 
       <button
+        onClick={() => window.dispatchEvent(new Event("open-new-message"))}
         style={{
           display:        "flex",
           alignItems:     "center",

@@ -10,9 +10,10 @@ import { MessagesSettingsModal } from "@/components/messages/MessagesSettingsMod
 interface MessagesHeaderProps {
   searchQuery?:    string;
   onSearchChange?: (query: string) => void;
+  onNewMessage?:   () => void;
 }
 
-export function MessagesHeader({ searchQuery = "", onSearchChange }: MessagesHeaderProps) {
+export function MessagesHeader({ searchQuery = "", onSearchChange, onNewMessage }: MessagesHeaderProps) {
   const { viewer } = useAppStore();
   const isCreator  = viewer?.role === "creator";
 
@@ -113,10 +114,7 @@ export function MessagesHeader({ searchQuery = "", onSearchChange }: MessagesHea
       <div
         className="messages-header-fixed"
         style={{
-          position:        "fixed",
-          top:             0,
-          left:            0,
-          right:           0,
+          position:        "relative",
           height:          "56px",
           flexShrink:      0,
           backgroundColor: "var(--background)",
@@ -135,7 +133,7 @@ export function MessagesHeader({ searchQuery = "", onSearchChange }: MessagesHea
               <Search size={22} strokeWidth={1.8} />
             </button>
 
-            <button className="mh-icon-btn">
+            <button className="mh-icon-btn" onClick={onNewMessage}>
               <Plus size={22} strokeWidth={1.8} />
             </button>
 

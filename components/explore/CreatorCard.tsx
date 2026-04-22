@@ -14,9 +14,9 @@ export interface StripCreator {
   subscriber_count: number;
   is_featured: boolean;
   is_new?: boolean;
+  is_free?: boolean;
   likes_count?: number;
 }
-
 export interface IdentityCardData {
   type: "identity";
   creator_id: string;
@@ -27,6 +27,7 @@ export interface IdentityCardData {
   subscriber_count: number;
   likes_count: number;
   categories: string[];
+  is_free?: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -49,7 +50,7 @@ interface CardInnerProps {
   banner_url: string | null;
   subscriber_count: number;
   likes_count: number;
-  is_new?: boolean;
+  is_free?: boolean;
 }
 
 function CreatorCardInner({
@@ -60,7 +61,7 @@ function CreatorCardInner({
   banner_url,
   subscriber_count,
   likes_count,
-  is_new,
+  is_free,
 }: CardInnerProps) {
   const router = useRouter();
   const [bannerError, setBannerError] = useState(false);
@@ -148,26 +149,17 @@ function CreatorCardInner({
           }}
         />
 
-        {/* New badge */}
-        {is_new && (
-          <div
-            style={{
-              position: "absolute",
-              top: "10px",
-              left: "10px",
-              background: "#8B5CF6",
-              color: "#fff",
-              fontSize: "9px",
-              fontWeight: 700,
-              letterSpacing: "0.4px",
-              padding: "3px 7px",
-              borderRadius: "4px",
-              zIndex: 2,
-              fontFamily: "'Inter', sans-serif",
-            }}
-          >
-            New
-          </div>
+        {/* Free badge */}
+        {is_free && (
+          <span style={{
+            position: "absolute", top: "10px", left: "10px",
+            backgroundColor: "rgba(16,185,129,0.85)", backdropFilter: "blur(6px)",
+            borderRadius: "20px", padding: "4px 12px", fontSize: "11px",
+            fontWeight: 700, color: "#fff", zIndex: 2,
+            fontFamily: "'Inter', sans-serif",
+          }}>
+            Free
+          </span>
         )}
 
         {/* Avatar */}
@@ -326,7 +318,7 @@ export function CreatorCard(props: StripCreator) {
       banner_url={props.banner_url}
       subscriber_count={props.subscriber_count}
       likes_count={props.likes_count ?? 0}
-      is_new={props.is_new}
+      is_free={props.is_free}
     />
   );
 }
@@ -342,6 +334,8 @@ export function IdentityCard({ data }: { data: IdentityCardData }) {
       banner_url={data.banner_url}
       subscriber_count={data.subscriber_count}
       likes_count={data.likes_count}
+      is_free={data.is_free}
     />
   );
+
 }

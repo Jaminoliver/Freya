@@ -218,16 +218,21 @@ export function SubscriptionCardCompact({
 
         {/* Body */}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "12px 10px 10px" }}>
-          <div style={{ marginBottom: "8px" }}>
-            <AvatarWithStoryRing
-              src={s.avatar_url}
-              alt={s.creatorName}
-              size={54}
-              hasStory={hasStory}
-              hasUnviewed={hasUnviewed}
-              onClick={handleAvatarClick}
-              borderColor="#0D0D18"
-            />
+          <div style={{ marginBottom: "8px", display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+            {s.isFreeCreator && (
+              <span style={{ backgroundColor: "rgba(16,185,129,0.85)", backdropFilter: "blur(6px)", borderRadius: "20px", padding: "4px 12px", fontSize: "11px", fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>Free</span>
+            )}
+            <div style={{ marginTop: "6px" }}>
+              <AvatarWithStoryRing
+                src={s.avatar_url}
+                alt={s.creatorName}
+                size={54}
+                hasStory={hasStory}
+                hasUnviewed={hasUnviewed}
+                onClick={handleAvatarClick}
+                borderColor="#0D0D18"
+              />
+            </div>
           </div>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
             <div>

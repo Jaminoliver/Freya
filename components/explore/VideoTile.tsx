@@ -17,6 +17,7 @@ export interface VideoTileData {
   duration_seconds: number | null;
   subscriber_count: number;
   likes_count: number;
+  is_free?: boolean;
 }
 
 const STREAM_CDN =
@@ -55,12 +56,10 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
     ? `https://${STREAM_CDN}/${data.bunny_video_id}/play_360p.mp4`
     : null;
 
-  // Set src when becoming active
   useEffect(() => {
     if (isActive && !srcLoaded) setSrcLoaded(true);
   }, [isActive, srcLoaded]);
 
-  // Play/pause + buffering detection + iOS Safari load() fix
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -79,14 +78,13 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
     if (isActive) {
       const tryPlay = () => {
         video.currentTime = 0;
-        video.muted = true; // ensure muted programmatically for iOS
+        video.muted = true;
         video.play().catch(() => {});
       };
 
       if (video.readyState >= 3) {
         tryPlay();
       } else {
-        // iOS Safari needs load() after dynamic src assignment
         if (video.src) video.load();
         video.addEventListener("canplay", tryPlay, { once: true });
       }
@@ -158,7 +156,6 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
         />
       )}
 
-      {/* Loading spinner — only when active + buffering */}
       {isActive && buffering && (
         <>
           <style>{`
@@ -185,6 +182,19 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
         position: "absolute", inset: 0,
         background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 45%, transparent 100%)",
       }} />
+
+      {/* Free badge */}
+      {data.is_free && (
+        <span style={{
+          position: "absolute", top: "8px", left: "8px",
+          backgroundColor: "rgba(16,185,129,0.85)", backdropFilter: "blur(6px)",
+          borderRadius: "20px", padding: "4px 12px", fontSize: "11px",
+          fontWeight: 700, color: "#fff", zIndex: 2,
+          fontFamily: "'Inter', sans-serif",
+        }}>
+          Free
+        </span>
+      )}
 
       {duration && (
         <div style={{

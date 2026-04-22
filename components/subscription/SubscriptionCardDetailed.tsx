@@ -192,7 +192,7 @@ export function SubscriptionCardDetailed({
           {/* Top-left badges */}
           <div style={{ position: "absolute", top: "10px", left: "10px", display: "flex", gap: "6px" }}>
             {s.isFreeCreator && (
-              <span style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", borderRadius: "20px", padding: "3px 10px", fontSize: "10px", fontWeight: 700, color: "#fff" }}>Free</span>
+              <span style={{ backgroundColor: "rgba(16,185,129,0.85)", backdropFilter: "blur(6px)", borderRadius: "20px", padding: "4px 12px", fontSize: "11px", fontWeight: 700, color: "#fff" }}>Free</span>
             )}
             {s.newPosts > 0 && (
               <span style={{ backgroundColor: "rgba(139,92,246,0.85)", backdropFilter: "blur(6px)", borderRadius: "20px", padding: "3px 10px", fontSize: "10px", fontWeight: 700, color: "#fff" }}>

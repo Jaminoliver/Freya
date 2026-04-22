@@ -17,18 +17,20 @@ interface SuggestedCreator {
   follower_count:   number;
   likes_count:      number;
   is_online?:       boolean;
+  is_free:          boolean;
 }
 
 interface ProfileRow {
-  id:               string;
-  display_name:     string | null;
-  username:         string;
-  avatar_url:       string | null;
-  banner_url:       string | null;
-  is_verified:      boolean | null;
-  subscriber_count: number | null;
-  follower_count:   number | null;
-  likes_count:      number | null;
+  id:                 string;
+  display_name:       string | null;
+  username:           string;
+  avatar_url:         string | null;
+  banner_url:         string | null;
+  is_verified:        boolean | null;
+  subscriber_count:   number | null;
+  follower_count:     number | null;
+  likes_count:        number | null;
+  subscription_price: number | null;
 }
 
 function formatCount(n: number): string {
@@ -52,7 +54,7 @@ export function HomeSidebar() {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, display_name, username, avatar_url, banner_url, is_verified, subscriber_count, follower_count, likes_count")
+      .select("id, display_name, username, avatar_url, banner_url, is_verified, subscriber_count, follower_count, likes_count, subscription_price")
       .eq("role", "creator")
       .eq("is_active", true)
       .eq("is_suspended", false)
@@ -72,6 +74,7 @@ export function HomeSidebar() {
           follower_count:   p.follower_count ?? 0,
           likes_count:      p.likes_count ?? 0,
           is_online:        Math.random() > 0.5,
+          is_free:          Number(p.subscription_price ?? 0) === 0,
         }))
       );
     }
@@ -202,6 +205,19 @@ function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: ()
         background: "linear-gradient(90deg, rgba(10,8,15,0.85) 0%, rgba(10,8,15,0.5) 55%, rgba(10,8,15,0.65) 100%)",
       }} />
 
+      {/* Free badge */}
+      {creator.is_free && (
+        <span style={{
+          position: "absolute", top: "10px", right: "10px",
+          backgroundColor: "rgba(16,185,129,0.85)", backdropFilter: "blur(6px)",
+          borderRadius: "20px", padding: "4px 12px", fontSize: "11px",
+          fontWeight: 700, color: "#fff", zIndex: 3,
+          fontFamily: "'Inter', sans-serif",
+        }}>
+          Free
+        </span>
+      )}
+
       {/* Content */}
       <div style={{
         position: "absolute", inset: 0,
@@ -211,17 +227,6 @@ function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: ()
 
         {/* Avatar ring */}
         <div style={{ position: "relative", flexShrink: 0 }}>
-          {/* Free tag */}
-          <div style={{
-            position: "absolute", top: "-5px", left: "-2px", zIndex: 3,
-            background: "#3abf7a", color: "#fff",
-            fontSize: "8px", fontWeight: 700, letterSpacing: "0.4px",
-            padding: "2px 6px", borderRadius: "4px",
-          }}>
-            Free
-          </div>
-
-          {/* Ring */}
           <div style={{
             width: "64px", height: "64px", borderRadius: "50%", padding: "2.5px",
             background: "conic-gradient(#C45F8C, #8B3FBF, #C45F8C)",
@@ -265,10 +270,8 @@ function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: ()
             @{creator.username}
           </div>
 
-          {/* Stats — matches CreatorCard style */}
+          {/* Stats */}
           <div style={{ display: "flex", gap: "10px", marginTop: "7px" }}>
-
-            {/* Subscribers — crown (gold) */}
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M2 18h20" />
@@ -281,16 +284,12 @@ function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: ()
                 {formatCount(creator.subscriber_count)}
               </span>
             </div>
-
-            {/* Followers — user plus (soft blue) */}
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <UserPlus size={14} color="#60A5FA" strokeWidth={1.8} />
               <span style={{ fontSize: "12px", color: "#60A5FA", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
                 {formatCount(creator.follower_count)}
               </span>
             </div>
-
-            {/* Likes — heart outline (white) */}
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />

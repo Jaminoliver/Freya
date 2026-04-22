@@ -20,14 +20,11 @@ export function SubscriptionsHeader() {
       <div
         className="subs-header-fixed"
         style={{
-          position:        "fixed",
-          top:             0,
-          left:            0,
-          right:           0,
-          height:          "56px",
-          flexShrink:      0,
-          backgroundColor: "var(--background)",
-          zIndex:          100,
+          position:        "relative",
+        height:          "56px",
+        flexShrink:      0,
+        backgroundColor: "var(--background)",
+        zIndex:          100,
           fontFamily:      "'Inter', sans-serif",
           display:         "flex",
           alignItems:      "center",

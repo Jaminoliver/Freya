@@ -150,7 +150,7 @@ export default function NotificationsPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 767px) {
           .notif-desktop-header { display: none !important; }
-          .notif-outer { padding-top: 56px; }
+          
         }
         .nh-icon-btn {
           background: none; border: none; cursor: pointer;
@@ -181,39 +181,46 @@ export default function NotificationsPage() {
           boxSizing: "border-box",
         }}
       >
-        <NotificationsHeader onMarkAllRead={handleMarkAllRead} onDeleteAll={handleDeleteAll} />
-
-        <div
-          className="notif-desktop-header"
-          style={{
-            alignItems: "center", justifyContent: "space-between",
-            padding: "0 16px", height: "56px", flexShrink: 0,
-            backgroundColor: "var(--background)",          }}
-        >
-          <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>
-            Notifications
-          </span>
-
-          <button
-            ref={dotsBtnRef}
-            className={`nh-icon-btn${dropdownOpen ? " nh-icon-btn--active" : ""}`}
-            onClick={handleOpenDropdown}
-          >
-            <MoreVertical size={22} strokeWidth={1.8} />
-          </button>
-        </div>
-
-        <NotificationFilterTabs
-          active={filter}
-          onChange={setFilter}
-          role={viewer?.role as "fan" | "creator" | undefined}
-        />
-
         <div style={{
           flex: 1, overflowY: "auto",
           WebkitOverflowScrolling: "touch" as any,
           minHeight: 0,
+          overscrollBehavior: "contain",
         }}>
+
+          {/* Mobile header — scrolls away naturally */}
+          <NotificationsHeader onMarkAllRead={handleMarkAllRead} onDeleteAll={handleDeleteAll} />
+
+          {/* Desktop header — scrolls away naturally */}
+          <div
+            className="notif-desktop-header"
+            style={{
+              alignItems: "center", justifyContent: "space-between",
+              padding: "0 16px", height: "56px", flexShrink: 0,
+              backgroundColor: "var(--background)",
+            }}
+          >
+            <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>
+              Notifications
+            </span>
+
+            <button
+              ref={dotsBtnRef}
+              className={`nh-icon-btn${dropdownOpen ? " nh-icon-btn--active" : ""}`}
+              onClick={handleOpenDropdown}
+            >
+              <MoreVertical size={22} strokeWidth={1.8} />
+            </button>
+          </div>
+
+          {/* Filter tabs — sticks once header scrolls out */}
+          <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "#0A0A0F" }}>
+            <NotificationFilterTabs
+              active={filter}
+              onChange={setFilter}
+              role={viewer?.role as "fan" | "creator" | undefined}
+            />
+          </div>
           {loading ? (
             <NotificationsSkeleton count={10} />
           ) : (

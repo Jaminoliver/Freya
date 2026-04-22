@@ -51,7 +51,7 @@ export async function GET() {
       isVerified:       p.is_verified ?? false,
       subscriber_count: p.subscriber_count ?? 0,
       likes_count:      p.likes_count ?? 0,
-      is_free:          (p.subscription_price ?? 0) === 0,
+      is_free:          Number(p.subscription_price ?? 0) === 0,
     }));
 
     const res = NextResponse.json({ creators });

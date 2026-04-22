@@ -30,6 +30,7 @@ interface CreatorProfile {
   categories: string[];
   created_at: string;
   country: string | null;
+  subscription_price: number | null;
 }
 
 interface CreatorVideo {
@@ -102,7 +103,7 @@ export async function GET(req: NextRequest) {
     const { data: allCreators, error: creatorsErr } = await service
       .from("profiles")
       .select(
-        "id, username, display_name, avatar_url, banner_url, subscriber_count, likes_count, post_count, categories, created_at, country"
+        "id, username, display_name, avatar_url, banner_url, subscriber_count, likes_count, post_count, categories, created_at, country, subscription_price"
       )
       .eq("role", "creator")
       .eq("is_active", true)
@@ -176,7 +177,6 @@ export async function GET(req: NextRequest) {
         if (videoM) creatorHasPublicVideo.add(post.creator_id);
         if (imageM) creatorHasPublicImage.add(post.creator_id);
 
-        // Store the FIRST (most recent) video per creator — not filtered by viewed
         if (videoM && !latestVideoByCreator.has(post.creator_id)) {
           latestVideoByCreator.set(post.creator_id, {
             post_id: Number(post.id),
@@ -220,7 +220,6 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      // Fallback: if no 7-day engagement data, use all-time likes
       if (engagementMap.size === 0) {
         for (const c of eligible) {
           engagementMap.set(c.id, (c.likes_count ?? 0) + (c.post_count ?? 0));
@@ -261,7 +260,6 @@ export async function GET(req: NextRequest) {
         );
         break;
 
-      // all, nigerian, photos, videos — new creators first, rest shuffled
       default: {
         const fresh = eligible.filter(
           (c) => now - new Date(c.created_at).getTime() < THIRTY_DAYS_MS
@@ -278,9 +276,9 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 6. Build grid items ─────────────────────────────────────────────────
-    // Consistent type: creator has ANY public video → VideoTile, else IdentityCard
     const allGridItems: GridItem[] = eligible.map((creator) => {
       const video = latestVideoByCreator.get(creator.id);
+      const is_free = Number(creator.subscription_price ?? 0) === 0;
 
       if (video) {
         return {
@@ -297,6 +295,7 @@ export async function GET(req: NextRequest) {
           duration_seconds: video.duration_seconds,
           subscriber_count: creator.subscriber_count ?? 0,
           likes_count: creator.likes_count ?? 0,
+          is_free,
         } satisfies VideoTileData;
       }
 
@@ -310,20 +309,19 @@ export async function GET(req: NextRequest) {
         subscriber_count: creator.subscriber_count ?? 0,
         likes_count: creator.likes_count ?? 0,
         categories: creator.categories ?? [],
+        is_free,
       } satisfies IdentityCardData;
     });
 
-    // ── 7. Pagination (dynamic page size) ───────────────────────────────────
+    // ── 7. Pagination ───────────────────────────────────────────────────────
     const pageSize = Math.min(20, Math.max(allGridItems.length, 6));
     const pageSlice = allGridItems.slice(offset, offset + pageSize);
     const nextOffset = offset + pageSize;
     const nextCursor =
       nextOffset < allGridItems.length ? encodeCursor(nextOffset) : null;
 
-    // ── 8. Featured strip (always returned) ──────────────────────────────────
-
+    // ── 8. Featured strip ─────────────────────────────────────────────────
     console.log("[Discover] sample grid:", JSON.stringify(pageSlice.slice(0, 3), null, 2));
-    // All eligible creators, shuffled daily, up to 12
     const daySeed = Math.floor(Date.now() / 86_400_000);
 
     let stripPool = ((allCreators ?? []) as CreatorProfile[]).filter(
@@ -349,7 +347,6 @@ export async function GET(req: NextRequest) {
 
     const strip: StripCreator[] = shuffled.map((c) => {
       const isNew = now - new Date(c.created_at).getTime() < THIRTY_DAYS_MS;
-      const video = latestVideoByCreator.get(c.id);
 
       return {
         creator_id: c.id,
@@ -361,6 +358,7 @@ export async function GET(req: NextRequest) {
         likes_count: c.likes_count ?? 0,
         is_featured: false,
         is_new: isNew,
+        is_free: Number(c.subscription_price ?? 0) === 0,
       };
     });
 
