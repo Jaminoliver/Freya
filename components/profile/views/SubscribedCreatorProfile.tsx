@@ -27,6 +27,7 @@ interface Props {
   onLike:                (id: string) => void;
   onComment:             (id: string) => void;
   onUnlock:              (id: string) => void;
+  messageLoading?:       boolean;
 }
 
 const padded: React.CSSProperties = { padding: "0 16px" };
@@ -43,6 +44,7 @@ export default function SubscribedCreatorProfile({
   pricePaid, selectedTier,
   onCancelled, onFollow, onTip, onMessage,
   onLike, onComment, onUnlock,
+  messageLoading = false,
 }: Props) {
   const bannerStats = {
     posts:       apiPosts.length,
@@ -86,6 +88,7 @@ export default function SubscribedCreatorProfile({
             onTip={() => onTip("")}
             onFollow={onFollow}
             isFollowing={isFollowing}
+            messageLoading={messageLoading}
           />
         </div>
       </div>

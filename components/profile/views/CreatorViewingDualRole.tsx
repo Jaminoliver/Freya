@@ -35,6 +35,7 @@ interface Props {
   onLike:                (id: string) => void;
   onComment:             (id: string) => void;
   onUnlock:              (id: string) => void;
+  messageLoading?:       boolean;
 }
 
 const padded: React.CSSProperties = { padding: "0 16px" };
@@ -77,6 +78,7 @@ export default function CreatorViewingDualRole({
   fanSubscription, pricePaid, selectedTier,
   onSubscribe, onCancelled,
   onFollow, onTip, onMessage, onLike, onComment, onUnlock,
+  messageLoading = false,
 }: Props) {
   const { navigate } = useNav();
   const setSettingsPanel = useAppStore((s) => s.setSettingsPanel);
@@ -171,6 +173,7 @@ export default function CreatorViewingDualRole({
             viewContext="fanViewingCreator"
             isSubscribed={isSubscribed}
             onMessage={onMessage} onTip={() => onTip("")} onFollow={onFollow} isFollowing={isFollowing}
+            messageLoading={messageLoading}
           />
         </div>
       </div>

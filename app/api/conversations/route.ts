@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     .from("conversations")
     .select(`
       id,
+      created_at,
       creator_id,
       fan_id,
       last_message_at,
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
     .or(`creator_id.eq.${user.id},fan_id.eq.${user.id}`)
     .eq("is_blocked", false)
     .eq("is_restricted", false)
-    .order("last_message_at", { ascending: false })
+    .order("last_message_at", { ascending: false, nullsFirst: false })
     .range(page * limit, (page + 1) * limit - 1);
 
   if (error) {
@@ -65,14 +66,25 @@ export async function GET(request: Request) {
       const isCreator   = row.creator_id === user.id;
       const participant = isCreator ? row.fan : row.creator;
       const unreadCount = isCreator ? row.unread_count_creator : row.unread_count_fan;
+      const deletedBefore = isCreator ? row.deleted_before_creator : row.deleted_before_fan;
 
       // Find this user's settings row from the joined array
       const settings = (row.conversation_user_settings ?? []).find(
         (s: any) => s.user_id === user.id
       );
 
+      // Per-user view: if I cleared after the last message, hide the preview
+      // and use my clear time as the sort key so the convo keeps its moved-up spot
+      const lastAt = row.last_message_at ?? null;
+      const clearedAfterLastMessage =
+        deletedBefore && (!lastAt || new Date(deletedBefore) >= new Date(lastAt));
+
+      const viewLastMessage   = clearedAfterLastMessage ? "" : (row.last_message_preview ?? "");
+      const viewLastMessageAt = clearedAfterLastMessage ? deletedBefore : (lastAt ?? "");
+
       return {
         id:          row.id,
+        createdAt:   row.created_at,
         participant: {
           id:         participant.id,
           name:       participant.display_name ?? participant.username,
@@ -82,8 +94,8 @@ export async function GET(request: Request) {
           isOnline:   false,
           role:       participant.role ?? "fan",
         },
-        lastMessage:   row.last_message_preview ?? "",
-        lastMessageAt: row.last_message_at ?? "",
+        lastMessage:   viewLastMessage,
+        lastMessageAt: viewLastMessageAt,
         unreadCount:   unreadCount ?? 0,
         hasMedia:      false,
         isPinned:      settings?.is_pinned   ?? false,

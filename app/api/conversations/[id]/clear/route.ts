@@ -34,7 +34,6 @@ export async function PATCH(
     .from("conversations")
     .update({
       [beforeField]: now,
-      last_message_preview: "",
       updated_at: now,
     })
     .eq("id", conversationId);

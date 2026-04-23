@@ -12,7 +12,7 @@ import { ManageBottomSheet } from "./ManageBottomSheet";
 import { useSubscriptionActions } from "@/lib/hooks/useSubscriptionActions";
 import { STATUS_COLOR, STATUS_LABEL, type Subscription } from "@/lib/types/subscription";
 import type { User } from "@/lib/types/profile";
-
+import { startConversation } from "@/app/(main)/messages/page";
 export function SubscriptionCardDetailed({
   subscription: s,
   onRefresh,
@@ -27,6 +27,7 @@ export function SubscriptionCardDetailed({
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const [manageOpen,      setManageOpen]      = useState(false);
   const [checkoutOpen,    setCheckoutOpen]    = useState(false);
+  const [messageLoading,  setMessageLoading]  = useState(false);
 
   const { group: storyGroup, hasStory, hasUnviewed, refresh: refreshStory } = useCreatorStory(s.creatorId);
 
@@ -48,17 +49,17 @@ export function SubscriptionCardDetailed({
     else                        navigate(`/${s.username}`);
   };
 
-  const handleMessage = (e: React.MouseEvent) => {
+  const handleMessage = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const params = new URLSearchParams({
-      targetUserId: s.creatorId,
-      name:         s.creatorName,
-      username:     s.username,
-      avatar:       s.avatar_url ?? "",
-      verified:     s.isVerified ? "1" : "0",
-    });
-    navigate(`/messages/new?${params.toString()}`);
+    if (messageLoading) return;
+    setMessageLoading(true);
+    const conversationId = await startConversation(s.creatorId);
+    if (conversationId) {
+      navigate(`/messages/${conversationId}`);
+    } else {
+      setMessageLoading(false);
+    }
   };
 
   const handleTip = (e: React.MouseEvent) => {
@@ -138,6 +139,8 @@ export function SubscriptionCardDetailed({
 
   return (
     <>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
       {storyViewerOpen && storyGroup && (
         <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refreshStory(); }} />
       )}
@@ -291,14 +294,23 @@ export function SubscriptionCardDetailed({
                 {/* Message button */}
                 <button
                   onClick={handleMessage}
+                  disabled={messageLoading}
                   aria-label="Message"
-                  style={iconButtonStyle}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; }}
+                  style={{
+                    ...iconButtonStyle,
+                    cursor: messageLoading ? "default" : "pointer",
+                    opacity: messageLoading ? 0.6 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!messageLoading) { e.currentTarget.style.borderColor = "#8B5CF6"; e.currentTarget.style.color = "#8B5CF6"; } }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3D"; e.currentTarget.style.color = "#C4C4D4"; }}
                 >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                  </svg>
+                  {messageLoading ? (
+                    <div style={{ width: "16px", height: "16px", borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent", animation: "spin 0.6s linear infinite" }} />
+                  ) : (
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                  )}
                 </button>
               </>
             )}

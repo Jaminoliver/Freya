@@ -3,8 +3,7 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { X, Search } from "lucide-react";
-import { updateConversations } from "@/app/(main)/messages/page";
-
+import { startConversation } from "@/app/(main)/messages/page";
 interface Person {
   id:          string;
   name:        string;
@@ -32,28 +31,10 @@ export function NewMessagePanel({ onClose, fans, creators, loading, isCreator }:
   const handleSelect = useCallback(async (person: Person) => {
     setStarting(person.id);
     try {
-      const res  = await fetch("/api/conversations", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ targetUserId: person.id }),
-      });
-      const data = await res.json();
-      if (data.conversationId) {
+      const conversationId = await startConversation(person.id);
+      if (conversationId) {
         if (window.innerWidth >= 768) onClose();
-        console.log("[NewMsg] conversationId:", data.conversationId, "isNew:", data.isNew);
-        router.push(`/messages/${data.conversationId}`);
-        fetch(`/api/conversations/${data.conversationId}`)
-          .then(r => r.json())
-          .then(convData => {
-            console.log("[NewMsg] conv fetch result:", JSON.stringify(convData));
-            if (convData.conversation) {
-              updateConversations((prev) => {
-  const filtered = prev.filter((c) => c.id !== data.conversationId);
-  return [convData.conversation, ...filtered];
-});
-            }
-          })
-          .catch(err => console.error("[NewMsg] fetch error:", err));
+        router.push(`/messages/${conversationId}`);
       }
     } catch (err) {
       console.error("[NewMessagePanel] start conv error:", err);

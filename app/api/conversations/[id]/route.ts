@@ -25,6 +25,7 @@ export async function GET(
     .select(
       `
       id,
+      created_at,
       creator_id,
       fan_id,
       last_message_at,
@@ -76,13 +77,24 @@ export async function GET(
 
   const participant = isCreator ? (row.fan as any) : (row.creator as any);
   const unreadCount = isCreator ? row.unread_count_creator : row.unread_count_fan;
+  const deletedBefore = isCreator ? row.deleted_before_creator : row.deleted_before_fan;
   const settings    = ((row as any).conversation_user_settings ?? []).find(
     (s: any) => s.user_id === user.id
   );
 
+  // Per-user view: if I cleared after the last message, hide the preview
+  // and use my clear time as the sort key so the convo keeps its moved-up spot
+  const lastAt = row.last_message_at ?? null;
+  const clearedAfterLastMessage =
+    deletedBefore && (!lastAt || new Date(deletedBefore) >= new Date(lastAt));
+
+  const viewLastMessage   = clearedAfterLastMessage ? "" : (row.last_message_preview ?? "");
+  const viewLastMessageAt = clearedAfterLastMessage ? deletedBefore : (lastAt ?? "");
+
   return NextResponse.json({
     conversation: {
       id: row.id,
+      createdAt: (row as any).created_at,
       participant: {
         id:         participant.id,
         name:       participant.display_name ?? participant.username,
@@ -91,8 +103,8 @@ export async function GET(
         isVerified: participant.is_verified ?? false,
         isOnline:   false,
       },
-      lastMessage:    row.last_message_preview ?? "",
-      lastMessageAt:  row.last_message_at ?? "",
+      lastMessage:    viewLastMessage,
+      lastMessageAt:  viewLastMessageAt,
       unreadCount:    unreadCount ?? 0,
       hasMedia:       false,
       isBlocked:      row.is_blocked,

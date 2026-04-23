@@ -15,6 +15,7 @@ export interface ConversationParticipant {
 
 export interface Conversation {
   id:            number;
+  createdAt?:    string;
   participant:   ConversationParticipant;
   lastMessage:   string;
   lastMessageAt: string;

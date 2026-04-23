@@ -205,7 +205,7 @@ export async function GET(
     };
   });
 
-  const nextCursor = rows.length === limit ? rows[rows.length - 1].created_at : null;
+  const nextCursor = rows.length === limit && visibleRows.length > 0 ? rows[rows.length - 1].created_at : null;
   return NextResponse.json({ messages, nextCursor });
 }
 

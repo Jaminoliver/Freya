@@ -14,6 +14,7 @@ import type { ApiPost } from "@/components/profile/PostRow";
 import { useAppStore, isStale } from "@/lib/store/appStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { postSyncStore } from "@/lib/store/postSyncStore";
+import { startConversation } from "@/app/(main)/messages/page";
 
 // ── Dynamic imports: only the active view loads ──────────────────────────────
 const CheckoutModal              = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
@@ -120,22 +121,18 @@ function ProfilePageInner() {
     }
   }, [checkoutType, lockedPostId]);
 
+  const [messageLoading, setMessageLoading] = React.useState(false);
+
   const handleMessage = React.useCallback(async () => {
-    if (!profile) return;
-    try {
-      const res  = await fetch("/api/conversations", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ targetUserId: profile.id }),
-      });
-      const data = await res.json();
-      if (res.ok && data.conversationId) {
-        router.push(`/messages/${data.conversationId}`);
-      }
-    } catch (err) {
-      console.error("[handleMessage] failed:", err);
+    if (!profile || messageLoading) return;
+    setMessageLoading(true);
+    const conversationId = await startConversation(profile.id);
+    if (conversationId) {
+      router.push(`/messages/${conversationId}`);
+    } else {
+      setMessageLoading(false);
     }
-  }, [profile, router]);
+  }, [profile, router, messageLoading]);
 
   const fetchSubscriptionStatus = React.useCallback(async (creatorId: string) => {
     try {
@@ -610,6 +607,7 @@ function ProfilePageInner() {
               profile={profile} totalLikes={totalLikes}
               fromFanList={fromFanList} fanSubscription={fanSubscription}
               onMessage={handleMessage}
+              messageLoading={messageLoading}
             />
           )}
 
@@ -626,6 +624,7 @@ function ProfilePageInner() {
               onCancelled={handleCancelled} onFollow={handleFollow}
               onTip={handleTip} onMessage={handleMessage}
               onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
+              messageLoading={messageLoading}
             />
           )}
 
@@ -639,6 +638,7 @@ function ProfilePageInner() {
               onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
               pricePaid={pricePaid}
               selectedTier={selectedTier}
+              messageLoading={messageLoading}
             />
           )}
 

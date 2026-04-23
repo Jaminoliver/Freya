@@ -13,6 +13,7 @@ interface ProfileActionsProps {
   onShare?:       () => void;
   onFollow?:      () => void;
   isFollowing?:   boolean;
+  messageLoading?: boolean;
 }
 
 export default function ProfileActions({
@@ -24,6 +25,7 @@ export default function ProfileActions({
   onTip,
   onFollow,
   isFollowing = false,
+  messageLoading = false,
 }: ProfileActionsProps) {
   const router = useRouter();
 
@@ -31,6 +33,10 @@ export default function ProfileActions({
     router.push("/settings/profile");
     onEditProfile?.();
   };
+
+  const spinKeyframes = (
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  );
 
   if (viewContext === "ownFan" || viewContext === "ownCreator") {
     return (
@@ -53,32 +59,43 @@ export default function ProfileActions({
 
   if (viewContext === "creatorViewingFan") {
     return (
+      <>
+      {spinKeyframes}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
         <button
           onClick={() => onMessage?.()}
+          disabled={messageLoading}
           style={{
             display: "flex", alignItems: "center", gap: "7px",
             padding: "9px 18px", borderRadius: "999px",
             background: "transparent", border: "1px solid #3A3A4D",
-            cursor: "pointer", fontFamily: "'Inter', sans-serif",
+            cursor: messageLoading ? "default" : "pointer",
+            fontFamily: "'Inter', sans-serif",
             transition: "border-color 0.15s",
+            opacity: messageLoading ? 0.6 : 1,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
+          onMouseEnter={(e) => { if (!messageLoading) e.currentTarget.style.borderColor = "#8B5CF6"; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
+          {messageLoading ? (
+            <div style={{ width: "16px", height: "16px", borderRadius: "50%", border: "2px solid #C4C4D4", borderTopColor: "transparent", animation: "spin 0.6s linear infinite" }} />
+          ) : (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          )}
           <span style={{ fontSize: "13px", fontWeight: 600, color: "#C4C4D4" }}>Message</span>
         </button>
       </div>
+      </>
     );
   }
 
   if (viewContext === "fanViewingCreator") {
     return (
+      <>
+      {spinKeyframes}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
-
         {/* Following/Follow pill */}
         <button
           onClick={onFollow}
@@ -106,18 +123,25 @@ export default function ProfileActions({
         {isSubscribed && (
           <button
             onClick={() => onMessage?.()}
+            disabled={messageLoading}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: "44px", height: "44px", borderRadius: "999px",
               background: "transparent", border: "1px solid #3A3A4D",
-              cursor: "pointer", transition: "border-color 0.15s",
+              cursor: messageLoading ? "default" : "pointer",
+              transition: "border-color 0.15s",
+              opacity: messageLoading ? 0.6 : 1,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
+            onMouseEnter={(e) => { if (!messageLoading) e.currentTarget.style.borderColor = "#8B5CF6"; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
+            {messageLoading ? (
+              <div style={{ width: "18px", height: "18px", borderRadius: "50%", border: "2px solid #C4C4D4", borderTopColor: "transparent", animation: "spin 0.6s linear infinite" }} />
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            )}
           </button>
         )}
 
@@ -143,6 +167,7 @@ export default function ProfileActions({
         </button>
 
       </div>
+      </>
     );
   }
 

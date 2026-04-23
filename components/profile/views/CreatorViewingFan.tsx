@@ -14,6 +14,7 @@ interface Props {
   fromFanList:     boolean;
   fanSubscription: Subscription | null;
   onMessage:       () => void;
+  messageLoading?: boolean;
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -42,7 +43,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default function CreatorViewingFan({
-  profile, totalLikes, fromFanList, fanSubscription, onMessage,
+  profile, totalLikes, fromFanList, fanSubscription, onMessage, messageLoading = false,
 }: Props) {
   const router = useRouter();
 
@@ -101,7 +102,7 @@ export default function CreatorViewingFan({
           isOnline={false}
         />
         <div style={{ paddingBottom: "12px" }}>
-          <ProfileActions viewContext="creatorViewingFan" onMessage={onMessage} />
+          <ProfileActions viewContext="creatorViewingFan" onMessage={onMessage} messageLoading={messageLoading} />
         </div>
       </div>
 

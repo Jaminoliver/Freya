@@ -29,6 +29,7 @@ const typingChannels  = new Map<number, any>();
 let typingConvIds = new Set<number>();
 const blockedConversationIds  = new Set<number>();
 const archivedConversationIds = new Set<number>();
+const pendingHydrationIds     = new Set<number>();
 
 export function addArchivedId(id: number) {
   archivedConversationIds.add(id);
@@ -41,17 +42,19 @@ export function removeArchivedId(id: number) {
 
 
 // ─── Conversation sorting ─────────────────────────────────────────────────────
+function sortKey(c: Conversation): number {
+  const raw = c.lastMessageAt || (c as any).createdAt || "";
+  if (!raw) return 0;
+  const t = new Date(raw).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
 function sortConversations(convs: Conversation[]): Conversation[] {
   return [...convs].sort((a, b) => {
     const aPinned = a.isPinned ? 1 : 0;
     const bPinned = b.isPinned ? 1 : 0;
     if (aPinned !== bPinned) return bPinned - aPinned;
-    if (!a.lastMessage && b.lastMessage) return -1;
-if (a.lastMessage && !b.lastMessage) return 1;
-    return (
-      new Date(b.lastMessageAt || 0).getTime() -
-      new Date(a.lastMessageAt || 0).getTime()
-    );
+    return sortKey(b) - sortKey(a);
   });
 }
 
@@ -82,6 +85,47 @@ export function setActiveConversation(id: number | null) {
 export function blockConversation(id: number) {
   blockedConversationIds.add(id);
 }
+
+// ─── Start conversation (shared helper) ───────────────────────────────────────
+export async function startConversation(targetUserId: string): Promise<number | null> {
+  try {
+    const res  = await fetch("/api/conversations", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ targetUserId }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.conversationId) {
+      console.error("[startConversation] POST failed:", data);
+      return null;
+    }
+    const conversationId = data.conversationId as number;
+    pendingHydrationIds.add(conversationId);
+    blockedConversationIds.delete(conversationId);
+    archivedConversationIds.delete(conversationId);
+    fetch(`/api/conversations/${conversationId}`)
+      .then((r) => r.json())
+      .then((convData) => {
+        if (!convData.conversation) return;
+        updateConversations((prev) => {
+          const filtered = prev.filter((c) => c.id !== conversationId);
+          return [convData.conversation, ...filtered];
+        });
+        getAuthenticatedBrowserClient().then((sb) =>
+          subscribeTyping(sb, conversationId)
+        );
+      })
+      .catch((err) => console.error("[startConversation] hydrate fetch error:", err))
+      .finally(() => {
+        pendingHydrationIds.delete(conversationId);
+      });
+    return conversationId;
+  } catch (err) {
+    console.error("[startConversation] error:", err);
+    return null;
+  }
+}
+
 // ─── Typing ───────────────────────────────────────────────────────────────────
 function setTyping(conversationId: number, isTyping: boolean) {
   const updated = new Set(typingConvIds);
@@ -143,12 +187,9 @@ function ensureConversationsFetched() {
     })
     .then((data) => {
       const convs = data.conversations ?? [];
-
-      // Track archived IDs so realtime doesn't re-add them
       if (data.archivedIds) {
         data.archivedIds.forEach((id: number) => archivedConversationIds.add(id));
       }
-
       cachedConversations = sortConversations(convs);
       listeners.forEach((fn) => fn(cachedConversations!));
       getAuthenticatedBrowserClient().then((supabase) => {
@@ -202,6 +243,12 @@ function startGlobalRealtime() {
           if (blockedConversationIds.has(row.id)) return;
           if (archivedConversationIds.has(row.id)) return;
 
+          // startConversation is hydrating this — don't race it
+          if (pendingHydrationIds.has(row.id)) {
+            console.log("[CONV INSERT] pending hydration — skipping");
+            return;
+          }
+
           console.log("[CONV INSERT] fetching /api/conversations/" + row.id);
           fetch(`/api/conversations/${row.id}`)
             .then((r) => {
@@ -248,6 +295,8 @@ function startGlobalRealtime() {
             // Never re-add a blocked or archived conversation
             if (blockedConversationIds.has(row.conversation_id)) return;
             if (archivedConversationIds.has(row.conversation_id)) return;
+            // startConversation is hydrating this — don't race it
+            if (pendingHydrationIds.has(row.conversation_id)) return;
             fetch(`/api/conversations/${row.conversation_id}`)
               .then((r) => r.json())
               .then((data) => {
@@ -320,7 +369,6 @@ function startGlobalRealtime() {
                 }
               )
             );
-            // Tip message body is hydrated by /api/conversations/:id/messages on reload
             return;
           }
 
@@ -372,7 +420,6 @@ function startGlobalRealtime() {
             fetch(`/api/conversations/${row.conversation_id}/read`, { method: "PATCH" }).catch(() => {});
           }
 
-
           updateConversations((prev) =>
             prev.map((c) =>
               c.id !== row.conversation_id ? c : {
@@ -414,8 +461,6 @@ function startGlobalRealtime() {
             const isReceiver = row.receiver_id === currentUserId;
             const isSender   = row.sender_id   === currentUserId;
             if (isSender || isReceiver) {
-              
-
               const ppvMessage: Message = {
                 id:             row.id,
                 conversationId: row.conversation_id,
@@ -449,8 +494,6 @@ function startGlobalRealtime() {
               isRead:      row.is_read      ?? false,
               status:      "sent",
             });
-
-           
             return;
           }
 
@@ -522,6 +565,12 @@ function startGlobalRealtime() {
               return prev;
             }
 
+            const deletedBefore = isCreator ? row.deleted_before_creator : row.deleted_before_fan;
+            const incomingAt    = row.last_message_at ?? null;
+            const clearedAfter  = deletedBefore && (!incomingAt || new Date(deletedBefore) >= new Date(incomingAt));
+            const viewLastMessage   = clearedAfter ? "" : (row.last_message_preview ?? "");
+            const viewLastMessageAt = clearedAfter ? deletedBefore : incomingAt;
+
             return prev.map((c) => {
               if (c.id !== row.id) return c;
 
@@ -529,18 +578,17 @@ function startGlobalRealtime() {
                 ? (row.unread_count_creator ?? c.unreadCount)
                 : (row.unread_count_fan     ?? c.unreadCount);
 
-              const incomingAt = row.last_message_at;
-              const cachedAt   = c.lastMessageAt;
+              const cachedAt = c.lastMessageAt;
 
               const alreadySorted =
                 cachedAt &&
-                incomingAt &&
-                new Date(cachedAt).getTime() >= new Date(incomingAt).getTime();
+                viewLastMessageAt &&
+                new Date(cachedAt).getTime() >= new Date(viewLastMessageAt).getTime();
 
               if (alreadySorted) {
                 return {
                   ...c,
-                  lastMessage: row.last_message_preview ?? c.lastMessage,
+                  lastMessage: viewLastMessage,
                   unreadCount: c.id === activeConversationId
                     ? c.unreadCount
                     : Math.max(c.unreadCount, incomingUnread),
@@ -549,8 +597,8 @@ function startGlobalRealtime() {
 
               return {
                 ...c,
-                lastMessage:   row.last_message_preview ?? c.lastMessage,
-                lastMessageAt: incomingAt               ?? c.lastMessageAt,
+                lastMessage:   viewLastMessage,
+                lastMessageAt: viewLastMessageAt ?? c.lastMessageAt,
                 unreadCount:   c.id === activeConversationId
                   ? c.unreadCount
                   : Math.max(c.unreadCount, incomingUnread),
@@ -597,16 +645,16 @@ export function useConversations() {
   const [error,   setError]   = useState<string | null>(null);
 
   useEffect(() => {
-  const handler = (convs: Conversation[]) => {
-    setConversationsState(convs);
-    setLoading(false);
-  };
-  listeners.add(handler);
-  startGlobalRealtime();
-  ensureConversationsFetched();
-  if (cachedConversations !== null) setLoading(false);
-  return () => { listeners.delete(handler); };
-}, []);
+    const handler = (convs: Conversation[]) => {
+      setConversationsState(convs);
+      setLoading(false);
+    };
+    listeners.add(handler);
+    startGlobalRealtime();
+    ensureConversationsFetched();
+    if (cachedConversations !== null) setLoading(false);
+    return () => { listeners.delete(handler); };
+  }, []);
 
   const setConversations = useCallback(updateConversations, []);
   return { conversations, setConversations, loading, error };
