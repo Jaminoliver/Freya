@@ -39,13 +39,10 @@ export function ConversationList({
   }
 
   return (
-    <div ref={(el) => { if (el) console.log("[scroll]", el.scrollHeight, el.clientHeight, getComputedStyle(el).overflowY, getComputedStyle(el).height); }} style={{
-      height:              "100%",
-overflowY:           "auto",
-scrollbarWidth:      "none",
-      userSelect:          "none",
-      WebkitUserSelect:    "none",
-    }}>
+    <div style={{
+  userSelect:       "none",
+  WebkitUserSelect: "none",
+}}>
       <AnimatePresence mode="popLayout">
         {conversations.map((conversation) => (
           <motion.div

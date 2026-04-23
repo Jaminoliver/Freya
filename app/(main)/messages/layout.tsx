@@ -33,14 +33,15 @@ function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        display:         "flex",
-        height:          "100%",
-        backgroundColor: "#0A0A0F",
-        overflow:        "hidden",
-        width:           "100%",
-        fontFamily:      "'Inter', sans-serif",
-        boxSizing:       "border-box",
-      }}
+  display:         "flex",
+  height:          "100%",
+  backgroundColor: "#0A0A0F",
+  overflow:        "hidden",
+  width:           "100%",
+  fontFamily:      "'Inter', sans-serif",
+  boxSizing:       "border-box",
+  touchAction:     "pan-y",
+}}
     >
       <style>{`
         .main-scroll { padding-top: 0 !important; }
