@@ -234,13 +234,13 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
       <div
         style={{
           position:        "relative",
-        width:           "100%",
-        height:          "100%",
-        backgroundColor: "#0A0A0F",
-        borderRight:     "1px solid #1A1A2A",
-        display:         "flex",
-        flexDirection:   "column",
-        overflow:        "hidden",
+          width:           "100%",
+          height:          "100vh",
+          backgroundColor: "#0A0A0F",
+          borderRight:     "1px solid #1A1A2A",
+          display:         "flex",
+          flexDirection:   "column",
+          boxSizing:       "border-box",
         }}
       >
         {newMessageOpen && (
@@ -253,7 +253,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           />
         )}
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", scrollbarWidth: "none", paddingBottom: "calc(64px + env(safe-area-inset-bottom))", touchAction: "pan-y" }}>
+        <div style={{ flex: 1, overflowY: "auto", minHeight: 0, overscrollBehavior: "contain", scrollbarWidth: "none", paddingBottom: "calc(64px + env(safe-area-inset-bottom))" }}>
 
           <MessagesHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} onNewMessage={() => setNewMessageOpen(true)} />
 
