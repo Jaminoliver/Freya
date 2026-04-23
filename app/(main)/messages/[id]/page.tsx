@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState, useCallback, useRef } from "react";
-import { getBrowserClient } from "@/lib/supabase/browserClient";
+import { useAppStore } from "@/lib/store/appStore";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatPanel } from "@/components/messages/ChatPanel";
 import { ChatSkeleton } from "@/components/loadscreen/ChatSkeleton";
@@ -11,9 +11,9 @@ import {
   useConversations,
   setActiveConversation,
   setOnMessagesPage,
-  setCachedMessages,
-  appendCachedMessage,
   updateConversations,
+  unsubscribeTypingForConversation,
+  blockConversation,
 } from "@/app/(main)/messages/page";
 import type { Conversation, Message } from "@/lib/types/messages";
 
@@ -31,7 +31,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
   const conversationId = isNew ? 0 : parseInt(id, 10);
 
-  const { conversations } = useConversations();
+  const { conversations, loading: convsLoading } = useConversations();
   const { setActiveConversationId } = useMessagesContext();
 
   const {
@@ -58,7 +58,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       : cached
   );
 
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const { viewer }                        = useAppStore();
+  const currentUserId                     = viewer?.id ?? null;
   const currentUserIdRef                  = useRef(currentUserId);
   currentUserIdRef.current                = currentUserId;
 
@@ -87,15 +88,11 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       setActiveConversation(null);
       setStoreConversationId(null);
       clearMessages();
+      unsubscribeTypingForConversation(conversationId);
     };
   }, [conversationId, setActiveConversationId, isNew]);
 
-  useEffect(() => {
-    const supabase = getBrowserClient();
-    supabase.auth.getUser().then((res: any) => {
-      if (res.data.user) setCurrentUserId(res.data.user.id);
-    });
-  }, []);
+ 
 
   // For "new" conversations: don't create until first message is sent
   useEffect(() => {
@@ -110,7 +107,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     async function load() {
       try {
         const [convoRes, msgsRes] = await Promise.all([
-          conversation ? Promise.resolve(null) : fetch(`/api/conversations/${id}`),
+          fetch(`/api/conversations/${id}`),
           fetch(`/api/conversations/${id}/messages`),
         ]);
 
@@ -127,7 +124,10 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
         const msgsData = await msgsRes.json();
         const fresh: Message[] = msgsData.messages ?? [];
         setMessages(fresh);
-        setCachedMessages(conversationId, fresh);
+        if (fresh.length === 0) {
+          const numId = parseInt(id, 10);
+          updateConversations((prev) => prev.map((c) => c.id === numId ? { ...c, lastMessage: "", lastMessageAt: "" } : c));
+        }
         setNextCursor(msgsData.nextCursor ?? null);
         setHasMore(!!msgsData.nextCursor);
       } catch {

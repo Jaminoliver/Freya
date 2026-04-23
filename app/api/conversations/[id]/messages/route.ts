@@ -68,51 +68,49 @@ export async function GET(
 
   const rows = data ?? [];
 
-  let mediaByMessageId = new Map<number, { url: string; thumbnail_url: string | null; media_type: string }[]>();
-  if (rows.length > 0) {
-    const messageIds = rows.map((r) => r.id);
-    const { data: allMedia } = await supabase
-      .from("message_media")
-      .select("message_id, url, thumbnail_url, media_type, display_order")
-      .in("message_id", messageIds)
-      .order("display_order", { ascending: true });
-
-    for (const m of allMedia ?? []) {
-      if (!mediaByMessageId.has(m.message_id)) mediaByMessageId.set(m.message_id, []);
-      mediaByMessageId.get(m.message_id)!.push({
-        ...m,
-        url:           refreshBunnyUrl(m.url) ?? m.url,
-        thumbnail_url: refreshBunnyUrl(m.thumbnail_url),
-      });
-    }
-  }
-
-  // ── PPV message unlocks (queries ppv_message_unlocks, NOT ppv_unlocks) ──
-  let unlockedByCurrentUser  = new Set<number>();
-  let unlockCountByMessageId = new Map<number, number>();
+ const messageIds    = rows.map((r) => r.id);
   const ppvMessageIds = rows.filter((r) => r.is_ppv).map((r) => r.id);
-  if (ppvMessageIds.length > 0) {
-    const { data: unlocks } = await supabase
-      .from("ppv_message_unlocks")
-      .select("message_id, fan_id")
-      .in("message_id", ppvMessageIds);
-    for (const u of unlocks ?? []) {
-      if (u.fan_id === user.id) unlockedByCurrentUser.add(u.message_id);
-      unlockCountByMessageId.set(u.message_id, (unlockCountByMessageId.get(u.message_id) ?? 0) + 1);
-    }
+  const tipIds        = rows.filter((r) => r.is_tip && r.tip_id).map((r) => r.tip_id as number);
+
+  const [mediaResult, ppvResult, tipResult] = await Promise.all([
+    messageIds.length > 0
+      ? supabase.from("message_media")
+          .select("message_id, url, thumbnail_url, media_type, display_order")
+          .in("message_id", messageIds)
+          .order("display_order", { ascending: true })
+      : Promise.resolve({ data: [] }),
+    ppvMessageIds.length > 0
+      ? supabase.from("ppv_message_unlocks")
+          .select("message_id, fan_id")
+          .in("message_id", ppvMessageIds)
+      : Promise.resolve({ data: [] }),
+    tipIds.length > 0
+      ? supabase.from("tips")
+          .select("id, amount")
+          .in("id", tipIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const mediaByMessageId = new Map<number, { url: string; thumbnail_url: string | null; media_type: string }[]>();
+  for (const m of mediaResult.data ?? []) {
+    if (!mediaByMessageId.has(m.message_id)) mediaByMessageId.set(m.message_id, []);
+    mediaByMessageId.get(m.message_id)!.push({
+      ...m,
+      url:           refreshBunnyUrl(m.url) ?? m.url,
+      thumbnail_url: refreshBunnyUrl(m.thumbnail_url),
+    });
   }
 
-  // ── Tips (resolve tip rows for is_tip messages) ─────────────────────────
-  const tipIds = rows.filter((r) => r.is_tip && r.tip_id).map((r) => r.tip_id as number);
+  const unlockedByCurrentUser  = new Set<number>();
+  const unlockCountByMessageId = new Map<number, number>();
+  for (const u of ppvResult.data ?? []) {
+    if (u.fan_id === user.id) unlockedByCurrentUser.add(u.message_id);
+    unlockCountByMessageId.set(u.message_id, (unlockCountByMessageId.get(u.message_id) ?? 0) + 1);
+  }
+
   const tipById = new Map<number, { amount: number }>();
-  if (tipIds.length > 0) {
-    const { data: tipRows } = await supabase
-      .from("tips")
-      .select("id, amount")
-      .in("id", tipIds);
-    for (const t of tipRows ?? []) {
-      tipById.set(t.id, { amount: t.amount });
-    }
+  for (const t of tipResult.data ?? []) {
+    tipById.set(t.id, { amount: t.amount });
   }
 
   const deletedBefore = isCreator ? (convo as any).deleted_before_creator : (convo as any).deleted_before_fan;
@@ -153,11 +151,7 @@ export async function GET(
 
     // ── GIF bubble ─────────────────────────────────────────────────────────
     if (row.gif_url) {
-      return {
-        ...base,
-        type:   "gif" as const,
-        gifUrl: row.gif_url,
-      };
+      return { ...base, type: "gif" as const, gifUrl: row.gif_url };
     }
 
     // ── Tip bubble ─────────────────────────────────────────────────────────
@@ -286,11 +280,9 @@ export async function POST(
   const unreadField  = isCreatorSending ? "unread_count_fan"    : "unread_count_creator";
   const restoreField = isCreatorSending ? "deleted_for_fan"     : "deleted_for_creator";
 
-  const lastPreview = hasGif ? "🎞️ GIF" : content.trim().slice(0, 100);
-
   await supabase.from("conversations").update({ [restoreField]: false, updated_at: new Date().toISOString() }).eq("id", conversationId);
   await supabase.rpc("increment_unread_count", { p_conversation_id: conversationId, p_field: unreadField });
-  await supabase.from("conversations").update({ last_message_preview: lastPreview, last_message_at: message.created_at, updated_at: new Date().toISOString() }).eq("id", conversationId);
+  await supabase.from("conversations").update({ last_message_preview: content.trim().slice(0, 100), last_message_at: message.created_at, updated_at: new Date().toISOString() }).eq("id", conversationId);
 
   // Notification
   try {
@@ -316,7 +308,6 @@ export async function POST(
     console.error("[notifications] unexpected error:", notifError);
   }
 
-  // Build response — gif takes precedence over text
   if (hasGif) {
     return NextResponse.json({
       message: {

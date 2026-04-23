@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Archive, ArchiveRestore, User, Pin, PinOff, MailOpen, Star, Trash2 } from "lucide-react";
-import { clearCachedMessages, updateConversations, blockConversation, addArchivedId, removeArchivedId } from "@/app/(main)/messages/page";
+import { updateConversations, blockConversation, addArchivedId, removeArchivedId } from "@/app/(main)/messages/page";
 import { FavouritesModal } from "@/components/messages/FavouritesModal";
 import { useNav } from "@/lib/hooks/useNav";
 
@@ -147,7 +147,6 @@ export function ConversationActionModal({
     updateConversations((prev) =>
       prev.filter((c) => c.id !== conversationId)
     );
-    clearCachedMessages(conversationId);
     onCleared();
     onClose();
 

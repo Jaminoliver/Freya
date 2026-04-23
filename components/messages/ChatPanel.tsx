@@ -5,10 +5,11 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, X, MoreVertical, Images, Trash2 } from "lucide-react";
 import { Sparkles } from "lucide-react";
+
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
-import { updateConversations, clearCachedMessages, subscribeTypingForConversation, blockConversation } from "@/app/(main)/messages/page";
+import { updateConversations, subscribeTypingForConversation, blockConversation } from "@/app/(main)/messages/page";
 import { useMessageStore } from "@/lib/store/messageStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { ChatHeader } from "@/components/messages/ChatHeader";
@@ -206,7 +207,6 @@ export function ChatPanel({
 
   const handleClearChat = useCallback(async () => {
     updateConversations((prev) => prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "" } : c));
-    clearCachedMessages(conversation.id);
     setMessages([]);
     onClearMessages?.();
     try { await fetch(`/api/conversations/${conversation.id}/clear`, { method: "PATCH" }); } catch (err) { console.error("[ChatPanel] clear chat error:", err); }
@@ -215,7 +215,6 @@ export function ChatPanel({
   const handleDeleteChat = useCallback(async () => {
     blockConversation(conversation.id);
     updateConversations((prev) => prev.filter((c) => c.id !== conversation.id));
-    clearCachedMessages(conversation.id);
     setMessages([]);
     onClearMessages?.();
     onBack();
@@ -535,7 +534,7 @@ background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
           onBack={onBack}
           isTyping={isTyping}
           onSelectMode={handleEnterSelectMode}
-          onMessagesCleared={() => { clearCachedMessages(conversation.id); onClearMessages?.(); setMessages([]); }}
+          onMessagesCleared={() => { onClearMessages?.(); setMessages([]); }}
         />
 
         <div

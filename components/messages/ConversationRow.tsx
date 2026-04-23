@@ -15,6 +15,8 @@ interface Props {
   onSelect:      () => void;
 }
 
+const prefetchMap = new Map<number, any[]>();
+
 export function ConversationRow({ conversation, isActive, isTyping = false, isFavourited = false, onSelect }: Props) {
   const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia, isPinned, isMuted } = conversation;
   const router = useRouter();
@@ -152,7 +154,14 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
         ref={rowRef}
         className={`conv-row${isActive ? " conv-row--active" : ""}`}
         onClick={handleClick}
-        onMouseEnter={() => setHovered(true)}
+        onMouseEnter={() => {
+  setHovered(true);
+  if (!prefetchMap.has(conversation.id)) {
+    fetch(`/api/conversations/${conversation.id}/messages`)
+      .then(r => r.json())
+      .then(d => prefetchMap.set(conversation.id, d.messages ?? []));
+  }
+}}
         onMouseLeave={() => setHovered(false)}
         onContextMenu={(e) => {
           e.preventDefault();

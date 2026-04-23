@@ -7,10 +7,7 @@ export async function GET(
 ) {
   const supabase = await createServerSupabaseClient();
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const { user, error: authError } = await getUser();
 
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -53,6 +50,9 @@ export async function GET(
         display_name,
         avatar_url,
         is_verified
+      ),
+      conversation_user_settings (
+        user_id, is_pinned, is_archived, is_muted
       )
     `
     )
@@ -76,6 +76,9 @@ export async function GET(
 
   const participant = isCreator ? (row.fan as any) : (row.creator as any);
   const unreadCount = isCreator ? row.unread_count_creator : row.unread_count_fan;
+  const settings    = ((row as any).conversation_user_settings ?? []).find(
+    (s: any) => s.user_id === user.id
+  );
 
   return NextResponse.json({
     conversation: {
@@ -94,6 +97,9 @@ export async function GET(
       hasMedia:       false,
       isBlocked:      row.is_blocked,
       isRestricted:   row.is_restricted,
+      isPinned:       settings?.is_pinned   ?? false,
+      isArchived:     settings?.is_archived  ?? false,
+      isMuted:        settings?.is_muted     ?? false,
     },
   });
 }

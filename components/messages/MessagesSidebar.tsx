@@ -61,8 +61,11 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
     return () => window.removeEventListener("open-new-message", handler);
   }, []);
 
-  // Preload fans + creators on mount
+ // Load fans + creators only when panel opens
   useEffect(() => {
+    if (!newMessageOpen) return;
+    if (nmCreators.length > 0 || nmFans.length > 0) return;
+
     const load = async () => {
       setNmLoading(true);
       try {
@@ -116,33 +119,34 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
       }
     };
     load();
-  }, [isCreator]);
+  }, [newMessageOpen, isCreator]);
 
   useEffect(() => {
-    const fetchFavourites = async () => {
+    const fetchBootstrap = async () => {
       try {
-        const res  = await fetch("/api/favourites/chatlists/all-items");
+        const res  = await fetch("/api/messages/bootstrap");
         const data = await res.json();
-        if (data.conversationIds) setFavouritedIds(new Set(data.conversationIds));
+        if (data.favouriteIds !== undefined) setFavouritedIds(new Set(data.favouriteIds));
+        if (data.archivedCount !== undefined) setArchivedCount(data.archivedCount);
+        if (data.subscriptions) setNmCreators(data.subscriptions.map((s: any) => ({ id: s.creatorId, name: s.creatorName, username: s.username, avatar_url: s.avatar_url ?? null, is_verified: s.isVerified ?? false, role: "creator" })));
+        if (data.fans) setNmFans(data.fans.map((f: any) => ({ id: f.id, name: f.display_name || f.username, username: f.username, avatar_url: f.avatar_url ?? null, is_verified: false, role: "fan" })));
+        setNmLoading(false);
       } catch {}
     };
-    fetchFavourites();
-    window.addEventListener("favourites-updated", fetchFavourites);
-    return () => window.removeEventListener("favourites-updated", fetchFavourites);
+    fetchBootstrap();
+    window.addEventListener("favourites-updated", fetchBootstrap);
+    window.addEventListener("conversations-updated", fetchBootstrap);
+    return () => {
+      window.removeEventListener("favourites-updated", fetchBootstrap);
+      window.removeEventListener("conversations-updated", fetchBootstrap);
+    };
   }, []);
 
   useEffect(() => {
-    const fetchArchivedCount = async () => {
-      try {
-        const res  = await fetch("/api/conversations?archived=true");
-        const data = await res.json();
-        setArchivedCount(data.conversations?.length ?? 0);
-      } catch {}
-    };
-    fetchArchivedCount();
-    window.addEventListener("conversations-updated", fetchArchivedCount);
-    return () => window.removeEventListener("conversations-updated", fetchArchivedCount);
-  }, []);
+    setArchivedCount(
+      conversations.filter((c) => c.isArchived).length
+    );
+  }, [conversations]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -225,13 +229,13 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
       <div
         style={{
           position:        "relative",
-          width:           "100%",
-          height:          "100%",
-          backgroundColor: "#0A0A0F",
-          borderRight:     "1px solid #1A1A2A",
-          display:         "flex",
-          flexDirection:   "column",
-          overflow:        "hidden",
+        width:           "100%",
+        height:          "100%",
+        backgroundColor: "#0A0A0F",
+        borderRight:     "1px solid #1A1A2A",
+        display:         "flex",
+        flexDirection:   "column",
+        overflow:        "hidden",
         }}
       >
         {newMessageOpen && (
@@ -244,7 +248,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           />
         )}
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", paddingBottom: "16px" }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "none" }}>
 
           <MessagesHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} onNewMessage={() => setNewMessageOpen(true)} />
 

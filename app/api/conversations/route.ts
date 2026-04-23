@@ -12,6 +12,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const showArchived = searchParams.get("archived") === "true";
 
+  const page  = parseInt(searchParams.get("page") ?? "0", 10);
+  const limit = 30;
+
   const { data, error } = await supabase
     .from("conversations")
     .select(`
@@ -39,7 +42,8 @@ export async function GET(request: Request) {
     .or(`creator_id.eq.${user.id},fan_id.eq.${user.id}`)
     .eq("is_blocked", false)
     .eq("is_restricted", false)
-    .order("last_message_at", { ascending: false });
+    .order("last_message_at", { ascending: false })
+    .range(page * limit, (page + 1) * limit - 1);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -50,6 +54,11 @@ export async function GET(request: Request) {
       const isCreator = row.creator_id === user.id;
       if (isCreator && row.deleted_for_creator) return false;
       if (!isCreator && row.deleted_for_fan)    return false;
+      const settings = (row.conversation_user_settings ?? []).find(
+        (s: any) => s.user_id === user.id
+      );
+      if (showArchived && !settings?.is_archived) return false;
+      if (!showArchived && settings?.is_archived) return false;
       return true;
     })
     .map((row: any) => {
@@ -83,14 +92,7 @@ export async function GET(request: Request) {
       };
     });
 
-  const archivedCount = allConversations.filter((c: any) => c.isArchived).length;
-  const archivedIds   = allConversations.filter((c: any) => c.isArchived).map((c: any) => c.id);
-
-  const conversations = showArchived
-    ? allConversations.filter((c: any) => c.isArchived)
-    : allConversations.filter((c: any) => !c.isArchived);
-
-  return NextResponse.json({ conversations, archivedCount, archivedIds });
+  return NextResponse.json({ conversations: allConversations });
 }
 
 export async function POST(request: Request) {
@@ -160,7 +162,7 @@ export async function POST(request: Request) {
       .update({ [field]: false, updated_at: new Date().toISOString() })
       .eq("id", existing.id);
 
-    return NextResponse.json({ conversationId: existing.id });
+    return NextResponse.json({ conversationId: existing.id, isNew: false });
   }
 
   const { data: created, error: createError } = await supabase
@@ -173,5 +175,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: createError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ conversationId: created.id }, { status: 201 });
+  return NextResponse.json({ conversationId: created.id, isNew: true }, { status: 201 });
 }

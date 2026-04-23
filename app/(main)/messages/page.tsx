@@ -11,9 +11,9 @@ import type { Conversation, Message } from "@/lib/types/messages";
 let cachedConversations: Conversation[] | null = null;
 let isFetching            = false;
 let realtimeChannel: any  = null;
+let channelStarting       = false;
 let currentUserId: string | null = null;
 let activeConversationId: number | null = null;
-let sortDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let isOnMessagesPage = false;
 
 export function setOnMessagesPage(value: boolean) {
@@ -25,7 +25,6 @@ const listeners       = new Set<(convs: Conversation[]) => void>();
 const typingListeners = new Set<(typers: Set<number>) => void>();
 const typingTimers    = new Map<number, ReturnType<typeof setTimeout>>();
 const typingChannels  = new Map<number, any>();
-const messageCache    = new Map<number, { messages: Message[]; timestamp: number }>();
 
 let typingConvIds = new Set<number>();
 const blockedConversationIds  = new Set<number>();
@@ -39,34 +38,7 @@ export function removeArchivedId(id: number) {
   archivedConversationIds.delete(id);
 }
 
-// ─── Message cache helpers ────────────────────────────────────────────────────
-export function getCachedMessages(conversationId: number): Message[] | null {
-  const entry = messageCache.get(conversationId);
-  if (!entry) return null;
-  if (Date.now() - entry.timestamp > 30_000) return null;
-  return entry.messages;
-}
 
-export function setCachedMessages(conversationId: number, messages: Message[]) {
-  messageCache.set(conversationId, { messages, timestamp: Date.now() });
-}
-
-export function clearCachedMessages(conversationId: number) {
-  messageCache.delete(conversationId);
-}
-
-export function appendCachedMessage(conversationId: number, message: Message) {
-  const entry = messageCache.get(conversationId);
-  if (!entry) {
-    messageCache.set(conversationId, { messages: [message], timestamp: Date.now() });
-    return;
-  }
-  if (entry.messages.some((m) => m.id === message.id)) return;
-  messageCache.set(conversationId, {
-    messages:  [...entry.messages, message],
-    timestamp: Date.now(),
-  });
-}
 
 // ─── Conversation sorting ─────────────────────────────────────────────────────
 function sortConversations(convs: Conversation[]): Conversation[] {
@@ -92,11 +64,7 @@ export function updateConversations(
       ? updater(cachedConversations ?? [])
       : updater;
   cachedConversations = sortConversations(next);
-  if (sortDebounceTimer) clearTimeout(sortDebounceTimer);
-  sortDebounceTimer = setTimeout(() => {
-    sortDebounceTimer = null;
-    listeners.forEach((fn) => fn(cachedConversations!));
-  }, 80);
+  listeners.forEach((fn) => fn(cachedConversations!));
 }
 
 // ─── Active conversation ──────────────────────────────────────────────────────
@@ -121,6 +89,13 @@ function setTyping(conversationId: number, isTyping: boolean) {
   else updated.delete(conversationId);
   typingConvIds = updated;
   typingListeners.forEach((fn) => fn(updated));
+}
+
+export function unsubscribeTypingForConversation(conversationId: number) {
+  const ch = typingChannels.get(conversationId);
+  if (!ch) return;
+  ch.unsubscribe();
+  typingChannels.delete(conversationId);
 }
 
 export async function subscribeTypingForConversation(conversationId: number) {
@@ -186,14 +161,15 @@ function ensureConversationsFetched() {
 
 // ─── Global realtime ──────────────────────────────────────────────────────────
 function startGlobalRealtime() {
-  if (realtimeChannel) return;
+  if (realtimeChannel || channelStarting) return;
+  channelStarting = true;
 
   getAuthenticatedBrowserClient().then(async (supabase) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
 
-    currentUserId = session.user.id;
-    console.log("[Realtime] currentUserId set:", currentUserId);
+    currentUserId  = session.user.id;
+    channelStarting = false;
     cachedConversations?.forEach((c) => subscribeTyping(supabase, c.id));
 
     realtimeChannel = supabase
@@ -316,7 +292,6 @@ function startGlobalRealtime() {
               store.appendMessage(gifMessage);
               fetch(`/api/conversations/${row.conversation_id}/read`, { method: "PATCH" }).catch(() => {});
             }
-            appendCachedMessage(row.conversation_id, gifMessage);
 
             updateConversations((prev) =>
               prev.map((c) =>
@@ -397,7 +372,6 @@ function startGlobalRealtime() {
             fetch(`/api/conversations/${row.conversation_id}/read`, { method: "PATCH" }).catch(() => {});
           }
 
-          appendCachedMessage(row.conversation_id, newMessage);
 
           updateConversations((prev) =>
             prev.map((c) =>
@@ -440,11 +414,7 @@ function startGlobalRealtime() {
             const isReceiver = row.receiver_id === currentUserId;
             const isSender   = row.sender_id   === currentUserId;
             if (isSender || isReceiver) {
-              const cached = messageCache.get(row.conversation_id);
-              const alreadyHasThumbnail = cached?.messages.some(
-                (m) => m.id === row.id && m.thumbnailUrl
-              );
-              if (alreadyHasThumbnail) return;
+              
 
               const ppvMessage: Message = {
                 id:             row.id,
@@ -469,7 +439,6 @@ function startGlobalRealtime() {
               if (row.conversation_id === store.conversationId) {
                 store.appendMessage(ppvMessage);
               }
-              appendCachedMessage(row.conversation_id, ppvMessage);
             }
             return;
           }
@@ -481,22 +450,7 @@ function startGlobalRealtime() {
               status:      "sent",
             });
 
-            const entry = messageCache.get(row.conversation_id);
-            if (entry) {
-              messageCache.set(row.conversation_id, {
-                messages: entry.messages.map((m) =>
-                  m.id === row.id
-                    ? {
-                        ...m,
-                        isDelivered: row.is_delivered ?? m.isDelivered,
-                        isRead:      row.is_read      ?? m.isRead,
-                        status:      "sent",
-                      }
-                    : m
-                ),
-                timestamp: entry.timestamp,
-              });
-            }
+           
             return;
           }
 
@@ -522,7 +476,6 @@ function startGlobalRealtime() {
           if (row.conversation_id === store.conversationId) {
             store.appendMessage(mediaMessage);
           }
-          appendCachedMessage(row.conversation_id, mediaMessage);
         }
       )
 

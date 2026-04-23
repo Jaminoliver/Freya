@@ -39,16 +39,26 @@ export function NewMessagePanel({ onClose, fans, creators, loading, isCreator }:
       });
       const data = await res.json();
       if (data.conversationId) {
-        const convRes  = await fetch(`/api/conversations/${data.conversationId}`);
-        const convData = await convRes.json();
-        if (convData.conversation) {
-          updateConversations((prev) => {
-            if (prev.some((c) => c.id === data.conversationId)) return prev;
-            return [convData.conversation, ...prev];
-          });
-        }
-        onClose();
+        if (window.innerWidth >= 768) onClose();
+        else setTimeout(onClose, 300);
+        console.log("[NewMsg] conversationId:", data.conversationId, "isNew:", data.isNew);
         router.push(`/messages/${data.conversationId}`);
+        fetch(`/api/conversations/${data.conversationId}`)
+          .then(r => r.json())
+          .then(convData => {
+            console.log("[NewMsg] conv fetch result:", JSON.stringify(convData));
+            if (convData.conversation) {
+              updateConversations((prev) => {
+                console.log("[NewMsg] prev ids:", prev.map(c => c.id), "adding:", data.conversationId);
+                if (prev.some((c) => c.id === data.conversationId)) {
+                  console.log("[NewMsg] already in cache — skipping");
+                  return prev;
+                }
+                return [convData.conversation, ...prev];
+              });
+            }
+          })
+          .catch(err => console.error("[NewMsg] fetch error:", err));
       }
     } catch (err) {
       console.error("[NewMessagePanel] start conv error:", err);

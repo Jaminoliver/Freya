@@ -8,7 +8,7 @@ import { ChatActionModal } from "@/components/messages/ChatActionModal";
 import { ReportModal } from "@/components/messages/ReportModal";
 import BlockConfirmModal from "@/components/ui/BlockConfirmModal";
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
-import { clearCachedMessages, updateConversations, blockConversation } from "@/app/(main)/messages/page";
+import { updateConversations, blockConversation } from "@/app/(main)/messages/page";
 import { useMessageStore } from "@/lib/store/messageStore";
 import type { Conversation } from "@/lib/types/messages";
 
@@ -55,7 +55,6 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
     updateConversations((prev) =>
       prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: "" } : c)
     );
-    clearCachedMessages(conversation.id);
     setMessages([]);
     onMessagesCleared?.();
 
@@ -71,7 +70,6 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
     updateConversations((prev) =>
       prev.filter((c) => c.id !== conversation.id)
     );
-    clearCachedMessages(conversation.id);
     setMessages([]);
     onBack();
 
