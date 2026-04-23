@@ -182,11 +182,12 @@ export default function NotificationsPage() {
         }}
       >
         <div style={{
-          flex: 1, overflowY: "auto",
-          WebkitOverflowScrolling: "touch" as any,
-          minHeight: 0,
-          overscrollBehavior: "contain",
-        }}>
+  flex: 1, overflowY: "auto",
+  WebkitOverflowScrolling: "touch" as any,
+  minHeight: 0,
+  overscrollBehavior: "contain",
+  paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
+}}>
 
           {/* Mobile header — scrolls away naturally */}
           <NotificationsHeader onMarkAllRead={handleMarkAllRead} onDeleteAll={handleDeleteAll} />

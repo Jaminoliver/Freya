@@ -132,7 +132,7 @@ export default function SubscriptionsPage() {
         }}
       >
         {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" as any, minHeight: 0, overscrollBehavior: "contain" }}>
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" as any, minHeight: 0, overscrollBehavior: "contain", paddingBottom: "calc(64px + env(safe-area-inset-bottom))" }}>
 
           {/* Mobile header — scrolls away naturally */}
           <SubscriptionsHeader />

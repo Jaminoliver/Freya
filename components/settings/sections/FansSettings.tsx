@@ -91,9 +91,8 @@ function FansSkeleton() {
 export default function FansSettings({ onBack }: { onBack?: () => void }) {
   const { navigate } = useNav();
 
-  const [fans, setFans] = useState<Fan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "active" | "expired" | "cancelled">("all");
+const [filter, setFilter] = useState<"all" | "active" | "expired" | "cancelled">("all");
 
   const filters: { key: typeof filter; label: string }[] = [
     { key: "all",       label: "All"       },
@@ -101,22 +100,29 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
     { key: "cancelled", label: "Cancelled" },
   ];
 
-  const fetchFans = useCallback(async (status: string) => {
-    setLoading(true);
-    try {
-      const res  = await fetch(`/api/fans/list?status=${status}`);
-      const data = await res.json();
-      if (data.fans) setFans(data.fans);
-    } catch (err) {
-      console.error("[FansSettings]", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [allFans, setAllFans] = useState<Fan[]>([]);
 
-  useEffect(() => {
-    fetchFans(filter);
-  }, [filter, fetchFans]);
+const fetchFans = useCallback(async () => {
+  setLoading(true);
+  try {
+    const res  = await fetch(`/api/fans/list?status=all`);
+    const data = await res.json();
+    if (data.fans) setAllFans(data.fans);
+  } catch (err) {
+    console.error("[FansSettings]", err);
+  } finally {
+    setLoading(false);
+  }
+}, []);
+
+useEffect(() => { fetchFans(); }, [fetchFans]);
+
+const fans = filter === "all" ? allFans : allFans.filter((f) => f.status === filter);
+
+const counts: Record<string, number> = {
+  active:    allFans.filter((f) => f.status === "active").length,
+  cancelled: allFans.filter((f) => f.status === "cancelled").length,
+};
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -129,21 +135,32 @@ export default function FansSettings({ onBack }: { onBack?: () => void }) {
       {/* Tabs */}
       <div style={{ display: "flex", gap: "8px", overflowX: "auto", scrollbarWidth: "none", padding: "0 0 12px", marginBottom: "20px", position: "sticky", top: 0, zIndex: 10, backgroundColor: "var(--background)" }}>
         {filters.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            style={{
-              padding: "7px 16px", borderRadius: "20px", border: "none",
-              backgroundColor: filter === f.key ? "#FFFFFF" : "#1A1A2A",
-              color: filter === f.key ? "#0A0A0F" : "#94A3B8",
-              fontSize: "12px", fontWeight: filter === f.key ? 600 : 500,
-              cursor: "pointer", fontFamily: "'Inter', sans-serif",
-              whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.15s",
-            }}
-          >
-            {f.label}
-          </button>
-        ))}
+  <button
+    key={f.key}
+    onClick={() => setFilter(f.key)}
+    style={{
+      display: "flex", alignItems: "center", gap: "6px",
+      padding: "7px 16px", borderRadius: "20px", border: "none",
+      backgroundColor: filter === f.key ? "#FFFFFF" : "#1A1A2A",
+      color: filter === f.key ? "#0A0A0F" : "#94A3B8",
+      fontSize: "12px", fontWeight: filter === f.key ? 600 : 500,
+      cursor: "pointer", fontFamily: "'Inter', sans-serif",
+      whiteSpace: "nowrap", flexShrink: 0, transition: "all 0.15s",
+    }}
+  >
+    {f.label}
+    {f.key !== "all" && (counts[f.key] ?? 0) > 0 && (
+      <span style={{
+        backgroundColor: "#8B5CF6", color: "#FFFFFF",
+        fontSize: "11px", fontWeight: 700,
+        borderRadius: "10px", padding: "1px 6px",
+        minWidth: "18px", textAlign: "center",
+      }}>
+        {counts[f.key]}
+      </span>
+    )}
+  </button>
+))}
       </div>
 
       {/* Fan count */}

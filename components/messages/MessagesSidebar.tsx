@@ -56,10 +56,15 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handler = () => setNewMessageOpen(true);
-    window.addEventListener("open-new-message", handler);
-    return () => window.removeEventListener("open-new-message", handler);
-  }, []);
+  const handler = () => setNewMessageOpen(true);
+  const closeHandler = () => setNewMessageOpen(false);
+  window.addEventListener("open-new-message", handler);
+  window.addEventListener("close-new-message", closeHandler);
+  return () => {
+    window.removeEventListener("open-new-message", handler);
+    window.removeEventListener("close-new-message", closeHandler);
+  };
+}, []);
 
  // Load fans + creators only when panel opens
   useEffect(() => {
@@ -248,7 +253,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           />
         )}
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "none" }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "none", paddingBottom: "calc(64px + env(safe-area-inset-bottom))" }}>
 
           <MessagesHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} onNewMessage={() => setNewMessageOpen(true)} />
 

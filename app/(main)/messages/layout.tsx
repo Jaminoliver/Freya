@@ -20,10 +20,11 @@ function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!inChat) {
-      fetch("/api/conversations/deliver-all", { method: "PATCH" }).catch(() => {});
-    }
-  }, [inChat]);
+  if (!inChat) {
+    fetch("/api/conversations/deliver-all", { method: "PATCH" }).catch(() => {});
+    window.dispatchEvent(new Event("close-new-message"));
+  }
+}, [inChat]);
 
   const handleNewConversation = useCallback((conv: Conversation) => {
     setConversations((prev) => [conv, ...prev.filter((c) => c.id !== conv.id)]);

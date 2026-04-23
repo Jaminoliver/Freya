@@ -44,7 +44,23 @@ export function SubscriptionFilterTabs({ active, counts, onChange }: Props) {
               transition:      "all 0.15s",
             }}
           >
-            {t.label}{count > 0 ? ` ${count}` : ""}
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+  {t.label}
+  {t.key !== "all" && count > 0 && (
+    <span style={{
+      backgroundColor: "#8B5CF6",
+      color:           "#FFFFFF",
+      fontSize:        "11px",
+      fontWeight:      700,
+      borderRadius:    "10px",
+      padding:         "1px 6px",
+      minWidth:        "18px",
+      textAlign:       "center",
+    }}>
+      {count}
+    </span>
+  )}
+</span>
           </button>
         );
       })}
