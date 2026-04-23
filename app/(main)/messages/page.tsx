@@ -46,8 +46,8 @@ function sortConversations(convs: Conversation[]): Conversation[] {
     const aPinned = a.isPinned ? 1 : 0;
     const bPinned = b.isPinned ? 1 : 0;
     if (aPinned !== bPinned) return bPinned - aPinned;
-    if (!a.lastMessage && b.lastMessage) return 1;
-    if (a.lastMessage && !b.lastMessage) return -1;
+    if (!a.lastMessage && b.lastMessage) return -1;
+if (a.lastMessage && !b.lastMessage) return 1;
     return (
       new Date(b.lastMessageAt || 0).getTime() -
       new Date(a.lastMessageAt || 0).getTime()

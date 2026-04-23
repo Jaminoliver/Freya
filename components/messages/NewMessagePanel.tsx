@@ -40,7 +40,6 @@ export function NewMessagePanel({ onClose, fans, creators, loading, isCreator }:
       const data = await res.json();
       if (data.conversationId) {
         if (window.innerWidth >= 768) onClose();
-        else setTimeout(onClose, 300);
         console.log("[NewMsg] conversationId:", data.conversationId, "isNew:", data.isNew);
         router.push(`/messages/${data.conversationId}`);
         fetch(`/api/conversations/${data.conversationId}`)
@@ -49,13 +48,9 @@ export function NewMessagePanel({ onClose, fans, creators, loading, isCreator }:
             console.log("[NewMsg] conv fetch result:", JSON.stringify(convData));
             if (convData.conversation) {
               updateConversations((prev) => {
-                console.log("[NewMsg] prev ids:", prev.map(c => c.id), "adding:", data.conversationId);
-                if (prev.some((c) => c.id === data.conversationId)) {
-                  console.log("[NewMsg] already in cache — skipping");
-                  return prev;
-                }
-                return [convData.conversation, ...prev];
-              });
+  const filtered = prev.filter((c) => c.id !== data.conversationId);
+  return [convData.conversation, ...filtered];
+});
             }
           })
           .catch(err => console.error("[NewMsg] fetch error:", err));
