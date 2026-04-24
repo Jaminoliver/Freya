@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Share2, MoreHorizontal } from "lucide-react";
 import PostActions from "@/components/profile/PostActions";
+import PostHeader from "@/components/shared/PostHeader";
 import CommentSection from "@/components/profile/CommentSection";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import Lightbox from "@/components/profile/Lightbox";
@@ -369,51 +370,30 @@ export default function SinglePostPage() {
       />
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 24px", paddingTop: "calc(16px + env(safe-area-inset-top))", borderBottom: "1px solid #1E1E2E", position: "sticky", top: 0, backgroundColor: "#0D0D16", zIndex: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", paddingTop: "env(safe-area-inset-top)", height: "56px", borderBottom: "1px solid #1E1E2E", position: "sticky", top: 0, backgroundColor: "#0A0A0F", zIndex: 10, boxSizing: "content-box" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button onClick={() => router.back()} style={{ background: "none", border: "none", color: "#E2E8F0", cursor: "pointer", display: "flex", alignItems: "center", padding: "4px 0" }}>
-            <ArrowLeft size={20} strokeWidth={2.5} />
+          <button onClick={() => router.back()} style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
+            <ArrowLeft size={20} strokeWidth={1.8} />
           </button>
-          <span style={{ fontSize: "17px", fontWeight: 800, color: "#F1F5F9", letterSpacing: "0.06em", textTransform: "uppercase" }}>Post</span>
+          <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>Post</span>
         </div>
-        <button onClick={() => console.log("share")} style={{ background: "none", border: "none", color: "#E2E8F0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
-          <Share2 size={18} />
+        <button onClick={() => console.log("share")} style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
+          <Share2 size={18} strokeWidth={1.8} />
         </button>
       </div>
 
-      {/* Creator info */}
-      <div style={{ margin: "12px 16px 0", backgroundColor: "#13131F", borderRadius: "14px", padding: "14px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={{ position: "relative" }}>
-              {post.profiles?.avatar_url
-                ? <img src={post.profiles.avatar_url} alt="" style={{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", display: "block" }} />
-                : <div style={{ width: "44px", height: "44px", borderRadius: "50%", backgroundColor: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span style={{ fontSize: "18px", fontWeight: 700, color: "#8B5CF6" }}>{(post.profiles?.display_name || post.profiles?.username || "?").charAt(0).toUpperCase()}</span>
-                  </div>
-              }
-              <div style={{ position: "absolute", bottom: 1, right: 1, width: 10, height: 10, borderRadius: "50%", backgroundColor: "#22C55E", border: "2px solid #13131F" }} />
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9" }}>{post.profiles?.display_name || post.profiles?.username}</span>
-              {post.profiles?.is_verified && <span style={{ fontSize: "14px" }}>✓</span>}
-              <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#8B5CF6", display: "inline-block", flexShrink: 0 }} />
-              <span style={{ fontSize: "13px", color: "#E2E8F0" }}>@{post.profiles?.username}</span>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-            <span style={{ fontSize: "12px", color: "#E2E8F0" }}>
-              {new Date(post.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-            </span>
-            <PostMenu isOwnPost={isOwnPost} onDelete={handleDelete} />
-          </div>
-        </div>
+      <PostHeader
+        avatarUrl={post.profiles?.avatar_url ?? null}
+        displayName={post.profiles?.display_name || post.profiles?.username || ""}
+        username={post.profiles?.username || ""}
+        isVerified={!!post.profiles?.is_verified}
+        timestamp={new Date(post.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+        rightSlot={<PostMenu isOwnPost={isOwnPost} onDelete={handleDelete} />}
+      />
 
-        {/* Caption — plain for non-text posts, inside the creator card */}
-        {post.caption && !isTextPost && (
-          <p style={{ margin: "14px 0 0", fontSize: "14px", color: "#FFFFFF", lineHeight: 1.7 }}>{post.caption}</p>
-        )}
-      </div>
+      {post.caption && !isTextPost && (
+        <p style={{ margin: "0", fontSize: "14px", color: "#FFFFFF", lineHeight: 1.7, padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>{post.caption}</p>
+      )}
 
       {/* Text post viewer — outside the card, full bleed style */}
       {isTextPost && post.caption && (
