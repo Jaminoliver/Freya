@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Share2, MoreHorizontal } from "lucide-react";
 import PostActions from "@/components/profile/PostActions";
 import PostHeader from "@/components/shared/PostHeader";
@@ -108,9 +108,11 @@ function PostMenu({ isOwnPost, onDelete }: { isOwnPost: boolean; onDelete: () =>
 }
 
 export default function SinglePostPage() {
-  const rawParams = useParams();
-  const router    = useRouter();
-  const postId    = rawParams?.postId as string | undefined;
+  const rawParams    = useParams();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const postId       = rawParams?.postId as string | undefined;
+  const fromSaved    = searchParams?.get("from") === "saved";
 
   const [post,            setPost]            = useState<PostData | null>(null);
   const [loading,         setLoading]         = useState(true);
@@ -372,7 +374,7 @@ export default function SinglePostPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", paddingTop: "env(safe-area-inset-top)", height: "56px", borderBottom: "1px solid #1E1E2E", position: "sticky", top: 0, backgroundColor: "#0A0A0F", zIndex: 10, boxSizing: "content-box" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button onClick={() => router.back()} style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
+          <button onClick={() => fromSaved ? router.push("/saved") : router.back()} style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
             <ArrowLeft size={20} strokeWidth={1.8} />
           </button>
           <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>Post</span>
