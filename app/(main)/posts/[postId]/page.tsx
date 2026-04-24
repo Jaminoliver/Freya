@@ -15,9 +15,15 @@ import type { PollData } from "@/components/feed/PollDisplay";
 import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
+import { SinglePostSkeleton } from "@/components/loadscreen/SinglePostSkeleton";
+import { useAppStore } from "@/lib/store/appStore";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 import type { User } from "@/lib/types/profile";
+import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
+import CreatorPostOptionsSheet from "@/components/profile/PostOptionsSheet";
+import EditCaptionModal from "@/components/profile/EditCaptionModal";
+import EditPPVModal from "@/components/profile/EditPPVModal";
 
 interface ApiComment {
   id: string | number;
@@ -131,7 +137,12 @@ export default function SinglePostPage() {
 
   const [lightboxOpen,     setLightboxOpen]     = useState(false);
   const [lightboxMediaIdx, setLightboxMediaIdx] = useState(0);
+  const [sheetOpen,        setSheetOpen]        = useState(false);
+  const [creatorSheetOpen, setCreatorSheetOpen] = useState(false);
+  const [editCaptionOpen,  setEditCaptionOpen]  = useState(false);
+  const [editPPVOpen,      setEditPPVOpen]      = useState(false);
 
+  const { viewer: globalViewer } = useAppStore();
   const isLiking   = useRef(false);
   const commentRef = useRef<HTMLDivElement>(null);
   const postRef    = useRef<PostData | null>(null);
@@ -143,16 +154,10 @@ export default function SinglePostPage() {
   }, []);
 
   useEffect(() => {
-    const load = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setViewerId(user.id);
-      const { data } = await supabase.from("profiles").select("username, display_name, avatar_url").eq("id", user.id).single();
-      if (data) setViewer({ username: data.username, display_name: data.display_name || data.username, avatar_url: data.avatar_url || "" });
-    };
-    load();
-  }, []);
+    if (!globalViewer) return;
+    setViewerId(globalViewer.id);
+    setViewer({ username: globalViewer.username, display_name: globalViewer.display_name || globalViewer.username, avatar_url: globalViewer.avatar_url || "" });
+  }, [globalViewer]);
 
   const loadPost = useCallback(async () => {
     if (!postId) return;
@@ -179,12 +184,12 @@ export default function SinglePostPage() {
   useEffect(() => { loadPost(); }, [loadPost]);
 
   useEffect(() => {
-    if (!postId || !post) return;
+    if (!postId) return;
     fetch(`/api/saved/posts?post_id=${postId}`)
       .then((r) => r.json())
       .then((d) => { if (d) setSavedPost(d.saved ?? false); })
       .catch(() => {});
-  }, [postId, post?.id]);
+  }, [postId]);
 
   useEffect(() => {
     if (!postId) return;
@@ -253,7 +258,7 @@ export default function SinglePostPage() {
 
   const handleDelete = async () => {
     if (!post) return;
-    const res = await fetch(`/api/posts/${post.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/posts/${post.id}/delete`, { method: "POST" });
     if (res.ok) router.back();
   };
 
@@ -311,14 +316,7 @@ export default function SinglePostPage() {
     );
   }
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: "36px", height: "36px", borderRadius: "50%", border: "3px solid #1F1F2A", borderTop: "3px solid #8B5CF6", animation: "spin 0.9s linear infinite" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
+  if (loading) return <SinglePostSkeleton />;
 
   if (error || !post) {
     return (
@@ -390,7 +388,18 @@ export default function SinglePostPage() {
         username={post.profiles?.username || ""}
         isVerified={!!post.profiles?.is_verified}
         timestamp={new Date(post.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-        rightSlot={<PostMenu isOwnPost={isOwnPost} onDelete={handleDelete} />}
+        onAvatarClick={() => router.push(`/${post.profiles?.username}`)}
+        onNameClick={() => router.push(`/${post.profiles?.username}`)}
+        rightSlot={
+          <button
+            onClick={() => isOwnPost ? setCreatorSheetOpen(true) : setSheetOpen(true)}
+            style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}
+          >
+            <MoreHorizontal size={20} strokeWidth={1.8} />
+          </button>
+        }
       />
 
       {post.caption && !isTextPost && (
@@ -423,6 +432,54 @@ export default function SinglePostPage() {
         <div style={{ margin: "0 16px" }}>
           <PostActions likes={post.like_count} comments={commentCount} liked={post.liked} bookmarked={savedPost} isSubscribed={post.can_access} isOwnProfile={isOwnPost} onLike={handleLike} onComment={handleComment} onTip={openTip} onBookmark={handleBookmark} />
         </div>
+      )}
+
+      <PostOptionsSheet
+        isOpen={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onSavePost={handleBookmark}
+        onSaveCreator={() => {}}
+        onNotInterested={() => {}}
+        onReport={() => {}}
+        onBlockCreator={() => {}}
+        savedPost={savedPost}
+      />
+
+      <CreatorPostOptionsSheet
+        isOpen={creatorSheetOpen}
+        onClose={() => setCreatorSheetOpen(false)}
+        onEdit={() => setEditCaptionOpen(true)}
+        onDelete={handleDelete}
+        onEditPPV={() => setEditPPVOpen(true)}
+      />
+
+      {editCaptionOpen && post && (
+        <EditCaptionModal
+          caption={post.caption ?? ""}
+          onSave={async (newCaption) => {
+            const res = await fetch(`/api/posts/${post.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caption: newCaption }) });
+            if (!res.ok) throw new Error("Failed");
+            setPost((p) => p ? { ...p, caption: newCaption || null } : p);
+          }}
+          onClose={() => setEditCaptionOpen(false)}
+        />
+      )}
+
+      {editPPVOpen && post && (
+        <EditPPVModal
+          currentPrice={post.ppv_price != null ? post.ppv_price / 100 : null}
+          onSave={async (priceKobo) => {
+            const res = await fetch(`/api/posts/${post.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_ppv: true, ppv_price: priceKobo }) });
+            if (!res.ok) throw new Error("Failed");
+            setPost((p) => p ? { ...p, is_ppv: true, ppv_price: priceKobo } : p);
+          }}
+          onRemove={post.is_ppv ? async () => {
+            const res = await fetch(`/api/posts/${post.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_ppv: false, ppv_price: null }) });
+            if (!res.ok) throw new Error("Failed");
+            setPost((p) => p ? { ...p, is_ppv: false, ppv_price: null } : p);
+          } : undefined}
+          onClose={() => setEditPPVOpen(false)}
+        />
       )}
 
       {/* Comments */}
