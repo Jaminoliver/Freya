@@ -87,7 +87,11 @@ export function CreatorOnboarding({ onBack }: CreatorOnboardingProps) {
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [showToast,   setShowToast]   = useState(false);
 
-  const scrollToTop = () => window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  };
   const [userEmail,   setUserEmail]   = useState("");
 
   React.useEffect(() => {
@@ -186,7 +190,7 @@ export function CreatorOnboarding({ onBack }: CreatorOnboardingProps) {
             {STEPS.map((s) => (
               <div
                 key={s.number}
-                onClick={() => { if (s.number < currentStep) { setCurrentStep(s.number); scrollToTop(); } }}
+                onClick={() => s.number < currentStep && setCurrentStep(s.number)}
                 style={{
                   flex: 1, position: "relative",
                   padding: "10px 0",
