@@ -131,12 +131,66 @@ export default function ProfileInfo({
           )}
 
           {isOverflowing && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              style={{ background: "none", border: "none", color: "#8B5CF6", fontSize: "13px", fontWeight: 500, cursor: "pointer", padding: "6px 0 0", fontFamily: "'Inter', sans-serif", display: "block" }}
-            >
-              {expanded ? "Less info" : "More info"}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", paddingTop: "6px", flexWrap: "wrap" }}>
+              {!expanded && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                style={{ background: "none", border: "none", color: "#8B5CF6", fontSize: "13px", fontWeight: 500, cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif" }}
+              >
+                More info
+              </button>
+              )}
+              {!expanded && (
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  {websiteUrl && (
+                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "flex", alignItems: "center", color: "#FFFFFF", textDecoration: "none" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "#FFFFFF"; }}>
+                      <Globe size={20} strokeWidth={1.8} />
+                    </a>
+                  )}
+                  {twitterUrl && (
+                    <a href={twitterUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "flex", alignItems: "center", color: "#FFFFFF", textDecoration: "none" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "#FFFFFF"; }}>
+                      <Twitter size={20} strokeWidth={1.8} />
+                    </a>
+                  )}
+                  {instagramUrl && (
+                    <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "flex", alignItems: "center", color: "#FFFFFF", textDecoration: "none" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "#FFFFFF"; }}>
+                      <Instagram size={20} strokeWidth={1.8} />
+                    </a>
+                  )}
+                  {facebookUrl && (
+                    <a href={facebookUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "flex", alignItems: "center", color: "#FFFFFF", textDecoration: "none" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "#FFFFFF"; }}>
+                      <Facebook size={20} strokeWidth={1.8} />
+                    </a>
+                  )}
+                  {telegramUrl && (
+                    <a href={telegramUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "flex", alignItems: "center", color: "#FFFFFF", textDecoration: "none" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = "#8B5CF6"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "#FFFFFF"; }}>
+                      <Send size={20} strokeWidth={1.8} />
+                    </a>
+                  )}
+                  {location && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <MapPin size={20} color="#FFFFFF" strokeWidth={1.8} />
+                      <span style={{ fontSize: "12px", color: "#FFFFFF" }}>{location}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {(expanded || !isOverflowing) && (
@@ -197,6 +251,15 @@ export default function ProfileInfo({
             </div>
           )}
         </div>
+      )}
+
+      {isOverflowing && expanded && (
+        <button
+          onClick={() => setExpanded(false)}
+          style={{ background: "none", border: "none", color: "#8B5CF6", fontSize: "13px", fontWeight: 500, cursor: "pointer", padding: "8px 0 0", fontFamily: "'Inter', sans-serif", display: "block" }}
+        >
+          Less info
+        </button>
       )}
     </div>
   );

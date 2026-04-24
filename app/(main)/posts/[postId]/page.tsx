@@ -259,7 +259,8 @@ export default function SinglePostPage() {
   const handleDelete = async () => {
     if (!post) return;
     const res = await fetch(`/api/posts/${post.id}/delete`, { method: "POST" });
-    if (res.ok) router.back();
+    if (!res.ok) throw new Error("Failed");
+    router.back();
   };
 
   const handleComment = () => {
@@ -391,14 +392,27 @@ export default function SinglePostPage() {
         onAvatarClick={() => router.push(`/${post.profiles?.username}`)}
         onNameClick={() => router.push(`/${post.profiles?.username}`)}
         rightSlot={
-          <button
-            onClick={() => isOwnPost ? setCreatorSheetOpen(true) : setSheetOpen(true)}
-            style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}
-          >
-            <MoreHorizontal size={20} strokeWidth={1.8} />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {isOwnPost && post.is_ppv && post.ppv_price ? (
+              <span style={{
+                fontSize: "11px", fontWeight: 600, color: "#8B5CF6",
+                backgroundColor: "rgba(139,92,246,0.15)",
+                border: "1px solid rgba(139,92,246,0.35)",
+                borderRadius: "999px", padding: "2px 10px",
+                fontFamily: "'Inter', sans-serif", letterSpacing: "0.02em",
+              }}>
+                PPV · ₦{(post.ppv_price / 100).toLocaleString("en-NG")}
+              </span>
+            ) : null}
+            <button
+              onClick={() => isOwnPost ? setCreatorSheetOpen(true) : setSheetOpen(true)}
+              style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}
+            >
+              <MoreHorizontal size={20} strokeWidth={1.8} />
+            </button>
+          </div>
         }
       />
 

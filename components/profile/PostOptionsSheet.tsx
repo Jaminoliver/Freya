@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { createPortal } from "react-dom";
 
@@ -23,6 +23,7 @@ export default function CreatorPostOptionsSheet({
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? "hidden" : "";
+    if (!isOpen) { setDeleteStep("idle"); setDeleteError(false); }
     return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
 
@@ -49,14 +50,24 @@ export default function CreatorPostOptionsSheet({
     }] : []),
   ];
 
-  const group2 = [
-    {
-      icon:   <Trash2 size={22} strokeWidth={1.6} />,
-      label:  "Delete post",
-      action: onDelete,
-      color:  "#EF4444",
-    },
-  ];
+  const [deleteStep,  setDeleteStep]  = React.useState<"idle" | "confirm" | "deleting">("idle");
+  const [deleteError, setDeleteError] = React.useState(false);
+
+  const handleDeleteClick = async () => {
+    if (deleteStep === "idle")    { setDeleteStep("confirm"); setDeleteError(false); return; }
+    if (deleteStep === "confirm") {
+      setDeleteStep("deleting");
+      setDeleteError(false);
+      try {
+        await onDelete();
+        setDeleteStep("idle");
+        onClose();
+      } catch {
+        setDeleteStep("confirm");
+        setDeleteError(true);
+      }
+    }
+  };
 
   const cardStyle: React.CSSProperties = {
     backgroundColor: "rgba(255,255,255,0.07)",
@@ -161,19 +172,42 @@ export default function CreatorPostOptionsSheet({
             </div>
 
             {/* Group 2 — danger */}
-            <div style={cardStyle}>
-              {group2.map((item, i) => (
-                <button
-                  key={i}
-                  className="creator-opts-list-btn"
-                  onClick={() => { item.action?.(); onClose(); }}
-                  style={{ ...listBtnBase, color: item.color }}
-                >
-                  <span style={{ display: "flex", flexShrink: 0 }}>{item.icon}</span>
-                  {item.label}
-                </button>
-              ))}
+            <div style={{ ...cardStyle, marginBottom: "10px" }}>
+              <button
+                className="creator-opts-list-btn"
+                onClick={handleDeleteClick}
+                disabled={deleteStep === "deleting"}
+                style={{
+                  ...listBtnBase,
+                  color:   deleteStep === "idle" ? "#EF4444" : "#FF6B6B",
+                  opacity: deleteStep === "deleting" ? 0.6 : 1,
+                }}
+              >
+                {deleteStep === "deleting"
+                  ? <div style={{ width: "22px", height: "22px", borderRadius: "50%", border: "2px solid rgba(239,68,68,0.3)", borderTop: "2px solid #EF4444", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+                  : <Trash2 size={22} strokeWidth={1.6} />
+                }
+                <span>
+                  {deleteStep === "idle"     && "Delete post"}
+                  {deleteStep === "confirm"  && "Tap again to confirm"}
+                  {deleteStep === "deleting" && "Deleting…"}
+                </span>
+              </button>
+              {deleteStep === "confirm" && (
+                <div style={{ paddingLeft: "58px", paddingBottom: "10px", display: "flex", alignItems: "center", gap: "12px" }}>
+                  {deleteError && (
+                    <span style={{ fontSize: "12px", color: "#EF4444", fontFamily: "'Inter', sans-serif" }}>Failed, try again</span>
+                  )}
+                  <span
+                    onClick={() => { setDeleteStep("idle"); setDeleteError(false); }}
+                    style={{ fontSize: "13px", fontWeight: 600, color: "#A3A3C2", cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: "4px 10px", borderRadius: "8px", backgroundColor: "rgba(255,255,255,0.08)" }}
+                  >
+                    Cancel
+                  </span>
+                </div>
+              )}
             </div>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
             {/* Cancel */}
             <button

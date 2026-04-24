@@ -140,7 +140,8 @@ export default function PostRow({
 
   const handleDelete = async () => {
     const res = await fetch(`/api/posts/${post.id}/delete`, { method: "POST" });
-    if (res.ok) onDelete?.(String(post.id));
+    if (!res.ok) throw new Error("Failed");
+    onDelete?.(String(post.id));
   };
 
   const handleSaveCaption = async (newCaption: string) => {
