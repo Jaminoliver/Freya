@@ -86,6 +86,8 @@ export function CreatorOnboarding({ onBack }: CreatorOnboardingProps) {
   const [launching,   setLaunching]   = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [showToast,   setShowToast]   = useState(false);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   const [userEmail,   setUserEmail]   = useState("");
 
   React.useEffect(() => {
@@ -182,11 +184,22 @@ export function CreatorOnboarding({ onBack }: CreatorOnboardingProps) {
           {/* Progress bar */}
           <div style={{ display: "flex", gap: "5px", marginBottom: "7px" }}>
             {STEPS.map((s) => (
-              <div key={s.number} style={{
-                flex: 1, height: "3px", borderRadius: "2px",
-                background: currentStep >= s.number ? "#8B5CF6" : "#222235",
-                transition: "background 0.3s",
-              }} />
+              <div
+                key={s.number}
+                onClick={() => { if (s.number < currentStep) { setCurrentStep(s.number); scrollToTop(); } }}
+                style={{
+                  flex: 1, position: "relative",
+                  padding: "10px 0",
+                  cursor: s.number < currentStep ? "pointer" : "default",
+                  WebkitTapHighlightColor: "transparent",
+                }}
+              >
+                <div style={{
+                  height: "3px", borderRadius: "2px",
+                  background: currentStep > s.number ? "#22C55E" : currentStep === s.number ? "#8B5CF6" : "#222235",
+                  transition: "background 0.3s",
+                }} />
+              </div>
             ))}
           </div>
 
@@ -195,7 +208,7 @@ export function CreatorOnboarding({ onBack }: CreatorOnboardingProps) {
             {STEPS.map((s) => (
               <span key={s.number} style={{
                 fontSize: "11px",
-                color: currentStep === s.number ? "#8B5CF6" : currentStep > s.number ? "#5A4A8A" : "#3A3A5A",
+                color: currentStep === s.number ? "#8B5CF6" : currentStep > s.number ? "#22C55E" : "#3A3A5A",
                 fontWeight: currentStep === s.number ? 600 : 400,
                 transition: "color 0.3s",
               }}>
@@ -220,21 +233,21 @@ export function CreatorOnboarding({ onBack }: CreatorOnboardingProps) {
 
             {currentStep === 1 && (
               <CreatorOnboardingStep1
-                onContinue={(data) => { setStep1Data(data); setCurrentStep(2); }}
+                onContinue={(data) => { setStep1Data(data); setCurrentStep(2); scrollToTop(); }}
                 defaultValues={{ ...step1Data, email: userEmail }}
               />
             )}
             {currentStep === 2 && (
               <CreatorOnboardingStep2
-                onContinue={(data) => { setStep2Data(data); setCurrentStep(3); }}
-                onBack={() => setCurrentStep(1)}
+                onContinue={(data) => { setStep2Data(data); setCurrentStep(3); scrollToTop(); }}
+                onBack={() => { setCurrentStep(1); scrollToTop(); }}
                 defaultValues={step2Data}
               />
             )}
             {currentStep === 3 && (
               <CreatorOnboardingStep3
                 onLaunch={handleLaunch}
-                onBack={() => setCurrentStep(2)}
+                onBack={() => { setCurrentStep(2); scrollToTop(); }}
                 launching={launching}
               />
             )}

@@ -24,14 +24,9 @@ export default function BecomeACreatorPage() {
         >
           <ArrowLeft size={20} />
         </button>
-        <div>
-          <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#F1F5F9", margin: "0 0 2px" }}>
-            Become a Creator
-          </h1>
-          <p style={{ fontSize: "13px", color: "#A3A3C2", margin: 0 }}>
-            Set up your creator profile in 3 simple steps
-          </p>
-        </div>
+        <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", margin: 0 }}>
+          Become a Creator
+        </h1>
       </div>
 
       <CreatorOnboarding onBack={() => router.back()} />
