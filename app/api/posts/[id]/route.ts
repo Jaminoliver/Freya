@@ -100,7 +100,7 @@ export async function GET(
 
     const [subResult, ppvResult, likeResult, pollResult] = await Promise.all([
       // Subscription check
-      user && !isOwnPost && !post.is_free
+      user && !isOwnPost
         ? service.from("subscriptions").select("id").eq("fan_id", user.id).eq("creator_id", post.creator_id).eq("status", "active").maybeSingle()
         : Promise.resolve({ data: null }),
 
