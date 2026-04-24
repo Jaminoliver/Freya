@@ -9,6 +9,7 @@ export default function BecomeACreatorPage() {
 
   return (
     <div
+      id="creator-page-top"
       style={{
         minHeight: "100vh",
         backgroundColor: "#0A0A0F",

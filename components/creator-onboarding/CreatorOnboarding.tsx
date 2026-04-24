@@ -88,6 +88,7 @@ export function CreatorOnboarding({ onBack }: CreatorOnboardingProps) {
   const [showToast,   setShowToast]   = useState(false);
 
   const scrollToTop = () => {
+    document.getElementById("creator-page-top")?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
