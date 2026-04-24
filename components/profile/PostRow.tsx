@@ -46,11 +46,12 @@ export interface ApiPost {
   saved_creator?:  boolean;
   tip_total?:      number;
   profiles: {
-    id:           string;
-    username:     string;
-    display_name: string | null;
-    avatar_url:   string | null;
-    is_verified:  boolean;
+    id:                 string;
+    username:           string;
+    display_name:       string | null;
+    avatar_url:         string | null;
+    is_verified:        boolean;
+    subscription_price: number | null;
   };
   media: {
     id:                number;
@@ -274,10 +275,10 @@ export default function PostRow({
       {viewerMedia.length > 0 && (
         <PostMediaViewer
           media={viewerMedia}
-          isLocked={post.locked && !(isSubscribed && !post.is_ppv) && !isOwnProfile}
+          isLocked={post.locked && !isOwnProfile}
           price={ppvPrice}
           isPPV={isPPV}
-          isFreeSubscription={post.is_free}
+          isFreeSubscription={(post.profiles.subscription_price ?? 0) === 0}
           isUnlockedPPV={isPPV && !post.locked}
           onDoubleTap={engagement.handleDoubleTapLike}
           onSingleTap={handleSingleTap}

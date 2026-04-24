@@ -53,6 +53,7 @@ export async function GET(
         caption,
         text_background,
         is_free,
+        audience,
         is_ppv,
         ppv_price,
         like_count,
@@ -120,10 +121,11 @@ export async function GET(
     ]);
 
     // Determine access
-    let canAccess = post.is_free && !post.is_ppv;
+    let canAccess = false;
     if (isOwnPost) canAccess = true;
-    else if (subResult.data && !post.is_ppv) canAccess = true;
-    else if (ppvResult.data && post.is_ppv) canAccess = true;
+    else if (post.is_ppv && ppvResult.data) canAccess = true;
+    else if (!post.is_ppv && post.audience === "everyone") canAccess = true;
+    else if (!post.is_ppv && subResult.data) canAccess = true;
 
     const liked = !!likeResult.data;
 
@@ -215,7 +217,7 @@ export async function GET(
     });
 
     // ── Cache: short cache for single posts, user-specific ──────────────
-    res.headers.set("Cache-Control", "private, s-maxage=15, stale-while-revalidate=30");
+    res.headers.set("Cache-Control", "no-store");
 
     return res;
 
