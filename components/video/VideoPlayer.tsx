@@ -309,6 +309,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
           ref={progressRef}
           className="vp-progress-bar"
           onMouseDown={handleSeekMouseDown}
+          onMouseUp={handleSeekMouseUp}
           onTouchStart={handleSeekTouchStart}
           onTouchMove={handleSeekTouchMove}
           onTouchEnd={handleSeekTouchEnd}
@@ -422,18 +423,10 @@ export default function VideoPlayer({
   }, [fillParent, externalRatio]);
 
   const teardown = React.useCallback(() => {
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
     const video = videoRef.current;
     if (video) {
       video.pause();
-      video.removeAttribute("src");
-      video.load();
     }
-    hasInitialized.current = false;
-    setShowPoster(true);
     setIsBuffering(false);
   }, []);
 
@@ -617,6 +610,7 @@ export default function VideoPlayer({
           ref={videoRef}
           playsInline
           preload="none"
+          loop
           muted={isMuted}
           poster={posterSrc}
           onLoadedMetadata={handleLoadedMetadata}

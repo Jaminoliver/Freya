@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { ArrowLeft, X, MoreVertical, Images } from "lucide-react";
 import { Sparkles } from "lucide-react";
 import { ChatActionModal } from "@/components/messages/ChatActionModal";
@@ -11,6 +12,9 @@ import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
 import { updateConversations, blockConversation } from "@/app/(main)/messages/page";
 import { useMessageStore } from "@/lib/store/messageStore";
 import type { Conversation } from "@/lib/types/messages";
+import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+import StoryViewer from "@/components/story/StoryViewer";
 
 interface Props {
   conversation:       Conversation;
@@ -25,10 +29,15 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
   const router = useRouter();
   const { setMessages } = useMessageStore();
 
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const { group, hasStory, hasUnviewed, refresh } = useCreatorStory(participant.id);
   const [modalOpen,         setModalOpen]         = useState(false);
-  const [modalPos,          setModalPos]          = useState({ x: 0, y: 0 });
-  const [reportOpen,        setReportOpen]        = useState(false);
-  const [avatarOpen,        setAvatarOpen]        = useState(false);
+const [modalPos,          setModalPos]          = useState({ x: 0, y: 0 });
+const [reportOpen,        setReportOpen]        = useState(false);
+const [avatarOpen,        setAvatarOpen]        = useState(false);
+const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
+const [avatarDropdownPos,  setAvatarDropdownPos]  = useState({ top: 0, left: 0 });
+const avatarWrapRef = useRef<HTMLDivElement>(null);
   const [blockConfirm,      setBlockConfirm]      = useState(false);
   const [unblockConfirm,    setUnblockConfirm]    = useState(false);
   const [restrictConfirm,   setRestrictConfirm]   = useState(false);
@@ -40,7 +49,26 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
     fetchStatus,
   } = useBlockRestrict({ userId: participant.id });
 
-  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuBtnRef    = useRef<HTMLButtonElement>(null);
+
+  const handleAvatarClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!hasStory) { setAvatarOpen(true); return; }
+    if (avatarWrapRef.current) {
+      const rect = avatarWrapRef.current.getBoundingClientRect();
+      const dropdownWidth          = 190;
+      const dropdownHeightEstimate = 100;
+      const padding                = 8;
+      let top  = rect.bottom + 8;
+      let left = rect.left;
+      if (left + dropdownWidth > window.innerWidth - padding) left = window.innerWidth - dropdownWidth - padding;
+      if (left < padding) left = padding;
+      if (top + dropdownHeightEstimate > window.innerHeight - padding) top = window.innerHeight - dropdownHeightEstimate - padding;
+      if (top < padding) top = padding;
+      setAvatarDropdownPos({ top, left });
+    }
+    setAvatarDropdownOpen(true);
+  };
 
   const handleOpenModal = () => {
     fetchStatus();
@@ -101,6 +129,13 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
     return () => document.removeEventListener("keydown", handler);
   }, [avatarOpen]);
 
+  useEffect(() => {
+    if (!avatarDropdownOpen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setAvatarDropdownOpen(false); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [avatarDropdownOpen]);
+
   const showStatus = isTyping || participant.isOnline;
 
   return (
@@ -120,6 +155,15 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
         .typing-dot:nth-child(3) { animation-delay: 0.3s; }
         .header-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 8px; border-radius: 8px; transition: all 0.15s ease; color: #A3A3C2; }
         .header-icon-btn:hover { color: #FFFFFF; background-color: #1C1C2E; }
+        @keyframes _avatarCtxPop {
+          0%   { opacity: 0; transform: scale(0.88) translateY(-6px); }
+          60%  { opacity: 1; transform: scale(1.02) translateY(0); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .avatar-ctx-popup { animation: _avatarCtxPop 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards; transform-origin: top left; }
+        .avatar-ctx-popup::before { content: ''; position: absolute; inset: 0; border-radius: 14px; background: rgba(8,8,18,0.88); -webkit-backdrop-filter: blur(32px); backdrop-filter: blur(32px); z-index: -1; }
+        .avatar-ctx-item:hover  { background-color: rgba(255,255,255,0.05) !important; }
+        .avatar-ctx-item:active { background-color: rgba(255,255,255,0.08) !important; }
       `}</style>
 
       {/* Avatar lightbox */}
@@ -190,20 +234,54 @@ export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping =
             <ArrowLeft size={20} strokeWidth={1.8} />
           </button>
 
-          <div style={{ position: "relative", flexShrink: 0, cursor: "pointer" }} onClick={() => setAvatarOpen(true)}>
-            <div style={{ width: "40px", height: "40px", borderRadius: "50%", overflow: "hidden", backgroundColor: "#2A2A3D" }}>
-              {participant.avatarUrl ? (
-                <img src={participant.avatarUrl} alt={participant.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              ) : (
-                <div style={{ width: "100%", height: "100%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", fontSize: "16px", fontWeight: 700 }}>
-                  {participant.name[0].toUpperCase()}
-                </div>
-              )}
-            </div>
+          <div ref={avatarWrapRef} style={{ position: "relative", flexShrink: 0 }}>
+            {storyViewerOpen && group && (
+              <StoryViewer groups={[group]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refresh(); }} />
+            )}
+            <AvatarWithStoryRing
+              src={participant.avatarUrl ?? null}
+              alt={participant.name}
+              size={36}
+              hasStory={hasStory}
+              hasUnviewed={hasUnviewed}
+              borderColor="var(--background)"
+              onClick={handleAvatarClick}
+            />
             {participant.isOnline && (
-              <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid var(--background)" }} />
+              <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid var(--background)", zIndex: 10 }} />
             )}
           </div>
+
+          {avatarDropdownOpen && typeof document !== "undefined" && createPortal(
+            <>
+              <div onMouseDown={() => setAvatarDropdownOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 500 }} />
+              <div
+                className="avatar-ctx-popup"
+                style={{ position: "fixed", top: avatarDropdownPos.top, left: avatarDropdownPos.left, zIndex: 501, backgroundColor: "transparent", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", boxShadow: "0 12px 40px rgba(0,0,0,0.5)", fontFamily: "'Inter', sans-serif", width: "190px", overflow: "hidden" }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div style={{ padding: "6px 0" }}>
+                  {[
+                    { label: "View story",         action: () => { setAvatarDropdownOpen(false); setStoryViewerOpen(true); } },
+                    { label: "View profile photo", action: () => { setAvatarDropdownOpen(false); setAvatarOpen(true); } },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      className="avatar-ctx-item"
+                      onClick={item.action}
+                      onTouchEnd={(e) => { e.preventDefault(); item.action(); }}
+                      style={{ display: "flex", alignItems: "center", width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.85)", fontSize: "13px", fontFamily: "'Inter', sans-serif", textAlign: "left", letterSpacing: "0.01em", transition: "background-color 0.12s ease" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#fff")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>,
+            document.body
+          )}
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1px", minWidth: 0, overflow: "hidden" }}>
             <div className={`chat-header-name${showStatus ? " chat-header-name--up" : ""}`} style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", minWidth: 0 }} onClick={() => router.push(`/${participant.username}`)}>

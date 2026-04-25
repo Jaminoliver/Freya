@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Bookmark, Lock, Trash2 } from "lucide-react";
+import { Bookmark, Lock } from "lucide-react";
 
 export interface SavedPost {
   id:            string;
@@ -18,47 +18,21 @@ export interface SavedPost {
 }
 
 interface SavedPostGridProps {
-  posts:    SavedPost[];
-  onUnsave: (ids: string[]) => void;
+  posts:          SavedPost[];
+  onUnsave:       (ids: string[]) => void;
+  selectMode:     boolean;
+  selectedIds:    Set<string>;
+  onToggleSelect: (id: string) => void;
+  onLongPress:    (id: string) => void;
 }
 
-export default function SavedPostGrid({ posts, onUnsave }: SavedPostGridProps) {
+export default function SavedPostGrid({ posts, onUnsave, selectMode, selectedIds, onToggleSelect, onLongPress }: SavedPostGridProps) {
   const router = useRouter();
-  const [selectMode,  setSelectMode]  = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [removing,    setRemoving]    = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const toggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }, []);
-
-  const handleCancelSelect = () => {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  };
-
-  const handleRemoveSelected = async () => {
-    if (removing || selectedIds.size === 0) return;
-    setRemoving(true);
-    const ids = Array.from(selectedIds);
-    onUnsave(ids);
-    setSelectMode(false);
-    setSelectedIds(new Set());
-    setRemoving(false);
-  };
-
-  // Long press handlers
   const handlePressStart = (id: string) => {
     longPressTimer.current = setTimeout(() => {
-      if (!selectMode) {
-        setSelectMode(true);
-        setSelectedIds(new Set([id]));
-      }
+      onLongPress(id);
     }, 500);
   };
 
@@ -70,85 +44,12 @@ export default function SavedPostGrid({ posts, onUnsave }: SavedPostGridProps) {
   };
 
   const handleItemClick = (id: string) => {
-    if (selectMode) { toggleSelect(id); return; }
+    if (selectMode) { onToggleSelect(id); return; }
     router.push(`/posts/${id}?from=saved`);
   };
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
-
-      {/* Action bar — always visible at top, transforms in select mode */}
-      <div style={{
-        display:         "flex",
-        alignItems:      "center",
-        justifyContent:  "space-between",
-        padding:         "10px 16px",
-        minHeight:       "44px",
-        backgroundColor: selectMode ? "rgba(239,68,68,0.08)" : "transparent",
-        borderBottom:    selectMode ? "1px solid rgba(239,68,68,0.2)" : "1px solid transparent",
-        transition:      "background-color 0.2s ease, border-color 0.2s ease",
-      }}>
-        {selectMode ? (
-          <>
-            <button
-              onClick={handleCancelSelect}
-              style={{ background: "none", border: "none", color: "#A3A3C2", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: "6px 0" }}
-            >
-              Cancel
-            </button>
-
-            <span style={{ fontSize: "13px", fontWeight: 600, color: selectedIds.size > 0 ? "#F1F5F9" : "#6B6B8A", fontFamily: "'Inter', sans-serif" }}>
-              {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Tap to select"}
-            </span>
-
-            <button
-              onClick={handleRemoveSelected}
-              disabled={removing || selectedIds.size === 0}
-              style={{
-                display:         "flex",
-                alignItems:      "center",
-                gap:             "5px",
-                padding:         "7px 14px",
-                borderRadius:    "20px",
-                border:          "none",
-                backgroundColor: selectedIds.size > 0 ? "#EF4444" : "rgba(239,68,68,0.2)",
-                color:           selectedIds.size > 0 ? "#FFFFFF" : "rgba(239,68,68,0.4)",
-                fontSize:        "13px",
-                fontWeight:      700,
-                cursor:          selectedIds.size > 0 && !removing ? "pointer" : "default",
-                fontFamily:      "'Inter', sans-serif",
-                transition:      "all 0.15s",
-              }}
-            >
-              <Trash2 size={13} />
-              Remove{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
-            </button>
-          </>
-        ) : (
-          <>
-            <span style={{ fontSize: "12px", color: "#4A4A6A", fontFamily: "'Inter', sans-serif" }}>
-              Hold any post to select
-            </span>
-            <button
-              onClick={() => setSelectMode(true)}
-              style={{
-                background:      "none",
-                border:          "1px solid #2A2A3D",
-                color:           "#A3A3C2",
-                fontSize:        "12px",
-                fontWeight:      600,
-                cursor:          "pointer",
-                fontFamily:      "'Inter', sans-serif",
-                padding:         "5px 12px",
-                borderRadius:    "20px",
-                backgroundColor: "#1C1C2E",
-              }}
-            >
-              Select
-            </button>
-          </>
-        )}
-      </div>
 
       {/* Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "2px", padding: "2px" }}>
@@ -158,7 +59,7 @@ export default function SavedPostGrid({ posts, onUnsave }: SavedPostGridProps) {
             <div
               key={post.id}
               onClick={() => handleItemClick(post.id)}
-              onContextMenu={(e) => { e.preventDefault(); if (!selectMode) { setSelectMode(true); setSelectedIds(new Set([post.id])); } else { toggleSelect(post.id); } }}
+              onContextMenu={(e) => { e.preventDefault(); if (!selectMode) { onLongPress(post.id); } else { onToggleSelect(post.id); } }}
               onMouseDown={() => handlePressStart(post.id)}
               onMouseUp={handlePressEnd}
               onMouseLeave={handlePressEnd}
@@ -166,16 +67,18 @@ export default function SavedPostGrid({ posts, onUnsave }: SavedPostGridProps) {
               onTouchEnd={handlePressEnd}
               onTouchCancel={handlePressEnd}
               style={{
-                position:    "relative",
-                aspectRatio: "1",
-                backgroundColor: "#1C1C2E",
-                cursor:      "pointer",
-                overflow:    "hidden",
-                outline:     isSelected ? "3px solid #8B5CF6" : "none",
-                outlineOffset: "-3px",
-                transition:  "outline 0.1s",
-                userSelect:  "none",
-                WebkitUserSelect: "none",
+                position:                "relative",
+                aspectRatio:             "1",
+                backgroundColor:         "#1C1C2E",
+                cursor:                  "pointer",
+                overflow:                "hidden",
+                outline:                 isSelected ? "3px solid #8B5CF6" : "none",
+                outlineOffset:           "-3px",
+                transition:              "outline 0.1s",
+                userSelect:              "none",
+                WebkitUserSelect:        "none",
+                WebkitTouchCallout:      "none",
+                WebkitTapHighlightColor: "transparent",
               }}
             >
               {post.thumbnail_url ? (
@@ -184,13 +87,18 @@ export default function SavedPostGrid({ posts, onUnsave }: SavedPostGridProps) {
                   alt=""
                   loading="lazy"
                   draggable={false}
+                  onContextMenu={(e) => e.preventDefault()}
                   style={{
-                    width:      "100%",
-                    height:     "100%",
-                    objectFit:  "cover",
-                    transition: "opacity 0.15s",
-                    opacity:    selectMode && !isSelected ? 0.4 : 1,
-                    filter:     post.is_locked && !selectMode ? "blur(12px)" : "none",
+                    width:              "100%",
+                    height:             "100%",
+                    objectFit:          "cover",
+                    transition:         "opacity 0.15s",
+                    opacity:            selectMode && !isSelected ? 0.4 : 1,
+                    filter:             post.is_locked && !selectMode ? "blur(12px)" : "none",
+                    pointerEvents:      "none",
+                    WebkitTouchCallout: "none",
+                    WebkitUserSelect:   "none",
+                    userSelect:         "none",
                   }}
                 />
               ) : (

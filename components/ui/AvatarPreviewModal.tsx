@@ -134,27 +134,7 @@ export default function AvatarPreviewModal({
         {!avatarUrl && firstLetter}
       </div>
 
-      {/* Display name */}
-      {displayName && (
-        <span
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            marginTop:  "20px",
-            fontSize:   "18px",
-            fontWeight: 600,
-            color:      "#FFFFFF",
-            fontFamily: "'Inter', sans-serif",
-            letterSpacing: "-0.01em",
-            textAlign:  "center",
-            maxWidth:   "90vw",
-            overflow:   "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {displayName}
-        </span>
-      )}
+      
 
       {/* Action pills (only if editable) */}
       {isEditable && (

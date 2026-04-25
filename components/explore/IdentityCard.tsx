@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+import StoryViewer from "@/components/story/StoryViewer";
 
 export interface IdentityCardData {
   type: "identity";
@@ -25,7 +28,9 @@ function formatCount(n: number): string {
 export function IdentityCard({ data }: { data: IdentityCardData }) {
   const router = useRouter();
   const [bannerError, setBannerError] = useState(false);
-  const [avatarError, setAvatarError] = useState(false);
+  const [storyOpen, setStoryOpen] = useState(false);
+
+  const { group, hasStory, hasUnviewed, refresh } = useCreatorStory(data.creator_id);
 
   const name = data.display_name || data.username;
   const initials = (name[0] ?? "?").toUpperCase();
@@ -104,67 +109,21 @@ export function IdentityCard({ data }: { data: IdentityCardData }) {
         )}
 
         {/* Avatar */}
+        {storyOpen && group && (
+          <StoryViewer groups={[group]} startGroupIndex={0} onClose={() => { setStoryOpen(false); refresh(); }} />
+        )}
         <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -38%)",
-            zIndex: 2,
-          }}
+          style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -38%)", zIndex: 2 }}
+          onClick={(e) => { e.stopPropagation(); if (hasStory && group) setStoryOpen(true); }}
         >
-          <div
-            style={{
-              width: "68px",
-              height: "68px",
-              borderRadius: "50%",
-              padding: "2px",
-              background: "conic-gradient(#C45F8C, #8B3FBF, #C45F8C)",
-            }}
-          >
-            <div
-              style={{
-                width: "100%",
-                height: "100%",
-                borderRadius: "50%",
-                overflow: "hidden",
-                border: "2px solid #0A0A0F",
-              }}
-            >
-              {data.avatar_url && !avatarError ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={data.avatar_url}
-                  alt={name}
-                  loading="lazy"
-                  onError={() => setAvatarError(true)}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    background: "#8B5CF6",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#fff",
-                    fontSize: "24px",
-                    fontWeight: 700,
-                    fontFamily: "'Inter', sans-serif",
-                  }}
-                >
-                  {initials}
-                </div>
-              )}
-            </div>
-          </div>
+          <AvatarWithStoryRing
+            src={data.avatar_url}
+            alt={name}
+            size={64}
+            hasStory={hasStory}
+            hasUnviewed={hasUnviewed}
+            borderColor="#0A0A0F"
+          />
         </div>
 
         {/* Name + username */}

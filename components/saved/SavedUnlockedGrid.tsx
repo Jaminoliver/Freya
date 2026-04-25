@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
-import { EyeOff, Eye, MessageSquare, Image as ImageIcon } from "lucide-react";
-
+import { MessageSquare, Image as ImageIcon } from "lucide-react";
 export interface UnlockedItem {
   unlock_id:        number;
   source:           "post" | "message";
@@ -24,47 +23,22 @@ export interface UnlockedItem {
 }
 
 interface SavedUnlockedGridProps {
-  items:     UnlockedItem[];
-  hidden:    boolean;
-  onToggle:  (items: UnlockedItem[], hidden: boolean) => void;
+  items:          UnlockedItem[];
+  mode?:          "visible" | "hidden";
+  onAction:       (items: UnlockedItem[]) => void;
+  selectMode:     boolean;
+  selectedIds:    Set<string>;
+  onToggleSelect: (id: string) => void;
+  onLongPress:    (id: string) => void;
 }
 
-export default function SavedUnlockedGrid({ items, hidden, onToggle }: SavedUnlockedGridProps) {
+export default function SavedUnlockedGrid({ items, mode = "visible", onAction, selectMode, selectedIds, onToggleSelect, onLongPress }: SavedUnlockedGridProps) {
   const router = useRouter();
-  const [selectMode,  setSelectMode]  = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [busy,        setBusy]        = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const toggleSelect = useCallback((unlockId: number) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.has(unlockId) ? next.delete(unlockId) : next.add(unlockId);
-      return next;
-    });
-  }, []);
-
-  const handleCancelSelect = () => {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  };
-
-  const handleAction = async () => {
-    if (busy || selectedIds.size === 0) return;
-    setBusy(true);
-    const picked = items.filter((i) => selectedIds.has(i.unlock_id));
-    onToggle(picked, !hidden);
-    setSelectMode(false);
-    setSelectedIds(new Set());
-    setBusy(false);
-  };
 
   const handlePressStart = (unlockId: number) => {
     longPressTimer.current = setTimeout(() => {
-      if (!selectMode) {
-        setSelectMode(true);
-        setSelectedIds(new Set([unlockId]));
-      }
+      onLongPress(unlockId.toString());
     }, 500);
   };
 
@@ -76,7 +50,7 @@ export default function SavedUnlockedGrid({ items, hidden, onToggle }: SavedUnlo
   };
 
   const handleItemClick = (item: UnlockedItem) => {
-    if (selectMode) { toggleSelect(item.unlock_id); return; }
+    if (selectMode) { onToggleSelect(item.unlock_id.toString()); return; }
     if (item.source === "message") {
       router.push(`/posts/${item.id}?source=message&from=saved`);
     } else {
@@ -84,95 +58,20 @@ export default function SavedUnlockedGrid({ items, hidden, onToggle }: SavedUnlo
     }
   };
 
-  const actionLabel = hidden ? "Unhide" : "Hide";
-  const ActionIcon  = hidden ? Eye : EyeOff;
-
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
-
-      {/* Action bar */}
-      <div style={{
-        display:         "flex",
-        alignItems:      "center",
-        justifyContent:  "space-between",
-        padding:         "10px 16px",
-        minHeight:       "44px",
-        backgroundColor: selectMode ? "rgba(139,92,246,0.08)" : "transparent",
-        borderBottom:    selectMode ? "1px solid rgba(139,92,246,0.2)" : "1px solid transparent",
-        transition:      "background-color 0.2s ease, border-color 0.2s ease",
-      }}>
-        {selectMode ? (
-          <>
-            <button
-              onClick={handleCancelSelect}
-              style={{ background: "none", border: "none", color: "#A3A3C2", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: "6px 0" }}
-            >
-              Cancel
-            </button>
-
-            <span style={{ fontSize: "13px", fontWeight: 600, color: selectedIds.size > 0 ? "#F1F5F9" : "#6B6B8A" }}>
-              {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Tap to select"}
-            </span>
-
-            <button
-              onClick={handleAction}
-              disabled={busy || selectedIds.size === 0}
-              style={{
-                display:         "flex",
-                alignItems:      "center",
-                gap:             "5px",
-                padding:         "7px 14px",
-                borderRadius:    "20px",
-                border:          "none",
-                backgroundColor: selectedIds.size > 0 ? "#8B5CF6" : "rgba(139,92,246,0.2)",
-                color:           selectedIds.size > 0 ? "#FFFFFF" : "rgba(139,92,246,0.4)",
-                fontSize:        "13px",
-                fontWeight:      700,
-                cursor:          selectedIds.size > 0 && !busy ? "pointer" : "default",
-                fontFamily:      "'Inter', sans-serif",
-                transition:      "all 0.15s",
-              }}
-            >
-              <ActionIcon size={13} />
-              {actionLabel}{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
-            </button>
-          </>
-        ) : (
-          <>
-            <span style={{ fontSize: "12px", color: "#4A4A6A" }}>
-              {hidden ? "Hidden — hold to select" : "Hold any item to select"}
-            </span>
-            <button
-              onClick={() => setSelectMode(true)}
-              style={{
-                background:      "#1C1C2E",
-                border:          "1px solid #2A2A3D",
-                color:           "#A3A3C2",
-                fontSize:        "12px",
-                fontWeight:      600,
-                cursor:          "pointer",
-                fontFamily:      "'Inter', sans-serif",
-                padding:         "5px 12px",
-                borderRadius:    "20px",
-              }}
-            >
-              Select
-            </button>
-          </>
-        )}
-      </div>
 
       {/* Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "2px", padding: "2px" }}>
         {items.map((item) => {
-          const isSelected = selectedIds.has(item.unlock_id);
+          const isSelected = selectedIds.has(item.unlock_id.toString());
           const SourceIcon = item.source === "message" ? MessageSquare : ImageIcon;
 
           return (
             <div
               key={item.unlock_id}
               onClick={() => handleItemClick(item)}
-              onContextMenu={(e) => { e.preventDefault(); if (!selectMode) { setSelectMode(true); setSelectedIds(new Set([item.unlock_id])); } else { toggleSelect(item.unlock_id); } }}
+              onContextMenu={(e) => { e.preventDefault(); if (!selectMode) { onLongPress(item.unlock_id.toString()); } else { onToggleSelect(item.unlock_id.toString()); } }}
               onMouseDown={() => handlePressStart(item.unlock_id)}
               onMouseUp={handlePressEnd}
               onMouseLeave={handlePressEnd}
@@ -180,16 +79,18 @@ export default function SavedUnlockedGrid({ items, hidden, onToggle }: SavedUnlo
               onTouchEnd={handlePressEnd}
               onTouchCancel={handlePressEnd}
               style={{
-                position:         "relative",
-                aspectRatio:      "1",
-                backgroundColor:  "#1C1C2E",
-                cursor:           "pointer",
-                overflow:         "hidden",
-                outline:          isSelected ? "3px solid #8B5CF6" : "none",
-                outlineOffset:    "-3px",
-                transition:       "outline 0.1s",
-                userSelect:       "none",
-                WebkitUserSelect: "none",
+                position:               "relative",
+                aspectRatio:            "1",
+                backgroundColor:        "#1C1C2E",
+                cursor:                 "pointer",
+                overflow:               "hidden",
+                outline:                isSelected ? "3px solid #8B5CF6" : "none",
+                outlineOffset:          "-3px",
+                transition:             "outline 0.1s",
+                userSelect:             "none",
+                WebkitUserSelect:       "none",
+                WebkitTouchCallout:     "none",
+                WebkitTapHighlightColor: "transparent",
               }}
             >
               {item.thumbnail_url ? (
@@ -198,12 +99,17 @@ export default function SavedUnlockedGrid({ items, hidden, onToggle }: SavedUnlo
                   alt=""
                   loading="lazy"
                   draggable={false}
+                  onContextMenu={(e) => e.preventDefault()}
                   style={{
-                    width:      "100%",
-                    height:     "100%",
-                    objectFit:  "cover",
-                    transition: "opacity 0.15s",
-                    opacity:    selectMode && !isSelected ? 0.4 : 1,
+                    width:               "100%",
+                    height:              "100%",
+                    objectFit:           "cover",
+                    transition:          "opacity 0.15s",
+                    opacity:             selectMode && !isSelected ? 0.4 : 1,
+                    pointerEvents:       "none",
+                    WebkitTouchCallout:  "none",
+                    WebkitUserSelect:    "none",
+                    userSelect:          "none",
                   }}
                 />
               ) : (

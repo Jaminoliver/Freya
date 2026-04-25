@@ -52,27 +52,36 @@ export default function ProfileAvatar({
   const { group: storyGroup, hasStory, hasUnviewed, refresh } = useCreatorStory(creatorId ?? userId);
 
   const handleAvatarClick = () => {
+    if (!hasStory && !isEditable) { setPreview(true); return; }
+    if (hasStory && !isEditable) {
+      if (avatarWrapRef.current) {
+        const rect = avatarWrapRef.current.getBoundingClientRect();
+        const dropdownWidth          = 190;
+        const dropdownHeightEstimate = 130;
+        const padding                = 8;
+        let top  = rect.bottom + 8;
+        let left = rect.left;
+        if (left + dropdownWidth > window.innerWidth - padding) left = window.innerWidth - dropdownWidth - padding;
+        if (left < padding) left = padding;
+        if (top + dropdownHeightEstimate > window.innerHeight - padding) top = window.innerHeight - dropdownHeightEstimate - padding;
+        if (top < padding) top = padding;
+        setDropdownPos({ top, left });
+      }
+      setSheetOpen(true);
+      return;
+    }
+    // isEditable — always show dropdown
     if (avatarWrapRef.current) {
       const rect = avatarWrapRef.current.getBoundingClientRect();
       const dropdownWidth          = 190;
       const dropdownHeightEstimate = 130;
       const padding                = 8;
-
       let top  = rect.bottom + 8;
       let left = rect.left;
-
-      // Clamp horizontally to viewport
-      if (left + dropdownWidth > window.innerWidth - padding) {
-        left = window.innerWidth - dropdownWidth - padding;
-      }
+      if (left + dropdownWidth > window.innerWidth - padding) left = window.innerWidth - dropdownWidth - padding;
       if (left < padding) left = padding;
-
-      // Clamp vertically
-      if (top + dropdownHeightEstimate > window.innerHeight - padding) {
-        top = window.innerHeight - dropdownHeightEstimate - padding;
-      }
+      if (top + dropdownHeightEstimate > window.innerHeight - padding) top = window.innerHeight - dropdownHeightEstimate - padding;
       if (top < padding) top = padding;
-
       setDropdownPos({ top, left });
     }
     setSheetOpen(true);
@@ -156,10 +165,8 @@ export default function ProfileAvatar({
 
   const menuItems = [
     ...(hasStory ? [{ label: "View story", action: () => { setSheetOpen(false); setStoryViewerOpen(true); } }] : []),
-    ...(isEditable
-      ? [{ label: "Edit profile photo", action: triggerEditPhoto }]
-      : [{ label: "View profile photo", action: () => { setSheetOpen(false); setPreview(true); } }]
-    ),
+    { label: "View profile photo", action: () => { setSheetOpen(false); setPreview(true); } },
+    ...(isEditable ? [{ label: "Edit profile photo", action: triggerEditPhoto }] : []),
     ...(isCreator && isEditable ? [{ label: storyUploading ? "Posting…" : "Add to Story", action: triggerAddToStory }] : []),
   ];
 

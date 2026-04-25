@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Grid3X3, List, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Grid3X3, List, EyeOff, Eye, Trash2 } from "lucide-react";
 import { SavedSkeleton } from "@/components/loadscreen/SavedSkeleton";
 import SavedPostGrid     from "@/components/saved/SavedPostGrid";
 import SavedPostFeed     from "@/components/saved/SavedPostFeed";
@@ -13,19 +13,41 @@ import type { SavedPost }     from "@/components/saved/SavedPostGrid";
 import type { SavedCreator }  from "@/components/saved/SavedCreatorGrid";
 import type { UnlockedItem }  from "@/components/saved/SavedUnlockedGrid";
 
+type Tab = "posts" | "creators" | "unlocked";
+
 export default function SavedPage() {
   const router = useRouter();
 
-  const [activeTab,        setActiveTab]        = useState<"posts" | "creators" | "unlocked">("posts");
+  const [activeTab,        setActiveTab]        = useState<Tab>("posts");
   const [viewMode,         setViewMode]         = useState<"grid" | "feed">("grid");
   const [savedPosts,       setSavedPosts]       = useState<SavedPost[]>([]);
   const [savedCreators,    setSavedCreators]    = useState<SavedCreator[]>([]);
-  const [unlockedItems,    setUnlockedItems]    = useState<UnlockedItem[]>([]);
+  const [unlockedVisible,  setUnlockedVisible]  = useState<UnlockedItem[]>([]);
+  const [unlockedHidden,   setUnlockedHidden]   = useState<UnlockedItem[]>([]);
   const [loadingPosts,     setLoadingPosts]     = useState(true);
   const [loadingCreators,  setLoadingCreators]  = useState(true);
   const [loadingUnlocked,  setLoadingUnlocked]  = useState(true);
-  const [showHidden,       setShowHidden]       = useState(false);
+  const [hiddenView,       setHiddenView]       = useState(false);
+  const [loadingHidden,    setLoadingHidden]    = useState(false);
+  const [selectMode,       setSelectMode]       = useState(false);
+  const [selectedIds,      setSelectedIds]      = useState<Set<string>>(new Set());
 
+  // ── Fetch helpers ─────────────────────────────────────────────────────────
+  const fetchVisibleUnlocked = useCallback(() => {
+    return fetch("/api/saved/unlocked")
+      .then((r) => r.json())
+      .then((d) => { setUnlockedVisible(d.unlocked ?? []); })
+      .catch(() => { setUnlockedVisible([]); });
+  }, []);
+
+  const fetchHiddenUnlocked = useCallback(() => {
+    return fetch("/api/saved/unlocked?hidden=1")
+      .then((r) => r.json())
+      .then((d) => { setUnlockedHidden(d.unlocked ?? []); })
+      .catch(() => { setUnlockedHidden([]); });
+  }, []);
+
+  // ── Initial loads ─────────────────────────────────────────────────────────
   useEffect(() => {
     fetch("/api/saved/posts")
       .then((r) => r.json())
@@ -44,35 +66,53 @@ export default function SavedPage() {
 
   useEffect(() => {
     setLoadingUnlocked(true);
-    const url = `/api/saved/unlocked${showHidden ? "?hidden=1" : ""}`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((d) => { setUnlockedItems(d.unlocked ?? []); })
-      .catch(() => { setUnlockedItems([]); })
+    Promise.all([fetchVisibleUnlocked(), fetchHiddenUnlocked()])
       .finally(() => setLoadingUnlocked(false));
-  }, [showHidden]);
+  }, [fetchVisibleUnlocked, fetchHiddenUnlocked]);
 
-  const handleToggleUnlockedHide = useCallback(async (picked: UnlockedItem[], hidden: boolean) => {
+  // ── Hide / Unhide ─────────────────────────────────────────────────────────
+  const handleHide = useCallback(async (picked: UnlockedItem[]) => {
     const pickedIds = new Set(picked.map((p) => p.unlock_id));
-    // Optimistic: remove from current view
-    setUnlockedItems((prev) => prev.filter((i) => !pickedIds.has(i.unlock_id)));
+    setUnlockedVisible((prev) => prev.filter((i) => !pickedIds.has(i.unlock_id)));
     try {
       await fetch("/api/saved/unlocked/hide", {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           items:  picked.map((p) => ({ source: p.source, unlock_id: p.unlock_id })),
-          hidden,
+          hidden: true,
         }),
       });
-      // Refetch to refresh both lists with the new is_hidden state
-      const url = `/api/saved/unlocked${showHidden ? "?hidden=1" : ""}`;
-      void fetch(url).then((r) => r.json()).then((d) => { if (d.unlocked) setUnlockedItems(d.unlocked); });
+      void fetchHiddenUnlocked();
     } catch {
-      // On failure, refetch so the optimistic remove is reconciled
-      void fetch("/api/saved/unlocked").then((r) => r.json()).then((d) => { if (d.unlocked) setUnlockedItems(d.unlocked); });
+      void fetchVisibleUnlocked();
     }
-  }, [showHidden]);
+  }, [fetchVisibleUnlocked, fetchHiddenUnlocked]);
+
+  const handleUnhide = useCallback(async (picked: UnlockedItem[]) => {
+    const pickedIds = new Set(picked.map((p) => p.unlock_id));
+    setUnlockedHidden((prev) => prev.filter((i) => !pickedIds.has(i.unlock_id)));
+    try {
+      await fetch("/api/saved/unlocked/hide", {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          items:  picked.map((p) => ({ source: p.source, unlock_id: p.unlock_id })),
+          hidden: false,
+        }),
+      });
+      void fetchVisibleUnlocked();
+    } catch {
+      void fetchHiddenUnlocked();
+    }
+  }, [fetchVisibleUnlocked, fetchHiddenUnlocked]);
+
+  // Auto-return to main view if hidden list empties out
+  useEffect(() => {
+    if (hiddenView && unlockedHidden.length === 0 && !loadingHidden) {
+      setHiddenView(false);
+    }
+  }, [hiddenView, unlockedHidden.length, loadingHidden]);
 
   const handleUnsavePosts = useCallback(async (ids: string[]) => {
     setSavedPosts((prev) => prev.filter((p) => !ids.includes(p.id)));
@@ -98,6 +138,41 @@ export default function SavedPage() {
     } catch {}
   }, []);
 
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleLongPress = useCallback((id: string) => {
+    if (!selectMode) {
+      setSelectMode(true);
+      setSelectedIds(new Set([id]));
+    }
+  }, [selectMode]);
+
+  const handleCancelSelect = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleConfirmAction = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    if (activeTab === "posts") {
+      await handleUnsavePosts(Array.from(selectedIds));
+    } else if (activeTab === "unlocked" && !hiddenView) {
+      const picked = unlockedVisible.filter((i) => selectedIds.has(i.unlock_id.toString()));
+      await handleHide(picked);
+    } else if (activeTab === "unlocked" && hiddenView) {
+      const picked = unlockedHidden.filter((i) => selectedIds.has(i.unlock_id.toString()));
+      await handleUnhide(picked);
+    }
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, [selectedIds, activeTab, hiddenView, unlockedVisible, unlockedHidden, handleUnsavePosts, handleHide, handleUnhide]);
+
   const isLoading =
     activeTab === "posts"    ? loadingPosts    :
     activeTab === "creators" ? loadingCreators :
@@ -106,6 +181,106 @@ export default function SavedPage() {
 
   const postIds = savedPosts.map((p) => p.id);
 
+  // ── Hidden sub-view ───────────────────────────────────────────────────────
+  if (hiddenView) {
+    return (
+      <div style={{ minHeight: "100svh", backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column" }}>
+        <div style={{
+          flexShrink:      0,
+          backgroundColor: "#0A0A0F",
+          borderBottom:    "1px solid #1E1E2E",
+          position:        "sticky",
+          top:             0,
+          zIndex:          10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "56px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <button
+                onClick={() => { setHiddenView(false); setSelectMode(false); setSelectedIds(new Set()); }}
+                style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
+              >
+                <ArrowLeft size={20} strokeWidth={1.8} />
+              </button>
+              <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Hidden</span>
+            </div>
+          </div>
+
+          {/* Lifted action bar — hidden view */}
+          {selectMode && (
+            <div style={{
+              display:              "flex",
+              alignItems:           "center",
+              justifyContent:       "space-between",
+              padding:              "10px 16px",
+              minHeight:            "44px",
+              backgroundColor:      "rgba(13,13,26,0.96)",
+              backdropFilter:       "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              borderBottom:         "1px solid rgba(139,92,246,0.25)",
+            }}>
+              <button
+                onClick={handleCancelSelect}
+                style={{ background: "none", border: "none", color: "#A3A3C2", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: "6px 0" }}
+              >
+                Cancel
+              </button>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: selectedIds.size > 0 ? "#F1F5F9" : "#6B6B8A" }}>
+                {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Tap to select"}
+              </span>
+              <button
+                onClick={handleConfirmAction}
+                disabled={selectedIds.size === 0}
+                style={{
+                  display:         "flex",
+                  alignItems:      "center",
+                  gap:             "5px",
+                  padding:         "7px 14px",
+                  borderRadius:    "20px",
+                  border:          "none",
+                  backgroundColor: selectedIds.size > 0 ? "#8B5CF6" : "rgba(139,92,246,0.2)",
+                  color:           selectedIds.size > 0 ? "#FFFFFF" : "rgba(139,92,246,0.4)",
+                  fontSize:        "13px",
+                  fontWeight:      700,
+                  cursor:          selectedIds.size > 0 ? "pointer" : "default",
+                  fontFamily:      "'Inter', sans-serif",
+                  transition:      "all 0.15s",
+                }}
+              >
+                <Eye size={13} />
+                Unhide{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" as any, paddingBottom: "calc(64px + env(safe-area-inset-bottom))" }}>
+          {unlockedHidden.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", gap: "12px" }}>
+              <div style={{ width: "56px", height: "56px", borderRadius: "16px", backgroundColor: "#1C1C2E", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <EyeOff size={22} color="#6B6B8A" strokeWidth={1.6} />
+              </div>
+              <p style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "#C4C4D4" }}>Nothing hidden</p>
+              <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", textAlign: "center", maxWidth: "240px", lineHeight: 1.6 }}>
+                Items you hide will appear here. You can always bring them back.
+              </p>
+            </div>
+          ) : (
+            <SavedUnlockedGrid
+              items={unlockedHidden}
+              mode="hidden"
+              onAction={handleUnhide}
+              selectMode={selectMode}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onLongPress={handleLongPress}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main view ─────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: "100svh", backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column" }}>
 
@@ -131,40 +306,21 @@ export default function SavedPage() {
             <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px" }}>Saved</span>
           </div>
 
-          {/* Right-side controls */}
-          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            {/* Hidden toggle — only on unlocked tab */}
-            {activeTab === "unlocked" && (
-              <button
-                onClick={() => setShowHidden((s) => !s)}
-                title={showHidden ? "Show visible" : "Show hidden"}
-                style={{ background: "none", border: "none", color: showHidden ? "#8B5CF6" : "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
-                onMouseEnter={(e) => { if (!showHidden) e.currentTarget.style.color = "#FFFFFF"; }}
-                onMouseLeave={(e) => { if (!showHidden) e.currentTarget.style.color = "#A3A3C2"; }}
-              >
-                {showHidden
-                  ? <Eye size={20} strokeWidth={1.8} />
-                  : <EyeOff size={20} strokeWidth={1.8} />
-                }
-              </button>
-            )}
-
-            {/* View toggle — posts tab and unlocked tab */}
-            {((activeTab === "posts"    && savedPosts.length    > 0) ||
-              (activeTab === "unlocked" && unlockedItems.length > 0)) && (
-              <button
-                onClick={() => setViewMode((v) => v === "grid" ? "feed" : "grid")}
-                style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}
-              >
-                {viewMode === "grid"
-                  ? <List size={20} strokeWidth={1.8} />
-                  : <Grid3X3 size={20} strokeWidth={1.8} />
-                }
-              </button>
-            )}
-          </div>
+          {/* View toggle — posts tab and unlocked tab */}
+          {((activeTab === "posts"    && savedPosts.length      > 0) ||
+            (activeTab === "unlocked" && unlockedVisible.length > 0)) && (
+            <button
+              onClick={() => setViewMode((v) => v === "grid" ? "feed" : "grid")}
+              style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}
+            >
+              {viewMode === "grid"
+                ? <List size={20} strokeWidth={1.8} />
+                : <Grid3X3 size={20} strokeWidth={1.8} />
+              }
+            </button>
+          )}
         </div>
 
         {/* Tab bar */}
@@ -172,7 +328,7 @@ export default function SavedPage() {
           {(["posts", "creators", "unlocked"] as const).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => { setActiveTab(tab); setSelectMode(false); setSelectedIds(new Set()); }}
               style={{
                 flex:            1,
                 padding:         "14px 4px",
@@ -194,12 +350,68 @@ export default function SavedPage() {
                 justifyContent:  "center",
               }}
             >
-              {tab === "posts"    ? `${savedPosts.length} Posts`       :
-               tab === "creators" ? `${savedCreators.length} Creators` :
-                                    `${unlockedItems.length} Unlocked`}
+              {tab === "posts"    ? `${savedPosts.length} Posts`         :
+               tab === "creators" ? `${savedCreators.length} Creators`   :
+                                    `${unlockedVisible.length} Unlocked`}
             </button>
           ))}
         </div>
+
+        {/* Lifted action bar */}
+        {selectMode && (
+          <div style={{
+            display:              "flex",
+            alignItems:           "center",
+            justifyContent:       "space-between",
+            padding:              "10px 16px",
+            minHeight:            "44px",
+            backgroundColor:      activeTab === "posts" ? "rgba(31,12,12,0.96)" : "rgba(13,13,26,0.96)",
+            backdropFilter:       "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            borderBottom:         `1px solid ${activeTab === "posts" ? "rgba(239,68,68,0.25)" : "rgba(139,92,246,0.25)"}`,
+          }}>
+            <button
+              onClick={handleCancelSelect}
+              style={{ background: "none", border: "none", color: "#A3A3C2", fontSize: "14px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", padding: "6px 0" }}
+            >
+              Cancel
+            </button>
+            <span style={{ fontSize: "13px", fontWeight: 600, color: selectedIds.size > 0 ? "#F1F5F9" : "#6B6B8A" }}>
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Tap to select"}
+            </span>
+            <button
+              onClick={handleConfirmAction}
+              disabled={selectedIds.size === 0}
+              style={{
+                display:         "flex",
+                alignItems:      "center",
+                gap:             "5px",
+                padding:         "7px 14px",
+                borderRadius:    "20px",
+                border:          "none",
+                backgroundColor: selectedIds.size > 0
+                  ? (activeTab === "posts" ? "#EF4444" : "#8B5CF6")
+                  : (activeTab === "posts" ? "rgba(239,68,68,0.2)" : "rgba(139,92,246,0.2)"),
+                color:           selectedIds.size > 0
+                  ? "#FFFFFF"
+                  : (activeTab === "posts" ? "rgba(239,68,68,0.4)" : "rgba(139,92,246,0.4)"),
+                fontSize:        "13px",
+                fontWeight:      700,
+                cursor:          selectedIds.size > 0 ? "pointer" : "default",
+                fontFamily:      "'Inter', sans-serif",
+                transition:      "all 0.15s",
+              }}
+            >
+              {activeTab === "posts" ? (
+                <><Trash2 size={13} />Remove{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}</>
+              ) : hiddenView ? (
+                <><Eye size={13} />Unhide{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}</>
+              ) : (
+                <><EyeOff size={13} />Hide{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}</>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -217,7 +429,14 @@ export default function SavedPage() {
               </p>
             </div>
           ) : viewMode === "grid" ? (
-            <SavedPostGrid posts={savedPosts} onUnsave={handleUnsavePosts} />
+            <SavedPostGrid
+              posts={savedPosts}
+              onUnsave={handleUnsavePosts}
+              selectMode={selectMode}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onLongPress={handleLongPress}
+            />
           ) : (
             <SavedPostFeed postIds={postIds} onUnsave={handleUnsavePosts} />
           )
@@ -228,30 +447,60 @@ export default function SavedPage() {
         )}
 
         {activeTab === "unlocked" && (
-          unlockedItems.length === 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", gap: "12px" }}>
-              <div style={{ width: "56px", height: "56px", borderRadius: "16px", backgroundColor: "#1C1C2E", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6B6B8A" strokeWidth="1.6"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+          <>
+            {/* Hidden pill — only when there are hidden items */}
+            {unlockedHidden.length > 0 && viewMode === "grid" && (
+              <div style={{ display: "flex", justifyContent: "center", padding: "12px 16px 4px" }}>
+                <button
+                  onClick={() => { setHiddenView(true); setSelectMode(false); setSelectedIds(new Set()); }}
+                  style={{
+                    display:         "inline-flex",
+                    alignItems:      "center",
+                    gap:             "6px",
+                    padding:         "7px 14px",
+                    borderRadius:    "999px",
+                    border:          "1px solid #2A2A3D",
+                    backgroundColor: "#13131F",
+                    color:           "#C4C4D4",
+                    fontSize:        "12px",
+                    fontWeight:      600,
+                    cursor:          "pointer",
+                    fontFamily:      "'Inter', sans-serif",
+                    transition:      "all 0.15s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#1C1C2E"; e.currentTarget.style.color = "#FFFFFF"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#13131F"; e.currentTarget.style.color = "#C4C4D4"; }}
+                >
+                  <EyeOff size={13} strokeWidth={2} />
+                  Hidden ({unlockedHidden.length})
+                </button>
               </div>
-              <p style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "#C4C4D4" }}>
-                {showHidden ? "No hidden items" : "No unlocked content yet"}
-              </p>
-              <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", textAlign: "center", maxWidth: "240px", lineHeight: 1.6 }}>
-                {showHidden
-                  ? "Items you hide from your unlocked list will appear here"
-                  : "PPV posts and messages you unlock will appear here"
-                }
-              </p>
-            </div>
-          ) : viewMode === "grid" ? (
-            <SavedUnlockedGrid
-              items={unlockedItems}
-              hidden={showHidden}
-              onToggle={handleToggleUnlockedHide}
-            />
-          ) : (
-            <SavedUnlockedFeed items={unlockedItems} />
-          )
+            )}
+
+            {unlockedVisible.length === 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", gap: "12px" }}>
+                <div style={{ width: "56px", height: "56px", borderRadius: "16px", backgroundColor: "#1C1C2E", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6B6B8A" strokeWidth="1.6"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                </div>
+                <p style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "#C4C4D4" }}>No unlocked content yet</p>
+                <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", textAlign: "center", maxWidth: "240px", lineHeight: 1.6 }}>
+                  PPV posts and messages you unlock will appear here
+                </p>
+              </div>
+            ) : viewMode === "grid" ? (
+              <SavedUnlockedGrid
+                items={unlockedVisible}
+                mode="visible"
+                onAction={handleHide}
+                selectMode={selectMode}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onLongPress={handleLongPress}
+              />
+            ) : (
+              <SavedUnlockedFeed items={unlockedVisible} />
+            )}
+          </>
         )}
       </div>
     </div>

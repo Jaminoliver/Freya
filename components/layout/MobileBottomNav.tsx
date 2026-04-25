@@ -67,8 +67,14 @@ border: "1px solid #1F1F2A",
           boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
         }}
       >
-        <button onClick={() => navigate("/dashboard")} style={btn(pathname === "/dashboard")}>
-  <House size={30}strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
+        <button onClick={() => {
+  if (pathname === "/dashboard") {
+    document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" });
+  } else {
+    navigate("/dashboard");
+  }
+}} style={btn(pathname === "/dashboard")}>
+  <House size={30} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
 </button>
 
        <button onClick={() => navigate("/messages")} style={{ ...btn(pathname === "/messages"), position: "relative" }}>

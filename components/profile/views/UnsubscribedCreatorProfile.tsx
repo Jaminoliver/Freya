@@ -61,10 +61,11 @@ export default function UnsubscribedCreatorProfile({
       />
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", ...padded }}>
         <ProfileAvatar
-          avatarUrl={profile.avatar_url || undefined}
-          displayName={profile.display_name || profile.username}
-          isOnline={false}
-        />
+  avatarUrl={profile.avatar_url || undefined}
+  displayName={profile.display_name || profile.username}
+  creatorId={profile.id}
+  isOnline={false}
+/>
         <div style={{ paddingBottom: "12px" }}>
           <ProfileActions
             viewContext="fanViewingCreator"

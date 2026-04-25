@@ -6,6 +6,9 @@ import { Sparkles, ImageIcon, Star, Pin, BellOff } from "lucide-react";
 import { ConversationActionModal } from "@/components/messages/ConversationActionModal";
 import { updateConversations } from "@/app/(main)/messages/page";
 import type { Conversation } from "@/lib/types/messages";
+import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+import StoryViewer from "@/components/story/StoryViewer";
 
 interface Props {
   conversation:  Conversation;
@@ -21,10 +24,13 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
   const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia, isPinned, isMuted } = conversation;
   const router = useRouter();
 
-  const [hovered,   setHovered]   = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [menuPos,   setMenuPos]   = useState({ x: 0, y: 0 });
-  const [imgBroken, setImgBroken] = useState(false);
+  const [hovered,        setHovered]        = useState(false);
+  const [modalOpen,      setModalOpen]      = useState(false);
+  const [menuPos,        setMenuPos]        = useState({ x: 0, y: 0 });
+  const [imgBroken,      setImgBroken]      = useState(false);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+
+  const { group, hasStory, hasUnviewed, refresh } = useCreatorStory(participant.id);
 
   const rowRef         = useRef<HTMLDivElement>(null);
   const touchStartY    = useRef<number>(0);
@@ -190,22 +196,20 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
         )}
 
         <div style={{ position: "relative", flexShrink: 0 }}>
-          <div style={{ width: "48px", height: "48px", borderRadius: "50%", overflow: "hidden", backgroundColor: "#1E1E2E" }}>
-            {showInitial ? (
-              <div style={{ width: "100%", height: "100%", backgroundColor: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", fontSize: "18px", fontWeight: 700 }}>
-                {participant.name[0].toUpperCase()}
-              </div>
-            ) : (
-              <img
-                src={participant.avatarUrl!}
-                alt={participant.name}
-                onError={() => setImgBroken(true)}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            )}
-          </div>
+          {storyViewerOpen && group && (
+            <StoryViewer groups={[group]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refresh(); }} />
+          )}
+          <AvatarWithStoryRing
+            src={participant.avatarUrl ?? null}
+            alt={participant.name}
+            size={44}
+            hasStory={hasStory}
+            hasUnviewed={hasUnviewed}
+            borderColor="#0A0A0F"
+            onClick={(e) => { e.stopPropagation(); if (hasStory && group) setStoryViewerOpen(true); }}
+          />
           {participant.isOnline && (
-            <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "12px", height: "12px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0A0A0F" }} />
+            <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "12px", height: "12px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0A0A0F", zIndex: 10 }} />
           )}
         </div>
 

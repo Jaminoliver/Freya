@@ -209,10 +209,8 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   if (!mounted || !visible) return null;
 
   return createPortal(
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-      <div onClick={handleClose} style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)", WebkitBackdropFilter: "blur(2px)", opacity: animateIn ? 1 : 0, transition: "opacity 0.32s cubic-bezier(0.32, 0.72, 0, 1)" }} />
-
-      <div ref={sheetRef} style={{ position: "relative", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", maxHeight: "80vh", display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", pointerEvents: "none" }}>
+      <div ref={sheetRef} style={{ position: "relative", width: "100%", maxWidth: "680px", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", maxHeight: "80vh", display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)", pointerEvents: "auto" }}>
 
         <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ padding: "12px 16px 0", userSelect: "none", touchAction: "none" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", margin: "0 auto 14px" }} />

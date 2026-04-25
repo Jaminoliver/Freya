@@ -3,6 +3,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { BadgeCheck, UserPlus, RefreshCw, Filter, ChevronLeft, ChevronRight } from "lucide-react";
+import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+import StoryViewer from "@/components/story/StoryViewer";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -177,6 +180,37 @@ export function HomeSidebar() {
 }
 
 // ── List row card ─────────────────────────────────────────────────────────────
+function AvatarWithStoryRingWrapper({ creatorId, avatarUrl, name }: { creatorId: string; avatarUrl: string | null; name: string }) {
+  const { group, hasStory, hasUnviewed, refresh } = useCreatorStory(creatorId);
+  const [storyOpen, setStoryOpen] = useState(false);
+
+  const handleAvatarClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (hasStory && group) setStoryOpen(true);
+  };
+
+  return (
+    <>
+      {storyOpen && group && (
+        <StoryViewer
+          groups={[group]}
+          startGroupIndex={0}
+          onClose={() => { setStoryOpen(false); refresh(); }}
+        />
+      )}
+      <AvatarWithStoryRing
+        src={avatarUrl || FALLBACK_AVATAR}
+        alt={name}
+        size={56}
+        hasStory={hasStory}
+        hasUnviewed={hasUnviewed}
+        onClick={handleAvatarClick}
+        borderColor="#0A0A0F"
+      />
+    </>
+  );
+}
+
 function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
 
@@ -227,24 +261,7 @@ function ListCard({ creator, onClick }: { creator: SuggestedCreator; onClick: ()
 
         {/* Avatar ring */}
         <div style={{ position: "relative", flexShrink: 0 }}>
-          <div style={{
-            width: "64px", height: "64px", borderRadius: "50%", padding: "2.5px",
-            background: "conic-gradient(#C45F8C, #8B3FBF, #C45F8C)",
-            flexShrink: 0,
-          }}>
-            <div style={{
-              width: "100%", height: "100%", borderRadius: "50%",
-              overflow: "hidden", border: "2.5px solid #0A0A0F",
-            }}>
-              <img
-                src={creator.avatar_url || FALLBACK_AVATAR}
-                alt={creator.name}
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-              />
-            </div>
-          </div>
-
-          {/* Online dot */}
+          <AvatarWithStoryRingWrapper creatorId={creator.id} avatarUrl={creator.avatar_url} name={creator.name} />
           {creator.is_online && (
             <div style={{
               position: "absolute", bottom: "3px", right: "3px",

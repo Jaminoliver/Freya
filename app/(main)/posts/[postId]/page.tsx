@@ -18,6 +18,8 @@ import type { LightboxPost } from "@/components/profile/Lightbox";
 import { createClient } from "@/lib/supabase/client";
 import { SinglePostSkeleton } from "@/components/loadscreen/SinglePostSkeleton";
 import { useAppStore } from "@/lib/store/appStore";
+import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import StoryViewer from "@/components/story/StoryViewer";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 import type { User } from "@/lib/types/profile";
@@ -146,6 +148,8 @@ export default function SinglePostPage() {
   const [editPPVOpen,      setEditPPVOpen]      = useState(false);
 
   const { viewer: globalViewer } = useAppStore();
+  const { group: storyGroup, hasStory, hasUnviewed, refresh: refreshStory } = useCreatorStory(post?.creator_id);
+  const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const isLiking   = useRef(false);
   const commentRef = useRef<HTMLDivElement>(null);
   const postRef    = useRef<PostData | null>(null);
@@ -400,6 +404,10 @@ export default function SinglePostPage() {
   return (
     <div style={{ width: "100%", fontFamily: "'Inter', sans-serif" }}>
 
+      {storyViewerOpen && storyGroup && (
+        <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refreshStory(); }} />
+      )}
+
       {lightboxOpen && lightboxPost.media.length > 0 && (
         <Lightbox post={lightboxPost} allPosts={[lightboxPost]} initialMediaIndex={lightboxMediaIdx} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
       )}
@@ -442,7 +450,9 @@ export default function SinglePostPage() {
         username={post.profiles?.username || ""}
         isVerified={!!post.profiles?.is_verified}
         timestamp={new Date(post.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-        onAvatarClick={() => router.push(`/${post.profiles?.username}`)}
+        hasStory={hasStory}
+        hasUnviewedStory={hasUnviewed}
+        onAvatarClick={() => { if (hasStory && storyGroup) setStoryViewerOpen(true); else router.push(`/${post.profiles?.username}`); }}
         onNameClick={() => router.push(`/${post.profiles?.username}`)}
         rightSlot={
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

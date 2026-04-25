@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
+import StoryViewer from "@/components/story/StoryViewer";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -44,6 +47,7 @@ type CardVariant = "strip" | "grid";
 
 interface CardInnerProps {
   variant: CardVariant;
+  creator_id: string;
   username: string;
   display_name: string | null;
   avatar_url: string | null;
@@ -55,6 +59,7 @@ interface CardInnerProps {
 
 function CreatorCardInner({
   variant,
+  creator_id,
   username,
   display_name,
   avatar_url,
@@ -65,7 +70,9 @@ function CreatorCardInner({
 }: CardInnerProps) {
   const router = useRouter();
   const [bannerError, setBannerError] = useState(false);
-  const [avatarError, setAvatarError] = useState(false);
+  const [storyOpen, setStoryOpen] = useState(false);
+
+  const { group, hasStory, hasUnviewed, refresh } = useCreatorStory(creator_id);
 
   const name = display_name || username;
   const initials = (name[0] ?? "?").toUpperCase();
@@ -163,6 +170,9 @@ function CreatorCardInner({
         )}
 
         {/* Avatar */}
+        {storyOpen && group && (
+          <StoryViewer groups={[group]} startGroupIndex={0} onClose={() => { setStoryOpen(false); refresh(); }} />
+        )}
         <div
           style={{
             position: "absolute",
@@ -171,59 +181,16 @@ function CreatorCardInner({
             transform: "translate(-50%, -38%)",
             zIndex: 2,
           }}
+          onClick={(e) => { e.stopPropagation(); if (hasStory && group) setStoryOpen(true); }}
         >
-          <div
-            style={{
-              width: "68px",
-              height: "68px",
-              borderRadius: "50%",
-              padding: "2px",
-              background: "conic-gradient(#C45F8C, #8B3FBF, #C45F8C)",
-            }}
-          >
-            <div
-              style={{
-                width: "100%",
-                height: "100%",
-                borderRadius: "50%",
-                overflow: "hidden",
-                border: "2px solid #0A0A0F",
-              }}
-            >
-              {avatar_url && !avatarError ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={avatar_url}
-                  alt={name}
-                  loading="lazy"
-                  onError={() => setAvatarError(true)}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    background: "#8B5CF6",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#fff",
-                    fontSize: "24px",
-                    fontWeight: 700,
-                    fontFamily: "'Inter', sans-serif",
-                  }}
-                >
-                  {initials}
-                </div>
-              )}
-            </div>
-          </div>
+          <AvatarWithStoryRing
+            src={avatar_url}
+            alt={name}
+            size={64}
+            hasStory={hasStory}
+            hasUnviewed={hasUnviewed}
+            borderColor="#0A0A0F"
+          />
         </div>
 
         {/* Name + username */}
@@ -312,6 +279,7 @@ export function CreatorCard(props: StripCreator) {
   return (
     <CreatorCardInner
       variant="strip"
+      creator_id={props.creator_id}
       username={props.username}
       display_name={props.display_name}
       avatar_url={props.avatar_url}
@@ -328,6 +296,7 @@ export function IdentityCard({ data }: { data: IdentityCardData }) {
   return (
     <CreatorCardInner
       variant="grid"
+      creator_id={data.creator_id}
       username={data.username}
       display_name={data.display_name}
       avatar_url={data.avatar_url}
