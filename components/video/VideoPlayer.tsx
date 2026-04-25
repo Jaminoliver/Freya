@@ -3,6 +3,15 @@
 import * as React from "react";
 import { decode } from "blurhash";
 
+// ── Mute persistence ──────────────────────────────────────────────────────────
+const MUTE_KEY = "vp_muted";
+function getSavedMute(): boolean {
+  try { return localStorage.getItem(MUTE_KEY) === "true"; } catch { return false; }
+}
+function saveMute(v: boolean) {
+  try { localStorage.setItem(MUTE_KEY, String(v)); } catch { }
+}
+
 const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
 
 export function getBunnyThumbnail(videoId: string) {
@@ -51,6 +60,7 @@ interface ControlsProps {
 
 function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
   const [playing,      setPlaying]      = React.useState(false);
+  const [centerFlash,  setCenterFlash]  = React.useState<"play"|"pause"|null>(null);
   const [currentTime,  setCurrentTime]  = React.useState(0);
   const [duration,     setDuration]     = React.useState(0);
   const [buffered,     setBuffered]     = React.useState(0);
@@ -110,14 +120,19 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
   }, [videoRef, showControls]);
 
   // ── Play / Pause ──────────────────────────────────────────────────────
+  const flashCenter = React.useCallback((type: "play" | "pause") => {
+    setCenterFlash(type);
+    setTimeout(() => setCenterFlash(null), 600);
+  }, []);
+
   const handlePlayPause = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) { video.play().catch(() => {}); }
-    else              { video.pause(); }
+    if (video.paused) { video.play().catch(() => {}); flashCenter("play"); }
+    else              { video.pause(); flashCenter("pause"); }
     showControls();
-  }, [videoRef, showControls]);
+  }, [videoRef, showControls, flashCenter]);
 
   // ── Seek ──────────────────────────────────────────────────────────────
   const seekTo = React.useCallback((clientX: number) => {
@@ -200,6 +215,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
       <style>{`
         @keyframes vp-fadein  { from { opacity: 0; } to { opacity: 1; } }
         @keyframes vp-fadeout { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes vp-pop     { 0% { transform: translate(-50%,-50%) scale(0.6); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; } }
         .vp-controls-bar { transition: opacity 0.25s ease; }
         .vp-seek-thumb {
           position: absolute; top: 50%; right: -6px;
@@ -210,27 +226,74 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
           pointer-events: none;
         }
         .vp-progress-bar:active .vp-seek-thumb,
-        .vp-progress-bar:hover .vp-seek-thumb {
-          width: 16px; height: 16px;
+        .vp-progress-bar:hover .vp-seek-thumb { width: 16px; height: 16px; }
+        .vp-center-flash {
+          position: absolute; top: 50%; left: 50%;
+          transform: translate(-50%,-50%) scale(0.6);
+          pointer-events: none; zIndex: 20;
+          animation: vp-pop 0.55s ease forwards;
         }
+        .vp-mute-btn {
+          position: absolute; top: 12px; right: 12px;
+          zIndex: 15; background: rgba(0,0,0,0.45);
+          border: none; border-radius: 50%; width: 36px; height: 36px;
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer; backdrop-filter: blur(6px);
+          -webkit-tap-highlight-color: transparent;
+          transition: background 0.2s;
+        }
+        .vp-mute-btn:hover { background: rgba(0,0,0,0.65); }
       `}</style>
 
-      {/* Tap zone — unified mouse move handler (no duplicate attribute) */}
+      {/* Tap zone */}
       <div
         style={{ position: "absolute", inset: 0, zIndex: 4 }}
-        onClick={showControls}
+        onClick={handlePlayPause}
         onMouseMove={handleTapZoneMouseMove}
         onMouseUp={handleSeekMouseUp}
       />
 
-      {/* Controls overlay */}
+      {/* Top-right mute button — always visible */}
+      <button
+        className="vp-mute-btn"
+        style={{ position: "absolute", top: 12, right: 12, zIndex: 15, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "36px", height: "36px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
+        onClick={(e) => { e.stopPropagation(); onToggleMute(); }}
+        onTouchEnd={(e) => { e.stopPropagation(); onToggleMute(); }}
+        aria-label={isMuted ? "Unmute" : "Mute"}
+      >
+        {isMuted ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          </svg>
+        )}
+      </button>
+
+      {/* Center play/pause flash (Instagram-style) */}
+      {centerFlash && (
+        <div className="vp-center-flash" style={{ position: "absolute", top: "50%", left: "50%", zIndex: 20, pointerEvents: "none" }}>
+          <div style={{ width: "64px", height: "64px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
+            {centerFlash === "pause" ? (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+            ) : (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bottom controls overlay */}
       <div
         className="vp-controls-bar"
         style={{
           position:      "absolute",
-          bottom:        0,
-          left:          0,
-          right:         0,
+          bottom:        0, left: 0, right: 0,
           zIndex:        10,
           opacity:       visible ? 1 : 0,
           pointerEvents: visible ? "auto" : "none",
@@ -249,31 +312,18 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
           onTouchStart={handleSeekTouchStart}
           onTouchMove={handleSeekTouchMove}
           onTouchEnd={handleSeekTouchEnd}
-          style={{
-            position:                "relative",
-            width:                   "100%",
-            height:                  "20px",
-            display:                 "flex",
-            alignItems:              "center",
-            cursor:                  "pointer",
-            WebkitTapHighlightColor: "transparent",
-          }}
+          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}
         >
-          {/* Track background */}
           <div style={{ position: "relative", width: "100%", height: "4px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.25)", overflow: "visible" }}>
-            {/* Buffered */}
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.35)", borderRadius: "2px" }} />
-            {/* Played */}
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${progress}%`, background: "linear-gradient(to right, #8B5CF6, #EC4899)", borderRadius: "2px" }}>
               <div className="vp-seek-thumb" />
             </div>
           </div>
         </div>
 
-        {/* Bottom row: play + time + mute + fullscreen */}
+        {/* Bottom row: play + time + fullscreen */}
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-
-          {/* Play/Pause */}
           <button style={btnStyle} onClick={handlePlayPause} onTouchEnd={handlePlayPause} aria-label={playing ? "Pause" : "Play"}>
             {playing ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
@@ -282,35 +332,12 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
             )}
           </button>
 
-          {/* Time */}
           <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: "0.02em", minWidth: "80px" }}>
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
 
           <div style={{ flex: 1 }} />
 
-          {/* Mute */}
-          <button
-            style={btnStyle}
-            onClick={(e) => { e.stopPropagation(); onToggleMute(); showControls(); }}
-            onTouchEnd={(e) => { e.stopPropagation(); onToggleMute(); showControls(); }}
-            aria-label={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-              </svg>
-            )}
-          </button>
-
-          {/* Fullscreen */}
           <button style={btnStyle} onClick={handleFullscreen} onTouchEnd={handleFullscreen} aria-label="Fullscreen">
             {isFullscreen ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -364,7 +391,7 @@ export default function VideoPlayer({
   const [posterError,  setPosterError]  = React.useState(false);
   const [isBuffering,  setIsBuffering]  = React.useState(false);
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
-  const [isMuted,      setIsMuted]      = React.useState(false);
+  const [isMuted,      setIsMuted]      = React.useState(() => getSavedMute());
 
   const aspectRatio = fillParent ? null : (externalRatio ?? internalRatio);
   const isPortrait  = (() => {
@@ -491,8 +518,10 @@ export default function VideoPlayer({
   const handleToggleMute = React.useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    video.muted = !isMuted;
-    setIsMuted(!isMuted);
+    const next = !isMuted;
+    video.muted = next;
+    setIsMuted(next);
+    saveMute(next);
   }, [isMuted]);
 
   const containerStyle: React.CSSProperties = fillParent ? {
