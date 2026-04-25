@@ -512,6 +512,9 @@ export default function VideoPlayer({
     setIsBuffering(true);
     const video = videoRef.current;
     if (!hasInitialized.current) await initVideo();
+    const savedMute = getSavedMute();
+    if (video) video.muted = savedMute;
+    setIsMuted(savedMute);
     try { await video?.play(); } catch { }
   }, [initVideo]);
 
@@ -624,10 +627,15 @@ export default function VideoPlayer({
           style={{ ...videoStyle, visibility: showPoster ? "hidden" : "visible", animation: !showPoster ? "fadeIn 0.2s ease" : undefined }}
         />
 
-        {/* Buffering spinner */}
+        {/* Instagram-style loading: blurred poster + spinner, fades out when ready */}
         {isBuffering && !showPoster && (
-          <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
-            <div style={{ width: "44px", height: "44px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.2)", borderTop: "3px solid rgba(255,255,255,0.9)", animation: "spin 0.8s linear infinite" }} />
+          <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {/* Blurred poster fill */}
+            {posterSrc && (
+              <img src={posterSrc} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(18px) brightness(0.5)", transform: "scale(1.08)", transition: "opacity 0.3s ease" }} />
+            )}
+            {/* Spinner */}
+            <div style={{ position: "relative", zIndex: 1, width: "44px", height: "44px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.15)", borderTop: "3px solid rgba(255,255,255,0.9)", animation: "spin 0.75s linear infinite" }} />
           </div>
         )}
 
