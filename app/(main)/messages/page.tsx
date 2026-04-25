@@ -226,14 +226,7 @@ function startGlobalRealtime() {
           console.log("[CONV INSERT] currentUserId:", currentUserId);
           console.log("[CONV INSERT] creator_id:", row.creator_id, "fan_id:", row.fan_id);
 
-          const isCreator = row.creator_id === currentUserId;
-          const isFan     = row.fan_id     === currentUserId;
-          console.log("[CONV INSERT] isCreator:", isCreator, "isFan:", isFan);
-
-          if (!isCreator && !isFan) {
-            console.log("[CONV INSERT] not involved — skipping");
-            return;
-          }
+          
 
           const alreadyExists = cachedConversations?.some((c) => c.id === row.id) ?? false;
           console.log("[CONV INSERT] alreadyExists in cache:", alreadyExists);
