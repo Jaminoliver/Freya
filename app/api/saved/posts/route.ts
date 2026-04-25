@@ -113,8 +113,8 @@ export async function GET(req: NextRequest) {
 
     // Always return thumbnail regardless of lock status — used for blur preview
     let thumbnail_url: string | null = null;
-    if (first?.media_type === "video" && first?.bunny_video_id) {
-      thumbnail_url = `https://${STREAM_CDN}/${first.bunny_video_id}/thumbnail.jpg`;
+    if (first?.media_type === "video") {
+      thumbnail_url = resignImageUrl(first?.thumbnail_url) ?? (first?.bunny_video_id ? `https://${STREAM_CDN}/${first.bunny_video_id}/thumbnail.jpg` : null);
     } else {
       thumbnail_url = resignImageUrl(first?.thumbnail_url) ?? resignImageUrl(first?.file_url) ?? null;
     }

@@ -160,8 +160,8 @@ function buildMediaFromPosts(fetchedPosts: ApiPost[]): PostMediaSummary[] {
     const hasImage = p.media.some((m) => m.media_type !== "video");
     const hasVideo = p.media.some((m) => m.media_type === "video");
     let thumbnail: string | null = null;
-    if (firstMedia.media_type === "video" && firstMedia.bunny_video_id) {
-      thumbnail = getBunnyThumbnail(firstMedia.bunny_video_id);
+    if (firstMedia.media_type === "video") {
+      thumbnail = firstMedia.thumbnail_url || (firstMedia.bunny_video_id ? getBunnyThumbnail(firstMedia.bunny_video_id) : null);
     } else {
       thumbnail = firstMedia.thumbnail_url || firstMedia.file_url || null;
     }
@@ -348,7 +348,7 @@ export default function ContentFeed({
 
   const renderGridPost = (post: ApiPost) => {
     const m      = post.media?.[0];
-    const thumb  = m ? m.media_type === "video" && m.bunny_video_id ? getBunnyThumbnail(m.bunny_video_id) : (m.thumbnail_url || m.file_url || undefined) : undefined;
+    const thumb  = m ? m.media_type === "video" ? (m.thumbnail_url || (m.bunny_video_id ? getBunnyThumbnail(m.bunny_video_id) : undefined)) : (m.thumbnail_url || m.file_url || undefined) : undefined;
     const locked = post.locked && !isOwnProfile;
     return (
       <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
