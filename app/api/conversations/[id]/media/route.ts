@@ -207,9 +207,10 @@ export async function DELETE(
 
   const body = await request.json().catch(() => ({}));
   const messageIds: number[] = body.messageIds ?? [];
+const itemIds: number[]    = body.itemIds    ?? [];
 
-  if (!messageIds.length) {
-    return NextResponse.json({ error: "messageIds is required" }, { status: 400 });
+  if (!messageIds.length && !itemIds.length) {
+    return NextResponse.json({ error: "messageIds or itemIds is required" }, { status: 400 });
   }
 
   const isCreator  = convo.creator_id === user.id;
@@ -225,5 +226,12 @@ export async function DELETE(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, deleted: messageIds.length });
+  if (itemIds.length > 0) {
+  await supabase
+    .from("message_media")
+    .delete()
+    .in("id", itemIds);
+}
+
+return NextResponse.json({ success: true, deleted: messageIds.length });
 }
