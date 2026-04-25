@@ -25,14 +25,13 @@ export default function SubscribedBanner({
   memberSince,
   onCancelled,
 }: SubscribedBannerProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [showSheet, setShowSheet] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
   const isFree = !price || price === 0;
   const planLabel = planMonths === 1 ? "1 Month" : planMonths === 3 ? "3 Months" : planMonths === 6 ? "6 Months" : `${planMonths} Months`;
 
   const handleCancel = async () => {
-    if (!confirm("Cancel subscription? You'll keep access until the renewal date.")) return;
     setCancelling(true);
     try {
       let subId = subscriptionId;
@@ -49,8 +48,9 @@ export default function SubscribedBanner({
       const cancelRes = await fetch(`/api/subscriptions/${subId}/cancel`, { method: "POST" });
       const cancelData = await cancelRes.json();
       if (cancelData.success) {
-        setMenuOpen(false);
+        setShowSheet(false);
         onCancelled?.();
+        window.location.reload();
       } else {
         alert(cancelData.error ?? "Failed to cancel");
       }
@@ -101,7 +101,7 @@ export default function SubscribedBanner({
         <div style={{ position: "relative", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
           <span style={{ fontSize: "12px", fontWeight: 700, color: "#34D399" }}>● Active</span>
           <button
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => setShowSheet(true)}
             style={{
               fontSize: "13px", color: "#FFFFFF",
               background: accentBg,
@@ -117,35 +117,45 @@ export default function SubscribedBanner({
             Manage
           </button>
 
-          {menuOpen && (
+          {showSheet && (
             <div style={{
-              position: "absolute", bottom: "36px", right: 0,
-              backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D",
-              borderRadius: "10px", overflow: "hidden", minWidth: "160px",
-              zIndex: 10, boxShadow: "0 -4px 16px rgba(0,0,0,0.5)",
+              position: "absolute", bottom: "110%", right: 0, zIndex: 50,
+              background: "#0A0A0F", border: "1px solid #2A2A3D",
+              borderRadius: "12px", padding: "14px", minWidth: "200px",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
             }}>
-              <button
-                onClick={handleCancel}
-                disabled={cancelling}
-                style={{
-                  width: "100%", padding: "10px 14px", backgroundColor: "transparent",
-                  border: "none", cursor: "pointer", fontSize: "13px", fontWeight: 500,
-                  color: "#EF4444", textAlign: "left", fontFamily: "'Inter', sans-serif",
-                }}
-              >
-                {cancelling ? "Cancelling…" : "Cancel subscription"}
-              </button>
-              <button
-                onClick={() => setMenuOpen(false)}
-                style={{
-                  width: "100%", padding: "10px 14px", backgroundColor: "transparent",
-                  border: "none", cursor: "pointer", fontSize: "13px", fontWeight: 500,
-                  color: "#F1F5F9", textAlign: "left", fontFamily: "'Inter', sans-serif",
-                  borderTop: "1px solid #2A2A3D",
-                }}
-              >
-                Close
-              </button>
+              <p style={{ fontSize: "13px", color: "#CBD5E1", margin: "0 0 12px", fontWeight: 500 }}>Cancel subscription?</p>
+              <div style={{ display: "flex", gap: "12px" }}>
+                <button
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                  style={{
+                    flex: 1, padding: "8px", borderRadius: "8px", border: "none",
+                    background: "#EF4444", color: "#fff", fontSize: "13px",
+                    fontWeight: 700, cursor: cancelling ? "not-allowed" : "pointer",
+                    opacity: cancelling ? 0.7 : 1,
+                  }}
+                >
+                  {cancelling ? (
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ width: "13px", height: "13px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid #fff", display: "inline-block", animation: "spin 0.7s linear infinite" }} />
+                      Cancelling…
+                    </span>
+                  ) : "Yes, cancel"}
+                </button>
+                <button
+                  onClick={() => setShowSheet(false)}
+                  disabled={cancelling}
+                  style={{
+                    flex: 1, padding: "8px", borderRadius: "8px",
+                    border: "1px solid #2A2A3D", background: "transparent",
+                    color: "#CBD5E1", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  No
+                </button>
+              </div>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
             </div>
           )}
         </div>

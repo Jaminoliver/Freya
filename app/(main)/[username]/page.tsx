@@ -569,6 +569,7 @@ function ProfilePageInner() {
           postPrice={lockedPostPrice}
           postId={lockedPostId}
           onSuccess={handleCheckoutSuccess}
+          onSubscriptionSuccess={() => window.location.reload()}
           autoCloseOnSuccess={checkoutType === "ppv" || checkoutType === "tips"}
           onViewContent={() => router.push(`/${profile.username}`)}
           onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
