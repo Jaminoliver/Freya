@@ -22,51 +22,51 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Full list ──────────────────────────────────────────────────────────────
-  const { data, error } = await supabase
+  const { data: savedData, error } = await supabase
     .from("saved_creators")
-    .select(`
-      creator_id,
-      profiles!saved_creators_creator_id_fkey (
-        id,
-        username,
-        display_name,
-        avatar_url,
-        banner_url,
-        is_verified,
-        subscriber_count
-      )
-    `)
+    .select("creator_id")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const creatorIds = (data ?? []).map((r: any) => r.creator_id);
-  let subscribedSet = new Set<string>();
+  const creatorIds = (savedData ?? []).map((r: any) => r.creator_id);
+  if (!creatorIds.length) return NextResponse.json({ creators: [] });
 
-  if (creatorIds.length > 0) {
-    const { data: subs } = await supabase
+  const [profilesResult, subsResult] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, username, display_name, avatar_url, banner_url, is_verified, subscriber_count, follower_count, likes_count")
+      .in("id", creatorIds),
+    supabase
       .from("subscriptions")
       .select("creator_id")
-      .eq("subscriber_id", user.id)
+      .eq("fan_id", user.id)
       .eq("status", "active")
-      .in("creator_id", creatorIds);
-    subscribedSet = new Set((subs ?? []).map((s: any) => s.creator_id));
-  }
+      .in("creator_id", creatorIds),
+  ]);
 
-  const creators = (data ?? []).map((row: any) => {
-    const p = row.profiles;
-    return {
-      id:              p.id,
-      username:        p.username,
-      name:            p.display_name || p.username,
-      avatar_url:      p.avatar_url ?? "",
-      banner_url:      p.banner_url ?? null,
-      isVerified:      p.is_verified ?? false,
-      subscriberCount: p.subscriber_count ?? 0,
-      isSubscribed:    subscribedSet.has(p.id),
-    };
-  });
+  const subscribedSet = new Set((subsResult.data ?? []).map((s: any) => s.creator_id));
+  const profileMap    = new Map((profilesResult.data ?? []).map((p: any) => [p.id, p]));
+
+  const creators = creatorIds
+    .map((id: string) => {
+      const p = profileMap.get(id);
+      if (!p) return null;
+      return {
+        id:              p.id,
+        username:        p.username,
+        name:            p.display_name || p.username,
+        avatar_url:      p.avatar_url ?? "",
+        banner_url:      p.banner_url ?? null,
+        isVerified:      p.is_verified ?? false,
+        subscriberCount: p.subscriber_count ?? 0,
+        follower_count:  p.follower_count ?? 0,
+        likes_count:     p.likes_count ?? 0,
+        isSubscribed:    subscribedSet.has(p.id),
+      };
+    })
+    .filter(Boolean);
 
   return NextResponse.json({ creators });
 }
