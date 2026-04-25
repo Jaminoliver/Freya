@@ -22,7 +22,7 @@ interface Props {
   loading:        boolean;
   loadingMore:    boolean;
   hasMore:        boolean;
-  loaderRef:      React.RefObject<HTMLDivElement>;
+  loaderRef:      React.RefObject<HTMLDivElement | null>;
   onDelete:       (itemIds: number[], messageIds: number[]) => Promise<void>;
 }
 
