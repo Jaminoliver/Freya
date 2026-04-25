@@ -154,7 +154,8 @@ export default function CheckoutModal({
     if (autoCloseOnSuccess) {
       autoCloseTimerRef.current = setTimeout(() => {
         handleClose();
-      }, 1200);
+      }, 3200);
+
     }
   };
 
@@ -228,7 +229,7 @@ export default function CheckoutModal({
             amount: getAmount(),
             creatorId: creator.id,
             selectedTier: type === "subscription" ? selectedTier : undefined,
-            postId: (type === "ppv" || type === "tips") ? postId : undefined,
+            postId: (type === "ppv" || type === "locked_post" || type === "tips") ? postId : undefined,
           };
           console.log("[CheckoutModal] wallet payload:", payload);
           const res = await fetch("/api/checkout", {
@@ -464,37 +465,75 @@ export default function CheckoutModal({
                 100% { opacity: 1; transform: translateY(0); }
               }
             `}</style>
-            <div style={{
-              width: "64px",
-              height: "64px",
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, #22C55E, #16A34A)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              animation: "successCheck 0.5s ease-out forwards",
-            }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </div>
-            <span style={{
-              fontSize: "18px",
-              fontWeight: 700,
-              color: "#FFFFFF",
-              animation: "successFade 0.4s ease-out 0.3s forwards",
-              opacity: 0,
-            }}>
-              {type === "tips" ? "Tip sent!" : type === "ppv" ? "Unlocked!" : "Subscribed!"}
-            </span>
-            <span style={{
-              fontSize: "13px",
-              color: "#6B6B8A",
-              animation: "successFade 0.4s ease-out 0.5s forwards",
-              opacity: 0,
-            }}>
-              @{creator.username}
-            </span>
+            {type === "ppv" ? (
+              <>
+                <style>{`
+                  @keyframes shackle {
+                    0%   { transform: rotate(0deg) translateY(0px); opacity: 1; }
+                    40%  { transform: rotate(-25deg) translateY(-5px); opacity: 1; }
+                    100% { transform: rotate(15deg) translateY(8px); opacity: 0; }
+                  }
+                  @keyframes lockGlow {
+                    0%   { box-shadow: 0 0 0 0 rgba(139,92,246,0.6); }
+                    70%  { box-shadow: 0 0 0 18px rgba(139,92,246,0); }
+                    100% { box-shadow: 0 0 0 0 rgba(139,92,246,0); }
+                  }
+                `}</style>
+                <div style={{
+                  width: "64px", height: "64px", borderRadius: "50%",
+                  background: "linear-gradient(135deg, #8B5CF6, #7C3AED)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  animation: "successCheck 0.5s ease-out forwards, lockGlow 1s ease-out 0.5s forwards",
+                }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" fill="rgba(255,255,255,0.2)" stroke="#FFFFFF" strokeWidth="2.2" />
+                    <circle cx="12" cy="16" r="1.5" fill="#FFFFFF" />
+                    <path
+                      d="M7 11V7a5 5 0 0 1 9.9-1"
+                      stroke="#FFFFFF" strokeWidth="2.2"
+                      style={{ animation: "shackle 0.7s ease-out 0.4s forwards", transformOrigin: "7px 11px", display: "inline" }}
+                    />
+                  </svg>
+                </div>
+                <span style={{
+                  fontSize: "18px", fontWeight: 700, color: "#FFFFFF",
+                  animation: "successFade 0.4s ease-out 0.6s forwards", opacity: 0,
+                }}>
+                  PPV Unlocked!
+                </span>
+                <span style={{
+                  fontSize: "16px", fontWeight: 600, color: "#FFFFFF",
+                  animation: "successFade 0.4s ease-out 0.8s forwards", opacity: 0,
+                }}>
+                  @{creator.username}
+                </span>
+              </>
+            ) : (
+              <>
+                <div style={{
+                  width: "64px", height: "64px", borderRadius: "50%",
+                  background: "linear-gradient(135deg, #22C55E, #16A34A)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  animation: "successCheck 0.5s ease-out forwards",
+                }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+                <span style={{
+                  fontSize: "18px", fontWeight: 700, color: "#FFFFFF",
+                  animation: "successFade 0.4s ease-out 0.3s forwards", opacity: 0,
+                }}>
+                  {type === "tips" ? "Tip sent!" : "Subscribed!"}
+                </span>
+                <span style={{
+                  fontSize: "16px", fontWeight: 600, color: "#FFFFFF",
+                  animation: "successFade 0.4s ease-out 0.5s forwards", opacity: 0,
+                }}>
+                  @{creator.username}
+                </span>
+              </>
+            )}
           </div>
         )}
 

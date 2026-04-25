@@ -88,7 +88,7 @@ function MediaToolbar({ totalCount, photoCount, videoCount, mediaFilter, setMedi
   return (
     <div style={{ padding: "12px 16px 0" }}>
       <div style={{ display: "flex", gap: "6px", overflowX: "auto", scrollbarWidth: "none", marginBottom: "8px" }}>
-        {([{ key: "all", label: `All ${totalCount}` }, { key: "photo", label: `Photo ${photoCount}` }, { key: "video", label: `Video ${videoCount}` }] as const).map((f) => (
+        {([{ key: "all", label: `All ${totalCount}`, show: true }, { key: "photo", label: `Photo ${photoCount}`, show: photoCount > 0 }, { key: "video", label: `Video ${videoCount}`, show: videoCount > 0 }] as const).filter((f) => f.show).map((f) => (
           <button
             key={f.key}
             onClick={() => setMediaFilter(f.key)}
@@ -211,7 +211,7 @@ export default function ContentFeed({
     prevIsSubscribed.current = isSubscribed;
     setApiPosts((prev) => {
       const updated = prev.map((p) => {
-        if (p.is_ppv) return p;
+        if (p.is_ppv || (p.ppv_price != null && p.ppv_price > 0)) return p;
         if (isSubscribed) return { ...p, locked: false, can_access: true };
         return { ...p, locked: true, can_access: false };
       });
@@ -349,7 +349,7 @@ export default function ContentFeed({
   const renderGridPost = (post: ApiPost) => {
     const m      = post.media?.[0];
     const thumb  = m ? m.media_type === "video" && m.bunny_video_id ? getBunnyThumbnail(m.bunny_video_id) : (m.thumbnail_url || m.file_url || undefined) : undefined;
-    const locked = post.locked && !isSubscribed && !isOwnProfile;
+    const locked = post.locked && !isOwnProfile;
     return (
       <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
         {thumb && <img src={thumb} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: locked ? "blur(12px)" : "none" }} />}
@@ -366,7 +366,7 @@ export default function ContentFeed({
 
   const renderMediaGridItem = (item: PostMediaSummary) => {
     const thumb  = item.thumbnail_url || undefined;
-    const locked = item.locked && !isSubscribed && !isOwnProfile;
+    const locked = item.locked && !isOwnProfile;
     return (
       <div key={item.post_id} onClick={() => router.push(`/posts/${item.post_id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
         {thumb && <img src={thumb} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: locked ? "blur(12px)" : "none" }} />}

@@ -244,11 +244,13 @@ params.set("hotOffset",   String(cursors.hotOffset));
         // Fresh load
         setPosts(merged);
         setNextCursors(newCursors);
-        setFeed({
-          posts:     merged,
-          nextCursor: newCursors ? JSON.stringify(newCursors) : "",
-          fetchedAt:  Date.now(),
-        });
+        setTimeout(() => {
+          setFeed({
+            posts:     merged,
+            nextCursor: newCursors ? JSON.stringify(newCursors) : "",
+            fetchedAt:  Date.now(),
+          });
+        }, 0);
         setApiLoading(false);
       }
     } catch {
@@ -317,8 +319,28 @@ params.set("hotOffset",   String(cursors.hotOffset));
     setPpvOpen(true);
   }, []);
 
-  const handlePpvSuccess = useCallback(() => {
-    setPosts((prev) => prev.map((p) => p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p));
+  const handlePpvSuccess = useCallback(async () => {
+    if (!ppvPostId) return;
+    try {
+      const res  = await fetch(`/api/posts/${ppvPostId}`);
+      const data = await res.json();
+      if (res.ok && data.post) {
+        setPosts((prev) => prev.map((p) => {
+          if (p.id !== ppvPostId) return p;
+          return {
+            ...p,
+            locked:     false,
+            can_access: true,
+            media:      (data.post.media ?? []).map((m: any) => ({
+              ...m,
+              locked: false,
+            })),
+          };
+        }));
+      }
+    } catch {
+      setPosts((prev) => prev.map((p) => p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p));
+    }
   }, [ppvPostId]);
 
   // ── Stories ────────────────────────────────────────────────────────────
@@ -403,6 +425,7 @@ params.set("hotOffset",   String(cursors.hotOffset));
           type="ppv" creator={ppvCreator}
           postPrice={ppvPrice} postId={ppvPostId}
           onSuccess={handlePpvSuccess}
+          autoCloseOnSuccess
         />
       )}
 

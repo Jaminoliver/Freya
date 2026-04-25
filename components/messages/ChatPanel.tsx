@@ -471,6 +471,7 @@ background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
         creator={participantAsUser}
         conversationId={conversation.id}
         onChatPaymentSuccess={handleTipSuccess}
+        autoCloseOnSuccess
       />
 
       {/* Chat PPV unlock modal */}

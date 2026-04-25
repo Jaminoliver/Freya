@@ -190,6 +190,7 @@ export default function SavedPostGrid({ posts, onUnsave }: SavedPostGridProps) {
                     objectFit:  "cover",
                     transition: "opacity 0.15s",
                     opacity:    selectMode && !isSelected ? 0.4 : 1,
+                    filter:     post.is_locked && !selectMode ? "blur(12px)" : "none",
                   }}
                 />
               ) : (
@@ -200,8 +201,8 @@ export default function SavedPostGrid({ posts, onUnsave }: SavedPostGridProps) {
 
               {/* Lock overlay */}
               {post.is_locked && !selectMode && (
-                <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Lock size={20} color="#FFFFFF" />
+                <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Lock size={16} color="#fff" />
                 </div>
               )}
 

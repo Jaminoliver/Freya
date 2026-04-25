@@ -48,8 +48,15 @@ export default function PaymentScreen({
   amount, label, tier, virtualAccount, walletBalance = 0, loading = false, error,
   onNext, onBack, onClose, onPaymentConfirmed, creatorId,
 }: PaymentScreenProps) {
-  const [copied, setCopied] = React.useState(false);
   const [transferStatus, setTransferStatus] = React.useState<TransferStatus>("idle");
+
+  const prevMethod = React.useRef<PaymentMethodId | null>(null);
+  React.useEffect(() => {
+    if (selectedMethod === "bank_transfer" && prevMethod.current !== "bank_transfer" && !virtualAccount) {
+      onNext();
+    }
+    prevMethod.current = selectedMethod;
+  }, [selectedMethod]);
 
   const pollRef    = React.useRef<NodeJS.Timeout | null>(null);
   const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -103,8 +110,7 @@ export default function PaymentScreen({
         if (confirmed) {
           stopPolling();
           setTransferStatus("success");
-          onPaymentConfirmed?.();
-          setTimeout(() => onClose(), 2500);
+          setTimeout(() => onPaymentConfirmed?.(), 2000);
         }
       } catch {
         // silently retry
@@ -118,50 +124,17 @@ export default function PaymentScreen({
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  const handleCopy = (text: string | undefined) => {
-  if (!text) return;
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => fallbackCopy(text));
-  } else {
-    fallbackCopy(text);
-  }
-};
-
-const fallbackCopy = (text: string) => {
-  const el = document.createElement("textarea");
-  el.value = text;
-  el.style.position = "fixed";
-  el.style.opacity = "0";
-  document.body.appendChild(el);
-  el.focus();
-  el.select();
-  try {
-    document.execCommand("copy");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  } catch {
-    // silently fail
-  } finally {
-    document.body.removeChild(el);
-  }
-};
+  
 
   const ctaLabel = () => {
     if (loading) {
-      if (isBankTransfer && !virtualAccount) return "Generating account...";
       if (isCard) return "Redirecting to checkout...";
-      return "Processing...";
+      return "Processing..."; // keep — we'll replace the button content below
     }
-    if (isBankTransfer && virtualAccount) return "I've Completed the Transfer";
-    if (isBankTransfer) return "Generate Bank Account";
     if (isCard) return "Pay with Card";
     return "Pay Now";
   };
 
-  const successMessage = type === "tips" ? "Tip sent successfully!" : "You are now subscribed";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
@@ -210,6 +183,8 @@ const fallbackCopy = (text: string) => {
                 onSelect={onMethodChange}
                 symbol={symbol}
                 amount={amount}
+                virtualAccount={method.id === "bank_transfer" ? virtualAccount : null}
+                transferStatus={method.id === "bank_transfer" ? transferStatus : undefined}
               />
               {method.id === "freya_wallet" && selectedMethod === "freya_wallet" && insufficientBalance && (
                 <p style={{ fontSize: "11px", color: "#EF4444", margin: "6px 0 0 4px" }}>
@@ -243,125 +218,10 @@ const fallbackCopy = (text: string) => {
         </div>
       )}
 
-      {/* Virtual account details — only for bank transfer */}
-      {isBankTransfer && virtualAccount && (
-        <div style={{
-          margin: "0 20px 16px",
-          backgroundColor: "#1C1C2E",
-          border: `1.5px solid ${
-            transferStatus === "success" ? "#22C55E" :
-            transferStatus === "expired" ? "#EF4444" : "#2A2A3D"
-          }`,
-          borderRadius: "10px", padding: "16px",
-          transition: "border-color 0.3s",
-        }}>
+      
 
-          {transferStatus === "waiting" && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: "10px",
-              backgroundColor: "rgba(139,92,246,0.08)",
-              border: "1px solid rgba(139,92,246,0.25)",
-              borderRadius: "8px", padding: "10px 14px", marginBottom: "16px",
-            }}>
-              <div style={{
-                width: "16px", height: "16px", flexShrink: 0,
-                border: "2px solid #2A2A3D", borderTop: "2px solid #8B5CF6",
-                borderRadius: "50%", animation: "spin 0.8s linear infinite",
-              }} />
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              <div>
-                <p style={{ fontSize: "12px", fontWeight: 600, color: "#A78BFA", margin: "0 0 1px" }}>
-                  Waiting for payment...
-                </p>
-                <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>
-                  Transfer {fmt(virtualAccount.amount ?? 0)} to confirm automatically
-                </p>
-              </div>
-            </div>
-          )}
-
-          {transferStatus === "success" && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: "10px",
-              backgroundColor: "rgba(34,197,94,0.08)",
-              border: "1px solid rgba(34,197,94,0.25)",
-              borderRadius: "8px", padding: "10px 14px", marginBottom: "16px",
-            }}>
-              <span style={{ fontSize: "20px" }}>✅</span>
-              <div>
-                <p style={{ fontSize: "12px", fontWeight: 600, color: "#22C55E", margin: "0 0 1px" }}>
-                  Payment received!
-                </p>
-                <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>{successMessage}</p>
-              </div>
-            </div>
-          )}
-
-          {transferStatus === "expired" && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: "10px",
-              backgroundColor: "rgba(239,68,68,0.08)",
-              border: "1px solid rgba(239,68,68,0.25)",
-              borderRadius: "8px", padding: "10px 14px", marginBottom: "16px",
-            }}>
-              <span style={{ fontSize: "20px" }}>⏱</span>
-              <div>
-                <p style={{ fontSize: "12px", fontWeight: 600, color: "#EF4444", margin: "0 0 1px" }}>Session expired</p>
-                <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>Generate a new account to continue</p>
-              </div>
-            </div>
-          )}
-
-          <p style={{ fontSize: "11px", fontWeight: 600, color: "#8B5CF6", margin: "0 0 12px", letterSpacing: "0.06em" }}>
-            TRANSFER DETAILS
-          </p>
-
-          {[
-            { label: "Bank", value: virtualAccount.bankName },
-            { label: "Account Name", value: virtualAccount.accountName },
-            { label: "Amount", value: fmt(virtualAccount.amount ?? 0) },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-              <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{label}</span>
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "#F1F5F9" }}>{value}</span>
-            </div>
-          ))}
-
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            backgroundColor: "#0A0A0F", borderRadius: "8px", padding: "10px 12px", marginTop: "4px",
-          }}>
-            <div>
-              <p style={{ fontSize: "10px", color: "#6B6B8A", margin: "0 0 2px" }}>Account Number</p>
-              <p style={{ fontSize: "18px", fontWeight: 700, color: "#F1F5F9", margin: 0, letterSpacing: "2px" }}>
-                {virtualAccount.accountNumber}
-              </p>
-            </div>
-            <button
-              onClick={() => handleCopy(virtualAccount.accountNumber)}
-              style={{
-                backgroundColor: copied ? "rgba(34,197,94,0.1)" : "rgba(139,92,246,0.1)",
-                border: `1px solid ${copied ? "#22C55E" : "#8B5CF6"}`,
-                color: copied ? "#22C55E" : "#A78BFA",
-                borderRadius: "6px", padding: "6px 12px",
-                fontSize: "12px", fontWeight: 600, cursor: "pointer",
-                fontFamily: "'Inter', sans-serif",
-              }}
-            >
-              {copied ? "Copied!" : "Copy"}
-            </button>
-          </div>
-
-          {transferStatus !== "success" && transferStatus !== "expired" && (
-            <p style={{ fontSize: "11px", color: "#F59E0B", margin: "12px 0 0", textAlign: "center" }}>
-              ⏱ Transfer exactly {fmt(virtualAccount.amount ?? 0)} before this account expires
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* CTA — hide when waiting or success */}
-      {transferStatus !== "waiting" && transferStatus !== "success" && (
+      {/* CTA — hide for bank transfer and when waiting or success */}
+      {!isBankTransfer && transferStatus !== "waiting" && transferStatus !== "success" && (
         <div style={{ padding: "0 20px 8px" }}>
           <button
             onClick={onNext}
@@ -371,11 +231,27 @@ const fallbackCopy = (text: string) => {
               background: canProceed ? "linear-gradient(135deg, #8B5CF6, #7C3AED)" : "#1E1E2E",
               border: "none", cursor: canProceed ? "pointer" : "not-allowed",
               fontFamily: "'Inter', sans-serif", transition: "all 0.15s ease",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
             }}
           >
-            <span style={{ fontSize: "14px", fontWeight: 700, color: canProceed ? "#fff" : "#4A4A6A" }}>
-              {ctaLabel()}
-            </span>
+            {loading ? (
+              <>
+                <div style={{
+                  width: "16px", height: "16px", borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.3)",
+                  borderTopColor: "#fff",
+                  animation: "spin 0.7s linear infinite",
+                  flexShrink: 0,
+                }} />
+                <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>
+                  {isCard ? "Redirecting..." : "Processing..."}
+                </span>
+              </>
+            ) : (
+              <span style={{ fontSize: "14px", fontWeight: 700, color: canProceed ? "#fff" : "#4A4A6A" }}>
+                {ctaLabel()}
+              </span>
+            )}
           </button>
         </div>
       )}

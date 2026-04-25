@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import type { PaymentMethod, PaymentMethodId } from "@/lib/types/checkout";
-import BankTransferDetails from "./BankTransferDetails";
 
 interface PaymentMethodCardProps {
   method: PaymentMethod;
@@ -16,6 +15,25 @@ interface PaymentMethodCardProps {
     accountName: string;
     expiresAt: string;
   } | null;
+  transferStatus?: "idle" | "waiting" | "success" | "expired";
+}
+
+function CopyRow({ label, value, large }: { label: string; value: string; large?: boolean }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#0A0A0F", borderRadius: "8px", padding: "10px 12px" }}>
+      <div>
+        <p style={{ fontSize: "10px", color: "#6B6B8A", margin: "0 0 2px" }}>{label}</p>
+        <p style={{ fontSize: large ? "18px" : "13px", fontWeight: 700, color: "#F1F5F9", margin: 0, letterSpacing: large ? "2px" : "0" }}>{value}</p>
+      </div>
+      <button onClick={copy} style={{ backgroundColor: copied ? "rgba(34,197,94,0.1)" : "rgba(139,92,246,0.1)", border: `1px solid ${copied ? "#22C55E" : "#8B5CF6"}`, color: copied ? "#22C55E" : "#A78BFA", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>
+        {copied ? "Copied!" : "Copy"}
+      </button>
+    </div>
+  );
 }
 
 export default function PaymentMethodCard({
@@ -25,6 +43,7 @@ export default function PaymentMethodCard({
   symbol,
   amount,
   virtualAccount,
+  transferStatus = "idle",
 }: PaymentMethodCardProps) {
   const isBankTransfer = method.id === "bank_transfer";
   const showBankDetails = selected && isBankTransfer;
@@ -95,15 +114,65 @@ export default function PaymentMethodCard({
           backgroundColor: "rgba(139,92,246,0.03)",
         }}>
           {virtualAccount ? (
-            <BankTransferDetails
-              accountNumber={virtualAccount.accountNumber}
-              bankName={virtualAccount.bankName}
-              amount={`${symbol}${amount.toLocaleString()}`}
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <style>{`
+                @keyframes spin { to { transform: rotate(360deg); } }
+                @keyframes successPop {
+                  0%   { transform: scale(0); opacity: 0; }
+                  60%  { transform: scale(1.2); opacity: 1; }
+                  100% { transform: scale(1); opacity: 1; }
+                }
+              `}</style>
+
+              {transferStatus === "waiting" && (
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)", borderRadius: "8px", padding: "10px 14px" }}>
+                  <div style={{ width: "14px", height: "14px", flexShrink: 0, border: "2px solid #2A2A3D", borderTop: "2px solid #8B5CF6", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                  <div>
+                    <p style={{ fontSize: "12px", fontWeight: 600, color: "#A78BFA", margin: "0 0 1px" }}>Waiting for payment...</p>
+                    <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>Transfer will confirm automatically</p>
+                  </div>
+                </div>
+              )}
+
+              {transferStatus === "success" && (
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: "8px", padding: "10px 14px" }}>
+                  <div style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: "#22C55E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, animation: "successPop 0.4s ease-out forwards" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: "12px", fontWeight: 600, color: "#22C55E", margin: "0 0 1px" }}>Payment received!</p>
+                    <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>Redirecting you now...</p>
+                  </div>
+                </div>
+              )}
+
+              {transferStatus === "expired" && (
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: "8px", padding: "10px 14px" }}>
+                  <span style={{ fontSize: "18px" }}>⏱</span>
+                  <div>
+                    <p style={{ fontSize: "12px", fontWeight: 600, color: "#EF4444", margin: "0 0 1px" }}>Session expired</p>
+                    <p style={{ fontSize: "11px", color: "#6B6B8A", margin: 0 }}>Please select a new payment method</p>
+                  </div>
+                </div>
+              )}
+              {[
+                { label: "Bank", value: virtualAccount.bankName },
+                { label: "Account Name", value: virtualAccount.accountName },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "12px", color: "#6B6B8A" }}>{label}</span>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "#F1F5F9" }}>{value}</span>
+                </div>
+              ))}
+              <CopyRow label="Amount" value={`${symbol}${amount.toLocaleString()}`} />
+              <CopyRow label="Account Number" value={virtualAccount.accountNumber} large />
+            </div>
           ) : (
-            <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", textAlign: "center" }}>
-              Generating account...
-            </p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "8px 0" }}>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <div style={{ width: "14px", height: "14px", border: "2px solid #2A2A3D", borderTop: "2px solid #8B5CF6", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+              <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A" }}>Generating account...</p>
+            </div>
           )}
         </div>
       )}

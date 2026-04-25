@@ -301,7 +301,7 @@ function PostCardInner({
         <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={handleStoryViewerClose} />
       )}
 
-      <CheckoutModal isOpen={tipOpen} onClose={() => setTipOpen(false)} type="tips" creator={creatorAsUser} postId={Number(post.id)} />
+      <CheckoutModal isOpen={tipOpen} onClose={() => setTipOpen(false)} type="tips" creator={creatorAsUser} postId={Number(post.id)} autoCloseOnSuccess />
 
       <CheckoutModal
         isOpen={subOpen}

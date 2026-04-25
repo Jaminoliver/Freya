@@ -578,7 +578,7 @@ export default function PostMediaViewer({
         {/* Blurred background — always shown */}
         <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
           <img
-            src={first.url ?? ""}
+            src={first.url || undefined}
             alt=""
             aria-hidden
             style={{
@@ -598,7 +598,7 @@ export default function PostMediaViewer({
 
         {/* Main image — animates blur-to-sharp on load */}
         <img
-          src={first.url ?? ""}
+          src={first.url || undefined}
           alt=""
           draggable={false}
           loading="lazy"

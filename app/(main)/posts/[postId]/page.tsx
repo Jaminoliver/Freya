@@ -301,7 +301,7 @@ export default function SinglePostPage() {
   }, [savedPost, post]);
 
   const openTip    = () => { setCheckoutType("tips");        setCheckoutOpen(true); };
-  const openUnlock = () => { setCheckoutType("locked_post"); setCheckoutOpen(true); };
+  const openUnlock = () => { setCheckoutType(post?.is_ppv ? "ppv" : "subscription"); setCheckoutOpen(true); };
 
   const handleViewContent = useCallback(async () => {
     setCheckoutOpen(false);
@@ -366,6 +366,8 @@ export default function SinglePostPage() {
         initialTier={checkoutTier}
         postPrice={post.ppv_price ? post.ppv_price / 100 : 0}
         postId={post.id}
+        autoCloseOnSuccess={checkoutType === "ppv" || checkoutType === "tips"}
+        onSuccess={checkoutType === "ppv" ? loadPost : undefined}
         onViewContent={handleViewContent}
         onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
       />

@@ -119,6 +119,7 @@ export default function SubscriptionsPage() {
           type="tips"
           creator={tipCreator}
           monthlyPrice={0}
+          autoCloseOnSuccess
         />
       )}
 
