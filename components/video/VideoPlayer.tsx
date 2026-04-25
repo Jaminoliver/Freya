@@ -258,7 +258,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
         className="vp-mute-btn"
         style={{ position: "absolute", top: 12, right: 12, zIndex: 15, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "36px", height: "36px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
         onClick={(e) => { e.stopPropagation(); onToggleMute(); }}
-        onTouchEnd={(e) => { e.stopPropagation(); onToggleMute(); }}
+        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onToggleMute(); }}
         aria-label={isMuted ? "Unmute" : "Mute"}
       >
         {isMuted ? (
