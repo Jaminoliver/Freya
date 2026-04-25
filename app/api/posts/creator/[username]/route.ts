@@ -233,8 +233,13 @@ export async function GET(
           const { bunnyVideoId, derivedThumb } = resolveVideoMedia(m);
           let freshThumb: string | null = null;
           if (m.media_type === "video") {
-            const customPath = extractBunnyPath(m.thumbnail_url as string | null);
-            freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
+            // Prefer Bunny Stream auto-generated thumbnail (Stream CDN, not regular CDN)
+            if (bunnyVideoId) {
+              freshThumb = derivedThumb;
+            } else {
+              const customPath = extractBunnyPath(m.thumbnail_url as string | null);
+              freshThumb = customPath ? signBunnyUrl(customPath) : null;
+            }
           } else {
             const thumbPath = extractBunnyPath(m.thumbnail_url as string | null);
             freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;

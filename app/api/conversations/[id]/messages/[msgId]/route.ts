@@ -56,7 +56,7 @@ export async function GET(
   if (row.is_ppv) {
     const isCreator = row.sender_id === user.id;
     const { data: unlocks } = await supabase
-      .from("ppv_unlocks")
+      .from("ppv_message_unlocks")
       .select("fan_id")
       .eq("message_id", messageId);
     const isUnlocked = isCreator || (unlocks ?? []).some((u) => u.fan_id === user.id);
@@ -136,7 +136,7 @@ export async function POST(
   if (priceKobo <= 0)  return NextResponse.json({ error: "Invalid price" }, { status: 400 });
 
   const { data: existing } = await supabase
-    .from("ppv_unlocks")
+    .from("ppv_message_unlocks")
     .select("id")
     .eq("message_id", messageId)
     .eq("fan_id", user.id)
@@ -192,7 +192,7 @@ export async function POST(
   }
 
   const { error: unlockError } = await supabase
-    .from("ppv_unlocks")
+    .from("ppv_message_unlocks")
     .insert({ message_id: messageId, fan_id: user.id, amount_paid: priceKobo });
 
   if (unlockError) {
@@ -291,7 +291,11 @@ export async function DELETE(
 
   const { error } = await supabase
     .from("messages")
-    .update({ is_deleted_for_everyone: true })
+    .update({
+      is_deleted_for_everyone: true,
+      is_deleted:              true,
+      deleted_at:              new Date().toISOString(),
+    })
     .eq("id", messageId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,0 +1,202 @@
+// app/api/saved/unlocked/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
+import { signBunnyUrl } from "@/lib/utils/bunny";
+
+const STREAM_CDN = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
+
+function resignImageUrl(storedUrl: string | null): string | null {
+  if (!storedUrl) return null;
+  try {
+    const url  = new URL(storedUrl);
+    const path = url.pathname;
+    return signBunnyUrl(path);
+  } catch {
+    return storedUrl;
+  }
+}
+
+function extractBunnyVideoId(url: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/play\/\d+\/([a-f0-9-]{36})\/playlist\.m3u8/i);
+  return match ? match[1] : null;
+}
+
+// GET /api/saved/unlocked — fetch unlocked PPV posts + messages, newest first
+// ?hidden=1 returns hidden items instead of visible ones
+export async function GET(req: NextRequest) {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const wantHidden = req.nextUrl.searchParams.get("hidden") === "1";
+  const service = createServiceSupabaseClient();
+
+  // ── Fetch both unlock tables in parallel ─────────────────────────────────
+  const [postUnlocksRes, msgUnlocksRes] = await Promise.all([
+    service
+      .from("ppv_unlocks")
+      .select(`
+        id,
+        post_id,
+        unlocked_at,
+        is_hidden,
+        amount_paid,
+        posts!inner (
+          id,
+          content_type,
+          is_deleted,
+          creator_id,
+          media:media (
+            id,
+            media_type,
+            file_url,
+            thumbnail_url,
+            bunny_video_id,
+            display_order
+          ),
+          profiles!creator_id (
+            username,
+            display_name,
+            avatar_url
+          )
+        )
+      `)
+      .eq("fan_id", user.id)
+      .eq("is_hidden", wantHidden)
+      .order("unlocked_at", { ascending: false }),
+
+    service
+      .from("ppv_message_unlocks")
+      .select(`
+        id,
+        message_id,
+        unlocked_at,
+        is_hidden,
+        amount_paid,
+        messages!inner (
+          id,
+          conversation_id,
+          sender_id,
+          is_deleted,
+          thumbnail_url,
+          media_url,
+          media_type,
+          message_media (
+            url,
+            thumbnail_url,
+            media_type,
+            display_order
+          ),
+          profiles:profiles!messages_sender_id_fkey (
+            username,
+            display_name,
+            avatar_url
+          )
+        )
+      `)
+      .eq("fan_id", user.id)
+      .eq("is_hidden", wantHidden)
+      .order("unlocked_at", { ascending: false }),
+  ]);
+
+  if (postUnlocksRes.error) {
+    console.error("[GET /api/saved/unlocked] post unlocks error:", postUnlocksRes.error);
+    return NextResponse.json({ error: postUnlocksRes.error.message }, { status: 500 });
+  }
+  if (msgUnlocksRes.error) {
+    console.error("[GET /api/saved/unlocked] message unlocks error:", msgUnlocksRes.error);
+    return NextResponse.json({ error: msgUnlocksRes.error.message }, { status: 500 });
+  }
+
+  // ── Map post unlocks ─────────────────────────────────────────────────────
+  const postItems = (postUnlocksRes.data ?? [])
+    .filter((row: any) => row.posts != null)
+    .map((row: any) => {
+      const p     = row.posts;
+      const media = (p.media ?? []).sort((a: any, b: any) => a.display_order - b.display_order);
+      const first = media[0];
+
+      let thumbnail_url: string | null = null;
+      if (first?.media_type === "video") {
+        // Prefer Bunny Stream auto-generated thumbnail (it's on the Stream CDN, not the regular CDN)
+        if (first?.bunny_video_id) {
+          thumbnail_url = `https://${STREAM_CDN}/${first.bunny_video_id}/thumbnail.jpg`;
+        } else {
+          thumbnail_url = resignImageUrl(first?.thumbnail_url);
+        }
+      } else {
+        thumbnail_url = resignImageUrl(first?.thumbnail_url) ?? resignImageUrl(first?.file_url) ?? null;
+      }
+
+      return {
+        unlock_id:    row.id,
+        source:       "post" as const,
+        id:           String(p.id),
+        unlocked_at:  row.unlocked_at,
+        amount_paid:  row.amount_paid,
+        thumbnail_url,
+        media_type:   first?.media_type === "video" ? "video" : "image",
+        media_count:  media.length,
+        is_locked:    false,
+        is_deleted:   !!p.is_deleted,
+        creator: {
+          username:   p.profiles?.username  ?? "",
+          name:       p.profiles?.display_name || p.profiles?.username || "",
+          avatar_url: p.profiles?.avatar_url ?? "",
+        },
+      };
+    });
+
+  // ── Map message unlocks ──────────────────────────────────────────────────
+  const msgItems = (msgUnlocksRes.data ?? [])
+    .filter((row: any) => row.messages != null)
+    .map((row: any) => {
+      const m       = row.messages;
+      const media   = (m.message_media ?? []).sort((a: any, b: any) => a.display_order - b.display_order);
+      const first   = media[0];
+      const isVideo = (first?.media_type ?? m.media_type) === "video";
+
+      let thumbnail_url: string | null = null;
+      if (isVideo) {
+        const stored = first?.thumbnail_url ?? m.thumbnail_url ?? null;
+        const videoUrl = first?.url ?? m.media_url ?? null;
+        const bunnyId  = extractBunnyVideoId(videoUrl);
+        thumbnail_url  = resignImageUrl(stored) ?? (bunnyId ? `https://${STREAM_CDN}/${bunnyId}/thumbnail.jpg` : null);
+      } else {
+        const stored  = first?.thumbnail_url ?? m.thumbnail_url ?? null;
+        const fileUrl = first?.url ?? m.media_url ?? null;
+        thumbnail_url = resignImageUrl(stored) ?? resignImageUrl(fileUrl) ?? null;
+      }
+
+      return {
+        unlock_id:       row.id,
+        source:          "message" as const,
+        id:              String(m.id),
+        conversation_id: m.conversation_id,
+        unlocked_at:     row.unlocked_at,
+        amount_paid:     row.amount_paid,
+        thumbnail_url,
+        media_type:      isVideo ? "video" : "image",
+        media_count:     media.length || 1,
+        is_locked:       false,
+        is_deleted:      !!m.is_deleted,
+        creator: {
+          username:   m.profiles?.username  ?? "",
+          name:       m.profiles?.display_name || m.profiles?.username || "",
+          avatar_url: m.profiles?.avatar_url ?? "",
+        },
+      };
+    });
+
+  // ── Merge, drop items with lost media, sort by unlocked_at desc ──────────
+  const combined = [...postItems, ...msgItems]
+    .filter((it) => it.media_count > 0 && it.thumbnail_url)
+    .sort((a, b) => {
+      const ta = new Date(a.unlocked_at).getTime();
+      const tb = new Date(b.unlocked_at).getTime();
+      return tb - ta;
+    });
+
+  return NextResponse.json({ unlocked: combined });
+}

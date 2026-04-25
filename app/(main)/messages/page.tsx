@@ -232,8 +232,7 @@ function startGlobalRealtime() {
           console.log("[CONV INSERT] alreadyExists in cache:", alreadyExists);
           if (alreadyExists) return;
 
-          // Never re-add a blocked or archived conversation
-          if (blockedConversationIds.has(row.id)) return;
+          // Never re-add an archived conversation
           if (archivedConversationIds.has(row.id)) return;
 
           // startConversation is hydrating this — don't race it
@@ -251,6 +250,7 @@ function startGlobalRealtime() {
             .then((data) => {
               console.log("[CONV INSERT] fetch response:", JSON.stringify(data));
               if (data.conversation && !archivedConversationIds.has(row.id)) {
+                blockedConversationIds.delete(row.id);
                 updateConversations((prev) => {
                   if (prev.some((c) => c.id === row.id)) {
                     console.log("[CONV INSERT] duplicate guard hit — not adding");
@@ -284,16 +284,15 @@ function startGlobalRealtime() {
           if (isOwn) return;
 
           const convoExists = cachedConversations?.some((c) => c.id === row.conversation_id) ?? false;
+          console.log("[MSG INSERT] convoExists:", convoExists, "conv_id:", row.conversation_id);
           if (!convoExists) {
-            // Never re-add a blocked or archived conversation
-            if (blockedConversationIds.has(row.conversation_id)) return;
             if (archivedConversationIds.has(row.conversation_id)) return;
-            // startConversation is hydrating this — don't race it
             if (pendingHydrationIds.has(row.conversation_id)) return;
             fetch(`/api/conversations/${row.conversation_id}`)
               .then((r) => r.json())
               .then((data) => {
                 if (data.conversation && !archivedConversationIds.has(row.conversation_id)) {
+                  blockedConversationIds.delete(row.conversation_id);
                   updateConversations((prev) => {
                     if (prev.some((c) => c.id === row.conversation_id)) return prev;
                     return [data.conversation, ...prev];
@@ -539,12 +538,12 @@ function startGlobalRealtime() {
             const exists = prev.some((c) => c.id === row.id);
 
             if (!exists) {
-              if (blockedConversationIds.has(row.id)) return prev;
               if (archivedConversationIds.has(row.id)) return prev;
               fetch(`/api/conversations/${row.id}`)
                 .then((r) => r.json())
                 .then((data) => {
                   if (data.conversation && !archivedConversationIds.has(row.id)) {
+                    blockedConversationIds.delete(row.id);
                     updateConversations((p) => {
                       if (p.some((c) => c.id === row.id)) return p;
                       return [data.conversation, ...p];

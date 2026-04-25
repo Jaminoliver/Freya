@@ -64,7 +64,6 @@ export async function GET(req: NextRequest) {
       )
     `)
     .eq("user_id", user.id)
-    .eq("posts.is_deleted", false)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -72,30 +71,38 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const filtered = (data ?? []).filter((row: any) => row.posts != null && !row.posts.is_deleted);
-
-  const postIds = filtered.map((row: any) => Number(row.posts?.id)).filter(Boolean);
+  const allRows = (data ?? []).filter((row: any) => row.posts != null);
+  const allPostIds = allRows.map((row: any) => Number(row.posts?.id)).filter(Boolean);
 
   // Fetch subscriptions and PPV unlocks in parallel
   const [{ data: subsRaw }, { data: ppvUnlocksRaw }] = await Promise.all([
-    postIds.length > 0
+    allPostIds.length > 0
       ? service
           .from("subscriptions")
           .select("creator_id")
           .eq("fan_id", user.id)
           .eq("status", "active")
       : Promise.resolve({ data: [] }),
-    postIds.length > 0
+    allPostIds.length > 0
       ? service
           .from("ppv_unlocks")
           .select("post_id")
           .eq("fan_id", user.id)
-          .in("post_id", postIds)
+          .in("post_id", allPostIds)
       : Promise.resolve({ data: [] }),
   ]);
 
   const subscribedSet = new Set((subsRaw ?? []).map((s: any) => s.creator_id));
   const unlockedSet   = new Set((ppvUnlocksRaw ?? []).map((u: any) => Number(u.post_id)));
+
+  // Hide soft-deleted posts unless the user has a PPV unlock for them.
+  // Also drop posts whose media rows were hard-deleted (legacy data) — broken thumbnails.
+  const filtered = allRows.filter((row: any) => {
+    const p = row.posts;
+    if (!p.media || p.media.length === 0) return false;
+    if (!p.is_deleted) return true;
+    return unlockedSet.has(Number(p.id));
+  });
 
   const STREAM_CDN = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
 
@@ -114,7 +121,12 @@ export async function GET(req: NextRequest) {
     // Always return thumbnail regardless of lock status — used for blur preview
     let thumbnail_url: string | null = null;
     if (first?.media_type === "video") {
-      thumbnail_url = resignImageUrl(first?.thumbnail_url) ?? (first?.bunny_video_id ? `https://${STREAM_CDN}/${first.bunny_video_id}/thumbnail.jpg` : null);
+      // Prefer Bunny Stream auto-generated thumbnail (lives on Stream CDN, not regular CDN)
+      if (first?.bunny_video_id) {
+        thumbnail_url = `https://${STREAM_CDN}/${first.bunny_video_id}/thumbnail.jpg`;
+      } else {
+        thumbnail_url = resignImageUrl(first?.thumbnail_url);
+      }
     } else {
       thumbnail_url = resignImageUrl(first?.thumbnail_url) ?? resignImageUrl(first?.file_url) ?? null;
     }

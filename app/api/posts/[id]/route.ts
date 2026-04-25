@@ -86,11 +86,28 @@ export async function GET(
       `)
       .eq("id", postId)
       .eq("is_published", true)
-      .eq("is_deleted", false)
       .single();
 
     if (error || !post) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
+    }
+
+    // ── Soft-deleted posts: only owner or fans with PPV unlock can view ──
+    if ((post as any).is_deleted) {
+      const isOwnPost = user?.id === post.creator_id;
+      let hasUnlock = false;
+      if (user && !isOwnPost && post.is_ppv) {
+        const { data: unlockRow } = await service
+          .from("ppv_unlocks")
+          .select("id")
+          .eq("fan_id", user.id)
+          .eq("post_id", postId)
+          .maybeSingle();
+        hasUnlock = !!unlockRow;
+      }
+      if (!isOwnPost && !hasUnlock) {
+        return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      }
     }
 
     // ── OPTIMIZED: all access checks + like + poll in ONE parallel batch ──
@@ -150,8 +167,11 @@ export async function GET(
         const { bunnyVideoId, derivedThumb } = resolveVideoMedia(m);
         let freshThumb: string | null = null;
         if (m.media_type === "video") {
-          const customPath = extractBunnyPath(m.thumbnail_url as string | null);
-          freshThumb = customPath ? signBunnyUrl(customPath) : derivedThumb;
+          // Prefer Bunny Stream auto-generated thumbnail (Stream CDN, not regular CDN)
+          freshThumb = derivedThumb ?? (() => {
+            const customPath = extractBunnyPath(m.thumbnail_url as string | null);
+            return customPath ? signBunnyUrl(customPath) : null;
+          })();
         } else {
           const thumbPath = extractBunnyPath(m.thumbnail_url as string | null);
           freshThumb = thumbPath ? signBunnyUrl(thumbPath) : null;

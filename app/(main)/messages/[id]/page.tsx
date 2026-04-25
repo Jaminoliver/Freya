@@ -88,7 +88,6 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       setActiveConversation(null);
       setStoreConversationId(null);
       clearMessages();
-      unsubscribeTypingForConversation(conversationId);
     };
   }, [conversationId, setActiveConversationId, isNew]);
 
