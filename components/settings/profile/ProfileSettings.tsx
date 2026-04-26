@@ -168,7 +168,7 @@ function ProfileSkeleton() {
 }
 
 // ─── Main Component ───────────────────────────
-export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
+export default function ProfileSettings({ onBack, saveRef, onSaveStateChange }: { onBack?: () => void; saveRef?: React.MutableRefObject<(() => void) | null>; onSaveStateChange?: (state: SaveState) => void }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
 
@@ -187,11 +187,16 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [errorMsg,  setErrorMsg]  = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof ProfileForm | "date_of_birth", string>>>({});
+  const [saveTried, setSaveTried] = useState(false);
+  useEffect(() => { onSaveStateChange?.(saveState); }, [saveState]);
+  useEffect(() => { if (saveRef) saveRef.current = handleSave; });
   const [userId,    setUserId]    = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fieldRefs = useRef<Partial<Record<keyof ProfileForm | "date_of_birth", HTMLElement | null>>>({});
 
   // ── Load profile ──────────────────────────
   useEffect(() => {
@@ -270,8 +275,51 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
     debounceTimer.current = setTimeout(() => checkUsername(value), 500);
   };
 
-  const set = (key: keyof ProfileForm, value: string) =>
+  const set = (key: keyof ProfileForm, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setFormErrors((prev) => ({ ...prev, [key]: undefined }));
+  };
+
+  const normalizeUrl = (val: string): string => {
+    const trimmed = val.trim();
+    if (!trimmed) return "";
+    if (!/^https?:\/\//i.test(trimmed)) return `https://${trimmed}`;
+    return trimmed;
+  };
+
+  const isValidUrl = (val: string): boolean => {
+    try { new URL(val); return true; } catch { return false; }
+  };
+
+  const validate = (): Partial<Record<keyof ProfileForm | "date_of_birth", string>> => {
+    const errors: Partial<Record<keyof ProfileForm | "date_of_birth", string>> = {};
+
+    if (!form.display_name.trim()) errors.display_name = "Display name is required.";
+
+    if (!usernameInput.trim()) {
+      errors.username = "Username is required.";
+    } else if (usernameStatus === "taken" || usernameStatus === "invalid") {
+      errors.username = usernameMsg ?? "Invalid username.";
+    } else if (usernameInput.trim() !== originalUsername && usernameStatus === "idle") {
+      errors.username = "Please wait for username availability check.";
+    }
+
+    if (form.date_of_birth) {
+      const dob = new Date(form.date_of_birth);
+      const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      if (age < 18) errors.date_of_birth = "You must be at least 18 years old.";
+    }
+
+    const urlFields: (keyof ProfileForm)[] = ["website_url", "twitter_url", "instagram_url", "telegram_url", "facebook_url"];
+    urlFields.forEach((key) => {
+      const val = form[key].trim();
+      if (!val) return;
+      const normalized = normalizeUrl(val);
+      if (!isValidUrl(normalized)) errors[key] = "Enter a valid URL.";
+    });
+
+    return errors;
+  };
 
   // ── Focus handlers ────────────────────────
   // For most inputs: only apply the purple border. Let the browser handle scroll natively.
@@ -304,32 +352,46 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
   };
 
   // ── Save ──────────────────────────────────
-  const canSave =
-    saveState !== "saving" &&
-    (usernameStatus === "available" || usernameStatus === "own" || usernameStatus === "idle");
+  const canSave = saveState !== "saving";
 
   const handleSave = async () => {
-    if (!userId || !canSave) return;
-    if (usernameInput.toLowerCase() !== originalUsername.toLowerCase() && usernameStatus !== "available") return;
-    setSaveState("saving"); setErrorMsg(null);
+    if (!userId || saveState === "saving") return;
+
+    setSaveTried(true);
+    const errors = validate();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      const firstKey = Object.keys(errors)[0] as keyof ProfileForm | "date_of_birth";
+      const el = fieldRefs.current[firstKey];
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    setSaveState("saving"); setErrorMsg(null); setFormErrors({});
     const supabase = createClient();
+
+    const urlFields: (keyof ProfileForm)[] = ["website_url", "twitter_url", "instagram_url", "telegram_url", "facebook_url"];
+    const normalizedUrls: Partial<Record<keyof ProfileForm, string | null>> = {};
+    urlFields.forEach((key) => {
+      const val = form[key].trim();
+      normalizedUrls[key] = val ? normalizeUrl(val) : null;
+    });
+
     const updates: Record<string, unknown> = {
-      display_name: form.display_name  || null,
-      bio:          form.bio           || null,
-      location:     form.location      || null,
-      country:      form.country       || null,
-      state:        form.state         || null,
-      date_of_birth: form.date_of_birth || null,
-      website_url:   form.website_url  || null,
-      twitter_url:   form.twitter_url  || null,
-      instagram_url: form.instagram_url || null,
-      telegram_url:  form.telegram_url  || null,
-      facebook_url:  form.facebook_url  || null,
+      display_name:  form.display_name.trim()  || null,
+      bio:           form.bio.trim()           || null,
+      location:      form.location.trim()      || null,
+      country:       form.country.trim()       || null,
+      state:         form.state.trim()         || null,
+      date_of_birth: form.date_of_birth        || null,
+      ...normalizedUrls,
       updated_at:    new Date().toISOString(),
     };
+
     if (usernameStatus === "available" && usernameInput.trim() !== originalUsername) {
       updates.username = usernameInput.toLowerCase().trim();
     }
+
     const { error } = await supabase.from("profiles").update(updates).eq("id", userId);
     if (error) {
       setSaveState("error"); setErrorMsg(error.message);
@@ -405,7 +467,11 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
                   style={inputBase}
                   onFocus={focusBorder}
                   onBlur={blurReset}
+                  ref={(el) => { fieldRefs.current.display_name = el; }}
                 />
+                {formErrors.display_name && (
+                  <span style={{ fontSize: "12px", color: "#EF4444", marginTop: "5px", display: "block" }}>{formErrors.display_name}</span>
+                )}
               </div>
 
               {/* Username */}
@@ -426,6 +492,7 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
                     style={{ ...inputBase, paddingLeft: "28px", paddingRight: "40px", borderColor: usernameBorderColor() }}
                     onFocus={focusBorder}
                     onBlur={blurReset}
+                    ref={(el) => { fieldRefs.current.username = el; }}
                   />
                   <div style={{
                     position: "absolute", right: "12px", top: "50%",
@@ -475,6 +542,9 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
                     ))}
                   </div>
                 )}
+                {formErrors.username && (
+                  <span style={{ fontSize: "12px", color: "#EF4444", marginTop: "5px", display: "block" }}>{formErrors.username}</span>
+                )}
                 <span style={{
                   fontSize: "11px", color: "#6B6B8A", marginTop: "5px",
                   display: "block", fontStyle: "italic",
@@ -513,7 +583,11 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
                   style={{ ...inputBase, colorScheme: "dark", maxWidth: "100%", minWidth: 0, WebkitAppearance: "none" }}
                   onFocus={focusBorder}
                   onBlur={blurReset}
+                  ref={(el) => { fieldRefs.current.date_of_birth = el; }}
                 />
+                {formErrors.date_of_birth && (
+                  <span style={{ fontSize: "12px", color: "#EF4444", marginTop: "5px", display: "block" }}>{formErrors.date_of_birth}</span>
+                )}
                 <span style={{ fontSize: "11px", color: "#6B6B8A", marginTop: "5px", display: "block", fontStyle: "italic" }}>
                   Not shown publicly — used for age verification
                 </span>
@@ -582,7 +656,13 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
                     style={inputBase}
                     onFocus={focusDeep}
                     onBlur={blurReset}
+                    ref={(el) => { fieldRefs.current[key as keyof ProfileForm] = el; }}
                   />
+                  {formErrors[key as keyof ProfileForm] && (
+                    <span style={{ fontSize: "12px", color: "#EF4444", marginTop: "5px", display: "block" }}>
+                      {formErrors[key as keyof ProfileForm]}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -601,19 +681,32 @@ export default function ProfileSettings({ onBack }: { onBack?: () => void }) {
             )}
 
             {/* Save button */}
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "28px" }}>
+            {saveTried && Object.keys(formErrors).length > 0 && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                backgroundColor: "rgba(239,68,68,0.08)",
+                border: "1.5px solid rgba(239,68,68,0.2)",
+                borderRadius: "10px", padding: "12px 14px", marginTop: "24px",
+              }}>
+                <AlertCircle size={14} color="#EF4444" />
+                <span style={{ fontSize: "13px", color: "#EF4444" }}>
+                  Please fix the errors above before saving.
+                </span>
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={!canSave}
+                disabled={saveState === "saving"}
                 style={{
                   display: "flex", alignItems: "center", gap: "8px",
                   padding: "11px 24px", borderRadius: "8px", fontSize: "14px",
-                  fontWeight: 600, border: "none", cursor: canSave ? "pointer" : "not-allowed",
+                  fontWeight: 600, border: "none", cursor: saveState === "saving" ? "not-allowed" : "pointer",
                   backgroundColor: saveState === "saved" ? "#059669" : "#8B5CF6",
                   color: "#FFFFFF", boxShadow: "0 4px 20px rgba(139,92,246,0.3)",
                   fontFamily: "'Inter', sans-serif", transition: "background-color 0.2s",
-                  opacity: canSave ? 1 : 0.5,
+                  opacity: saveState === "saving" ? 0.6 : 1,
                 }}
               >
                 {saveState === "saving" && (

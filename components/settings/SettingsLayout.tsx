@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { User, Shield, CreditCard, Lock, Bell, ChevronRight, TrendingUp, Wallet, Users, ArrowLeft } from "lucide-react";
@@ -66,6 +66,16 @@ function SettingsLayoutInner() {
   const [username,   setUsername]   = useState<string>(viewer?.username ?? "");
   const [loading,    setLoading]    = useState(!viewer?.username);
   const [revealed,   setRevealed]   = useState(!!viewer?.username);
+  const [headerSaveState, setHeaderSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
+  const profileSaveRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const onPop = () => {
+      if (mobileView === "content") setMobileView("menu");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [mobileView]);
 
   const isCreator = viewer?.role === "creator";
   const tabs = allTabs.filter((t) => !t.creatorOnly || isCreator);
@@ -116,14 +126,18 @@ function SettingsLayoutInner() {
   const handleTabSelect = (id: SettingsTab) => {
     setActiveTab(id);
     setMobileView("content");
+    window.history.pushState({ settingsMenu: true }, "");
   };
 
-  const handleBack     = () => setMobileView("menu");
+  const handleBack = () => {
+    setMobileView("menu");
+    if (window.history.state?.settingsMenu) window.history.back();
+  };
   const handleWithdraw = () => { setActiveTab("payouts"); setMobileView("content"); };
 
   const renderSection = () => {
     switch (activeTab) {
-      case "profile":       return <ProfileSettings onBack={handleBack} />;
+      case "profile":       return <ProfileSettings onBack={handleBack} saveRef={profileSaveRef} onSaveStateChange={setHeaderSaveState} />;
       case "account":       return <AccountSettings onBack={handleBack} />;
       case "pricing":       return <PricingSettings onBack={handleBack} username={username} />;
       case "privacy":       return <PrivacySettings onBack={handleBack} />;
@@ -296,6 +310,20 @@ function SettingsLayoutInner() {
           <span style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF" }}>
             {activeTabData?.label ?? "Settings"}
           </span>
+          {activeTab === "profile" && (
+            <button
+              onClick={() => profileSaveRef.current?.()}
+              style={{
+                marginLeft: "auto", padding: "7px 16px", borderRadius: "8px", border: "none",
+                cursor: "pointer", fontSize: "13px", fontWeight: 600, fontFamily: "'Inter', sans-serif",
+                backgroundColor: headerSaveState === "saved" ? "#059669" : "#8B5CF6",
+                color: "#FFFFFF", transition: "background-color 0.2s",
+                display: "flex", alignItems: "center", gap: "6px",
+              }}
+            >
+              {headerSaveState === "saving" ? "Saving…" : headerSaveState === "saved" ? "Saved ✓" : "Save"}
+            </button>
+          )}
         </div>
 
         <div className="settings-content-inner" style={{ padding: "20px 16px 100px", maxWidth: "640px", width: "100%" }}>
