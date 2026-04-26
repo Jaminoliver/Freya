@@ -42,7 +42,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
     pathname === "/dashboard" ||
     (pathname.split("/").length === 2 &&
      pathname !== "/" &&
-     !["/messages", "/notifications", "/settings", "/subscriptions", "/explore", "/wallet", "/create", "/posts"].some(p => pathname.startsWith(p)));
+     !["/messages", "/notifications", "/settings", "/subscriptions", "/wallet", "/create", "/posts"].some(p => pathname.startsWith(p)));
 
   const showRightPanel = !isSettings && !isMessages;
   const noTopbar = (!isDashboard && !isExplore) || isPostPage || isNotifications;

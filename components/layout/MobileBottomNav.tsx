@@ -57,7 +57,7 @@ body.search-open .mobile-bottom-nav { display: none !important; }
         style={{
           position: "fixed", bottom: "0", left: "0", right: "0",
           backgroundColor: "#13131F",
-border: "1px solid #1F1F2A",
+border: "none",
           borderRadius: "20px 20px 0 0",
           zIndex: 200,
           fontFamily: "'Inter', sans-serif",
