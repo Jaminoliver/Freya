@@ -141,6 +141,8 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
       <MobileBottomNav />
       <UploadProgressBar />
+      <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+      <script dangerouslySetInnerHTML={{ __html: "eruda.init();" }} />
     </div>
   );
 }
