@@ -55,6 +55,24 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
   const { showSplash: showVisibilitySplash, dismissVisibilitySplash } = useVisibilitySplash();
 
+  useEffect(() => {
+    const handler = (e: ErrorEvent) => {
+      fetch("/api/log-error", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message:  e.message,
+          filename: e.filename,
+          lineno:   e.lineno,
+          colno:    e.colno,
+          stack:    e.error?.stack,
+        }),
+      }).catch(() => {});
+    };
+    window.addEventListener("error", handler);
+    return () => window.removeEventListener("error", handler);
+  }, []);
+
   const showAnySplash = initialSplash || showVisibilitySplash;
 
   useEffect(() => {
@@ -141,8 +159,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
       <MobileBottomNav />
       <UploadProgressBar />
-      <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-      <script dangerouslySetInnerHTML={{ __html: "eruda.init();" }} />
+      
     </div>
   );
 }
