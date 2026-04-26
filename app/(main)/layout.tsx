@@ -42,7 +42,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
     pathname === "/dashboard" ||
     (pathname.split("/").length === 2 &&
      pathname !== "/" &&
-     !["/messages", "/notifications", "/settings", "/subscriptions", "/wallet", "/create", "/posts"].some(p => pathname.startsWith(p)));
+     !["/messages", "/settings", "/wallet", "/create", "/posts"].some(p => pathname.startsWith(p)));
 
   const showRightPanel = !isSettings && !isMessages;
   const noTopbar = (!isDashboard && !isExplore) || isPostPage || isNotifications;
@@ -110,10 +110,10 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
           flex:       1,
           minWidth:   0,
           maxWidth:   isSettings || isMessages || isNotifications ? "100%" : "720px",
-          height:     isMessages || isNotifications ? "100dvh" : isWindowScrollPage ? "auto" : "100vh",
+          height:     isMessages ? "100dvh" : isWindowScrollPage ? "auto" : "100vh",
           boxSizing:  "border-box",
           borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
-          overflowY:   isMessages || isNotifications ? "hidden" : isWindowScrollPage ? "visible" : "auto",
+          overflowY:   isMessages ? "hidden" : isWindowScrollPage ? "visible" : "auto",
           overflowX:   "hidden",
           paddingBottom: isMessages || isNotifications ? "0" : "72px",
           scrollbarWidth: "none",
