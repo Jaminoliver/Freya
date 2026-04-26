@@ -38,6 +38,12 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const isExplore       = pathname === "/explore";
   const isPostPage      = pathname.startsWith("/posts/");
 
+  const isWindowScrollPage =
+    pathname === "/dashboard" ||
+    (pathname.split("/").length === 2 &&
+     pathname !== "/" &&
+     !["/messages", "/notifications", "/settings", "/subscriptions", "/explore", "/wallet", "/create", "/posts"].some(p => pathname.startsWith(p)));
+
   const showRightPanel = !isSettings && !isMessages;
   const noTopbar = (!isDashboard && !isExplore) || isPostPage || isNotifications;
 
@@ -52,14 +58,14 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const showAnySplash = initialSplash || showVisibilitySplash;
 
   useEffect(() => {
-    const el = mainRef.current;
+    const el = isWindowScrollPage ? window : mainRef.current;
     if (!el) return;
 
     const onScroll = () => {
       if (ticking.current) return;
       ticking.current = true;
       requestAnimationFrame(() => {
-        const current = el.scrollTop;
+        const current = isWindowScrollPage ? window.scrollY : (mainRef.current?.scrollTop ?? 0);
         const diff    = current - lastScrollY.current;
         if (current === 0) {
           setHeaderVisible(true);
@@ -75,10 +81,10 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [isWindowScrollPage]);
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#0A0A0F", overflow: "hidden", width: "100%" }}>
+    <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "#0A0A0F", overflow: isWindowScrollPage ? "visible" : "hidden", width: "100%" }}>
 
       {/* Initial load splash */}
       {initialSplash && (
@@ -104,10 +110,10 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
           flex:       1,
           minWidth:   0,
           maxWidth:   isSettings || isMessages || isNotifications ? "100%" : "720px",
-          height:     isMessages || isNotifications ? "100dvh" : "100vh",
+          height:     isMessages || isNotifications ? "100dvh" : isWindowScrollPage ? "auto" : "100vh",
           boxSizing:  "border-box",
           borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
-          overflowY:   isMessages || isNotifications ? "hidden" : "auto",
+          overflowY:   isMessages || isNotifications ? "hidden" : isWindowScrollPage ? "visible" : "auto",
           overflowX:   "hidden",
           paddingBottom: isMessages || isNotifications ? "0" : "72px",
           scrollbarWidth: "none",
