@@ -219,7 +219,7 @@ export default function ImageCarousel({
     applyTransform(bounded, false);
   }, [media.length, applyTransform]);
 
-  const handleTouchEnd = React.useCallback(() => {
+    const handleTouchEnd = React.useCallback(() => {
     const dx = dragDeltaX.current;
     startXRef.current    = null;
     startYRef.current    = null;
@@ -236,9 +236,8 @@ export default function ImageCarousel({
     else if (dx > 50 && idx > 0) goTo(idx - 1);
     else {
       applyTransform(0, true);
-      if (Math.abs(dx) < 5 && !isVideoSlide) onImageClick?.(idx);
     }
-  }, [media.length, goTo, applyTransform, onImageClick]);
+  }, [media.length, goTo, applyTransform]);
 
   // ── Mouse handlers (desktop only) ──
   const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
