@@ -43,7 +43,12 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
 
   React.useEffect(() => {
     setMounted(true);
+    setIsMobile(window.matchMedia("(hover: none), (pointer: coarse)").matches);
   }, []);
+
+  React.useEffect(() => {
+    if (mounted && isMobile) onClose();
+  }, [mounted, isMobile, onClose]);
 
   // Lock body scroll when lightbox is open, restore on close
   React.useEffect(() => {
@@ -112,7 +117,7 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   const hasPrev = hasPrevImage || hasPrevPost;
   const hasNext = hasNextImage || hasNextPost;
 
-  if (!mounted || images.length === 0) return null;
+  if (!mounted || isMobile || images.length === 0) return null;
 
   const totalSlides = images.length;
   const translateX  = -(mediaIndex / totalSlides) * 100;
