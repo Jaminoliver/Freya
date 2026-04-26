@@ -249,6 +249,8 @@ function PostCardInner({
   const isPollPost   = post.content_type === "poll";
 
   const handleSingleTap = useCallback((index: number) => {
+    const isMobileDevice = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+    if (isMobileDevice) return;
     const tappedMedia = normalizedMedia[index];
     if (!tappedMedia || tappedMedia.type !== "image") return;
     const imageOnlyMedia = normalizedMedia.filter((m) => m.type === "image");

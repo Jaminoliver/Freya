@@ -46,9 +46,7 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
     setIsMobile(window.matchMedia("(hover: none), (pointer: coarse)").matches);
   }, []);
 
-  React.useEffect(() => {
-    if (mounted && isMobile) onClose();
-  }, [mounted, isMobile, onClose]);
+  if (!mounted || isMobile || images.length === 0) return null;
 
   // Lock body scroll when lightbox is open, restore on close
   React.useEffect(() => {
