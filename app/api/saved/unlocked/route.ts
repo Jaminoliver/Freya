@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const wantHidden = req.nextUrl.searchParams.get("hidden") === "1";
+  console.log("[GET /unlocked] wantHidden:", wantHidden);
   const service = createServiceSupabaseClient();
 
   // ── Fetch both unlock tables in parallel ─────────────────────────────────
@@ -100,6 +101,8 @@ export async function GET(req: NextRequest) {
       .order("unlocked_at", { ascending: false }),
   ]);
 
+  console.log("[GET /unlocked] raw postUnlocks:", JSON.stringify(postUnlocksRes.data?.map((r: any) => ({ id: r.id, is_hidden: r.is_hidden })), null, 2));
+  console.log("[GET /unlocked] raw msgUnlocks:", JSON.stringify(msgUnlocksRes.data?.map((r: any) => ({ id: r.id, is_hidden: r.is_hidden })), null, 2));
   if (postUnlocksRes.error) {
     console.error("[GET /api/saved/unlocked] post unlocks error:", postUnlocksRes.error);
     return NextResponse.json({ error: postUnlocksRes.error.message }, { status: 500 });

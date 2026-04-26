@@ -43,24 +43,22 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
 
   React.useEffect(() => {
     setMounted(true);
-    setIsMobile(window.matchMedia("(hover: none), (pointer: coarse)").matches);
   }, []);
-
-  // If mobile, close immediately and don't render
-  React.useEffect(() => {
-    if (mounted && isMobile) onClose();
-  }, [mounted, isMobile, onClose]);
 
   // Lock body scroll when lightbox is open, restore on close
   React.useEffect(() => {
     const prev = document.body.style.overflow;
+    const scrollY = window.scrollY;
     document.body.style.overflow = "hidden";
     document.body.style.position = "fixed";
+    document.body.style.top      = `-${scrollY}px`;
     document.body.style.width    = "100%";
     return () => {
       document.body.style.overflow = prev;
       document.body.style.position = "";
+      document.body.style.top      = "";
       document.body.style.width    = "";
+      window.scrollTo(0, scrollY);
     };
   }, []);
 
@@ -114,7 +112,7 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   const hasPrev = hasPrevImage || hasPrevPost;
   const hasNext = hasNextImage || hasNextPost;
 
-  if (!mounted || isMobile || images.length === 0) return null;
+  if (!mounted || images.length === 0) return null;
 
   const totalSlides = images.length;
   const translateX  = -(mediaIndex / totalSlides) * 100;

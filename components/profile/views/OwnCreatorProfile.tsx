@@ -7,6 +7,7 @@ import ProfileInfo from "@/components/profile/ProfileInfo";
 import ProfileActions from "@/components/profile/ProfileActions";
 import PostComposer from "@/components/profile/PostComposer";
 import ContentFeed from "@/components/profile/ContentFeed";
+import type { LightboxPost } from "@/components/profile/Lightbox";
 import type { User } from "@/lib/types/profile";
 import type { ApiPost } from "@/components/profile/PostRow";
 
@@ -24,6 +25,8 @@ interface Props {
   onComment:       (id: string) => void;
   onTip:           (id: string) => void;
   onUnlock:        (id: string) => void;
+  onOpenPost?:     (postId: string) => void;
+  onImageClick?:   (post: LightboxPost, index: number) => void;
 }
 
 const padded: React.CSSProperties = { padding: "0 16px" };
@@ -31,7 +34,7 @@ const padded: React.CSSProperties = { padding: "0 16px" };
 export default function OwnCreatorProfile({
   profile, apiPosts, feedRefreshKey, totalLikes,
   onBannerUpdated, onAvatarUpdated, onEditProfile,
-  onPost, onSchedule, onLike, onComment, onTip, onUnlock,
+  onPost, onSchedule, onLike, onComment, onTip, onUnlock, onOpenPost, onImageClick,
 }: Props) {
   const bannerStats = {
     posts:       apiPosts.length,
@@ -83,6 +86,8 @@ export default function OwnCreatorProfile({
         creatorUsername={profile.username} initialApiPosts={apiPosts}
         refreshKey={feedRefreshKey}
         onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
+        onOpenPost={onOpenPost}
+        onImageClick={onImageClick}
       />
     </div>
   );

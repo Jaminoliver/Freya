@@ -8,6 +8,7 @@ import ProfileActions from "@/components/profile/ProfileActions";
 import SubscriptionCard from "@/components/profile/SubscriptionCard";
 import SubscribedBanner from "@/components/profile/SubscribedBanner";
 import ContentFeed from "@/components/profile/ContentFeed";
+import type { LightboxPost } from "@/components/profile/Lightbox";
 import type { User, Subscription } from "@/lib/types/profile";
 import type { ApiPost } from "@/components/profile/PostRow";
 import type { SubscriptionTier } from "@/lib/types/checkout";
@@ -36,6 +37,8 @@ interface Props {
   onComment:             (id: string) => void;
   onUnlock:              (id: string) => void;
   messageLoading?:       boolean;
+  onOpenPost?:           (postId: string) => void;
+  onImageClick?:         (post: LightboxPost, index: number) => void;
 }
 
 const padded: React.CSSProperties = { padding: "0 16px" };
@@ -78,7 +81,7 @@ export default function CreatorViewingDualRole({
   fanSubscription, pricePaid, selectedTier,
   onSubscribe, onCancelled,
   onFollow, onTip, onMessage, onLike, onComment, onUnlock,
-  messageLoading = false,
+  messageLoading = false, onOpenPost, onImageClick,
 }: Props) {
   const { navigate } = useNav();
   const setSettingsPanel = useAppStore((s) => s.setSettingsPanel);
@@ -227,6 +230,8 @@ export default function CreatorViewingDualRole({
         posts={[]} isSubscribed={isSubscribed} creatorUsername={profile.username}
         initialApiPosts={apiPosts} refreshKey={feedRefreshKey}
         onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
+        onOpenPost={onOpenPost}
+        onImageClick={onImageClick}
         extraTab={fanSubscription ? "FAN INFO" : undefined}
         extraTabContent={fanInfoContent}
       />

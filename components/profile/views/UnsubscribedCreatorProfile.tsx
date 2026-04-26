@@ -7,6 +7,7 @@ import ProfileInfo from "@/components/profile/ProfileInfo";
 import ProfileActions from "@/components/profile/ProfileActions";
 import SubscriptionCard from "@/components/profile/SubscriptionCard";
 import ContentFeed from "@/components/profile/ContentFeed";
+import type { LightboxPost } from "@/components/profile/Lightbox";
 import type { User } from "@/lib/types/profile";
 import type { ApiPost } from "@/components/profile/PostRow";
 import type { SubscriptionTier } from "@/lib/types/checkout";
@@ -23,6 +24,8 @@ interface Props {
   onLike:         (id: string) => void;
   onComment:      (id: string) => void;
   onUnlock:       (id: string) => void;
+  onOpenPost?:    (postId: string) => void;
+  onImageClick?:  (post: LightboxPost, index: number) => void;
 }
 
 const padded: React.CSSProperties = { padding: "0 16px" };
@@ -30,7 +33,7 @@ const padded: React.CSSProperties = { padding: "0 16px" };
 export default function UnsubscribedCreatorProfile({
   profile, apiPosts, feedRefreshKey, totalLikes,
   isFollowing, onSubscribe, onFollow, onTip,
-  onLike, onComment, onUnlock,
+  onLike, onComment, onUnlock, onOpenPost, onImageClick,
 }: Props) {
   const bannerStats = {
     posts:       apiPosts.length,
@@ -92,6 +95,8 @@ export default function UnsubscribedCreatorProfile({
         posts={[]} isSubscribed={false} creatorUsername={profile.username}
         initialApiPosts={apiPosts} refreshKey={feedRefreshKey}
         onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
+        onOpenPost={onOpenPost}
+        onImageClick={onImageClick}
       />
     </div>
   );

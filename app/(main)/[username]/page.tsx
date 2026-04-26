@@ -15,7 +15,9 @@ import { useAppStore, isStale } from "@/lib/store/appStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import { startConversation } from "@/app/(main)/messages/page";
-
+import SinglePostSheet from "@/components/shared/SinglePostSheet";
+import type { LightboxPost } from "@/components/profile/Lightbox";
+const Lightbox = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
 // ── Dynamic imports: only the active view loads ──────────────────────────────
 const CheckoutModal              = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
 const OwnCreatorProfile          = dynamic(() => import("@/components/profile/views/OwnCreatorProfile"), { ssr: false });
@@ -68,6 +70,24 @@ function ProfilePageInner() {
   const [lockedPostPrice, setLockedPostPrice] = React.useState<number>(0);
 
   const [fanSubscription, setFanSubscription] = React.useState<Subscription | null>(null);
+  const [openPost,           setOpenPost]           = React.useState<{ id: string; sourceIsMessage: boolean } | null>(null);
+  const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
+  const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
+  const imagePosts = React.useMemo(() => apiPosts.filter((p) => !p.locked && p.media?.[0]?.media_type !== "video").map((p) => ({ id: p.id, media: p.media })), [apiPosts]);
+  const openLightboxFromProfile = (p: LightboxPost, index: number) => {
+    console.log("[ProfilePage] openLightbox called", { postId: p.id, index, windowScrollY: window.scrollY });
+    setLightboxMediaIndex(index);
+    setLightboxPost(p);
+    requestAnimationFrame(() => {
+      console.log("[ProfilePage] windowScrollY after rAF1", window.scrollY);
+      requestAnimationFrame(() => {
+        console.log("[ProfilePage] windowScrollY after rAF2", window.scrollY);
+        setTimeout(() => {
+          console.log("[ProfilePage] windowScrollY after 500ms", window.scrollY);
+        }, 500);
+      });
+    });
+  };
 
   const profileIdRef = React.useRef<string | null>(null);
   const viewerIdRef  = React.useRef<string | null>(null);
@@ -555,7 +575,21 @@ function ProfilePageInner() {
   }
 
   return (
-    <>
+    <div style={{ position: "relative" }}>
+      {lightboxPost && (
+        <Lightbox
+          post={lightboxPost}
+          allPosts={imagePosts}
+          initialMediaIndex={lightboxMediaIndex}
+          onClose={() => setLightboxPost(null)}
+          onNavigate={(p, mediaIndex) => { setLightboxMediaIndex(mediaIndex ?? 0); setLightboxPost(p); }}
+        />
+      )}
+      <SinglePostSheet
+        postId={openPost?.id ?? null}
+        sourceIsMessage={openPost?.sourceIsMessage ?? false}
+        onClose={() => setOpenPost(null)}
+      />
       {profile && (
         <CheckoutModal
           isOpen={checkoutOpen}
@@ -590,6 +624,8 @@ function ProfilePageInner() {
               onEditProfile={() => router.push("/settings")}
               onPost={handlePost} onSchedule={handleSchedule}
               onLike={handleLike} onComment={handleComment} onTip={handleTip} onUnlock={handleUnlock}
+              onOpenPost={(id) => setOpenPost({ id, sourceIsMessage: false })}
+              onImageClick={(p, index) => openLightboxFromProfile(p, index)}
             />
           )}
 
@@ -626,6 +662,8 @@ function ProfilePageInner() {
               onTip={handleTip} onMessage={handleMessage}
               onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
               messageLoading={messageLoading}
+              onOpenPost={(id) => setOpenPost({ id, sourceIsMessage: false })}
+              onImageClick={(p, index) => openLightboxFromProfile(p, index)}
             />
           )}
 
@@ -640,6 +678,8 @@ function ProfilePageInner() {
               pricePaid={pricePaid}
               selectedTier={selectedTier}
               messageLoading={messageLoading}
+              onOpenPost={(id) => setOpenPost({ id, sourceIsMessage: false })}
+              onImageClick={(p, index) => openLightboxFromProfile(p, index)}
             />
           )}
 
@@ -650,12 +690,14 @@ function ProfilePageInner() {
               onSubscribe={(tier) => openCheckout("subscription", tier)}
               onFollow={handleFollow} onTip={openTip}
               onLike={handleLike} onComment={handleComment} onUnlock={handleUnlock}
+              onOpenPost={(id) => setOpenPost({ id, sourceIsMessage: false })}
+              onImageClick={(p, index) => openLightboxFromProfile(p, index)}
             />
           )}
 
         </div>
       )}
-    </>
+    </div>
   );
 }
 

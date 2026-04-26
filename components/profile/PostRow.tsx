@@ -164,8 +164,15 @@ export default function PostRow({
     onPPVUpdated?.(String(post.id), 0);
   };
 
-  const handleSingleTap = () => {
-    if (firstMedia?.media_type !== "video") onImageClick?.(post, 0);
+  const handleSingleTap = (index: number) => {
+    console.log("[PostRow] handleSingleTap", { index, postId: post.id });
+    const item = post.media?.filter((m) => !m.locked)[index];
+    console.log("[PostRow] item at index", item);
+    if (!item || item.media_type === "video") return;
+    const photoMedia = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
+    const photoIndex = photoMedia.findIndex((p) => p.id === item.id);
+    console.log("[PostRow] photoIndex", photoIndex);
+    if (photoIndex >= 0) onImageClick?.(post, photoIndex);
   };
 
   const handleAvatarClick = React.useCallback((e: React.MouseEvent) => {

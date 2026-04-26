@@ -249,6 +249,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
       <div
         style={{ position: "absolute", inset: 0, zIndex: 4 }}
         onClick={handlePlayPause}
+        onTouchEnd={(e) => { e.preventDefault(); handlePlayPause(e as any); }}
         onMouseMove={handleTapZoneMouseMove}
         onMouseUp={handleSeekMouseUp}
       />

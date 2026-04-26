@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef } from "react";
-import { useRouter } from "next/navigation";
 import { Bookmark, Lock } from "lucide-react";
 
 export interface SavedPost {
@@ -24,10 +23,11 @@ interface SavedPostGridProps {
   selectedIds:    Set<string>;
   onToggleSelect: (id: string) => void;
   onLongPress:    (id: string) => void;
+  tab:            string;
+  onOpenPost:     (id: string) => void;
 }
 
-export default function SavedPostGrid({ posts, onUnsave, selectMode, selectedIds, onToggleSelect, onLongPress }: SavedPostGridProps) {
-  const router = useRouter();
+export default function SavedPostGrid({ posts, onUnsave, selectMode, selectedIds, onToggleSelect, onLongPress, tab, onOpenPost }: SavedPostGridProps) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handlePressStart = (id: string) => {
@@ -45,7 +45,7 @@ export default function SavedPostGrid({ posts, onUnsave, selectMode, selectedIds
 
   const handleItemClick = (id: string) => {
     if (selectMode) { onToggleSelect(id); return; }
-    router.push(`/posts/${id}?from=saved`);
+    onOpenPost(id);
   };
 
   return (

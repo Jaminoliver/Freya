@@ -1,7 +1,5 @@
 "use client";
-
 import { useRef } from "react";
-import { useRouter } from "next/navigation";
 import { MessageSquare, Image as ImageIcon } from "lucide-react";
 export interface UnlockedItem {
   unlock_id:        number;
@@ -30,10 +28,11 @@ interface SavedUnlockedGridProps {
   selectedIds:    Set<string>;
   onToggleSelect: (id: string) => void;
   onLongPress:    (id: string) => void;
+  tab:            string;
+  onOpenPost:     (id: string, sourceIsMessage: boolean) => void;
 }
 
-export default function SavedUnlockedGrid({ items, mode = "visible", onAction, selectMode, selectedIds, onToggleSelect, onLongPress }: SavedUnlockedGridProps) {
-  const router = useRouter();
+export default function SavedUnlockedGrid({ items, mode = "visible", onAction, selectMode, selectedIds, onToggleSelect, onLongPress, tab, onOpenPost }: SavedUnlockedGridProps) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handlePressStart = (unlockId: number) => {
@@ -51,11 +50,7 @@ export default function SavedUnlockedGrid({ items, mode = "visible", onAction, s
 
   const handleItemClick = (item: UnlockedItem) => {
     if (selectMode) { onToggleSelect(item.unlock_id.toString()); return; }
-    if (item.source === "message") {
-      router.push(`/posts/${item.id}?source=message&from=saved`);
-    } else {
-      router.push(`/posts/${item.id}?from=saved`);
-    }
+    onOpenPost(item.id, item.source === "message");
   };
 
   return (

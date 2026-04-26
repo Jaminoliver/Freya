@@ -176,6 +176,8 @@ export default function ImageCarousel({
     }, 380);
   }, [onSlideChange]);
 
+  const lastTouchTargetRef = React.useRef<EventTarget | null>(null);
+
   // ── Touch handlers ──
   const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
     if (isTransitioningRef.current) return;
@@ -184,6 +186,7 @@ export default function ImageCarousel({
     dragDeltaX.current = 0;
     isHorizontal.current = null;
     isDragging.current = false;
+    lastTouchTargetRef.current = e.target;
   }, []);
 
   const handleTouchMove = React.useCallback((e: React.TouchEvent) => {
@@ -226,10 +229,16 @@ export default function ImageCarousel({
     liveOffsetRef.current = 0;
 
     const idx = activeIndexRef.current;
+    const currentItem = media[idx];
+    const isVideoSlide = currentItem?.media_type === "video";
+
     if (dx < -50 && idx < media.length - 1) goTo(idx + 1);
     else if (dx > 50 && idx > 0) goTo(idx - 1);
-    else applyTransform(0, true); // snap back animated
-  }, [media.length, goTo, applyTransform]);
+    else {
+      applyTransform(0, true);
+      if (Math.abs(dx) < 5 && !isVideoSlide) onImageClick?.(idx);
+    }
+  }, [media.length, goTo, applyTransform, onImageClick]);
 
   // ── Mouse handlers (desktop only) ──
   const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
@@ -251,7 +260,7 @@ export default function ImageCarousel({
     applyTransform(bounded, false);
   }, [media.length, applyTransform]);
 
-  const handleMouseUp = React.useCallback(() => {
+  const handleMouseUp = React.useCallback((e: React.MouseEvent) => {
     if (startXRef.current === null) return;
     const dx     = dragDeltaX.current;
     const wasDrag = isDragging.current;
@@ -261,13 +270,16 @@ export default function ImageCarousel({
     liveOffsetRef.current = 0;
 
     const idx = activeIndexRef.current;
+    const currentItem = media[idx];
+    const isVideoSlide = currentItem?.media_type === "video";
+
     if (Math.abs(dx) > 50) {
       if (dx < 0 && idx < media.length - 1) goTo(idx + 1);
       else if (dx > 0 && idx > 0) goTo(idx - 1);
       else applyTransform(0, true);
     } else {
       applyTransform(0, true);
-      if (!wasDrag) onImageClick?.(idx);
+      if (!wasDrag && !isVideoSlide) onImageClick?.(idx);
     }
   }, [media.length, goTo, applyTransform, onImageClick]);
 
@@ -318,7 +330,7 @@ export default function ImageCarousel({
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onMouseUp={(e) => handleMouseUp(e)}
         style={{
           display: "flex", width: "100%", height: "100%",
           transform: `translateX(${-activeIndex * 100}%)`,
@@ -398,8 +410,8 @@ export default function ImageCarousel({
 
       {isUnlockedPPV && <UnlockedPPVBadge />}
 
-      {media.length > 1 && (
-        <div style={{ position: "absolute", top: "10px", right: "10px", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+      {media.length > 1 && !isUnlockedPPV && (
+        <div style={{ position: "absolute", top: "10px", left: "10px", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
           {activeIndex + 1} / {media.length}
         </div>
       )}

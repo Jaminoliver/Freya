@@ -12,7 +12,6 @@ import { getBunnyThumbnail } from "@/components/video/VideoPlayer";
 import { useAppStore } from "@/lib/store/appStore";
 import { ContentFeedSkeleton } from "@/components/loadscreen/ContentFeedSkeleton";
 
-const Lightbox = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
 
 export interface ContentFeedProps {
   posts: Post[];
@@ -31,6 +30,9 @@ export interface ContentFeedProps {
   className?: string;
   extraTab?: string;
   extraTabContent?: React.ReactNode;
+  onOpenPost?:    (postId: string) => void;
+  onImageClick?:  (post: LightboxPost, index: number) => void;
+
 }
 
 interface PostMediaSummary {
@@ -184,7 +186,7 @@ export default function ContentFeed({
   creatorUsername, initialApiPosts,
   refreshKey,
   onLike, onComment, onTip, onUnlock, onSubscribe, emptyState, className,
-  extraTab, extraTabContent,
+  extraTab, extraTabContent, onOpenPost, onImageClick,
 }: ContentFeedProps) {
   const router = useRouter();
 
@@ -228,9 +230,7 @@ export default function ContentFeed({
   const [isMediaGridView, setIsMediaGridView] = React.useState(cached?.isMediaGridView ?? true);
   const [showSearch,      setShowSearch]      = React.useState(false);
   const [searchQuery,     setSearchQuery]     = React.useState("");
-  const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
-  const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
-
+  
   const prevRefreshKey = React.useRef<number | undefined>(undefined);
   React.useEffect(() => {
     if (refreshKey === undefined) return;
@@ -334,14 +334,14 @@ export default function ContentFeed({
     });
   }, [cacheKey]);
 
-  const openLightbox = (p: LightboxPost, index: number) => { setLightboxMediaIndex(index); setLightboxPost(p); };
+  
 
   const renderPostRow = (post: ApiPost) => (
     <div key={post.id} style={{ margin: "10px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden" }}>
       <PostRow
         post={post} isOwnProfile={isOwnProfile} isSubscribed={isSubscribed}
         viewer={viewer} onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
-        onDelete={handleDeletePost} onImageClick={(p, index) => openLightbox(p, index)} onPPVUpdated={handlePPVUpdated}
+        onDelete={handleDeletePost} onImageClick={(p, index) => { console.log("[ContentFeed] onImageClick called", { postId: p.id, index }); onImageClick?.(p, index); }} onPPVUpdated={handlePPVUpdated}
       />
     </div>
   );
@@ -351,7 +351,7 @@ export default function ContentFeed({
     const thumb  = m ? m.media_type === "video" ? (m.thumbnail_url || (m.bunny_video_id ? getBunnyThumbnail(m.bunny_video_id) : undefined)) : (m.thumbnail_url || m.file_url || undefined) : undefined;
     const locked = post.locked && !isOwnProfile;
     return (
-      <div key={post.id} onClick={() => router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
+      <div key={post.id} onClick={() => onOpenPost ? onOpenPost(String(post.id)) : router.push(`/posts/${post.id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
         {thumb && <img src={thumb} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: locked ? "blur(12px)" : "none" }} />}
         {locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}><Lock size={16} color="#fff" /></div>}
         {!locked && (post.media?.length ?? 0) > 1 && (
@@ -368,7 +368,7 @@ export default function ContentFeed({
     const thumb  = item.thumbnail_url || undefined;
     const locked = item.locked && !isOwnProfile;
     return (
-      <div key={item.post_id} onClick={() => router.push(`/posts/${item.post_id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
+      <div key={item.post_id} onClick={() => onOpenPost ? onOpenPost(String(item.post_id)) : router.push(`/posts/${item.post_id}`)} style={{ aspectRatio: "1", overflow: "hidden", borderRadius: "4px", backgroundColor: "#1C1C2E", position: "relative", cursor: "pointer" }}>
         {thumb && <img src={thumb} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: locked ? "blur(12px)" : "none" }} />}
         {locked && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)" }}><Lock size={16} color="#fff" /></div>}
         {item.media_count > 1 && (
@@ -408,12 +408,7 @@ export default function ContentFeed({
 
   return (
     <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
-      {lightboxPost && (
-        <Lightbox post={lightboxPost} allPosts={imagePosts} initialMediaIndex={lightboxMediaIndex}
-          onClose={() => setLightboxPost(null)}
-          onNavigate={(p, mediaIndex) => { setLightboxMediaIndex(mediaIndex ?? 0); setLightboxPost(p); }}
-        />
-      )}
+      ss
 
       <TabBar
         postCount={apiPosts.length} mediaCount={apiMedia.length}

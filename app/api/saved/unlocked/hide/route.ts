@@ -58,6 +58,7 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  console.log("[PATCH /hide] items:", items, "hidden:", hidden, "postIds:", postIds, "msgIds:", msgIds);
   const results = await Promise.all(tasks);
 
   for (const r of results) {
@@ -67,5 +68,7 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  console.log("[PATCH /hide] success, updated postIds:", postIds, "msgIds:", msgIds, "to is_hidden:", hidden);
+  console.log("[PATCH /hide] success, updated postIds:", postIds, "msgIds:", msgIds, "to is_hidden:", hidden);
   return NextResponse.json({ success: true });
 }
