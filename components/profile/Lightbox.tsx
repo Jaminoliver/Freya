@@ -46,10 +46,11 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
     setIsMobile(window.matchMedia("(hover: none), (pointer: coarse)").matches);
   }, []);
 
-  if (!mounted || isMobile || images.length === 0) return null;
+  const shouldRender = mounted && !isMobile && images.length > 0;
 
   // Lock body scroll when lightbox is open, restore on close
   React.useEffect(() => {
+    if (!shouldRender) return;
     const prev = document.body.style.overflow;
     const scrollY = window.scrollY;
     document.body.style.overflow = "hidden";
@@ -63,7 +64,7 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
       document.body.style.width    = "";
       window.scrollTo(0, scrollY);
     };
-  }, []);
+  }, [shouldRender]);
 
   React.useEffect(() => { setMediaIndex(initialMediaIndex); }, [post.id, initialMediaIndex]);
 
@@ -78,6 +79,7 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
   }, [hasNextImage, hasNextPost, currentPostIdx, allPosts, onNavigate]);
 
   React.useEffect(() => {
+    if (!shouldRender) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape")     onClose();
       if (e.key === "ArrowLeft")  goPrev();
@@ -85,7 +87,7 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [goPrev, goNext, onClose]);
+  }, [shouldRender, goPrev, goNext, onClose]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current   = e.touches[0].clientX;
@@ -112,10 +114,10 @@ export default function Lightbox({ post, allPosts, initialMediaIndex = 0, onClos
     touchStartX.current = touchCurrentX.current = null;
   };
 
+  if (!shouldRender) return null;
+
   const hasPrev = hasPrevImage || hasPrevPost;
   const hasNext = hasNextImage || hasNextPost;
-
-  if (!mounted || isMobile || images.length === 0) return null;
 
   const totalSlides = images.length;
   const translateX  = -(mediaIndex / totalSlides) * 100;

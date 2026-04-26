@@ -33,6 +33,7 @@ interface PostMediaViewerProps {
   onUnlock?:            () => void;
   initialSlide?:        number;
   onSlideChange?:       (index: number) => void;
+  maxHeight?:           string;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -282,6 +283,7 @@ export default function PostMediaViewer({
   onUnlock,
   initialSlide = 0,
   onSlideChange,
+  maxHeight = "85svh",
 }: PostMediaViewerProps) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";

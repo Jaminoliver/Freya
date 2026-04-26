@@ -461,7 +461,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
 
       {normalizedMedia.length > 0 && (
         <div style={{ marginTop: "12px" }}>
-          <PostMediaViewer media={normalizedMedia} isLocked={post.locked} price={post.ppv_price} isPPV={post.is_ppv} isFreeSubscription={(post.profiles?.subscription_price ?? 0) === 0} isUnlockedPPV={post.is_ppv && !post.locked} onDoubleTap={handleDoubleTapLike} onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }} onUnlock={openUnlock} />
+          <PostMediaViewer media={normalizedMedia} isLocked={post.locked} price={post.ppv_price} isPPV={post.is_ppv} isFreeSubscription={(post.profiles?.subscription_price ?? 0) === 0} isUnlockedPPV={post.is_ppv && !post.locked} onDoubleTap={handleDoubleTapLike} onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }} onUnlock={openUnlock} maxHeight="none" />
         </div>
       )}
 
