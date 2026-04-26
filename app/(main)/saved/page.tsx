@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Grid3X3, List, EyeOff, Eye, Trash2 } from "lucide-react";
 import { SavedSkeleton } from "@/components/loadscreen/SavedSkeleton";
@@ -15,7 +15,7 @@ import type { UnlockedItem }  from "@/components/saved/SavedUnlockedGrid";
 import SinglePostSheet from "@/components/shared/SinglePostSheet";
 type Tab = "posts" | "creators" | "unlocked";
 
-export default function SavedPage() {
+function SavedPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -564,5 +564,13 @@ export default function SavedPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SavedPage() {
+  return (
+    <Suspense fallback={null}>
+      <SavedPageInner />
+    </Suspense>
   );
 }
