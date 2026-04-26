@@ -340,8 +340,8 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
   const photoMedia = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
 
   const normalizedMedia: NormalizedMedia[] = post.locked
-    ? post.media.slice(0, 1).map((m) => ({ type: m.media_type === "video" ? "video" : "image", url: m.file_url, bunnyVideoId: m.bunny_video_id, thumbnailUrl: m.thumbnail_url, processingStatus: m.processing_status, rawVideoUrl: m.raw_video_url, blurHash: m.blur_hash ?? null, width: m.width ?? null, height: m.height ?? null }))
-    : post.media.filter((m) => !m.locked).map((m) => ({ type: m.media_type === "video" ? "video" : "image", url: m.file_url, bunnyVideoId: m.bunny_video_id, thumbnailUrl: m.thumbnail_url, processingStatus: m.processing_status, rawVideoUrl: m.raw_video_url, blurHash: m.blur_hash ?? null, width: m.width ?? null, height: m.height ?? null }));
+    ? post.media.slice(0, 1).map((m) => ({ type: m.media_type === "video" ? "video" : "image", url: m.file_url, bunnyVideoId: m.bunny_video_id, thumbnailUrl: m.thumbnail_url, processingStatus: m.processing_status, rawVideoUrl: m.raw_video_url, blurHash: m.blur_hash ?? null, width: m.width ?? null, height: m.height ?? null, aspectRatio: m.width && m.height ? m.width / m.height : null }))
+    : post.media.filter((m) => !m.locked).map((m) => ({ type: m.media_type === "video" ? "video" : "image", url: m.file_url, bunnyVideoId: m.bunny_video_id, thumbnailUrl: m.thumbnail_url, processingStatus: m.processing_status, rawVideoUrl: m.raw_video_url, blurHash: m.blur_hash ?? null, width: m.width ?? null, height: m.height ?? null, aspectRatio: m.width && m.height ? m.width / m.height : null }));
 
   const lightboxPost: LightboxPost = {
     id: post.id,
