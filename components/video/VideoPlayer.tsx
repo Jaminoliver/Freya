@@ -249,8 +249,8 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
       <div
         style={{ position: "absolute", inset: 0, zIndex: 4, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none" }}
         onClick={handlePlayPause}
-        onTouchStart={(e) => { e.stopPropagation(); const v = videoRef.current; if (v && !v.paused) v.pause(); }}
-        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); const v = videoRef.current; if (v && v.paused) v.play().catch(() => {}); }}
+        onTouchStart={(e) => { e.stopPropagation(); const v = videoRef.current; if (v && !v.paused) { v.pause(); (e.currentTarget as HTMLDivElement).dataset.touchStart = String(Date.now()); } }}
+        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); const v = videoRef.current; const start = Number((e.currentTarget as HTMLDivElement).dataset.touchStart ?? 0); const held = Date.now() - start > 150; if (v && v.paused && held) v.play().catch(() => {}); }}
         onMouseMove={handleTapZoneMouseMove}
         onMouseUp={handleSeekMouseUp}
       />
