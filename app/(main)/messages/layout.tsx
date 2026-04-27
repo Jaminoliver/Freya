@@ -80,7 +80,7 @@ function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
         />
       </div>
 
-      <div className="msg-chat-wrap">
+      <div className="msg-chat-wrap" style={{ justifyContent: "center" }}>
         {children}
       </div>
     </div>
