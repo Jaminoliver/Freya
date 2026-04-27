@@ -69,7 +69,7 @@ border: "none",
       >
         <button onClick={() => {
   if (pathname === "/dashboard") {
-    document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   } else {
     navigate("/dashboard");
   }
