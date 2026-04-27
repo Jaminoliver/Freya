@@ -40,6 +40,9 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
   const isWindowScrollPage =
     pathname === "/dashboard" ||
+    pathname === "/subscriptions" ||
+    pathname === "/notifications" ||
+    
     (pathname.split("/").length === 2 &&
      pathname !== "/" &&
      !["/messages", "/settings", "/wallet", "/create", "/posts"].some(p => pathname.startsWith(p)));
