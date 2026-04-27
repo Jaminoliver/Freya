@@ -249,6 +249,8 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
       <div
         style={{ position: "absolute", inset: 0, zIndex: 4 }}
         onClick={handlePlayPause}
+        onTouchStart={(e) => { e.stopPropagation(); const v = videoRef.current; if (v && !v.paused) v.pause(); }}
+        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); const v = videoRef.current; if (v && v.paused) v.play().catch(() => {}); }}
         onMouseMove={handleTapZoneMouseMove}
         onMouseUp={handleSeekMouseUp}
       />
