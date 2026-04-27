@@ -33,6 +33,8 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const isSettings      = pathname.startsWith("/settings");
   const isSubscriptions = pathname.startsWith("/subscriptions");
   const isMessages      = pathname.startsWith("/messages");
+  const isMessagesList  = pathname === "/messages";
+  const isMessageChat   = pathname.startsWith("/messages/");
   const isNotifications = pathname.startsWith("/notifications");
   const isDashboard     = pathname === "/dashboard";
   const isExplore       = pathname === "/explore";
@@ -42,7 +44,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
     pathname === "/dashboard" ||
     pathname === "/subscriptions" ||
     pathname === "/notifications" ||
-    
+    pathname === "/messages" ||
     (pathname.split("/").length === 2 &&
      pathname !== "/" &&
      !["/messages", "/settings", "/wallet", "/create", "/posts"].some(p => pathname.startsWith(p)));
@@ -126,17 +128,17 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
       <main
         ref={mainRef}
-        className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}${isMessages ? " messages" : ""}`}
+        className={`main-scroll md:pb-0${noTopbar ? " no-topbar" : ""}${isMessageChat ? " messages" : ""}`}
         style={{
           flex:       1,
           minWidth:   0,
-          maxWidth:   isSettings || isMessages || isNotifications ? "100%" : "720px",
-          height:     isMessages ? "100dvh" : isWindowScrollPage ? "auto" : "100vh",
+          maxWidth:   isSettings || isMessageChat || isNotifications ? "100%" : "720px",
+          height:     isMessageChat ? "100dvh" : isWindowScrollPage ? "auto" : "100vh",
           boxSizing:  "border-box",
           borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
-          overflowY:   isMessages ? "hidden" : isWindowScrollPage ? "visible" : "auto",
+          overflowY:   isMessageChat ? "hidden" : isWindowScrollPage ? "visible" : "auto",
           overflowX:   "hidden",
-          paddingBottom: isMessages || isNotifications ? "0" : "72px",
+          paddingBottom: isMessageChat || isNotifications ? "0" : "72px",
           scrollbarWidth: "none",
           msOverflowStyle: "none",
           WebkitOverflowScrolling: "touch",
