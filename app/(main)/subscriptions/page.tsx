@@ -123,17 +123,8 @@ export default function SubscriptionsPage() {
         />
       )}
 
-     <div
-        className="subs-outer"
-        style={{
-          width: "100%", height: "100vh",
-          backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif",
-          display: "flex", flexDirection: "column",
-          boxSizing: "border-box",
-        }}
-      >
-        {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" as any, minHeight: 0, overscrollBehavior: "contain", paddingBottom: "calc(64px + env(safe-area-inset-bottom))" }}>
+     <div className="subs-outer" style={{ width: "100%", backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif", paddingBottom: "calc(64px + env(safe-area-inset-bottom))" }}>
+        <div>
 
           {/* Mobile header — scrolls away naturally */}
           <SubscriptionsHeader />
