@@ -628,10 +628,7 @@ export default function VideoPlayer({
           console.log(`%c[VideoPlayer] ⏹  TEARDOWN (out of view)`, "color: #EF4444; font-weight: bold", { videoId: bunnyVideoId });
         }
         teardown();
-        if (autoplayOnVisible && isMobile) {
-          // Reset to poster so it auto-restarts on re-entry
-          setShowPoster(true);
-        }
+        setShowPoster(true);
       }
     }, { threshold: [0, 0.2, 0.5, 0.75] });
 
