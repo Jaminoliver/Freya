@@ -763,8 +763,8 @@ export default function VideoPlayer({
           poster={posterSrc}
           onLoadedMetadata={handleLoadedMetadata}
           onPlay={() => {
-            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
-            setIsBuffering(false);
+            // Don't clear isBuffering here — onPlay fires before frames paint.
+            // Only onPlaying truly means "video is now showing frames."
           }}
           onWaiting={() => {
             if (bufferTimer.current) clearTimeout(bufferTimer.current);
@@ -779,15 +779,14 @@ export default function VideoPlayer({
             setShowPoster(false);  // hide poster only when video actually paints
           }}
           onCanPlay={() => {
-            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
-            setIsBuffering(false);
+            // Don't clear isBuffering here either — wait for actual playback.
           }}
           onError={() => { setHasError(true); setIsBuffering(false); }}
           style={{ ...videoStyle, visibility: showPoster ? "hidden" : "visible", animation: !showPoster ? "fadeIn 0.2s ease" : undefined }}
         />
 
         {/* Buffering — pulsing gradient ring, brand colors */}
-        {isBuffering && !showPoster && hasStarted && (
+        {isBuffering && !showPoster && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <style>{`
               @keyframes vp-ring-rotate { to { transform: rotate(360deg); } }
