@@ -34,6 +34,7 @@ interface PostMediaViewerProps {
   initialSlide?:        number;
   onSlideChange?:       (index: number) => void;
   maxHeight?:           string;
+  autoplayOnVisible?:   boolean;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -102,11 +103,11 @@ function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProper
 }
 
 // ── ProgressiveImage ──────────────────────────────────────────────────────────
-function ProgressiveImage({ src, placeholder, blurHash, style }: {
-  src?:         string | null;
-  placeholder?: string | null;
-  blurHash?:    string | null;
-  style?:       React.CSSProperties;
+function ProgressiveImage({ src, blurHash, style, eager }: {
+  src?:      string | null;
+  blurHash?: string | null;
+  style?:    React.CSSProperties;
+  eager?:    boolean;
 }) {
   const [loaded, setLoaded] = React.useState(false);
   const imgRef = React.useRef<HTMLImageElement>(null);
@@ -123,24 +124,14 @@ function ProgressiveImage({ src, placeholder, blurHash, style }: {
       {blurHash && !loaded && (
         <BlurHashCanvas hash={blurHash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />
       )}
-      {placeholder && !loaded && (
-        <img
-          src={placeholder}
-          alt=""
-          aria-hidden
-          style={{
-            position: "absolute", inset: 0, width: "100%", height: "100%",
-            objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)",
-            zIndex: 1,
-          }}
-        />
-      )}
       <img
         ref={imgRef}
         src={src ?? ""}
         alt=""
         draggable={false}
-        loading="lazy"
+        loading={eager ? "eager" : "lazy"}
+        decoding="async"
+        fetchPriority={eager ? "high" : "low"}
         onLoad={() => setLoaded(true)}
         style={{ ...style, opacity: loaded ? 1 : 0, transition: "opacity 0.25s ease", position: "relative", zIndex: 2 }}
       />
@@ -284,6 +275,7 @@ export default function PostMediaViewer({
   initialSlide = 0,
   onSlideChange,
   maxHeight = "85svh",
+  autoplayOnVisible = false,
 }: PostMediaViewerProps) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
@@ -496,6 +488,7 @@ export default function PostMediaViewer({
               hideInternalBlur={true}
               blurHash={first.blurHash}
               objectFit="contain"
+              autoplayOnVisible={autoplayOnVisible}
             />
           </div>
           {isUnlockedPPV && <UnlockedPPVBadge />}
@@ -554,19 +547,8 @@ export default function PostMediaViewer({
     return ratio;
   })();
 
-  const [imgLoaded, setImgLoaded] = React.useState(false);
-
   return (
     <DoubleTapLike onSingleTap={singleTapAt0} onDoubleTap={doubleTap} style={{ width: "100%", cursor: "zoom-in" }}>
-      <style>{`
-        @media (min-width: 768px) {
-          .pmv-blur-bg { display: block !important; }
-        }
-        @keyframes pmv-sharpen {
-          from { filter: blur(20px); transform: scale(1.05); }
-          to   { filter: blur(0px);  transform: scale(1); }
-        }
-      `}</style>
       <div
         style={{
           position:        "relative",
@@ -577,45 +559,11 @@ export default function PostMediaViewer({
           overflow:        "hidden",
         }}
       >
-        {/* Blurred background — always shown */}
-        <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
-          <img
-            src={first.url || undefined}
-            alt=""
-            aria-hidden
-            style={{
-              width: "100%", height: "100%", objectFit: "cover",
-              filter: "blur(24px) brightness(0.5)", transform: "scale(1.08)",
-            }}
-          />
-        </div>
-
-        {/* BlurHash placeholder while loading */}
-        {first.blurHash && !imgLoaded && (
-          <BlurHashCanvas
-            hash={first.blurHash}
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 1 }}
-          />
-        )}
-
-        {/* Main image — animates blur-to-sharp on load */}
-        <img
-          src={first.url || undefined}
-          alt=""
-          draggable={false}
-          loading="lazy"
-          onLoad={() => setImgLoaded(true)}
-          style={{
-            position:  "relative",
-            zIndex:    2,
-            width:     "100%",
-            height:    "100%",
-            objectFit: "contain",
-            display:   "block",
-            animation: imgLoaded ? "pmv-sharpen 0.4s ease forwards" : undefined,
-            filter:    imgLoaded ? undefined : "blur(20px)",
-            transform: imgLoaded ? undefined : "scale(1.05)",
-          }}
+        <ProgressiveImage
+          src={first.url}
+          blurHash={first.blurHash}
+          eager
+          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
         />
 
         {isUnlockedPPV && <UnlockedPPVBadge />}

@@ -9,6 +9,8 @@ import dynamic from "next/dynamic";
 import PostActions from "@/components/profile/PostActions";
 import CommentSection from "@/components/profile/CommentSection";
 import PostMediaViewer from "@/components/shared/PostMediaViewer";
+import VisibilityGate from "@/components/shared/VisibilityGate";
+import { decode } from "blurhash";
 import PostTextViewer from "@/components/shared/PostTextViewer";
 import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
 import PostHeader from "@/components/shared/PostHeader";
@@ -100,6 +102,8 @@ function PostCardInner({
   isSubscribedExternal = false,
   initialSavedPost = false,
   initialSavedCreator = false,
+  eager = false,
+  autoplayOnVisible = false,
 }: {
   post:                  Post;
   onLike?:               (postId: string) => void;
@@ -113,6 +117,8 @@ function PostCardInner({
   isSubscribedExternal?: boolean;
   initialSavedPost?:     boolean;
   initialSavedCreator?:  boolean;
+  eager?:                boolean;
+  autoplayOnVisible?:    boolean;
 }) {
   const { navigate } = useNav();
   const router  = useRouter();
@@ -376,17 +382,41 @@ function PostCardInner({
         <PollDisplay poll={pollData} postId={post.id} onVoted={(updated) => setPollData(updated)} />
       )}
 
-      {!isTextPost && !isPollPost && (
-        <PostMediaViewer
-          media={normalizedMedia} isLocked={post.isLocked} price={post.price}
-          isPPV={post.is_ppv} isUnlockedPPV={post.is_ppv && !post.isLocked}
-          onDoubleTap={engagement.handleDoubleTapLike}
-          onSingleTap={handleSingleTap}
-          onUnlock={() => onUnlock?.(post.id)}
-          initialSlide={initialSlide}
-          onSlideChange={(index) => onSlideChange?.(post.id, index)}
-        />
-      )}
+      {!isTextPost && !isPollPost && (() => {
+        const firstMedia = normalizedMedia[0];
+        const placeholderRatio = (() => {
+          if (firstMedia?.aspectRatio && firstMedia.aspectRatio > 0) {
+            return Math.min(Math.max(firstMedia.aspectRatio, 0.4), 1.91);
+          }
+          if (firstMedia?.width && firstMedia?.height) {
+            return Math.min(Math.max(firstMedia.width / firstMedia.height, 0.4), 1.91);
+          }
+          return 1;
+        })();
+
+        return (
+          <VisibilityGate
+            aspectRatio={placeholderRatio}
+            eager={eager}
+            placeholder={
+              firstMedia?.blurHash ? (
+                <BlurHashPlaceholder hash={firstMedia.blurHash} />
+              ) : null
+            }
+          >
+            <PostMediaViewer
+              media={normalizedMedia} isLocked={post.isLocked} price={post.price}
+              isPPV={post.is_ppv} isUnlockedPPV={post.is_ppv && !post.isLocked}
+              onDoubleTap={engagement.handleDoubleTapLike}
+              onSingleTap={handleSingleTap}
+              onUnlock={() => onUnlock?.(post.id)}
+              initialSlide={initialSlide}
+              onSlideChange={(index) => onSlideChange?.(post.id, index)}
+              autoplayOnVisible={autoplayOnVisible}
+            />
+          </VisibilityGate>
+        );
+      })()}
 
       {post.taggedCreators && post.taggedCreators.length > 0 && (
         <div style={{ padding: "0 16px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "10px" }}>
@@ -429,8 +459,32 @@ export const PostCard = memo(PostCardInner, (prev, next) => {
   if (prev.initialSavedPost     !== next.initialSavedPost)     return false;
   if (prev.initialSavedCreator  !== next.initialSavedCreator)  return false;
   if (prev.is_renewal           !== next.is_renewal)           return false;
+  if (prev.eager                !== next.eager)                return false;
+  if (prev.autoplayOnVisible    !== next.autoplayOnVisible)    return false;
   return true;
 });
+
+function BlurHashPlaceholder({ hash }: { hash: string }) {
+  const canvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
+    if (!canvas || !hash) return;
+    try {
+      const pixels    = decode(hash, 64, 64);
+      const ctx       = canvas.getContext("2d");
+      if (!ctx) return;
+      const imageData = ctx.createImageData(64, 64);
+      imageData.data.set(pixels);
+      ctx.putImageData(imageData, 0, 0);
+    } catch {}
+  }, [hash]);
+  return (
+    <canvas
+      ref={canvasRef}
+      width={64}
+      height={64}
+      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", imageRendering: "auto" }}
+    />
+  );
+}
 
 function TaggedCreatorCard({ creator, onClick }: { creator: TaggedCreator; onClick: () => void }) {
   return (

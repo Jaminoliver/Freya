@@ -181,7 +181,19 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
   // ── Fullscreen ────────────────────────────────────────────────────────
   const handleFullscreen = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
-    const container = (videoRef.current?.closest("[data-videoplayer]") as HTMLElement) ?? videoRef.current?.parentElement;
+    const video = videoRef.current;
+    if (!video) return;
+
+    // iOS Safari: standard fullscreen API doesn't work on arbitrary elements.
+    // Use the video's own webkitEnterFullscreen instead.
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    if (isIOS && typeof (video as any).webkitEnterFullscreen === "function") {
+      try { (video as any).webkitEnterFullscreen(); } catch {}
+      showControls();
+      return;
+    }
+
+    const container = (video.closest("[data-videoplayer]") as HTMLElement) ?? video.parentElement;
     if (!container) return;
     if (!document.fullscreenElement) {
       container.requestFullscreen?.().catch(() => {});
@@ -245,12 +257,54 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
         .vp-mute-btn:hover { background: rgba(0,0,0,0.65); }
       `}</style>
 
-      {/* Tap zone */}
+      {/* Tap zone — IG-style press-and-hold to pause + tap to toggle */}
       <div
         style={{ position: "absolute", inset: 0, zIndex: 4, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none" }}
-        onClick={handlePlayPause}
-        onTouchStart={(e) => { e.stopPropagation(); const v = videoRef.current; if (v && !v.paused) { v.pause(); (e.currentTarget as HTMLDivElement).dataset.touchStart = String(Date.now()); } }}
-        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); const v = videoRef.current; const start = Number((e.currentTarget as HTMLDivElement).dataset.touchStart ?? 0); const held = Date.now() - start > 150; if (v && v.paused && held) v.play().catch(() => {}); }}
+        onClick={(e) => {
+          // Desktop click — just toggle. Touch devices handle this in touchstart/touchend.
+          if ((e as any).pointerType === "touch") return;
+          handlePlayPause(e);
+        }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          const v = videoRef.current;
+          if (!v) return;
+          const wasPlaying = !v.paused;
+          (e.currentTarget as HTMLDivElement).dataset.touchStart  = String(Date.now());
+          (e.currentTarget as HTMLDivElement).dataset.wasPlaying  = String(wasPlaying);
+          if (wasPlaying) v.pause();   // press-and-hold pause
+        }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const v       = videoRef.current;
+          const target  = e.currentTarget as HTMLDivElement;
+          const start   = Number(target.dataset.touchStart ?? 0);
+          const held    = Date.now() - start;
+          const wasPlaying = target.dataset.wasPlaying === "true";
+          if (!v) return;
+
+          if (held < 200) {
+            // Quick tap — toggle from the original state
+            if (wasPlaying) {
+              flashCenter("pause");        // we already paused on touchstart
+            } else {
+              v.play().catch(() => {});
+              flashCenter("play");
+            }
+          } else {
+            // Long press release — resume if it was playing before
+            if (wasPlaying) v.play().catch(() => {});
+          }
+          showControls();
+        }}
+        onTouchCancel={(e) => {
+          // Finger left the screen unexpectedly — restore prior state
+          const v       = videoRef.current;
+          const target  = e.currentTarget as HTMLDivElement;
+          const wasPlaying = target.dataset.wasPlaying === "true";
+          if (v && wasPlaying) v.play().catch(() => {});
+        }}
         onMouseMove={handleTapZoneMouseMove}
         onMouseUp={handleSeekMouseUp}
       />
@@ -258,7 +312,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
       {/* Top-right mute button — always visible */}
       <button
         className="vp-mute-btn"
-        style={{ position: "absolute", top: 12, right: 12, zIndex: 15, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "36px", height: "36px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
+        style={{ position: "absolute", top: 12, right: 12, zIndex: 15, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
         onClick={(e) => { e.stopPropagation(); onToggleMute(); }}
         onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onToggleMute(); }}
         aria-label={isMuted ? "Unmute" : "Mute"}
@@ -362,15 +416,16 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
 
 // ── Main VideoPlayer ──────────────────────────────────────────────────────────
 interface VideoPlayerProps {
-  bunnyVideoId:      string | null;
-  thumbnailUrl?:     string | null;
-  processingStatus?: string | null;
-  rawVideoUrl?:      string | null;
-  fillParent?:       boolean;
-  aspectRatio?:      string | null;
-  hideInternalBlur?: boolean;
-  blurHash?:         string | null;
-  objectFit?:        "contain" | "cover";
+  bunnyVideoId:       string | null;
+  thumbnailUrl?:      string | null;
+  processingStatus?:  string | null;
+  rawVideoUrl?:       string | null;
+  fillParent?:        boolean;
+  aspectRatio?:       string | null;
+  hideInternalBlur?:  boolean;
+  blurHash?:          string | null;
+  objectFit?:         "contain" | "cover";
+  autoplayOnVisible?: boolean;
 }
 
 export default function VideoPlayer({
@@ -383,18 +438,29 @@ export default function VideoPlayer({
   hideInternalBlur = false,
   blurHash,
   objectFit = "contain",
+  autoplayOnVisible = false,
 }: VideoPlayerProps) {
   const videoRef       = React.useRef<HTMLVideoElement | null>(null);
   const containerRef   = React.useRef<HTMLDivElement | null>(null);
   const hlsRef         = React.useRef<any>(null);
   const hasInitialized = React.useRef(false);
+  const bufferTimer    = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showPoster,   setShowPoster]   = React.useState(true);
   const [posterLoaded, setPosterLoaded] = React.useState(false);
   const [posterError,  setPosterError]  = React.useState(false);
   const [isBuffering,  setIsBuffering]  = React.useState(false);
+  const [hasError,     setHasError]     = React.useState(false);
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
   const [isMuted,      setIsMuted]      = React.useState(() => getSavedMute());
+  const [isMobile,     setIsMobile]     = React.useState(false);
+
+  React.useEffect(() => {
+    const check = () => setIsMobile(!window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const aspectRatio = fillParent ? null : (externalRatio ?? internalRatio);
   const isPortrait  = (() => {
@@ -428,7 +494,16 @@ export default function VideoPlayer({
     const video = videoRef.current;
     if (video) {
       video.pause();
+      try {
+        video.removeAttribute("src");
+        video.load();
+      } catch {}
     }
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy(); } catch {}
+      hlsRef.current = null;
+    }
+    hasInitialized.current = false;
     setIsBuffering(false);
   }, []);
 
@@ -436,6 +511,8 @@ export default function VideoPlayer({
     const video = videoRef.current;
     if (!video || !bunnyVideoId || hasInitialized.current) return;
     hasInitialized.current = true;
+    setHasError(false);
+    console.log(`%c[VideoPlayer] 📡 HLS INIT`, "color: #06B6D4; font-weight: bold", { videoId: bunnyVideoId });
 
     if (useRawFallback) {
       video.src = rawVideoUrl!;
@@ -466,6 +543,15 @@ export default function VideoPlayer({
         hls.on(Hls.Events.MANIFEST_PARSED, (_evt: any, data: any) => {
           hls.currentLevel = data.levels.length - 1;
         });
+        hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
+          if (!data?.fatal) return;
+          console.error(`%c[VideoPlayer] ❌ HLS FATAL ERROR`, "color: #EF4444; font-weight: bold", { videoId: bunnyVideoId, type: data.type, details: data.details });
+          try { hls.destroy(); } catch {}
+          hlsRef.current = null;
+          hasInitialized.current = false;
+          setHasError(true);
+          setIsBuffering(false);
+        });
         hls.loadSource(hlsSrc);
         hls.attachMedia(video);
       }
@@ -474,24 +560,58 @@ export default function VideoPlayer({
     }
   }, [bunnyVideoId, useRawFallback, rawVideoUrl]);
 
+  const handleRetry = React.useCallback(async () => {
+    setHasError(false);
+    hasInitialized.current = false;
+    await initVideo();
+    try { await videoRef.current?.play(); } catch {}
+  }, [initVideo]);
+
   React.useEffect(() => {
     return () => {
+      if (bufferTimer.current) clearTimeout(bufferTimer.current);
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
   }, []);
 
   React.useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const container = containerRef.current;
+    if (!container) return;
 
     const observer = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) teardown();
-    }, { threshold: 0.2 });
+      const video = videoRef.current;
+      if (!video) return;
 
-    if (containerRef.current) observer.observe(containerRef.current);
+      if (entry.intersectionRatio >= 0.5) {
+        // In view — autoplay if enabled and on mobile, and we haven't been started yet
+        if (autoplayOnVisible && isMobile && showPoster && !hasError) {
+          console.log(`%c[VideoPlayer] ▶  AUTOPLAY (visible ${Math.round(entry.intersectionRatio * 100)}%)`, "color: #8B5CF6; font-weight: bold", { videoId: bunnyVideoId });
+          (async () => {
+            setShowPoster(false);
+            if (!hasInitialized.current) await initVideo();
+            const muted = getSavedMute();
+            video.muted = muted;
+            setIsMuted(muted);
+            try { await video.play(); } catch {}
+          })();
+        }
+      } else if (entry.intersectionRatio < 0.2) {
+        // Out of view — pause + tear down to free memory
+        if (hasInitialized.current) {
+          console.log(`%c[VideoPlayer] ⏹  TEARDOWN (out of view)`, "color: #EF4444; font-weight: bold", { videoId: bunnyVideoId });
+        }
+        teardown();
+        if (autoplayOnVisible && isMobile) {
+          // Reset to poster so it auto-restarts on re-entry
+          setShowPoster(true);
+        }
+      }
+    }, { threshold: [0, 0.2, 0.5, 0.75] });
+
+    observer.observe(container);
     return () => observer.disconnect();
-  }, [teardown]);
+  }, [teardown, autoplayOnVisible, isMobile, showPoster, hasError, initVideo]);
 
   const handleLoadedMetadata = React.useCallback(() => {
     if (fillParent || externalRatio) return;
@@ -616,10 +736,23 @@ export default function VideoPlayer({
           muted={isMuted}
           poster={posterSrc}
           onLoadedMetadata={handleLoadedMetadata}
-          onPlay={() => setIsBuffering(false)}
-          onWaiting={() => setIsBuffering(true)}
-          onPlaying={() => setIsBuffering(false)}
-          onCanPlay={() => setIsBuffering(false)}
+          onPlay={() => {
+            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
+            setIsBuffering(false);
+          }}
+          onWaiting={() => {
+            if (bufferTimer.current) clearTimeout(bufferTimer.current);
+            bufferTimer.current = setTimeout(() => setIsBuffering(true), 300);
+          }}
+          onPlaying={() => {
+            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
+            setIsBuffering(false);
+          }}
+          onCanPlay={() => {
+            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
+            setIsBuffering(false);
+          }}
+          onError={() => { setHasError(true); setIsBuffering(false); }}
           style={{ ...videoStyle, visibility: showPoster ? "hidden" : "visible", animation: !showPoster ? "fadeIn 0.2s ease" : undefined }}
         />
 
@@ -636,12 +769,27 @@ export default function VideoPlayer({
         )}
 
         {/* Custom controls — only shown after poster is dismissed */}
-        {!showPoster && (
+        {!showPoster && !hasError && (
           <VideoControls
             videoRef={videoRef}
             isMuted={isMuted}
             onToggleMute={handleToggleMute}
           />
+        )}
+
+        {/* Error overlay with retry */}
+        {hasError && (
+          <div style={{ position: "absolute", inset: 0, zIndex: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", backgroundColor: "rgba(10,10,15,0.85)", backdropFilter: "blur(8px)" }}>
+            <span style={{ fontSize: "13px", color: "#C4C4D4", fontFamily: "'Inter', sans-serif" }}>
+              Couldn&apos;t load video
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleRetry(); }}
+              style={{ padding: "8px 20px", borderRadius: "20px", border: "1px solid #2A2A3D", backgroundColor: "#1A1A2E", color: "#FFFFFF", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif" }}
+            >
+              Retry
+            </button>
+          </div>
         )}
       </div>
     </>

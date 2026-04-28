@@ -406,6 +406,8 @@ params.set("hotOffset",   String(cursors.hotOffset));
       isSubscribedExternal={subscribedCreatorIds.has(post.creator_id)}
       initialSavedPost={post.saved_post ?? false}
       initialSavedCreator={post.saved_creator ?? false}
+      eager={index < 2}
+      autoplayOnVisible={true}
     />
   </div>
 );

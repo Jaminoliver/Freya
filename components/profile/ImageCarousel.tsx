@@ -38,12 +38,11 @@ function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProper
   return <canvas ref={canvasRef} width={W} height={H} style={{ ...style, imageRendering: "auto" }} />;
 }
 
-function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
-  src?:         string | null;
-  placeholder?: string | null;
-  blurHash?:    string | null;
-  style?:       React.CSSProperties;
-  eager?:       boolean;
+function ProgressiveImage({ src, blurHash, style, eager }: {
+  src?:      string | null;
+  blurHash?: string | null;
+  style?:    React.CSSProperties;
+  eager?:    boolean;
 }) {
   const [loaded, setLoaded] = React.useState(false);
   const imgRef = React.useRef<HTMLImageElement>(null);
@@ -55,17 +54,8 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <style>{`
-        @keyframes ic-sharpen {
-          from { filter: blur(20px); transform: scale(1.05); }
-          to   { filter: blur(0px);  transform: scale(1); }
-        }
-      `}</style>
       {blurHash && !loaded && (
         <BlurHashCanvas hash={blurHash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />
-      )}
-      {!loaded && src && (
-        <img src={src} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px)", transform: "scale(1.05)", zIndex: 1 }} />
       )}
       <img
         ref={imgRef}
@@ -73,13 +63,14 @@ function ProgressiveImage({ src, placeholder, blurHash, style, eager }: {
         alt=""
         draggable={false}
         loading={eager ? "eager" : "lazy"}
+        decoding="async"
+        fetchPriority={eager ? "high" : "low"}
         onLoad={() => setLoaded(true)}
         style={{
           ...style,
           position: "relative", zIndex: 2,
-          animation: loaded ? "ic-sharpen 0.4s ease forwards" : undefined,
-          filter:    loaded ? undefined : "blur(20px)",
-          transform: loaded ? undefined : "scale(1.05)",
+          opacity:    loaded ? 1 : 0,
+          transition: "opacity 0.25s ease",
         }}
       />
     </div>
@@ -176,8 +167,6 @@ export default function ImageCarousel({
     }, 380);
   }, [onSlideChange]);
 
-  const lastTouchTargetRef = React.useRef<EventTarget | null>(null);
-
   // ── Touch handlers ──
   const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
     if (isTransitioningRef.current) return;
@@ -186,7 +175,6 @@ export default function ImageCarousel({
     dragDeltaX.current = 0;
     isHorizontal.current = null;
     isDragging.current = false;
-    lastTouchTargetRef.current = e.target;
   }, []);
 
   const handleTouchMove = React.useCallback((e: React.TouchEvent) => {
@@ -229,14 +217,10 @@ export default function ImageCarousel({
     liveOffsetRef.current = 0;
 
     const idx = activeIndexRef.current;
-    const currentItem = media[idx];
-    const isVideoSlide = currentItem?.media_type === "video";
 
     if (dx < -50 && idx < media.length - 1) goTo(idx + 1);
     else if (dx > 50 && idx > 0) goTo(idx - 1);
-    else {
-      applyTransform(0, true);
-    }
+    else applyTransform(0, true);
   }, [media.length, goTo, applyTransform]);
 
   // ── Mouse handlers (desktop only) ──
@@ -291,11 +275,7 @@ export default function ImageCarousel({
     applyTransform(0, true);
   }, [applyTransform]);
 
-  // Sync strip position when activeIndex changes from arrow/dot clicks
-  React.useEffect(() => {
-    applyTransform(0, false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIndex]);
+  
 
   const arrowStyle = (side: "left" | "right"): React.CSSProperties => ({
     position: "absolute", [side]: "10px", top: "50%", transform: "translateY(-50%)",
@@ -315,13 +295,6 @@ export default function ImageCarousel({
       }}
       onMouseLeave={handleMouseLeave}
     >
-      <style>{`
-        @keyframes ic-sharpen {
-          from { filter: blur(20px); transform: scale(1.05); }
-          to   { filter: blur(0px);  transform: scale(1); }
-        }
-      `}</style>
-
       <div
         ref={stripRef}
         onTouchStart={handleTouchStart}
@@ -341,9 +314,14 @@ export default function ImageCarousel({
       >
         {media.map((item, i) => {
           const isActive   = i === activeIndex;
-          const isAdjacent = Math.abs(i - activeIndex) === 1;
-          const shouldLoad = isActive || isAdjacent;
+          const distance   = Math.abs(i - activeIndex);
+          const shouldLoad = distance <= 2;
           const isVideo    = item.media_type === "video";
+
+          if (i === 0 && isActive) {
+            // log once per active-slide change for the first slide
+            console.log(`%c[Carousel] slide ${activeIndex + 1}/${media.length} active, loading slides ${Math.max(0, activeIndex - 2) + 1}–${Math.min(media.length, activeIndex + 3)}`, "color: #EC4899");
+          }
 
           const videoBlurSrc = item.bunny_video_id
             ? getBunnyThumbnail(item.bunny_video_id)
@@ -389,7 +367,6 @@ export default function ImageCarousel({
                     <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%" }}>
                       <ProgressiveImage
                         src={item.file_url}
-                        placeholder={item.thumbnail_url}
                         blurHash={item.blur_hash}
                         eager={isActive}
                         style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", pointerEvents: "none" }}
