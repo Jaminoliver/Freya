@@ -771,12 +771,20 @@ export default function VideoPlayer({
             bufferTimer.current = setTimeout(() => setIsBuffering(true), 300);
           }}
           onPlaying={() => {
-            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
-            if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
-            setIsBuffering(false);
-            setHasStarted(true);
-            setShowSlowDots(false);
-            setShowPoster(false);  // hide poster only when video actually paints
+            // onPlaying fires when ready to paint, but actual frame may take ~50-200ms more.
+            // Don't clear loading state here — wait for timeUpdate to confirm currentTime > 0.
+          }}
+          onTimeUpdate={(e) => {
+            const v = e.currentTarget;
+            // Only flip "started" once we have actual frames being displayed
+            if (!hasStarted && v.currentTime > 0.05) {
+              if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
+              if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
+              setIsBuffering(false);
+              setHasStarted(true);
+              setShowSlowDots(false);
+              setShowPoster(false);
+            }
           }}
           onCanPlay={() => {
             // Don't clear isBuffering here either — wait for actual playback.
@@ -785,43 +793,43 @@ export default function VideoPlayer({
           style={{ ...videoStyle, visibility: showPoster ? "hidden" : "visible", animation: !showPoster ? "fadeIn 0.2s ease" : undefined }}
         />
 
-        {/* Buffering — pulsing gradient ring, brand colors */}
-        {isBuffering && !showPoster && (
+        {/* Loading — pulsing gradient ring (SVG, reliable everywhere).
+            Shows during entire load window: poster dismissed → first frame paints,
+            plus any mid-playback stall. */}
+        {!showPoster && !hasError && (isBuffering || !hasStarted) && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <style>{`
-              @keyframes vp-ring-rotate { to { transform: rotate(360deg); } }
+              @keyframes vp-ring-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
               @keyframes vp-ring-pulse  {
-                0%, 100% { transform: scale(1);    opacity: 0.85; }
-                50%      { transform: scale(1.08); opacity: 1; }
-              }
-              @keyframes vp-ring-glow {
-                0%, 100% { box-shadow: 0 0 12px rgba(139,92,246,0.35), 0 0 24px rgba(236,72,153,0.2); }
-                50%      { box-shadow: 0 0 20px rgba(139,92,246,0.6),  0 0 36px rgba(236,72,153,0.35); }
+                0%, 100% { transform: scale(1);    opacity: 0.9; }
+                50%      { transform: scale(1.06); opacity: 1; }
               }
             `}</style>
             <div style={{
-              position: "relative",
-              width:    "52px",
-              height:   "52px",
+              width:     "56px",
+              height:    "56px",
               animation: "vp-ring-pulse 1.4s ease-in-out infinite",
+              filter:    "drop-shadow(0 0 12px rgba(139,92,246,0.5)) drop-shadow(0 0 20px rgba(236,72,153,0.3))",
             }}>
-              {/* Rotating gradient ring */}
-              <div style={{
-                position:     "absolute",
-                inset:        0,
-                borderRadius: "50%",
-                background:   "conic-gradient(from 0deg, transparent 0deg, rgba(139,92,246,0.15) 60deg, #8B5CF6 180deg, #EC4899 300deg, transparent 360deg)",
-                animation:    "vp-ring-rotate 1s linear infinite",
-                WebkitMask:   "radial-gradient(circle, transparent 58%, #000 60%)",
-                mask:         "radial-gradient(circle, transparent 58%, #000 60%)",
-              }} />
-              {/* Soft glow underlay */}
-              <div style={{
-                position:     "absolute",
-                inset:        "6px",
-                borderRadius: "50%",
-                animation:    "vp-ring-glow 1.4s ease-in-out infinite",
-              }} />
+              <svg
+                width="56" height="56" viewBox="0 0 56 56"
+                style={{ animation: "vp-ring-rotate 1s linear infinite", display: "block" }}
+              >
+                <defs>
+                  <linearGradient id="vp-ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%"   stopColor="#8B5CF6" />
+                    <stop offset="100%" stopColor="#EC4899" />
+                  </linearGradient>
+                </defs>
+                {/* Background track */}
+                <circle cx="28" cy="28" r="22" fill="none"
+                        stroke="rgba(255,255,255,0.12)" strokeWidth="3.5" />
+                {/* Gradient arc — covers ~40% of circumference */}
+                <circle cx="28" cy="28" r="22" fill="none"
+                        stroke="url(#vp-ring-grad)" strokeWidth="3.5"
+                        strokeLinecap="round"
+                        strokeDasharray="55 138" />
+              </svg>
             </div>
           </div>
         )}
