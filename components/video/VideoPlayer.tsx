@@ -786,10 +786,44 @@ export default function VideoPlayer({
           style={{ ...videoStyle, visibility: showPoster ? "hidden" : "visible", animation: !showPoster ? "fadeIn 0.2s ease" : undefined }}
         />
 
-        {/* Buffering spinner — only mid-playback stalls, not startup */}
+        {/* Buffering — pulsing gradient ring, brand colors */}
         {isBuffering && !showPoster && hasStarted && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ width: "44px", height: "44px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.15)", borderTop: "3px solid rgba(255,255,255,0.9)", animation: "spin 0.75s linear infinite" }} />
+            <style>{`
+              @keyframes vp-ring-rotate { to { transform: rotate(360deg); } }
+              @keyframes vp-ring-pulse  {
+                0%, 100% { transform: scale(1);    opacity: 0.85; }
+                50%      { transform: scale(1.08); opacity: 1; }
+              }
+              @keyframes vp-ring-glow {
+                0%, 100% { box-shadow: 0 0 12px rgba(139,92,246,0.35), 0 0 24px rgba(236,72,153,0.2); }
+                50%      { box-shadow: 0 0 20px rgba(139,92,246,0.6),  0 0 36px rgba(236,72,153,0.35); }
+              }
+            `}</style>
+            <div style={{
+              position: "relative",
+              width:    "52px",
+              height:   "52px",
+              animation: "vp-ring-pulse 1.4s ease-in-out infinite",
+            }}>
+              {/* Rotating gradient ring */}
+              <div style={{
+                position:     "absolute",
+                inset:        0,
+                borderRadius: "50%",
+                background:   "conic-gradient(from 0deg, transparent 0deg, rgba(139,92,246,0.15) 60deg, #8B5CF6 180deg, #EC4899 300deg, transparent 360deg)",
+                animation:    "vp-ring-rotate 1s linear infinite",
+                WebkitMask:   "radial-gradient(circle, transparent 58%, #000 60%)",
+                mask:         "radial-gradient(circle, transparent 58%, #000 60%)",
+              }} />
+              {/* Soft glow underlay */}
+              <div style={{
+                position:     "absolute",
+                inset:        "6px",
+                borderRadius: "50%",
+                animation:    "vp-ring-glow 1.4s ease-in-out infinite",
+              }} />
+            </div>
           </div>
         )}
 
