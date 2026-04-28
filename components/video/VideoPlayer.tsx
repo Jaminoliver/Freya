@@ -168,15 +168,23 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
     showControls();
   }, [seekTo, showControls]);
 
-  const handleSeekTouchMove = React.useCallback((e: React.TouchEvent) => {
-    if (!seeking) return;
-    e.preventDefault();
-    seekTo(e.touches[0].clientX);
-  }, [seeking, seekTo]);
-
   const handleSeekTouchEnd = React.useCallback(() => {
     setSeeking(false);
   }, []);
+
+  // Attach native (non-passive) touchmove so preventDefault works on iOS.
+  // React's synthetic touchmove is passive by default and silently ignores preventDefault.
+  React.useEffect(() => {
+    const bar = progressRef.current;
+    if (!bar) return;
+    const onMove = (e: TouchEvent) => {
+      if (!seeking) return;
+      e.preventDefault();
+      seekTo(e.touches[0].clientX);
+    };
+    bar.addEventListener("touchmove", onMove, { passive: false });
+    return () => bar.removeEventListener("touchmove", onMove);
+  }, [seeking, seekTo]);
 
   // ── Fullscreen ────────────────────────────────────────────────────────
   const handleFullscreen = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -367,9 +375,8 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
           onMouseDown={handleSeekMouseDown}
           onMouseUp={handleSeekMouseUp}
           onTouchStart={handleSeekTouchStart}
-          onTouchMove={handleSeekTouchMove}
           onTouchEnd={handleSeekTouchEnd}
-          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}
+          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none" }}
         >
           <div style={{ position: "relative", width: "100%", height: "4px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.25)", overflow: "visible" }}>
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.35)", borderRadius: "2px" }} />

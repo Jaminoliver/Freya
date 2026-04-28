@@ -407,7 +407,7 @@ params.set("hotOffset",   String(cursors.hotOffset));
       initialSavedPost={post.saved_post ?? false}
       initialSavedCreator={post.saved_creator ?? false}
       eager={index < 2}
-      autoplayOnVisible={true}
+      autoplayOnVisible={false}
     />
   </div>
 );
