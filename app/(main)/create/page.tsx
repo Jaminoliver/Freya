@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, Suspense, useCallback, useMemo } from "react";
-import { ArrowLeft, ImagePlus, BarChart2, HelpCircle, Lock, Calendar, ChevronDown, Type } from "lucide-react";
+import { ArrowLeft, ImagePlus, BarChart2, HelpCircle, Lock, Calendar, ChevronDown, Type, Film } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { MediaUploader } from "@/components/create/MediaUploader";
@@ -52,6 +52,7 @@ function CreatePostContent() {
 
   const [thumbnailBlob,    setThumbnailBlob]    = useState<Blob | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [thumbOpen,        setThumbOpen]        = useState(false);
 
   /* ── user ───────────────────────────────────────────────────────────────── */
 
@@ -413,18 +414,59 @@ function CreatePostContent() {
 
         {/* ── Thumbnail picker (video only, no poll) ──────────────────── */}
         {videoFile && !hasPoll && (
-          <div style={{
-            borderRadius: "14px",
-            backgroundColor: "#0D0D18",
-            padding: "14px",
-          }}>
-            <ThumbnailPicker
-              file={videoFile}
-              onPicked={(blob, previewUrl) => {
-                setThumbnailBlob(blob);
-                setThumbnailPreview(previewUrl);
+          <div style={{ borderRadius: "14px", backgroundColor: "#0D0D18", overflow: "hidden" }}>
+            {/* Collapsed header / toggle button */}
+            <button
+              onClick={() => setThumbOpen((v) => !v)}
+              style={{
+                width:           "100%",
+                display:         "flex",
+                alignItems:      "center",
+                justifyContent:  "space-between",
+                padding:         "14px 16px",
+                background:      "none",
+                border:          "none",
+                cursor:          "pointer",
+                fontFamily:      "inherit",
               }}
-            />
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Film size={17} color="#8B5CF6" />
+                <span style={{ fontSize: "14px", fontWeight: 600, color: "#D4D4E8" }}>Cover frame</span>
+                {thumbnailPreview && (
+                  <img
+                    src={thumbnailPreview}
+                    alt=""
+                    style={{ width: "28px", height: "28px", borderRadius: "6px", objectFit: "cover" }}
+                  />
+                )}
+              </div>
+              <ChevronDown
+                size={18}
+                color="#8A8AA0"
+                style={{
+                  transform:  thumbOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 0.2s",
+                }}
+              />
+            </button>
+
+            {/* Slideable body */}
+            <div style={{
+              maxHeight:  thumbOpen ? "600px" : "0px",
+              overflow:   "hidden",
+              transition: "max-height 0.3s ease",
+            }}>
+              <div style={{ padding: "0 14px 14px" }}>
+                <ThumbnailPicker
+                  file={videoFile}
+                  onPicked={(blob, previewUrl) => {
+                    setThumbnailBlob(blob);
+                    setThumbnailPreview(previewUrl);
+                  }}
+                />
+              </div>
+            </div>
           </div>
         )}
 

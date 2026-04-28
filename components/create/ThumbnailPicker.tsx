@@ -107,21 +107,15 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-          <Film size={17} color="#8B5CF6" />               {/* ← bigger */}
-          <span style={{ fontSize: "14px", fontWeight: 600, color: "#D4D4E8" }}>Cover frame</span>  {/* ← bigger + whiter */}
-        </div>
-        {picked && (
-          <span style={{
-            fontSize: "13px", color: "#22C55E",            /* ← bigger */
-            display: "flex", alignItems: "center", gap: "4px",
-          }}>
-            <Check size={14} /> Applied                    {/* ← bigger */}
-          </span>
-        )}
-      </div>
+      {/* Applied badge */}
+      {picked && (
+        <span style={{
+          fontSize: "13px", color: "#22C55E",
+          display: "flex", alignItems: "center", gap: "4px",
+        }}>
+          <Check size={14} /> Applied
+        </span>
+      )}
 
       {/* Preview */}
       <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>

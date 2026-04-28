@@ -551,14 +551,28 @@ export default function PostMediaViewer({
     <DoubleTapLike onSingleTap={singleTapAt0} onDoubleTap={doubleTap} style={{ width: "100%", cursor: "zoom-in" }}>
       <div
         style={{
-          position:        "relative",
-          width:           "100%",
-          aspectRatio:     String(imageRatio),
-          maxHeight:       "85svh",
-          backgroundColor: "#0A0A0F",
-          overflow:        "hidden",
+          position:             "relative",
+          width:                "100%",
+          aspectRatio:          String(imageRatio),
+          maxHeight:            "85svh",
+          backgroundColor:      "#0A0A0F",
+          overflow:             "hidden",
+          backgroundImage:      first.url ? `url(${first.url})` : undefined,
+          backgroundSize:       "cover",
+          backgroundPosition:   "center",
         }}
       >
+        {first.url && (
+          <div style={{
+            position:             "absolute",
+            inset:                0,
+            backdropFilter:       "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            backgroundColor:      "rgba(0,0,0,0.35)",
+            zIndex:               0,
+            pointerEvents:        "none",
+          }} />
+        )}
         <ProgressiveImage
           src={first.url}
           blurHash={first.blurHash}
