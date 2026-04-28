@@ -452,9 +452,12 @@ export default function VideoPlayer({
   const [isBuffering,  setIsBuffering]  = React.useState(false);
   const [hasError,     setHasError]     = React.useState(false);
   const [hasStarted,   setHasStarted]   = React.useState(false);
+  const [showSlowDots, setShowSlowDots] = React.useState(false);
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
   const [isMuted,      setIsMuted]      = React.useState(() => getSavedMute());
   const [isMobile,     setIsMobile]     = React.useState(false);
+
+  const slowTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
     const check = () => setIsMobile(!window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -504,9 +507,11 @@ export default function VideoPlayer({
       try { hlsRef.current.destroy(); } catch {}
       hlsRef.current = null;
     }
+    if (slowTimer.current) { clearTimeout(slowTimer.current); slowTimer.current = null; }
     hasInitialized.current = false;
     setIsBuffering(false);
     setHasStarted(false);
+    setShowSlowDots(false);
   }, []);
 
   const initVideo = React.useCallback(async () => {
@@ -577,6 +582,15 @@ export default function VideoPlayer({
     };
   }, []);
 
+  // Pre-warm HLS as soon as the player mounts when autoplay is enabled.
+  // This way, by the time the video scrolls into view, it's already buffered.
+  React.useEffect(() => {
+    if (!autoplayOnVisible || !isMobile || !bunnyVideoId) return;
+    if (hasInitialized.current) return;
+    console.log(`%c[VideoPlayer] 🔥 PREWARM HLS`, "color: #F59E0B; font-weight: bold", { videoId: bunnyVideoId });
+    initVideo();
+  }, [autoplayOnVisible, isMobile, bunnyVideoId, initVideo]);
+
   React.useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -587,14 +601,17 @@ export default function VideoPlayer({
 
       if (entry.intersectionRatio >= 0.5) {
         // In view — autoplay if enabled and on mobile, and we haven't been started yet
-        if (autoplayOnVisible && isMobile && showPoster && !hasError) {
+        if (autoplayOnVisible && isMobile && !hasStarted && !hasError) {
           console.log(`%c[VideoPlayer] ▶  AUTOPLAY (visible ${Math.round(entry.intersectionRatio * 100)}%)`, "color: #8B5CF6; font-weight: bold", { videoId: bunnyVideoId });
           (async () => {
-            setShowPoster(false);
+            // Keep poster visible — onPlaying will hide it once first frame paints
             if (!hasInitialized.current) await initVideo();
             const muted = getSavedMute();
             video.muted = muted;
             setIsMuted(muted);
+            // Show subtle progress dots if startup takes >800ms
+            if (slowTimer.current) clearTimeout(slowTimer.current);
+            slowTimer.current = setTimeout(() => setShowSlowDots(true), 800);
             try { await video.play(); } catch {}
           })();
         }
@@ -748,8 +765,11 @@ export default function VideoPlayer({
           }}
           onPlaying={() => {
             if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
+            if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
             setIsBuffering(false);
             setHasStarted(true);
+            setShowSlowDots(false);
+            setShowPoster(false);  // hide poster only when video actually paints
           }}
           onCanPlay={() => {
             if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
@@ -763,6 +783,18 @@ export default function VideoPlayer({
         {isBuffering && !showPoster && hasStarted && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ width: "44px", height: "44px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.15)", borderTop: "3px solid rgba(255,255,255,0.9)", animation: "spin 0.75s linear infinite" }} />
+          </div>
+        )}
+
+        {/* Slow-loading dots — IG style, shown over poster when startup takes >800ms */}
+        {showSlowDots && showPoster && (
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: "16px", zIndex: 11, display: "flex", justifyContent: "center", gap: "6px", pointerEvents: "none" }}>
+            <style>{`
+              @keyframes vp-dot { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1); } }
+            `}</style>
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s",   boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.2s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.4s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
           </div>
         )}
 
