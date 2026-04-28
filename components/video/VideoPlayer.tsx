@@ -771,20 +771,12 @@ export default function VideoPlayer({
             bufferTimer.current = setTimeout(() => setIsBuffering(true), 300);
           }}
           onPlaying={() => {
-            // onPlaying fires when ready to paint, but actual frame may take ~50-200ms more.
-            // Don't clear loading state here — wait for timeUpdate to confirm currentTime > 0.
-          }}
-          onTimeUpdate={(e) => {
-            const v = e.currentTarget;
-            // Only flip "started" once we have actual frames being displayed
-            if (!hasStarted && v.currentTime > 0.05) {
-              if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
-              if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
-              setIsBuffering(false);
-              setHasStarted(true);
-              setShowSlowDots(false);
-              setShowPoster(false);
-            }
+            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
+            if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
+            setIsBuffering(false);
+            setHasStarted(true);
+            setShowSlowDots(false);
+            setShowPoster(false);  // hide poster only when video actually paints
           }}
           onCanPlay={() => {
             // Don't clear isBuffering here either — wait for actual playback.
