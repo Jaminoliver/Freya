@@ -451,6 +451,7 @@ export default function VideoPlayer({
   const [posterError,  setPosterError]  = React.useState(false);
   const [isBuffering,  setIsBuffering]  = React.useState(false);
   const [hasError,     setHasError]     = React.useState(false);
+  const [hasStarted,   setHasStarted]   = React.useState(false);
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
   const [isMuted,      setIsMuted]      = React.useState(() => getSavedMute());
   const [isMobile,     setIsMobile]     = React.useState(false);
@@ -505,6 +506,7 @@ export default function VideoPlayer({
     }
     hasInitialized.current = false;
     setIsBuffering(false);
+    setHasStarted(false);
   }, []);
 
   const initVideo = React.useCallback(async () => {
@@ -747,6 +749,7 @@ export default function VideoPlayer({
           onPlaying={() => {
             if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
             setIsBuffering(false);
+            setHasStarted(true);
           }}
           onCanPlay={() => {
             if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
@@ -756,15 +759,10 @@ export default function VideoPlayer({
           style={{ ...videoStyle, visibility: showPoster ? "hidden" : "visible", animation: !showPoster ? "fadeIn 0.2s ease" : undefined }}
         />
 
-        {/* Instagram-style loading: blurred poster + spinner, fades out when ready */}
-        {isBuffering && !showPoster && (
+        {/* Buffering spinner — only mid-playback stalls, not startup */}
+        {isBuffering && !showPoster && hasStarted && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {/* Blurred poster fill */}
-            {posterSrc && (
-              <img src={posterSrc} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(18px) brightness(0.5)", transform: "scale(1.08)", transition: "opacity 0.3s ease" }} />
-            )}
-            {/* Spinner */}
-            <div style={{ position: "relative", zIndex: 1, width: "44px", height: "44px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.15)", borderTop: "3px solid rgba(255,255,255,0.9)", animation: "spin 0.75s linear infinite" }} />
+            <div style={{ width: "44px", height: "44px", borderRadius: "50%", border: "3px solid rgba(255,255,255,0.15)", borderTop: "3px solid rgba(255,255,255,0.9)", animation: "spin 0.75s linear infinite" }} />
           </div>
         )}
 
