@@ -10,6 +10,14 @@ import StoryVideoPlayer from "@/components/story/StoryVideoPlayer";
 import StoryTopBar, { type StoryTopBarRef } from "@/components/story/StoryTopBar";
 import StoryReplyOverlay from "@/components/story/StoryReplyOverlay";
 
+interface ViewerItem {
+  userId:      string;
+  displayName: string;
+  avatarUrl:   string | null;
+  liked:       boolean;
+  viewedAt:    string;
+}
+
 const SPINNER_DELAY_MS  = 600;
 const PRELOAD_AHEAD     = 3;
 const HOLD_THRESHOLD_MS = 200;
@@ -125,7 +133,12 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const [deleteErr,   setDeleteErr]   = useState<string | null>(null);
   const [liked,       setLiked]       = useState(false);
   const [replyOpen,   setReplyOpen]   = useState(false);
-  const [sentToast,   setSentToast]   = useState(false);
+  const [sentToast,      setSentToast]      = useState(false);
+  const [viewersOpen,    setViewersOpen]    = useState(false);
+  const [viewers,        setViewers]        = useState<ViewerItem[]>([]);
+  const [viewersLoading, setViewersLoading] = useState(false);
+  const [viewersError,   setViewersError]   = useState<string | null>(null);
+  const [likeCount,      setLikeCount]      = useState(0);
 
   const topBarRef       = useRef<StoryTopBarRef>(null);
   const hiddenInputRef  = useRef<HTMLInputElement>(null);
@@ -147,12 +160,16 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const holdTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const goNextRef       = useRef<() => void>(() => {});
   const goPrevRef       = useRef<() => void>(() => {});
+  const viewersPanelRef = useRef<HTMLDivElement>(null);
+  const viewersOpenRef  = useRef(false);
+  const viewersDragRef  = useRef({ active: false, startY: 0 });
 
   useEffect(() => { localGroupsRef.current = localGroups; }, [localGroups]);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => { imgLoadedRef.current = imgLoaded; }, [imgLoaded]);
   useEffect(() => { setLocalGroups(groups); }, [groups]);
-  useEffect(() => { replyOpenRef.current = replyOpen; }, [replyOpen]);
+  useEffect(() => { replyOpenRef.current  = replyOpen;  }, [replyOpen]);
+  useEffect(() => { viewersOpenRef.current = viewersOpen; }, [viewersOpen]);
 
   const updateGroupIdx = useCallback((v: number) => { groupIdxRef.current = v; setGroupIdx(v); }, []);
   const updateStoryIdx = useCallback((v: number) => { storyIdxRef.current = v; setStoryIdx(v); }, []);
@@ -227,7 +244,8 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     imgLoadedRef.current = false;
     setImgLoaded(false); setImgError(false); setMenuOpen(false);
     setDeleteErr(null); setLiked(false); setShowSpinner(false);
-    setSentToast(false); setReplyOpen(false);
+    setSentToast(false); setReplyOpen(false); setViewersOpen(false);
+    setViewers([]); setLikeCount(0); setViewersError(null);
     if (spinnerTimerRef.current) { clearTimeout(spinnerTimerRef.current); spinnerTimerRef.current = null; }
 
     topBarRef.current?.resetBars(storyIdx);
@@ -403,6 +421,31 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     });
   }, [story?.id]);
 
+  // ── Viewers panel ─────────────────────────────────────────────────────────
+  const handleOpenViewers = useCallback(async () => {
+    setPaused(true);
+    setViewersOpen(true);
+    if (viewers.length > 0) return;
+    setViewersLoading(true);
+    setViewersError(null);
+    try {
+      const res  = await fetch(`/api/stories/${story?.id}/viewers`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to load viewers");
+      setViewers(data.viewers);
+      setLikeCount(data.likeCount);
+    } catch (e: any) {
+      setViewersError(e.message ?? "Error loading viewers");
+    } finally {
+      setViewersLoading(false);
+    }
+  }, [story?.id, viewers.length]);
+
+  const handleCloseViewers = useCallback(() => {
+    setViewersOpen(false);
+    setPaused(false);
+  }, []);
+
   // ── Touch / drag / tap ────────────────────────────────────────────────────
   const applyDrag = useCallback((dy: number) => {
     const el = containerRef.current; if (!el) return;
@@ -420,7 +463,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   }, []);
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
-    if (replyOpenRef.current) return;
+    if (replyOpenRef.current || viewersOpenRef.current) return;
     const t = e.touches[0];
     touchRef.current = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false, holding: false, draggingDown: false };
     dragRef.current = { active: false, startY: t.clientY };
@@ -441,7 +484,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   }, [applyDrag]);
 
   const onTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (replyOpenRef.current) return;
+    if (replyOpenRef.current || viewersOpenRef.current) return;
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     if (dragRef.current.active) {
       dragRef.current.active = false;
@@ -461,7 +504,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   }, [closeWithGroups, resetDrag]);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (replyOpenRef.current) return;
+    if (replyOpenRef.current || viewersOpenRef.current) return;
     if ((e.target as HTMLElement).closest("button, input")) return;
     holdTimerRef.current = setTimeout(() => { touchRef.current.holding = true; setPaused(true); }, HOLD_THRESHOLD_MS);
   }, []);
@@ -482,7 +525,10 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
       <style>{`
         @keyframes sv-spin { to { transform:rotate(360deg); } }
         @keyframes sv-like { 0%,100% { transform:scale(1); } 50% { transform:scale(1.4); } }
-        @keyframes sv-toast { 0% { opacity:0; transform:translateY(8px); } 100% { opacity:1; transform:translateY(0); } }
+        @keyframes sv-toast     { 0% { opacity:0; transform:translateY(8px); } 100% { opacity:1; transform:translateY(0); } }
+        @keyframes sv-sheet-in  { from { transform:translateY(100%); } to { transform:translateY(0); } }
+        @keyframes sv-shimmer   { 0%,100% { opacity:0.35; } 50% { opacity:0.7; } }
+        @keyframes sv-row-in    { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
         .sv-like-anim { animation: sv-like 0.3s ease; }
         .sv-wrap { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:none; overscroll-behavior:none; }
         .sv-arrow { display:none; }
@@ -594,6 +640,169 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
               }}>
                 <Heart size={22} fill={liked ? "#EC4899" : "none"} color={liked ? "#EC4899" : "#fff"} className={liked ? "sv-like-anim" : ""} />
               </button>
+            </div>
+          )}
+
+          {/* Viewers pill — owner only */}
+          {isOwner && !viewersOpen && (
+            <div
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 16px calc(env(safe-area-inset-bottom) + 14px)", zIndex: 10 }}
+            >
+              <button
+                onClick={handleOpenViewers}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: 24, padding: "10px 16px", cursor: "pointer",
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                </svg>
+                <span style={{ color: "#fff", fontSize: 14, fontWeight: 600, fontFamily: "Inter,sans-serif" }}>
+                  {story.viewCount ?? 0}
+                </span>
+              </button>
+            </div>
+          )}
+
+          {/* Viewers bottom sheet — owner only */}
+          {isOwner && viewersOpen && (
+            <div
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              style={{ position: "absolute", inset: 0, zIndex: 20 }}
+            >
+              {/* Backdrop */}
+              <div
+                onClick={handleCloseViewers}
+                style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }}
+              />
+
+              {/* Panel */}
+              <div
+                ref={viewersPanelRef}
+                onTouchStart={(e) => {
+                  viewersDragRef.current = { active: true, startY: e.touches[0].clientY };
+                }}
+                onTouchMove={(e) => {
+                  if (!viewersDragRef.current.active) return;
+                  const dy = e.touches[0].clientY - viewersDragRef.current.startY;
+                  if (dy > 0 && viewersPanelRef.current) {
+                    viewersPanelRef.current.style.transform = `translateY(${dy}px)`;
+                    viewersPanelRef.current.style.transition = "none";
+                  }
+                }}
+                onTouchEnd={(e) => {
+                  if (!viewersDragRef.current.active) return;
+                  viewersDragRef.current.active = false;
+                  const dy = e.changedTouches[0].clientY - viewersDragRef.current.startY;
+                  if (dy > 80) {
+                    handleCloseViewers();
+                  } else if (viewersPanelRef.current) {
+                    viewersPanelRef.current.style.transition = "transform 0.25s cubic-bezier(0.32,0.72,0,1)";
+                    viewersPanelRef.current.style.transform  = "translateY(0)";
+                  }
+                }}
+                style={{
+                  position: "absolute", bottom: 0, left: 0, right: 0,
+                  background: "#0D0D18", borderRadius: "20px 20px 0 0",
+                  maxHeight: "65vh", display: "flex", flexDirection: "column",
+                  animation: "sv-sheet-in 0.32s cubic-bezier(0.32,0.72,0,1) forwards",
+                  willChange: "transform",
+                }}
+              >
+                {/* Drag handle */}
+                <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 8px" }}>
+                  <div style={{ width: 40, height: 4, borderRadius: 4, background: "#2A2A3D" }} />
+                </div>
+
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 20px 12px", borderBottom: "1px solid #2A2A3D" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <span style={{ color: "#fff", fontSize: 15, fontWeight: 600, fontFamily: "Inter,sans-serif" }}>
+                      {story.viewCount ?? 0}
+                    </span>
+                  </div>
+                  {likeCount > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <Heart size={15} fill="#EC4899" color="#EC4899" />
+                      <span style={{ color: "#EC4899", fontSize: 14, fontWeight: 600, fontFamily: "Inter,sans-serif" }}>{likeCount}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* List */}
+                <div style={{ overflowY: "auto", flex: 1, padding: "6px 0 calc(env(safe-area-inset-bottom) + 8px)" }}>
+
+                  {/* Skeleton */}
+                  {viewersLoading && [0, 1, 2].map((i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#1A1A2E", animation: `sv-shimmer 1.4s ease ${i * 0.15}s infinite` }} />
+                      <div style={{ flex: 1, height: 13, borderRadius: 7, background: "#1A1A2E", animation: `sv-shimmer 1.4s ease ${i * 0.15 + 0.08}s infinite` }} />
+                    </div>
+                  ))}
+
+                  {/* Error */}
+                  {viewersError && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 20px", gap: 8 }}>
+                      <span style={{ fontSize: 13, color: "#F87171", fontFamily: "Inter,sans-serif" }}>{viewersError}</span>
+                      <button
+                        onClick={handleOpenViewers}
+                        style={{ fontSize: 13, color: "#8B5CF6", fontFamily: "Inter,sans-serif", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                      >Retry</button>
+                    </div>
+                  )}
+
+                  {/* Empty */}
+                  {!viewersLoading && !viewersError && viewers.length === 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 20px", gap: 10 }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4A4A6A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                      </svg>
+                      <span style={{ fontSize: 14, color: "#6B6B8A", fontFamily: "Inter,sans-serif" }}>No views yet</span>
+                    </div>
+                  )}
+
+                  {/* Viewer rows */}
+                  {!viewersLoading && !viewersError && viewers.map((v, i) => (
+                    <div
+                      key={v.userId}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 12, padding: "10px 20px",
+                        animation: "sv-row-in 0.22s ease forwards",
+                        animationDelay: `${i * 45}ms`,
+                        opacity: 0,
+                      }}
+                    >
+                      {v.avatarUrl ? (
+                        <img src={v.avatarUrl} alt={v.displayName} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "#8A8AA0", fontFamily: "Inter,sans-serif" }}>
+                            {v.displayName.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                      <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#fff", fontFamily: "Inter,sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {v.displayName}
+                      </span>
+                      {v.liked && <Heart size={16} fill="#EC4899" color="#EC4899" />}
+                    </div>
+                  ))}
+
+                </div>
+              </div>
             </div>
           )}
 

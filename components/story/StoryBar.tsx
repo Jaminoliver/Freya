@@ -23,6 +23,7 @@ export interface StoryItem {
   expiresAt:    string;
   viewed:       boolean;
   isProcessing?: boolean;
+  viewCount?:    number;
 }
 
 export interface CreatorStoryGroup {

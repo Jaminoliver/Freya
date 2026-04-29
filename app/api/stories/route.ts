@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const t2 = Date.now();
     let query = supabase
       .from("stories")
-      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, created_at, expires_at, is_processing")
+      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, view_count, created_at, expires_at, is_processing")
       .in("creator_id", creatorIds)
       .eq("is_expired", false)
       .gt("expires_at", now)
@@ -115,6 +115,7 @@ export async function GET(req: NextRequest) {
         expiresAt:    story.expires_at,
         viewed:       isViewed,
         isProcessing: story.is_processing ?? false,
+        viewCount:    story.view_count    ?? 0,
       });
     }
 
