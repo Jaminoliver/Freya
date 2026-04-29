@@ -23,6 +23,7 @@ export interface UploadJob {
   mediaType: "photo" | "video" | "mixed";
   clipStart: number;
   clipEnd:   number;
+  ctaType?:  "subscribe" | "tip" | null;
 }
 
 interface StoryUploadState {
@@ -163,7 +164,8 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
         const fd = new FormData();
         for (const p of photos) fd.append("file", p);
         fd.append("mediaType", "photo");
-        if (job.caption) fd.append("caption", job.caption);
+        if (job.caption)  fd.append("caption",  job.caption);
+        if (job.ctaType)  fd.append("ctaType",  job.ctaType);
 
         patch({ uploadPct: 10 });
 
@@ -221,9 +223,10 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
           body:    JSON.stringify({
             mediaType:    "video",
             caption:      job.caption,
+            ctaType:      job.ctaType ?? null,
             clipStart:    job.clipStart,
             clipEnd:      job.clipEnd,
-            photoStoryIds,                   // link photos created in step 2
+            photoStoryIds,
           }),
           signal: controller.signal,
         });

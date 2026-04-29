@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const t2 = Date.now();
     let query = supabase
       .from("stories")
-      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, view_count, created_at, expires_at, is_processing")
+      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, view_count, cta_type, created_at, expires_at, is_processing")
       .in("creator_id", creatorIds)
       .eq("is_expired", false)
       .gt("expires_at", now)
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
 
     const t3 = Date.now();
     const [{ data: profiles }, { data: views }] = await Promise.all([
-      supabase.from("profiles").select("id, username, display_name, avatar_url").in("id", uniqueCreatorIds),
+      supabase.from("profiles").select("id, username, display_name, avatar_url, subscription_price, bundle_price_3_months, bundle_price_6_months").in("id", uniqueCreatorIds),
       supabase.from("story_views").select("story_id").eq("user_id", user.id).in("story_id", storyIds),
     ]);
     console.log(`[stories] profiles+views: ${Date.now() - t3}ms`);
@@ -84,14 +84,17 @@ export async function GET(req: NextRequest) {
       if (!groupMap[cId]) {
         const profile = profileMap[cId] ?? {};
         groupMap[cId] = {
-          creatorId:       cId,
-          username:        profile.username     ?? "unknown",
-          displayName:     profile.display_name ?? profile.username ?? "unknown",
-          avatarUrl:       profile.avatar_url   ?? null,
-          hasUnviewed:     false,
-          latestStoryAt:   null,
-          latestThumbnail: null,
-          items:           [],
+          creatorId:         cId,
+          username:          profile.username               ?? "unknown",
+          displayName:       profile.display_name           ?? profile.username ?? "unknown",
+          avatarUrl:         profile.avatar_url             ?? null,
+          subscriptionPrice: profile.subscription_price     ?? 0,
+          threeMonthPrice:   profile.bundle_price_3_months  ?? undefined,
+          sixMonthPrice:     profile.bundle_price_6_months  ?? undefined,
+          hasUnviewed:       false,
+          latestStoryAt:     null,
+          latestThumbnail:   null,
+          items:             [],
         };
       }
 
@@ -116,6 +119,7 @@ export async function GET(req: NextRequest) {
         viewed:       isViewed,
         isProcessing: story.is_processing ?? false,
         viewCount:    story.view_count    ?? 0,
+        ctaType:      story.cta_type      ?? null,
       });
     }
 

@@ -24,17 +24,21 @@ export interface StoryItem {
   viewed:       boolean;
   isProcessing?: boolean;
   viewCount?:    number;
+  ctaType?:      "subscribe" | "tip" | null;
 }
 
 export interface CreatorStoryGroup {
-  creatorId:       string;
-  username:        string;
-  displayName:     string;
-  avatarUrl:       string | null;
-  hasUnviewed:     boolean;
-  latestStoryAt:   string;
-  latestThumbnail: string | null;
-  items:           StoryItem[];
+  creatorId:         string;
+  username:          string;
+  displayName:       string;
+  avatarUrl:         string | null;
+  subscriptionPrice: number;
+  threeMonthPrice?:  number;
+  sixMonthPrice?:    number;
+  hasUnviewed:       boolean;
+  latestStoryAt:     string;
+  latestThumbnail:   string | null;
+  items:             StoryItem[];
 }
 
 interface StoryBarProps {

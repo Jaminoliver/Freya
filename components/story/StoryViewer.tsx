@@ -9,6 +9,8 @@ import { useAppStore } from "@/lib/store/appStore";
 import StoryVideoPlayer from "@/components/story/StoryVideoPlayer";
 import StoryTopBar, { type StoryTopBarRef } from "@/components/story/StoryTopBar";
 import StoryReplyOverlay from "@/components/story/StoryReplyOverlay";
+import dynamic from "next/dynamic";
+const CheckoutModal = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
 
 interface ViewerItem {
   userId:      string;
@@ -139,6 +141,8 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const [viewersLoading, setViewersLoading] = useState(false);
   const [viewersError,   setViewersError]   = useState<string | null>(null);
   const [likeCount,      setLikeCount]      = useState(0);
+  const [ctaCheckoutOpen, setCtaCheckoutOpen] = useState(false);
+  const [ctaCheckoutType, setCtaCheckoutType] = useState<"subscription" | "tips">("subscription");
 
   const topBarRef       = useRef<StoryTopBarRef>(null);
   const hiddenInputRef  = useRef<HTMLInputElement>(null);
@@ -246,6 +250,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     setDeleteErr(null); setLiked(false); setShowSpinner(false);
     setSentToast(false); setReplyOpen(false); setViewersOpen(false);
     setViewers([]); setLikeCount(0); setViewersError(null);
+    setCtaCheckoutOpen(false);
     if (spinnerTimerRef.current) { clearTimeout(spinnerTimerRef.current); spinnerTimerRef.current = null; }
 
     topBarRef.current?.resetBars(storyIdx);
@@ -446,6 +451,18 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     setPaused(false);
   }, []);
 
+  // ── CTA ───────────────────────────────────────────────────────────────────
+  const handleCtaTap = useCallback((type: "subscription" | "tips") => {
+    setPaused(true);
+    setCtaCheckoutType(type);
+    setCtaCheckoutOpen(true);
+  }, []);
+
+  const handleCtaCheckoutClose = useCallback(() => {
+    setCtaCheckoutOpen(false);
+    setPaused(false);
+  }, []);
+
   // ── Touch / drag / tap ────────────────────────────────────────────────────
   const applyDrag = useCallback((dy: number) => {
     const el = containerRef.current; if (!el) return;
@@ -529,6 +546,8 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
         @keyframes sv-sheet-in  { from { transform:translateY(100%); } to { transform:translateY(0); } }
         @keyframes sv-shimmer   { 0%,100% { opacity:0.35; } 50% { opacity:0.7; } }
         @keyframes sv-row-in    { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes sv-cta-in    { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes sv-sweep     { 0%{left:-80%} 100%{left:130%} }
         .sv-like-anim { animation: sv-like 0.3s ease; }
         .sv-wrap { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:none; overscroll-behavior:none; }
         .sv-arrow { display:none; }
@@ -640,6 +659,41 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
               }}>
                 <Heart size={22} fill={liked ? "#EC4899" : "none"} color={liked ? "#EC4899" : "#fff"} className={liked ? "sv-like-anim" : ""} />
               </button>
+            </div>
+          )}
+
+          {/* CTA pill — non-owner only, when story has a CTA */}
+          {!isOwner && !replyOpen && !viewersOpen && story.ctaType && (
+            <div
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              style={{ position: "absolute", bottom: 90, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, animation: "sv-cta-in 0.3s ease 0.6s forwards", opacity: 0 }}
+            >
+              {story.ctaType === "subscribe" ? (
+                <button
+                  onClick={() => handleCtaTap("subscription")}
+                  style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#8B5CF6,#EC4899)", border: "none", borderRadius: 24, padding: "12px 24px", cursor: "pointer", position: "relative", overflow: "hidden" }}
+                >
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "Inter,sans-serif", position: "relative", zIndex: 1 }}>Subscribe</span>
+                  <span style={{ fontSize: 14, color: "rgba(255,255,255,0.75)", fontFamily: "Inter,sans-serif", position: "relative", zIndex: 1 }}>✦</span>
+                  <div style={{ position: "absolute", top: 0, left: "-80%", width: "50%", height: "100%", background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)", transform: "skewX(-20deg)", animation: "sv-sweep 2.5s ease-in-out infinite" }} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleCtaTap("tips")}
+                  style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(236,72,153,0.12)", border: "1px solid #EC4899", borderRadius: 24, padding: "12px 24px", cursor: "pointer", backdropFilter: "blur(8px)" }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EC4899" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/>
+                    <line x1="12" y1="22" x2="12" y2="7"/>
+                    <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+                    <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+                  </svg>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#EC4899", fontFamily: "Inter,sans-serif" }}>Send a Tip</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -814,6 +868,33 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
           )}
         </div>
       </div>
+
+      {/* CTA checkout modal */}
+      {ctaCheckoutOpen && group && (
+        <CheckoutModal
+          isOpen={ctaCheckoutOpen}
+          onClose={handleCtaCheckoutClose}
+          type={ctaCheckoutType}
+          creator={{
+            id:               group.creatorId,
+            username:         group.username,
+            display_name:     group.displayName,
+            avatar_url:       group.avatarUrl,
+            role:             "creator",
+            subscriptionPrice: group.subscriptionPrice ?? 0,
+            bundlePricing: {
+              threeMonths: group.threeMonthPrice,
+              sixMonths:   group.sixMonthPrice,
+            },
+          } as any}
+          monthlyPrice={group.subscriptionPrice ?? 0}
+          threeMonthPrice={group.threeMonthPrice}
+          sixMonthPrice={group.sixMonthPrice}
+          autoCloseOnSuccess={true}
+          onSuccess={handleCtaCheckoutClose}
+          onSubscriptionSuccess={handleCtaCheckoutClose}
+        />
+      )}
 
       {/* Reply overlay */}
       <StoryReplyOverlay

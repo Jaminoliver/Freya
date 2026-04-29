@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       const file     = formData.get("file") as File | null;
-      const caption  = (formData.get("caption") as string) || null;
+      const caption  = (formData.get("caption")  as string) || null;
+      const ctaType  = (formData.get("ctaType")  as string) || null;
 
       if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
           expires_at:    expiresAt,
           is_expired:    false,
           is_processing: false,
+          cta_type:      ctaType ?? null,
         })
         .select("id")
         .single();
@@ -85,6 +87,7 @@ export async function POST(req: NextRequest) {
     const body      = await req.json();
     const mediaType = body.mediaType as string;
     const caption   = (body.caption  as string) || null;
+    const ctaType   = (body.ctaType  as string) || null;
     const clipStart = parseFloat(body.clipStart) || 0;
     const clipEnd   = parseFloat(body.clipEnd)   || 0;
 
@@ -110,6 +113,7 @@ export async function POST(req: NextRequest) {
         is_expired:     false,
         is_processing:  true,
         bunny_video_id: videoId,
+        cta_type:       ctaType ?? null,
       })
       .select("id")
       .single();

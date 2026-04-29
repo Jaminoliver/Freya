@@ -51,6 +51,8 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
   const [error,        setError]        = useState<string | null>(null);
   const [captionFocus, setCaptionFocus] = useState(false);
   const [carouselIdx,  setCarouselIdx]  = useState(0);
+  const [ctaType,      setCtaType]      = useState<"subscribe" | "tip" | null>(null);
+  const [ctaSheetOpen, setCtaSheetOpen] = useState(false);
 
   // Clip state
   const [clipStart,     setClipStart]     = useState(0);
@@ -234,6 +236,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
       mediaType: mediaType as any,
       clipStart,
       clipEnd,
+      ctaType,
     });
     onClose();
   };
@@ -269,7 +272,10 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
   return createPortal(
     <>
       <style>{`
-        @keyframes sum-in { from{opacity:0;transform:scale(0.97)} to{opacity:1;transform:scale(1)} }
+        @keyframes sum-in        { from{opacity:0;transform:scale(0.97)} to{opacity:1;transform:scale(1)} }
+        @keyframes sum-sheet-in  { from{transform:translateY(100%)} to{transform:translateY(0)} }
+        @keyframes sum-cta-in    { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes sum-sweep     { 0%{left:-80%} 100%{left:130%} }
         .sum-wrap { animation: sum-in 0.18s ease forwards; }
         .sum-caption { background:none;border:none;outline:none;width:100%;color:#fff;font-size:14px;font-family:'Inter',sans-serif; }
         .sum-caption::placeholder { color:rgba(255,255,255,0.45); }
@@ -598,25 +604,112 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
               )}
             </div>
 
-            {/* Caption + Send */}
-            <div style={{ flexShrink:0, backgroundColor:"#0D0D18", borderTop:"1px solid #1A1A2E", display:"flex", alignItems:"center", gap:12, padding:"12px 16px", paddingBottom:"calc(env(safe-area-inset-bottom) + 12px)" }}>
-              <div style={{ flex:1, background: captionFocus ? "#1C1C2E" : "#13131F", borderRadius:24, padding:"10px 16px", border: captionFocus ? "1px solid #8B5CF6" : "1px solid #2A2A3D", transition:"all 0.2s" }}>
-                <input
-                  className="sum-caption"
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  onFocus={() => setCaptionFocus(true)}
-                  onBlur={() => setCaptionFocus(false)}
-                  placeholder="Add a caption…"
-                  maxLength={300}
-                />
+            {/* CTA preview pill — shown on story when set */}
+            {ctaType && (
+              <div style={{ position:"absolute", bottom:90, left:0, right:0, display:"flex", justifyContent:"center", zIndex:8, pointerEvents:"none", animation:"sum-cta-in 0.25s ease forwards" }}>
+                {ctaType === "subscribe" ? (
+                  <div style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", borderRadius:24, padding:"10px 20px", position:"relative", overflow:"hidden" }}>
+                    <span style={{ fontSize:14, fontWeight:700, color:"#fff", fontFamily:"'Inter',sans-serif" }}>Subscribe</span>
+                    <span style={{ fontSize:13, color:"rgba(255,255,255,0.75)", fontFamily:"'Inter',sans-serif" }}>✦</span>
+                    <div style={{ position:"absolute", top:0, left:"-80%", width:"50%", height:"100%", background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)", transform:"skewX(-20deg)", animation:"sum-sweep 2.5s ease-in-out infinite" }} />
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", alignItems:"center", gap:8, background:"rgba(236,72,153,0.12)", border:"1px solid #EC4899", borderRadius:24, padding:"10px 20px" }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EC4899" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/>
+                      <line x1="12" y1="22" x2="12" y2="7"/>
+                      <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+                      <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+                    </svg>
+                    <span style={{ fontSize:14, fontWeight:700, color:"#EC4899", fontFamily:"'Inter',sans-serif" }}>Send a Tip</span>
+                  </div>
+                )}
               </div>
-              <button
-                onClick={handleSend}
-                style={{ width:50, height:50, borderRadius:"50%", border:"none", cursor:"pointer", background:"linear-gradient(135deg,#8B5CF6,#EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 4px 16px rgba(139,92,246,0.5)" }}
-              >
-                <Send size={20} color="#fff" style={{ marginLeft:2 }} />
-              </button>
+            )}
+
+            {/* Caption + Send */}
+            <div style={{ flexShrink:0, backgroundColor:"#0D0D18", borderTop:"1px solid #1A1A2E", zIndex:10 }}>
+
+              {/* CTA sheet */}
+              {ctaSheetOpen && (
+                <div style={{ padding:"0 16px 12px", animation:"sum-sheet-in 0.25s cubic-bezier(0.32,0.72,0,1) forwards" }}>
+                  <div style={{ display:"flex", gap:10 }}>
+                    {/* Subscribe card */}
+                    <button
+                      onClick={() => { setCtaType(ctaType === "subscribe" ? null : "subscribe"); setCtaSheetOpen(false); }}
+                      style={{
+                        flex:1, borderRadius:14, border: ctaType === "subscribe" ? "2px solid #8B5CF6" : "1px solid #2A2A3D",
+                        background: ctaType === "subscribe" ? "rgba(139,92,246,0.12)" : "#13131F",
+                        padding:"14px 12px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:8,
+                      }}
+                    >
+                      <div style={{ width:40, height:40, borderRadius:12, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                      </div>
+                      <span style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Inter',sans-serif" }}>Subscribe</span>
+                      <span style={{ fontSize:11, color:"#6B6B8A", fontFamily:"'Inter',sans-serif", textAlign:"center", lineHeight:1.4 }}>Fans tap to subscribe</span>
+                    </button>
+
+                    {/* Tip card */}
+                    <button
+                      onClick={() => { setCtaType(ctaType === "tip" ? null : "tip"); setCtaSheetOpen(false); }}
+                      style={{
+                        flex:1, borderRadius:14, border: ctaType === "tip" ? "2px solid #EC4899" : "1px solid #2A2A3D",
+                        background: ctaType === "tip" ? "rgba(236,72,153,0.08)" : "#13131F",
+                        padding:"14px 12px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:8,
+                      }}
+                    >
+                      <div style={{ width:40, height:40, borderRadius:12, background:"rgba(236,72,153,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EC4899" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/>
+                          <line x1="12" y1="22" x2="12" y2="7"/>
+                          <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+                          <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+                        </svg>
+                      </div>
+                      <span style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Inter',sans-serif" }}>Send a Tip</span>
+                      <span style={{ fontSize:11, color:"#6B6B8A", fontFamily:"'Inter',sans-serif", textAlign:"center", lineHeight:1.4 }}>Fans tip you from story</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", paddingBottom:"calc(env(safe-area-inset-bottom) + 12px)" }}>
+                {/* CTA toggle button */}
+                <button
+                  onClick={() => setCtaSheetOpen((o) => !o)}
+                  style={{
+                    width:42, height:42, borderRadius:"50%", border:"none", flexShrink:0, cursor:"pointer",
+                    background: ctaType ? "linear-gradient(135deg,#8B5CF6,#EC4899)" : "rgba(255,255,255,0.08)",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    transition:"all 0.2s",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ctaType ? "#fff" : "rgba(255,255,255,0.6)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  </svg>
+                </button>
+
+                <div style={{ flex:1, background: captionFocus ? "#1C1C2E" : "#13131F", borderRadius:24, padding:"10px 16px", border: captionFocus ? "1px solid #8B5CF6" : "1px solid #2A2A3D", transition:"all 0.2s" }}>
+                  <input
+                    className="sum-caption"
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    onFocus={() => setCaptionFocus(true)}
+                    onBlur={() => setCaptionFocus(false)}
+                    placeholder="Add a caption…"
+                    maxLength={300}
+                  />
+                </div>
+                <button
+                  onClick={handleSend}
+                  style={{ width:50, height:50, borderRadius:"50%", border:"none", cursor:"pointer", background:"linear-gradient(135deg,#8B5CF6,#EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 4px 16px rgba(139,92,246,0.5)" }}
+                >
+                  <Send size={20} color="#fff" style={{ marginLeft:2 }} />
+                </button>
+              </div>
             </div>
           </div>
         )}
