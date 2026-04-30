@@ -23,8 +23,9 @@ export interface UploadJob {
   mediaType: "photo" | "video" | "mixed";
   clipStart: number;
   clipEnd:   number;
-  ctaType?:    "subscribe" | "tip" | null;
-  ctaMessage?: string | null;
+  ctaType?:      "subscribe" | "tip" | null;
+  ctaMessage?:   string | null;
+  ctaPositionY?: number | null;
 }
 interface StoryUploadState {
   phase:       StoryUploadPhase;
@@ -164,9 +165,10 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
         const fd = new FormData();
         for (const p of photos) fd.append("file", p);
         fd.append("mediaType", "photo");
-        if (job.caption)    fd.append("caption",    job.caption);
-        if (job.ctaType)    fd.append("ctaType",    job.ctaType);
-        if (job.ctaMessage) fd.append("ctaMessage", job.ctaMessage);
+        if (job.caption)       fd.append("caption",       job.caption);
+        if (job.ctaType)       fd.append("ctaType",       job.ctaType);
+        if (job.ctaMessage)    fd.append("ctaMessage",    job.ctaMessage);
+        if (job.ctaPositionY != null) fd.append("ctaPositionY", String(job.ctaPositionY));
 
         patch({ uploadPct: 10 });
 
@@ -224,8 +226,9 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
           body:    JSON.stringify({
             mediaType:    "video",
             caption:      job.caption,
-            ctaType:      job.ctaType    ?? null,
-            ctaMessage:   job.ctaMessage ?? null,
+            ctaType:      job.ctaType      ?? null,
+            ctaMessage:   job.ctaMessage   ?? null,
+            ctaPositionY: job.ctaPositionY ?? 0.75,
             clipStart:    job.clipStart,
             clipEnd:      job.clipEnd,
             photoStoryIds,

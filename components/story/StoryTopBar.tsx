@@ -61,10 +61,11 @@ interface Props {
   onDelete:      () => void;
   onClose:       () => void;
   onBarComplete: () => void;
+  onTip?:        () => void;
 }
 
 export default forwardRef<StoryTopBarRef, Props>(function StoryTopBar(
-  { group, story, storyIdx, isOwner, isVideo, muted, deleting, menuOpen, onMuteToggle, onMenuToggle, onDelete, onClose, onBarComplete },
+  { group, story, storyIdx, isOwner, isVideo, muted, deleting, menuOpen, onMuteToggle, onMenuToggle, onDelete, onClose, onBarComplete, onTip },
   ref,
 ) {
   const barsRef = useRef<HTMLDivElement>(null);
@@ -137,6 +138,16 @@ export default forwardRef<StoryTopBarRef, Props>(function StoryTopBar(
           {isVideo && (
             <button {...stop} onClick={(e) => { e.stopPropagation(); onMuteToggle(); }} style={ICON_BTN}>
               {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+            </button>
+          )}
+          {!isOwner && onTip && (
+            <button {...stop} onClick={(e) => { e.stopPropagation(); onTip(); }} style={ICON_BTN} title="Send a tip">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/>
+                <line x1="12" y1="22" x2="12" y2="7"/>
+                <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+                <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+              </svg>
             </button>
           )}
           {isOwner && (

@@ -25,7 +25,10 @@ export interface StoryItem {
   isProcessing?: boolean;
   viewCount?:    number;
   ctaType?:      "subscribe" | "tip" | null;
-  ctaMessage?:   string | null;
+  ctaMessage?:     string | null;
+  ctaPositionY?:   number | null;
+  textContent?:    string | null;
+  textBackground?: string | null;
 }
 
 export interface CreatorStoryGroup {

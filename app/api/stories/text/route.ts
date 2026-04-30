@@ -25,8 +25,9 @@ export async function POST(req: NextRequest) {
     const body       = await req.json();
     const textContent = (body.textContent as string)?.trim();
     const textBg      = (body.textBg      as string) || "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)";
-    const ctaType     = (body.ctaType     as string) || null;
-    const ctaMessage  = (body.ctaMessage  as string) || null;
+    const ctaType      = (body.ctaType      as string) || null;
+    const ctaMessage   = (body.ctaMessage   as string) || null;
+    const ctaPositionY = parseFloat(body.ctaPositionY) || 0.75;
 
     if (!textContent) {
       return NextResponse.json({ error: "Text content is required" }, { status: 400 });
@@ -50,8 +51,9 @@ export async function POST(req: NextRequest) {
         caption:         null,
         text_content:    textContent,
         text_background: textBg,
-        cta_type:        ctaType    ?? null,
-        cta_message:     ctaMessage ?? null,
+        cta_type:       ctaType      ?? null,
+        cta_message:    ctaMessage   ?? null,
+        cta_position_y: ctaPositionY ?? 0.75,
         expires_at:      expiresAt,
         is_expired:      false,
         is_processing:   false,

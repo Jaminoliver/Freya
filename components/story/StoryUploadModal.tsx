@@ -57,11 +57,17 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
   const videoInputRef   = useRef<HTMLInputElement>(null);
   const addMoreInputRef = useRef<HTMLInputElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
-  const scrubRef        = useRef<HTMLDivElement>(null);
+  const scrubRef           = useRef<HTMLDivElement>(null);
+  const previewCanvasRef   = useRef<HTMLDivElement>(null);
+  const textCanvasRef      = useRef<HTMLDivElement>(null);
   const isDragging      = useRef(false);
   const dragStartX      = useRef(0);
   const dragStartClip   = useRef(0);
-  const touchStartX     = useRef(0);
+  const touchStartX       = useRef(0);
+  const ctaCardRefPreview = useRef<HTMLDivElement>(null);
+  const ctaCardRefText    = useRef<HTMLDivElement>(null);
+  const ctaPosRef         = useRef(0.75);
+  const [ctaInset, setCtaInset] = useState(16);
 
   const [phase,        setPhase]        = useState<Phase>("pick");
   const [selected,     setSelected]     = useState<SelectedFile[]>([]);
@@ -72,6 +78,10 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
   const [ctaType,      setCtaType]      = useState<"subscribe" | null>(null);
   const [ctaMessage,   setCtaMessage]   = useState("");
   const [ctaSheetOpen, setCtaSheetOpen] = useState(false);
+  const [ctaPositionY, setCtaPositionY] = useState(0.75);
+const [isMuted, setIsMuted] = useState(true);
+  const ctaDragRef                      = useRef<{ active: boolean; startY: number; startPosY: number }>({ active: false, startY: 0, startPosY: 0.75 });
+const [toolbarOpen,  setToolbarOpen]  = useState(false);
   const [textContent,  setTextContent]  = useState("");
   const [textBg,       setTextBg]       = useState(TEXT_BACKGROUNDS[0]);
   const [textPosting,  setTextPosting]  = useState(false);
@@ -121,6 +131,50 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
       window.removeEventListener("touchend",   onUp);
     };
   }, [videoDuration]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      if (!ctaDragRef.current.active) return;
+      const clientY = "touches" in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+      const card: HTMLDivElement | null = ctaCardRefPreview.current !== null ? ctaCardRefPreview.current : ctaCardRefText.current;
+      if (!card || !card.parentElement) return;
+      const parentH  = card.parentElement.clientHeight;
+      const cardH    = card.offsetHeight;
+      const dy       = clientY - ctaDragRef.current.startY;
+      const newTop   = Math.max(0, Math.min(parentH - cardH, ctaDragRef.current.startPosY + dy));
+      ctaPosRef.current = (newTop + 72) / parentH;
+      card.style.top = `${newTop}px`;
+    };
+    const onUp = () => {
+      if (!ctaDragRef.current.active) return;
+      ctaDragRef.current.active = false;
+      setCtaPositionY(ctaPosRef.current);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("touchmove", onMove, { passive: true });
+    window.addEventListener("mouseup",   onUp);
+    window.addEventListener("touchend",  onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+      window.removeEventListener("touchend",  onUp);
+    };
+  }, []);
+
+  const measureVideoInset = useCallback(() => {
+    const vid = previewVideoRef.current;
+    if (!vid || !previewCanvasRef.current) return;
+    const cW = previewCanvasRef.current.clientWidth;
+    const cH = previewCanvasRef.current.clientHeight;
+    const vW = vid.videoWidth;
+    const vH = vid.videoHeight;
+    if (!vW || !vH) return;
+    const containerAR = cW / cH;
+    const videoAR     = vW / vH;
+    const renderedW   = videoAR > containerAR ? cW : cH * videoAR;
+    setCtaInset((cW - renderedW) / 2 + 8);
+  }, []);
 
   const generateThumbnails = useCallback(async (url: string, duration: number) => {
     setThumbsLoading(true);
@@ -260,7 +314,8 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
       clipStart,
       clipEnd,
       ctaType,
-      ctaMessage: ctaMessage.trim() || null,
+      ctaMessage:   ctaMessage.trim() || null,
+      ctaPositionY: ctaType ? ctaPositionY : null,
     });
     onClose();
   };
@@ -276,8 +331,9 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
         body:    JSON.stringify({
           textContent: textContent.trim(),
           textBg,
-          ctaType:     ctaType ?? null,
-          ctaMessage:  ctaMessage.trim() || null,
+          ctaType:      ctaType ?? null,
+          ctaMessage:   ctaMessage.trim() || null,
+          ctaPositionY: ctaType ? ctaPositionY : null,
         }),
       });
       const data = await res.json();
@@ -294,7 +350,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
     selected.forEach((s) => URL.revokeObjectURL(s.previewUrl));
     setSelected([]); setCaption(""); setError(null);
     setThumbnails([]); setClipStart(0); setPhase("pick");
-    setTextContent(""); setCtaMessage(""); setCtaType(null);
+    setTextContent(""); setCtaMessage(""); setCtaType(null); setCtaPositionY(0.75);
   };
 
   // ── Carousel swipe ────────────────────────────────────────────────────────
@@ -327,8 +383,8 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
         @keyframes sum-cta-in    { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes sum-sweep     { 0%{left:-80%} 100%{left:130%} }
         .sum-wrap { animation: sum-in 0.18s ease forwards; }
-        .sum-caption { background:none;border:none;outline:none;width:100%;color:#fff;font-size:14px;font-family:'Inter',sans-serif; }
-        .sum-caption::placeholder { color:rgba(255,255,255,0.45); }
+        .sum-caption { background:none;border:none;outline:none;width:100%;color:#fff;font-size:14px;font-family:'Inter',sans-serif;text-shadow:0 1px 4px rgba(0,0,0,0.6),0 0px 12px rgba(0,0,0,0.4); }
+        .sum-caption::placeholder { color:rgba(255,255,255,0.7);text-shadow:0 1px 4px rgba(0,0,0,0.7); }
         .sum-scrub { cursor:grab; }
         .sum-scrub:active { cursor:grabbing; }
         .sum-thumb-remove { opacity:0;transition:opacity 0.15s; }
@@ -580,8 +636,9 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
             onClick={(e) => e.stopPropagation()}
             style={{ position:"relative", width:"100%", height:"100dvh", maxWidth:480, backgroundColor:"#000", display:"flex", flexDirection:"column" }}
           >
-            {/* Back */}
-            <div style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 16px)", left:16, zIndex:10 }}>
+            {/* Back + Toolbar */}
+            <div style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 16px)", left:0, right:0, zIndex:10, display:"flex", alignItems:"flex-start", justifyContent:"space-between", padding:"0 16px" }}>
+              <div style={{ display:"flex", gap:8 }}>
               <button
                 onClick={() => {
                   const vid = selected.find((s) => s.mediaType === "video");
@@ -592,13 +649,67 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
               >
                 <X size={18} />
               </button>
+              {selected.some((s) => s.mediaType === "video") && (
+                <button
+                  onClick={() => setIsMuted((m) => !m)}
+                  style={{ background:"rgba(0,0,0,0.55)", border:"none", borderRadius:"50%", width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#fff" }}
+                >
+                  {isMuted
+                    ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                    : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                  }
+                </button>
+              )}
+              </div>
+
+              {/* Top-right icon toolbar */}
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8, position:"relative" }}>
+                <div style={{ display:"flex", gap:8 }}>
+                  {/* Edit / Sticker icon */}
+                  <button
+                    onClick={() => setToolbarOpen((o) => !o)}
+                    style={{ background: toolbarOpen || ctaType ? "rgba(139,92,246,0.7)" : "rgba(0,0,0,0.55)", border:"none", borderRadius:"50%", width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#fff", backdropFilter:"blur(8px)", transition:"background 0.2s" }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Dropdown */}
+                {toolbarOpen && (
+                  <div style={{ background:"rgba(15,15,25,0.92)", backdropFilter:"blur(16px)", borderRadius:14, border:"1px solid rgba(255,255,255,0.12)", overflow:"hidden", minWidth:190, marginTop:4, animation:"sum-cta-in 0.18s ease forwards" }}>
+                    <button
+                      onClick={() => { const next = ctaType === "subscribe" ? null : "subscribe"; setCtaType(next); setToolbarOpen(false); if (next) setTimeout(measureVideoInset, 50); }}
+                      style={{ width:"100%", background:"none", border:"none", cursor:"pointer", display:"flex", alignItems:"center", gap:10, padding:"11px 14px", transition:"background 0.15s" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(139,92,246,0.15)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                    >
+                      <div style={{ width:30, height:30, borderRadius:8, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                      </div>
+                      <div style={{ textAlign:"left" }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:"#fff", fontFamily:"'Inter',sans-serif" }}>Subscribe CTA</div>
+                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", fontFamily:"'Inter',sans-serif" }}>{ctaType === "subscribe" ? "Tap to remove" : "Add to story"}</div>
+                      </div>
+                      {ctaType === "subscribe" && (
+                        <svg style={{ marginLeft:"auto" }} width="14" height="14" viewBox="0 0 12 12" fill="none"><polyline points="1,6 4,9 11,2" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Carousel */}
             <div
+              ref={previewCanvasRef}
               style={{ flex:1, position:"relative", overflow:"hidden", minHeight:0 }}
-              onTouchStart={onCarouselTouchStart}
-              onTouchEnd={onCarouselTouchEnd}
+              onTouchStart={(e) => { if (ctaDragRef.current.active) return; onCarouselTouchStart(e); }}
+              onTouchEnd={(e) => { if (ctaDragRef.current.active) return; onCarouselTouchEnd(e); }}
+              
             >
               {selected.map((s, idx) => (
                 <div
@@ -611,18 +722,28 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
                     pointerEvents: idx === carouselIdx ? "auto" : "none",
                   }}
                 >
+                  {/* Blurred backdrop */}
+                  <div style={{ position:"absolute", inset:0, overflow:"hidden" }}>
+                    {s.mediaType === "video" ? (
+                      <video src={s.previewUrl} muted playsInline style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", filter:"blur(18px)", transform:"scale(1.08)", opacity:0.55 }} />
+                    ) : (
+                      <img src={s.previewUrl} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", filter:"blur(18px)", transform:"scale(1.08)", opacity:0.55 }} />
+                    )}
+                  </div>
+                  {/* Foreground media — fully visible */}
                   {s.mediaType === "video" ? (
                     <video
+                      key={`vid-${idx}-${carouselIdx}`}
                       src={s.previewUrl}
-                      autoPlay={idx === carouselIdx}
-                      muted loop playsInline
-                      style={{ width:"100%", height:"100%", objectFit:"contain", display:"block" }}
+                      autoPlay loop playsInline
+                      muted={isMuted}
+                      style={{ position:"relative", zIndex:1, width:"100%", height:"100%", objectFit:"contain", display:"block" }}
                     />
                   ) : (
                     <img
                       src={s.previewUrl}
                       alt=""
-                      style={{ width:"100%", height:"100%", objectFit:"contain", display:"block" }}
+                      style={{ position:"relative", zIndex:1, width:"100%", height:"100%", objectFit:"contain", display:"block" }}
                     />
                   )}
                 </div>
@@ -647,7 +768,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
                   </button>
 
                   {/* Dot indicators */}
-                  <div style={{ position:"absolute", bottom:16, left:"50%", transform:"translateX(-50%)", display:"flex", gap:6, zIndex:5 }}>
+                  <div style={{ position:"absolute", bottom:82, left:"50%", transform:"translateX(-50%)", display:"flex", gap:6, zIndex:5 }}>
                     {selected.map((_, i) => (
                       <button
                         key={i}
@@ -658,7 +779,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
                   </div>
 
                   {/* Counter */}
-                  <div style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 16px)", right:16, zIndex:10, background:"rgba(0,0,0,0.55)", borderRadius:12, padding:"4px 10px" }}>
+                  <div style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 64px)", right:16, zIndex:10, background:"rgba(0,0,0,0.55)", borderRadius:12, padding:"4px 10px" }}>
                     <span style={{ fontSize:12, fontWeight:600, color:"#fff", fontFamily:"'Inter',sans-serif" }}>
                       {carouselIdx + 1}/{selected.length}
                     </span>
@@ -667,101 +788,76 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
               )}
             </div>
 
-            {/* CTA preview pill — subscribe only */}
+            {/* Subscribe pill moved to toolbar */}
+
+            {/* Draggable CTA card */}
             {ctaType === "subscribe" && (
-              <div style={{ position:"absolute", bottom:90, left:16, right:16, zIndex:8, pointerEvents:"none", animation:"sum-cta-in 0.25s ease forwards" }}>
-                <div style={{ background:"rgba(0,0,0,0.6)", backdropFilter:"blur(12px)", borderRadius:16, padding:"12px 16px", border:"1px solid rgba(139,92,246,0.3)" }}>
+              <div
+                ref={ctaCardRefPreview}
+                style={{
+                  position:"absolute", left:ctaInset, right:ctaInset, zIndex:8,
+                  top:`calc(${ctaPositionY * 100}% - 72px)`,
+                  userSelect:"none", WebkitUserSelect:"none",
+                }}
+              >
+                {/* Grip handle — drag starts here */}
+                <div
+                  onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); const card = ctaCardRefPreview.current; ctaDragRef.current = { active:true, startY:e.clientY, startPosY: card ? card.offsetTop : 0 }; }}
+                  onTouchStart={(e) => { e.stopPropagation(); const card = ctaCardRefPreview.current; ctaDragRef.current = { active:true, startY:e.touches[0].clientY, startPosY: card ? card.offsetTop : 0 }; }}
+                  style={{ display:"flex", justifyContent:"center", paddingBottom:6, cursor:"grab", touchAction:"none" }}
+                >
+                  <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                    {[0,1,2].map((i) => <div key={i} style={{ width:30, height:2.5, borderRadius:2, background:"rgba(255,255,255,0.55)" }} />)}
+                  </div>
+                </div>
+
+                {/* Card body */}
+                <div style={{ background:"rgba(0,0,0,0.45)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderRadius:20, padding:"10px 12px", border:"1px solid rgba(255,255,255,0.08)", position:"relative" }}>
+                  <button
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); setCtaType(null); setCtaMessage(""); setCtaPositionY(0.75); }}
+                    style={{ position:"absolute", top:-8, right:-8, width:20, height:20, borderRadius:"50%", background:"rgba(0,0,0,0.7)", border:"1.5px solid rgba(255,255,255,0.2)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", zIndex:2, padding:0 }}
+                  >
+                    <X size={9} color="#fff" />
+                  </button>
                   {ctaMessage.trim() && (
-                    <p style={{ margin:"0 0 10px", fontSize:13, color:"rgba(255,255,255,0.85)", fontFamily:"'Inter',sans-serif", fontStyle:"italic", textAlign:"center", lineHeight:1.4 }}>
-                      "{ctaMessage.trim()}"
+                    <p style={{ margin:"0 0 7px", fontSize:13, color:"rgba(255,255,255,0.9)", fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter',sans-serif", fontWeight:500, textAlign:"center", lineHeight:1.4, letterSpacing:"0.01em" }}>
+                      {ctaMessage.trim()}
                     </p>
                   )}
-                  <div style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", borderRadius:24, padding:"10px 20px", position:"relative", overflow:"hidden", justifyContent:"center" }}>
-                    <span style={{ fontSize:14, fontWeight:700, color:"#fff", fontFamily:"'Inter',sans-serif", position:"relative", zIndex:1 }}>Subscribe</span>
-                    <span style={{ fontSize:13, color:"rgba(255,255,255,0.75)", fontFamily:"'Inter',sans-serif", position:"relative", zIndex:1 }}>✦</span>
-                    <div style={{ position:"absolute", top:0, left:"-80%", width:"50%", height:"100%", background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)", transform:"skewX(-20deg)", animation:"sum-sweep 2.5s ease-in-out infinite" }} />
+                  <div style={{ display:"flex", alignItems:"center", gap:6, background:"linear-gradient(90deg,#8B5CF6,#EC4899)", borderRadius:50, padding:"8px 20px", position:"relative", overflow:"hidden", justifyContent:"center" }}>
+                    <span style={{ fontSize:13, fontWeight:600, color:"#fff", fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter',sans-serif", position:"relative", zIndex:1, letterSpacing:"0.01em" }}>Subscribe</span>
+                    <div style={{ position:"absolute", top:0, left:"-80%", width:"50%", height:"100%", background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)", transform:"skewX(-20deg)", animation:"sum-sweep 2.5s ease-in-out infinite" }} />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Caption + Send */}
-            <div style={{ flexShrink:0, backgroundColor:"#0D0D18", borderTop:"1px solid #1A1A2E", zIndex:10 }}>
-
-              {/* CTA sheet */}
-              {ctaSheetOpen && (
-                <div style={{ padding:"0 16px 12px", animation:"sum-sheet-in 0.25s cubic-bezier(0.32,0.72,0,1) forwards" }}>
-                  {/* Subscribe card */}
-                  <button
-                    onClick={() => setCtaType(ctaType === "subscribe" ? null : "subscribe")}
-                    style={{
-                      width:"100%", borderRadius:14, border: ctaType === "subscribe" ? "2px solid #8B5CF6" : "1px solid #2A2A3D",
-                      background: ctaType === "subscribe" ? "rgba(139,92,246,0.12)" : "#13131F",
-                      padding:"14px 16px", cursor:"pointer", display:"flex", alignItems:"center", gap:14, marginBottom: ctaType === "subscribe" ? 10 : 0,
-                    }}
-                  >
-                    <div style={{ width:42, height:42, borderRadius:12, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                      </svg>
-                    </div>
-                    <div style={{ textAlign:"left" }}>
-                      <div style={{ fontSize:14, fontWeight:700, color:"#fff", fontFamily:"'Inter',sans-serif" }}>Subscribe CTA</div>
-                      <div style={{ fontSize:11, color:"#6B6B8A", fontFamily:"'Inter',sans-serif", marginTop:2 }}>Fans tap to subscribe to your page</div>
-                    </div>
-                    <div style={{ marginLeft:"auto", width:20, height:20, borderRadius:"50%", border: ctaType === "subscribe" ? "none" : "2px solid #2A2A3D", background: ctaType === "subscribe" ? "#8B5CF6" : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                      {ctaType === "subscribe" && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="1,6 4,9 11,2" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                    </div>
-                  </button>
-
-                  {/* Message field — shown when subscribe selected */}
-                  {ctaType === "subscribe" && (
-                    <div style={{ background:"#13131F", border:"1px solid #2A2A3D", borderRadius:12, padding:"10px 14px" }}>
-                      <p style={{ margin:"0 0 6px", fontSize:11, color:"#6B6B8A", fontFamily:"'Inter',sans-serif", fontWeight:600 }}>Message for fans (optional)</p>
-                      <input
-                        value={ctaMessage}
-                        onChange={(e) => setCtaMessage(e.target.value.slice(0, 80))}
-                        placeholder="Subscribe to unlock exclusive content like this…"
-                        style={{ width:"100%", background:"none", border:"none", outline:"none", color:"#fff", fontSize:13, fontFamily:"'Inter',sans-serif", caretColor:"#8B5CF6", boxSizing:"border-box" }}
-                      />
-                      <p style={{ margin:"6px 0 0", fontSize:10, color: ctaMessage.length >= 70 ? "#F59E0B" : "#4A4A6A", fontFamily:"'Inter',sans-serif", textAlign:"right" }}>{ctaMessage.length}/80</p>
-                    </div>
-                  )}
-                </div>
+            {/* Caption / Message + Send — floating */}
+            <div style={{ position:"absolute", bottom:0, left:0, right:0, zIndex:10, padding:"12px 16px", paddingBottom:"calc(env(safe-area-inset-bottom) + 12px)" }}>
+              {ctaType === "subscribe" && (
+                <p style={{ margin:"0 0 6px 4px", fontSize:11, color:"#8B5CF6", fontFamily:"'Inter',sans-serif", fontWeight:600 }}>
+                  ✦ Subscribe button added — drag it to reposition
+                </p>
               )}
-
-              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px", paddingBottom:"calc(env(safe-area-inset-bottom) + 12px)" }}>
-                {/* CTA toggle button */}
-                <button
-                  onClick={() => setCtaSheetOpen((o) => !o)}
-                  style={{
-                    width:42, height:42, borderRadius:"50%", border:"none", flexShrink:0, cursor:"pointer",
-                    background: ctaType ? "linear-gradient(135deg,#8B5CF6,#EC4899)" : "rgba(255,255,255,0.08)",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    transition:"all 0.2s",
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ctaType ? "#fff" : "rgba(255,255,255,0.6)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                  </svg>
-                </button>
-
-                <div style={{ flex:1, background: captionFocus ? "#1C1C2E" : "#13131F", borderRadius:24, padding:"10px 16px", border: captionFocus ? "1px solid #8B5CF6" : "1px solid #2A2A3D", transition:"all 0.2s" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <div style={{ flex:1, background: captionFocus || (ctaType ? ctaMessage : caption) ? "rgba(255,255,255,0.08)" : "transparent", backdropFilter: captionFocus || (ctaType ? ctaMessage : caption) ? "blur(20px)" : "none", WebkitBackdropFilter: captionFocus || (ctaType ? ctaMessage : caption) ? "blur(20px)" : "none", borderRadius:30, padding:"11px 18px", border: captionFocus ? "1px solid rgba(139,92,246,0.6)" : (ctaType ? ctaMessage : caption) ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.45)", transition:"all 0.25s", boxShadow: captionFocus ? "0 2px 16px rgba(0,0,0,0.25)" : "none" }}>
                   <input
                     className="sum-caption"
-                    value={caption}
-                    onChange={(e) => setCaption(e.target.value)}
+                    value={ctaType ? ctaMessage : caption}
+                    onChange={(e) => ctaType ? setCtaMessage(e.target.value.slice(0, 80)) : setCaption(e.target.value)}
                     onFocus={() => setCaptionFocus(true)}
                     onBlur={() => setCaptionFocus(false)}
-                    placeholder="Add a caption…"
-                    maxLength={300}
+                    placeholder={ctaType ? "Add message for fans…" : "Add a caption…"}
+                    maxLength={ctaType ? 80 : 300}
                   />
                 </div>
                 <button
                   onClick={handleSend}
-                  style={{ width:50, height:50, borderRadius:"50%", border:"none", cursor:"pointer", background:"linear-gradient(135deg,#8B5CF6,#EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 4px 16px rgba(139,92,246,0.5)" }}
+                  style={{ width:46, height:46, borderRadius:"50%", border:"none", cursor:"pointer", background:"linear-gradient(135deg,#8B5CF6,#EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 4px 20px rgba(139,92,246,0.55)", backdropFilter:"blur(8px)" }}
                 >
-                  <Send size={20} color="#fff" style={{ marginLeft:2 }} />
+                  <Send size={18} color="#fff" style={{ marginLeft:2 }} />
                 </button>
               </div>
             </div>
@@ -775,7 +871,9 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
             style={{ position:"relative", width:"100%", height:"100dvh", maxWidth:480, display:"flex", flexDirection:"column" }}
           >
             {/* Canvas */}
-            <div style={{ flex:1, background:textBg, display:"flex", alignItems:"center", justifyContent:"center", padding:"80px 24px 120px", position:"relative" }}>
+            <div ref={textCanvasRef} style={{ flex:1, background:textBg, display:"flex", alignItems:"center", justifyContent:"center", padding:"80px 24px 120px", position:"relative" }}
+              
+            >
               {/* Back button */}
               <div style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 16px)", left:16 }}>
                 <button
@@ -787,19 +885,38 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
               </div>
 
               {/* CTA toggle */}
-              <div style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 16px)", right:16 }}>
+              <div style={{ position:"absolute", top:"calc(env(safe-area-inset-top) + 16px)", right:16, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
                 <button
                   onClick={() => setCtaSheetOpen((o) => !o)}
-                  style={{
-                    width:38, height:38, borderRadius:"50%", border:"none", cursor:"pointer",
-                    background: ctaType ? "linear-gradient(135deg,#8B5CF6,#EC4899)" : "rgba(0,0,0,0.4)",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                  }}
+                  style={{ background: ctaSheetOpen || ctaType ? "rgba(139,92,246,0.7)" : "rgba(0,0,0,0.55)", border:"none", borderRadius:"50%", width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#fff", backdropFilter:"blur(8px)", transition:"background 0.2s" }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={ctaType ? "#fff" : "rgba(255,255,255,0.8)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
                   </svg>
                 </button>
+                {ctaSheetOpen && (
+                  <div style={{ background:"rgba(15,15,25,0.92)", backdropFilter:"blur(16px)", borderRadius:14, border:"1px solid rgba(255,255,255,0.12)", overflow:"hidden", minWidth:190, marginTop:4, animation:"sum-cta-in 0.18s ease forwards" }}>
+                    <button
+                      onClick={() => { setCtaType(ctaType === "subscribe" ? null : "subscribe"); setCtaSheetOpen(false); }}
+                      style={{ width:"100%", background:"none", border:"none", cursor:"pointer", display:"flex", alignItems:"center", gap:10, padding:"11px 14px", transition:"background 0.15s" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(139,92,246,0.15)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                    >
+                      <div style={{ width:30, height:30, borderRadius:8, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                      </div>
+                      <div style={{ textAlign:"left" }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:"#fff", fontFamily:"'Inter',sans-serif" }}>Subscribe CTA</div>
+                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", fontFamily:"'Inter',sans-serif" }}>{ctaType === "subscribe" ? "Tap to remove" : "Add to story"}</div>
+                      </div>
+                      {ctaType === "subscribe" && (
+                        <svg style={{ marginLeft:"auto" }} width="14" height="14" viewBox="0 0 12 12" fill="none"><polyline points="1,6 4,9 11,2" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Text area */}
@@ -835,17 +952,35 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
                 </div>
               )}
 
-              {/* CTA preview on canvas */}
+              {/* Draggable CTA card */}
               {ctaType === "subscribe" && (
-                <div style={{ position:"absolute", bottom:16, left:16, right:16, pointerEvents:"none" }}>
-                  <div style={{ background:"rgba(0,0,0,0.5)", backdropFilter:"blur(8px)", borderRadius:14, padding:"10px 14px", border:"1px solid rgba(139,92,246,0.3)" }}>
+                <div ref={ctaCardRefText} style={{ position:"absolute", left:16, right:16, zIndex:8, top:`calc(${ctaPositionY * 100}% - 72px)`, userSelect:"none", WebkitUserSelect:"none" }}>
+                  <div
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); const card = ctaCardRefText.current; ctaDragRef.current = { active:true, startY:e.clientY, startPosY: card ? card.offsetTop : 0 }; }}
+                    onTouchStart={(e) => { e.stopPropagation(); const card = ctaCardRefText.current; ctaDragRef.current = { active:true, startY:e.touches[0].clientY, startPosY: card ? card.offsetTop : 0 }; }}
+                    style={{ display:"flex", justifyContent:"center", paddingBottom:6, cursor:"grab", touchAction:"none" }}
+                  >
+                    <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                      {[0,1,2].map((i) => <div key={i} style={{ width:30, height:2.5, borderRadius:2, background:"rgba(255,255,255,0.55)" }} />)}
+                    </div>
+                  </div>
+                  <div style={{ background:"rgba(0,0,0,0.45)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderRadius:20, padding:"10px 12px", border:"1px solid rgba(255,255,255,0.08)", position:"relative" }}>
+                    <button
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onClick={(e) => { e.stopPropagation(); setCtaType(null); setCtaMessage(""); setCtaPositionY(0.75); }}
+                      style={{ position:"absolute", top:-8, right:-8, width:20, height:20, borderRadius:"50%", background:"rgba(0,0,0,0.7)", border:"1.5px solid rgba(255,255,255,0.2)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", zIndex:2, padding:0 }}
+                    >
+                      <X size={9} color="#fff" />
+                    </button>
                     {ctaMessage.trim() && (
-                      <p style={{ margin:"0 0 8px", fontSize:12, color:"rgba(255,255,255,0.8)", fontFamily:"'Inter',sans-serif", fontStyle:"italic", textAlign:"center" }}>"{ctaMessage.trim()}"</p>
+                      <p style={{ margin:"0 0 7px", fontSize:13, color:"rgba(255,255,255,0.9)", fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter',sans-serif", fontWeight:500, textAlign:"center", lineHeight:1.4, letterSpacing:"0.01em" }}>
+                        {ctaMessage.trim()}
+                      </p>
                     )}
-                    <div style={{ display:"flex", justifyContent:"center", alignItems:"center", gap:8, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", borderRadius:20, padding:"8px 18px", position:"relative", overflow:"hidden" }}>
-                      <span style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Inter',sans-serif", position:"relative", zIndex:1 }}>Subscribe</span>
-                      <span style={{ fontSize:12, color:"rgba(255,255,255,0.75)", position:"relative", zIndex:1 }}>✦</span>
-                      <div style={{ position:"absolute", top:0, left:"-80%", width:"50%", height:"100%", background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)", transform:"skewX(-20deg)", animation:"sum-sweep 2.5s ease-in-out infinite" }} />
+                    <div style={{ display:"flex", alignItems:"center", gap:6, background:"linear-gradient(90deg,#8B5CF6,#EC4899)", borderRadius:50, padding:"8px 20px", position:"relative", overflow:"hidden", justifyContent:"center" }}>
+                      <span style={{ fontSize:13, fontWeight:600, color:"#fff", fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter',sans-serif", position:"relative", zIndex:1, letterSpacing:"0.01em" }}>Subscribe</span>
+                      <div style={{ position:"absolute", top:0, left:"-80%", width:"50%", height:"100%", background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)", transform:"skewX(-20deg)", animation:"sum-sweep 2.5s ease-in-out infinite" }} />
                     </div>
                   </div>
                 </div>
@@ -855,42 +990,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
             {/* Bottom — background picker + CTA sheet + send */}
             <div style={{ flexShrink:0, background:"rgba(0,0,0,0.85)", backdropFilter:"blur(16px)", borderTop:"1px solid rgba(255,255,255,0.08)" }}>
 
-              {/* CTA sheet */}
-              {ctaSheetOpen && (
-                <div style={{ padding:"12px 16px 0", animation:"sum-sheet-in 0.25s cubic-bezier(0.32,0.72,0,1) forwards" }}>
-                  <button
-                    onClick={() => setCtaType(ctaType === "subscribe" ? null : "subscribe")}
-                    style={{
-                      width:"100%", borderRadius:14, border: ctaType === "subscribe" ? "2px solid #8B5CF6" : "1px solid rgba(255,255,255,0.1)",
-                      background: ctaType === "subscribe" ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.05)",
-                      padding:"12px 16px", cursor:"pointer", display:"flex", alignItems:"center", gap:12, marginBottom:10,
-                    }}
-                  >
-                    <div style={{ width:38, height:38, borderRadius:10, background:"linear-gradient(135deg,#8B5CF6,#EC4899)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                      </svg>
-                    </div>
-                    <div style={{ textAlign:"left", flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Inter',sans-serif" }}>Subscribe CTA</div>
-                      <div style={{ fontSize:11, color:"#6B6B8A", fontFamily:"'Inter',sans-serif" }}>Fans tap to subscribe</div>
-                    </div>
-                    <div style={{ width:18, height:18, borderRadius:"50%", border: ctaType === "subscribe" ? "none" : "2px solid rgba(255,255,255,0.2)", background: ctaType === "subscribe" ? "#8B5CF6" : "transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                      {ctaType === "subscribe" && <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><polyline points="1,6 4,9 11,2" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                    </div>
-                  </button>
-                  {ctaType === "subscribe" && (
-                    <div style={{ background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, padding:"10px 14px", marginBottom:10 }}>
-                      <input
-                        value={ctaMessage}
-                        onChange={(e) => setCtaMessage(e.target.value.slice(0, 80))}
-                        placeholder="Subscribe to unlock exclusive content…"
-                        style={{ width:"100%", background:"none", border:"none", outline:"none", color:"#fff", fontSize:13, fontFamily:"'Inter',sans-serif", caretColor:"#8B5CF6", boxSizing:"border-box" }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
+              
 
               {/* Background picker */}
               <div style={{ display:"flex", gap:8, padding:"12px 16px", overflowX:"auto", scrollbarWidth:"none" }}>

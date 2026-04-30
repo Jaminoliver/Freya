@@ -143,6 +143,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const [likeCount,      setLikeCount]      = useState(0);
   const [ctaCheckoutOpen, setCtaCheckoutOpen] = useState(false);
   const [ctaCheckoutType, setCtaCheckoutType] = useState<"subscription" | "tips">("subscription");
+  // ctaCheckoutType is set by handleCtaTap ("subscription") or handleTipTap ("tips")
 
   const topBarRef       = useRef<StoryTopBarRef>(null);
   const hiddenInputRef  = useRef<HTMLInputElement>(null);
@@ -452,9 +453,15 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   }, []);
 
   // ── CTA ───────────────────────────────────────────────────────────────────
-  const handleCtaTap = useCallback((type: "subscription" | "tips") => {
+  const handleCtaTap = useCallback(() => {
     setPaused(true);
-    setCtaCheckoutType(type);
+    setCtaCheckoutType("subscription");
+    setCtaCheckoutOpen(true);
+  }, []);
+
+  const handleTipTap = useCallback(() => {
+    setPaused(true);
+    setCtaCheckoutType("tips");
     setCtaCheckoutOpen(true);
   }, []);
 
@@ -616,6 +623,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
             onMenuToggle={() => setMenuOpen((o) => !o)}
             onDelete={handleDelete} onClose={closeWithGroups}
             onBarComplete={handleBarComplete}
+            onTip={!isOwner ? handleTipTap : undefined}
           />
 
           {/* Caption */}
@@ -662,38 +670,50 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
             </div>
           )}
 
-          {/* CTA pill — non-owner only, when story has a CTA */}
-          {!isOwner && !replyOpen && !viewersOpen && story.ctaType && (
+          {/* Text story canvas */}
+          {story.textContent && (
+            <div style={{ position: "absolute", inset: 0, background: story.textBackground ?? "#0A0A0F", display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 28px 140px", pointerEvents: "none" }}>
+              <p style={{
+                margin: 0, textAlign: "center", color: "#fff", fontFamily: "Inter,sans-serif",
+                fontSize: story.textContent.length <= 30 ? 48 : story.textContent.length <= 80 ? 32 : story.textContent.length <= 150 ? 22 : 16,
+                fontWeight: story.textContent.length <= 30 ? 700 : story.textContent.length <= 80 ? 600 : 400,
+                lineHeight: 1.3, textShadow: "0 2px 16px rgba(0,0,0,0.4)", wordBreak: "break-word",
+              }}>
+                {story.textContent}
+              </p>
+            </div>
+          )}
+
+          {/* Subscribe CTA card — non-owner only */}
+          {!isOwner && !replyOpen && !viewersOpen && story.ctaType === "subscribe" && (
             <div
               onTouchStart={(e) => e.stopPropagation()}
               onTouchEnd={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onMouseUp={(e) => e.stopPropagation()}
-              style={{ position: "absolute", bottom: 90, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, animation: "sv-cta-in 0.3s ease 0.6s forwards", opacity: 0 }}
+              style={{ position: "absolute", bottom: 90, left: 16, right: 16, zIndex: 10, animation: "sv-cta-in 0.3s ease 0.6s forwards", opacity: 0 }}
             >
-              {story.ctaType === "subscribe" ? (
+              <div style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(16px)", borderRadius: 18, padding: "14px 16px", border: "1px solid rgba(139,92,246,0.3)" }}>
+                {story.ctaMessage && (
+                  <p style={{ margin: "0 0 12px", fontSize: 13, color: "rgba(255,255,255,0.85)", fontFamily: "Inter,sans-serif", fontStyle: "italic", textAlign: "center", lineHeight: 1.45 }}>
+                    "{story.ctaMessage}"
+                  </p>
+                )}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "Inter,sans-serif" }}>
+                    {group.subscriptionPrice === 0 ? "Free" : `From ₦${(group.subscriptionPrice).toLocaleString()}/mo`}
+                  </span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "Inter,sans-serif" }}>Cancel anytime</span>
+                </div>
                 <button
-                  onClick={() => handleCtaTap("subscription")}
-                  style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg,#8B5CF6,#EC4899)", border: "none", borderRadius: 24, padding: "12px 24px", cursor: "pointer", position: "relative", overflow: "hidden" }}
+                  onClick={handleCtaTap}
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "linear-gradient(135deg,#8B5CF6,#EC4899)", border: "none", borderRadius: 24, padding: "13px 20px", cursor: "pointer", position: "relative", overflow: "hidden" }}
                 >
                   <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "Inter,sans-serif", position: "relative", zIndex: 1 }}>Subscribe</span>
                   <span style={{ fontSize: 14, color: "rgba(255,255,255,0.75)", fontFamily: "Inter,sans-serif", position: "relative", zIndex: 1 }}>✦</span>
                   <div style={{ position: "absolute", top: 0, left: "-80%", width: "50%", height: "100%", background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)", transform: "skewX(-20deg)", animation: "sv-sweep 2.5s ease-in-out infinite" }} />
                 </button>
-              ) : (
-                <button
-                  onClick={() => handleCtaTap("tips")}
-                  style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(236,72,153,0.12)", border: "1px solid #EC4899", borderRadius: 24, padding: "12px 24px", cursor: "pointer", backdropFilter: "blur(8px)" }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EC4899" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/>
-                    <line x1="12" y1="22" x2="12" y2="7"/>
-                    <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
-                    <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
-                  </svg>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: "#EC4899", fontFamily: "Inter,sans-serif" }}>Send a Tip</span>
-                </button>
-              )}
+              </div>
             </div>
           )}
 
