@@ -325,7 +325,8 @@ function startGlobalRealtime() {
               isRead:         row.is_read ?? false,
               isDelivered:    true,
               createdAt:      row.created_at,
-              replyToId:      row.reply_to_id ?? null,
+              replyToId:         row.reply_to_id          ?? null,
+              replyToMediaIndex: row.reply_to_media_index ?? 0,
             };
 
             const store = useMessageStore.getState();
@@ -403,7 +404,8 @@ function startGlobalRealtime() {
             isRead:         row.is_read ?? false,
             isDelivered:    true,
             createdAt:      row.created_at,
-            replyToId:      row.reply_to_id ?? null,
+            replyToId:         row.reply_to_id          ?? null,
+            replyToMediaIndex: row.reply_to_media_index ?? 0,
           };
 
           const store = useMessageStore.getState();
