@@ -78,9 +78,11 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
       }
     };
 
-    const onTouchEnd = () => {
+    const onTouchEnd = (e: TouchEvent) => {
       if (longPressTimer.current) clearTimeout(longPressTimer.current);
       if (longPressFired.current) { longPressFired.current = false; return; }
+      const avatarEl = (el as HTMLElement).querySelector("[data-avatar-ring]");
+      if (avatarEl && avatarEl.contains(e.target as Node)) return;
       if (!didScroll.current) onSelect();
       setTimeout(() => { wasTouched.current = false; }, 50);
     };
@@ -202,10 +204,11 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
           <AvatarWithStoryRing
             src={participant.avatarUrl ?? null}
             alt={participant.name}
-            size={44}
+            size={52}
             hasStory={hasStory}
             hasUnviewed={hasUnviewed}
             borderColor="#0A0A0F"
+            data-avatar-ring
             onClick={(e) => { e.stopPropagation(); if (hasStory && group) setStoryViewerOpen(true); }}
           />
           {participant.isOnline && (
