@@ -321,8 +321,13 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
 
   const handleViewContent = useCallback(async () => {
     setCheckoutOpen(false);
-    await loadPost();
-  }, [loadPost]);
+    if (checkoutType === "subscription") {
+      router.push(`/${post?.profiles?.username}`);
+      router.refresh();
+    } else {
+      await loadPost();
+    }
+  }, [loadPost, checkoutType, post?.profiles?.username, router]);
 
   if (loading) return <SinglePostSkeleton />;
 

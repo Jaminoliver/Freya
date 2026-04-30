@@ -18,10 +18,11 @@ interface Props {
   onDelete?:       (message: Message, deleteFor: "me" | "everyone") => void;
   onSelect?:       (messageId: number) => void;
   onSaveGif?:      (gifUrl: string) => void;
-  replyToMessage?: Message | null;
+  replyToMessage?:      Message | null;
+  onScrollToMessage?:   (messageId: number) => void;
 }
 
-export function GifMessage({ message, conversation, isOwn, time, isSameGroup, onClick, onReply, onDelete, onSelect, onSaveGif, replyToMessage }: Props) {
+export function GifMessage({ message, conversation, isOwn, time, isSameGroup, onClick, onReply, onDelete, onSelect, onSaveGif, replyToMessage, onScrollToMessage }: Props) {
   const { participant } = conversation;
   const [loaded,     setLoaded]     = useState(false);
   const [sheetOpen,  setSheetOpen]  = useState(false);
@@ -157,7 +158,7 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
 
         {console.log("[GIF REPLY] replyToMessage:", replyToMessage, "msg.replyToId:", message.replyToId) as any}
         {replyToMessage && (
-          <div style={{ borderLeft: "3px solid #8B5CF6", backgroundColor: "rgba(139,92,246,0.15)", margin: "8px 8px 4px", borderRadius: "6px", padding: "5px 8px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <div onClick={(e) => { e.stopPropagation(); onScrollToMessage?.(replyToMessage.id); }} style={{ cursor: "pointer", borderLeft: "3px solid #8B5CF6", backgroundColor: "rgba(139,92,246,0.15)", margin: "8px 8px 4px", borderRadius: "6px", padding: "5px 8px", display: "flex", alignItems: "center", gap: "8px" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: "11px", fontWeight: 700, color: "#8B5CF6", marginBottom: "2px" }}>
                 {replyToMessage.senderId === message.senderId ? (isOwn ? "You" : conversation.participant.name) : (isOwn ? conversation.participant.name : "You")}

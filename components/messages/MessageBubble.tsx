@@ -18,6 +18,7 @@ interface Props {
   onSelect?:            (messageId: number) => void;
   replyToMessage?:      Message | null;
   onStoryReplyClick?:   (storyId: number) => void;
+  onScrollToMessage?:   (messageId: number) => void;
 }
 
 function copyToClipboard(text: string) {
@@ -42,7 +43,7 @@ function fallbackCopy(text: string) {
 
 export function MessageBubble({
   message, conversation, isOwn, isRead, isDelivered, time,
-  onReply, onDelete, onSelect, replyToMessage, onStoryReplyClick,
+  onReply, onDelete, onSelect, replyToMessage, onStoryReplyClick, onScrollToMessage,
 }: Props) {
   const { participant } = conversation;
 
@@ -144,7 +145,7 @@ export function MessageBubble({
 
   // ── Normal reply preview ──────────────────────────────────────────────────
   const replyPreview = replyToMessage ? (
-  <div style={{ borderLeft: `3px solid ${isOwn ? "rgba(255,255,255,0.5)" : "#8B5CF6"}`, backgroundColor: isOwn ? "rgba(0,0,0,0.15)" : "rgba(139,92,246,0.1)", borderRadius: "8px", padding: "5px 8px", marginBottom: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
+  <div onClick={(e) => { e.stopPropagation(); onScrollToMessage?.(replyToMessage.id); }} style={{ cursor: "pointer", borderLeft: `3px solid ${isOwn ? "rgba(255,255,255,0.5)" : "#8B5CF6"}`, backgroundColor: isOwn ? "rgba(0,0,0,0.15)" : "rgba(139,92,246,0.1)", borderRadius: "8px", padding: "5px 8px", marginBottom: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
     <div style={{ flex: 1, minWidth: 0 }}>
       <p style={{ margin: 0, fontSize: "11px", fontWeight: 700, color: isOwn ? "rgba(255,255,255,0.7)" : "#8B5CF6", marginBottom: "2px" }}>
         {replyToMessage.senderId === message.senderId ? (isOwn ? "You" : participant.name) : (isOwn ? participant.name : "You")}

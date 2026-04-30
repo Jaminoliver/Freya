@@ -180,6 +180,17 @@ export function MessagesList({
   const [newerAnimIds, setNewerAnimIds] = useState<Set<string>>(new Set());
   const [lightbox,     setLightbox]     = useState<LightboxState | null>(null);
   const [unlocking,    setUnlocking]    = useState<Set<number>>(new Set());
+const [highlightId,  setHighlightId]  = useState<string | null>(null);
+
+const scrollToMessage = useCallback((replyToId: number) => {
+  const el = scrollRef.current;
+  if (!el) return;
+  const target = el.querySelector(`[data-message-id="${replyToId}"]`) as HTMLElement | null;
+  if (!target) return;
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  setHighlightId(String(replyToId));
+  setTimeout(() => setHighlightId(null), 1000);
+}, []);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -357,6 +368,8 @@ export function MessagesList({
         <style>{`
           @keyframes msgSlideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
           @keyframes msgSlideUp   { from { opacity: 0; transform: translateY(10px);  } to { opacity: 1; transform: translateY(0); } }
+@keyframes msgHighlight { 0% { background-color: rgba(139,92,246,0.35); } 100% { background-color: transparent; } }
+.msg-highlight { animation: msgHighlight 1s ease-out forwards; border-radius: 8px; }
           .msg-older { animation: msgSlideDown 0.35s ease-out both; }
           .msg-newer { animation: msgSlideUp   0.25s ease-out both; }
           @keyframes spinLoader    { to { transform: rotate(360deg); } }
@@ -440,7 +453,8 @@ export function MessagesList({
                 return (
                   <div
                     key={msgKey}
-                    className={animClass}
+                    data-message-id={msg.id}
+                    className={`${animClass}${highlightId === String(msg.id) ? " msg-highlight" : ""}`}
                     onClick={() => selectMode && onToggleSelect?.(msg.id)}
                     style={{
                       display:         "flex",
@@ -475,6 +489,7 @@ export function MessagesList({
                       onDelete={selectMode ? undefined : onDelete}
                       onSelect={onSelectMessage}
                       replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
+                      onScrollToMessage={scrollToMessage}
                       onSaveGif={(gifUrl) => {
                         fetch("/api/gifs/favorites", {
                           method:  "POST",
@@ -518,7 +533,8 @@ export function MessagesList({
               return (
                 <div
                   key={msgKey}
-                  className={animClass}
+                  data-message-id={msg.id}
+                  className={`${animClass}${highlightId === String(msg.id) ? " msg-highlight" : ""}`}
                   onClick={() => handleMessageClick(msg.id)}
                   style={{
                     display:         "flex",
@@ -556,6 +572,7 @@ export function MessagesList({
                             onSelect={undefined}
                             replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
                             onStoryReplyClick={onStoryReplyClick}
+                            onScrollToMessage={scrollToMessage}
                           />
                         )}
                         {(msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0 && (
@@ -592,6 +609,7 @@ export function MessagesList({
                           onDelete={onDelete}
                           onSelect={onSelectMessage}
                           replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
+                      onScrollToMessage={scrollToMessage}
                           onStoryReplyClick={onStoryReplyClick}
                         />
                       )}

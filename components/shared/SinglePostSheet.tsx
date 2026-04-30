@@ -26,11 +26,16 @@ export default function SinglePostSheet({ postId, sourceIsMessage, onClose }: Si
     }
 
     document.body.style.overflow = "hidden";
+    window.history.pushState({ singlePostSheet: true }, "");
+
+    const handlePop = () => { onClose(); };
+    window.addEventListener("popstate", handlePop);
 
     return () => {
       document.body.style.overflow = "";
+      window.removeEventListener("popstate", handlePop);
     };
-  }, [postId]);
+  }, [postId, onClose]);
 
   if (!postId) return null;
 
