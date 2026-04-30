@@ -63,19 +63,20 @@ function VideoThumb({ src, isSending, locked }: { src: string; isSending: boolea
 }
 
 interface Props {
-  mediaItems:      MediaItem[];
-  isPPV?:          boolean;
-  price?:          number;
-  isUnlocked?:     boolean;
-  thumbnailUrl?:   string | null;
-  onClickItem?:    (index: number) => void;
-  isSending?:      boolean;
-  uploadProgress?: number;
-  isFailed?:       boolean;
+  mediaItems:       MediaItem[];
+  isPPV?:           boolean;
+  price?:           number;
+  isUnlocked?:      boolean;
+  thumbnailUrl?:    string | null;
+  onClickItem?:     (index: number) => void;
+  onLongPressItem?: (index: number) => void;
+  isSending?:       boolean;
+  uploadProgress?:  number;
+  isFailed?:        boolean;
 }
 
 export function MediaGrid({
-  mediaItems, isPPV, price, isUnlocked, thumbnailUrl, onClickItem, isSending, uploadProgress = 0, isFailed,
+  mediaItems, isPPV, price, isUnlocked, thumbnailUrl, onClickItem, onLongPressItem, isSending, uploadProgress = 0, isFailed,
 }: Props) {
   const count  = mediaItems.length;
   const extra  = count > 4 ? count - 4 : 0;
@@ -166,10 +167,19 @@ export function MediaGrid({
       <style>{`@keyframes mediaSpinRing { to { transform: rotate(360deg); } }`}</style>
 
       <div style={getGridStyle()}>
-        {mediaItems.slice(0, 4).map((item, i) => (
+        {mediaItems.slice(0, 4).map((item, i) => {
+          const pressIndex = (extra > 0 && i === 3) ? 3 : i;
+          let lpTimer: ReturnType<typeof setTimeout> | null = null;
+          let moved = false;
+          return (
           <div
             key={i}
-            onClick={() => !isSending && onClickItem?.(i)}
+            onClick={() => !isSending && onClickItem?.(pressIndex)}
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); console.log("[MEDIAGRID] right click i:", i, "pressIndex:", pressIndex, "onLongPressItem defined:", !!onLongPressItem); onLongPressItem?.(pressIndex); }}
+            onTouchStart={() => { moved = false; lpTimer = setTimeout(() => { if (!moved) onLongPressItem?.(pressIndex); }, 500); }}
+            onTouchMove={() => { moved = true; if (lpTimer) clearTimeout(lpTimer); }}
+            onTouchEnd={() => { if (lpTimer) clearTimeout(lpTimer); }}
+            onTouchCancel={() => { if (lpTimer) clearTimeout(lpTimer); }}
             style={{
               position: "relative", overflow: "hidden",
               height: getItemHeight(), backgroundColor: "#2A2A3D",
@@ -199,7 +209,8 @@ export function MediaGrid({
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Sender PPV badge */}

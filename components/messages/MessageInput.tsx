@@ -14,12 +14,13 @@ interface Props {
   onTyping?:      () => void;
   onTipClick?:    () => void;
   disabled?:      boolean;
-  replyTo?:       Message | null;
-  onCancelReply?: () => void;
-  viewerUserId?:  string;
+  replyTo?:            Message | null;
+  replyToMediaIndex?:  number;
+  onCancelReply?:      () => void;
+  viewerUserId?:       string;
 }
 
-export function MessageInput({ onSend, onSendGif, onTyping, onTipClick, disabled = false, replyTo, onCancelReply, viewerUserId }: Props) {
+export function MessageInput({ onSend, onSendGif, onTyping, onTipClick, disabled = false, replyTo, replyToMediaIndex = 0, onCancelReply, viewerUserId }: Props) {
   const [text,          setText]          = useState("");
   const [mediaFiles,    setMediaFiles]    = useState<File[]>([]);
   const [ppvEnabled,    setPpvEnabled]    = useState(false);
@@ -91,21 +92,41 @@ export function MessageInput({ onSend, onSendGif, onTyping, onTipClick, disabled
         touchAction:     "none",
         userSelect:      "none",
         paddingBottom:   "env(safe-area-inset-bottom, 0px)",
-        position:        "relative",
       }}
     >
       {/* WhatsApp-style reply bar */}
       {replyTo && (
         <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderBottom: "1px solid #1E1E2E", backgroundColor: "#13131F" }}>
           <div style={{ width: "3px", height: "36px", borderRadius: "2px", backgroundColor: "#8B5CF6", flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: "12px", color: "#8B5CF6", fontWeight: 600, marginBottom: "2px" }}>
-              <CornerUpLeft size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />
-              Reply
-            </p>
-            <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {replyTo.text ?? "Media"}
-            </p>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: "12px", color: "#8B5CF6", fontWeight: 600, marginBottom: "2px" }}>
+                <CornerUpLeft size={11} style={{ marginRight: "4px", verticalAlign: "middle" }} />
+                Reply
+              </p>
+              <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {replyTo.text
+                  ? replyTo.text
+                  : replyTo.type === "gif"
+                  ? "GIF"
+                  : replyTo.type === "media" || replyTo.type === "ppv"
+                  ? (replyTo.mediaUrls?.[0]?.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || replyTo.mediaUrls?.[0]?.includes("#video") ? "Video" : "Photo")
+                  : "Media"}
+              </p>
+            </div>
+            {replyTo.type === "gif" && replyTo.gifUrl && (
+              <img src={replyTo.gifUrl} alt="GIF" style={{ width: "40px", height: "40px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }} />
+            )}
+            {(replyTo.type === "media" || replyTo.type === "ppv") && replyTo.mediaUrls?.[replyToMediaIndex] && (
+              replyTo.mediaUrls[replyToMediaIndex].match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || replyTo.mediaUrls[replyToMediaIndex].includes("#video")
+                ? <div style={{ width: "40px", height: "40px", borderRadius: "6px", backgroundColor: "#1C1C2E", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" }}>
+                    <video src={replyTo.mediaUrls[replyToMediaIndex].replace("#video", "")} muted playsInline preload="metadata" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onLoadedMetadata={(e) => { (e.currentTarget as HTMLVideoElement).currentTime = 0.5; }} />
+                    <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFFFFF"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    </div>
+                  </div>
+                : <img src={replyTo.mediaUrls[replyToMediaIndex]} alt="" style={{ width: "40px", height: "40px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }} />
+            )}
           </div>
           <button onClick={onCancelReply} style={{ background: "none", border: "none", cursor: "pointer", color: "#4A4A6A", display: "flex", padding: "4px", flexShrink: 0 }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "#A3A3C2")}

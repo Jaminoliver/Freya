@@ -43,6 +43,56 @@ function formatCount(n: number): string {
 }
 
 const PER_PAGE = 3;
+
+function seededRandom(seed: number) {
+  return function () {
+    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+    return (seed >>> 0) / 0xffffffff;
+  };
+}
+
+function applySorting(creators: SuggestedCreator[]): SuggestedCreator[] {
+  if (creators.length === 0) return creators;
+
+  const maxSub = Math.max(...creators.map((c) => c.subscriber_count), 1);
+  const maxFol = Math.max(...creators.map((c) => c.follower_count), 1);
+  const maxLik = Math.max(...creators.map((c) => c.likes_count), 1);
+
+  const scored = creators
+    .map((c) => ({
+      ...c,
+      _score:
+        (c.subscriber_count / maxSub) * 0.45 +
+        (c.follower_count   / maxFol) * 0.35 +
+        (c.likes_count      / maxLik) * 0.20,
+    }))
+    .sort((a, b) => b._score - a._score);
+
+  const half    = Math.ceil(scored.length / 2);
+  const top     = scored.slice(0, half);
+  const bottom  = scored.slice(half);
+
+  const now  = new Date();
+  const seed = Number(
+    `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
+  );
+  const rand = seededRandom(seed);
+
+  const rising = [...bottom];
+  for (let i = rising.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [rising[i], rising[j]] = [rising[j], rising[i]];
+  }
+
+  const result: SuggestedCreator[] = [];
+  let t = 0, r = 0;
+  while (t < top.length || r < rising.length) {
+    for (let i = 0; i < 2 && t < top.length; i++) result.push(top[t++]);
+    if (r < rising.length) result.push(rising[r++]);
+  }
+
+  return result;
+}
 const FALLBACK_BANNER = "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80";
 const FALLBACK_AVATAR = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80";
 
@@ -86,8 +136,9 @@ export function HomeSidebar() {
 
   useEffect(() => { fetchCreators(); }, [fetchCreators]);
 
-  const totalPages = Math.ceil(creators.length / PER_PAGE);
-  const visible    = creators.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
+  const sorted     = applySorting(creators);
+const totalPages = Math.ceil(sorted.length / PER_PAGE);
+const visible    = sorted.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>

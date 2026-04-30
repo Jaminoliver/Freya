@@ -52,7 +52,7 @@ export async function GET(
 
   let query = supabase
     .from("messages")
-    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, is_tip, tip_id, gif_url, media_type, media_url, thumbnail_url, is_read, is_delivered, created_at, reply_to_id, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone, story_reply_story_id, story_reply_thumbnail_url")
+    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, is_tip, tip_id, gif_url, media_type, media_url, thumbnail_url, is_read, is_delivered, created_at, reply_to_id, reply_to_media_index, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone, story_reply_story_id, story_reply_thumbnail_url")
     .eq("conversation_id", conversationId)
     .eq(deleteField, false)
     .order("created_at", { ascending: false })
@@ -143,7 +143,8 @@ export async function GET(
       createdAt:              row.created_at,
       isRead:                 row.is_read      ?? false,
       isDelivered:            row.is_delivered ?? false,
-      replyToId:              row.reply_to_id  ?? null,
+      replyToId:              row.reply_to_id        ?? null,
+      replyToMediaIndex:      row.reply_to_media_index ?? 0,
       // Story reply fields — present on all message types
       storyReplyStoryId:      row.story_reply_story_id      ?? null,
       storyReplyThumbnailUrl: row.story_reply_thumbnail_url ?? null,
@@ -267,10 +268,11 @@ export async function POST(
       is_unlocked:               true,
       gif_url:                   hasGif ? gif_url : null,
       reply_to_id:               reply_to_id               ?? null,
+      reply_to_media_index:      body.reply_to_media_index ?? 0,
       story_reply_story_id:      story_reply_story_id      ?? null,
       story_reply_thumbnail_url: story_reply_thumbnail_url ?? null,
     })
-    .select("id, conversation_id, sender_id, content, gif_url, created_at, reply_to_id, story_reply_story_id, story_reply_thumbnail_url")
+    .select("id, conversation_id, sender_id, content, gif_url, created_at, reply_to_id, reply_to_media_index, story_reply_story_id, story_reply_thumbnail_url")
     .single();
 
   if (insertError) {
@@ -282,7 +284,7 @@ export async function POST(
 
   await supabase.from("conversations").update({ [restoreField]: false, updated_at: new Date().toISOString() }).eq("id", conversationId);
   await supabase.rpc("increment_unread_count", { p_conversation_id: conversationId, p_field: unreadField });
-  await supabase.from("conversations").update({ last_message_preview: content.trim().slice(0, 100), last_message_at: message.created_at, updated_at: new Date().toISOString() }).eq("id", conversationId);
+  await supabase.from("conversations").update({ last_message_preview: hasGif ? "🎞️ GIF" : content.trim().slice(0, 100), last_message_at: message.created_at, updated_at: new Date().toISOString() }).eq("id", conversationId);
 
   // Notification
   try {
@@ -317,7 +319,8 @@ export async function POST(
         type:           "gif",
         gifUrl:         message.gif_url,
         createdAt:      message.created_at,
-        replyToId:      message.reply_to_id ?? null,
+        replyToId:         message.reply_to_id          ?? null,
+        replyToMediaIndex: message.reply_to_media_index ?? 0,
       },
     }, { status: 201 });
   }
@@ -331,6 +334,7 @@ export async function POST(
       text:                   message.content,
       createdAt:              message.created_at,
       replyToId:              message.reply_to_id              ?? null,
+      replyToMediaIndex:      message.reply_to_media_index     ?? 0,
       storyReplyStoryId:      message.story_reply_story_id      ?? null,
       storyReplyThumbnailUrl: message.story_reply_thumbnail_url ?? null,
     },

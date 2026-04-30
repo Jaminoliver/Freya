@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Copy, CornerUpLeft, Trash2, X, CheckSquare } from "lucide-react";
+import { Copy, CornerUpLeft, Trash2, X, CheckSquare, Bookmark } from "lucide-react";
 import type { Message } from "@/lib/types/messages";
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
   onDeleteForMe:       () => void;
   onDeleteForEveryone: () => void;
   onSelect?:           (messageId: number) => void;
+  onSaveGif?:          () => void;
   onClose:             () => void;
 }
 
@@ -25,7 +26,7 @@ interface MenuItem {
 
 export function MessageActionModal({
   message, isOwn,
-  onCopy, onReply, onDeleteForMe, onDeleteForEveryone, onSelect, onClose,
+  onCopy, onReply, onDeleteForMe, onDeleteForEveryone, onSelect, onSaveGif, onClose,
 }: Props) {
   const [closing, setClosing] = useState(false);
   const [ready,   setReady]   = useState(false);
@@ -44,6 +45,11 @@ export function MessageActionModal({
   };
 
   const menuItems: MenuItem[] = [
+    ...(onSaveGif ? [{
+      icon:   <Bookmark size={20} strokeWidth={1.6} />,
+      label:  "Save GIF",
+      action: () => { onSaveGif(); triggerClose(); },
+    }] : []),
     {
       icon:   <Copy size={20} strokeWidth={1.6} />,
       label:  "Copy",

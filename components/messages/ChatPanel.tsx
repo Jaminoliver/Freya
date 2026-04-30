@@ -76,6 +76,7 @@ export function ChatPanel({
   const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
   const [sending,           setSending]           = useState(false);
   const [replyTo,           setReplyTo]           = useState<Message | null>(null);
+const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
 
   // ── Tip + PPV unlock modals ─────────────────────────────────────────────
   const [tipModalOpen,     setTipModalOpen]     = useState(false);
@@ -287,7 +288,34 @@ export function ChatPanel({
     if (mediaFiles && mediaFiles.length > 0) {
       const tempId    = `temp_${Date.now()}_${Math.random()}`;
       const blobItems = mediaFiles.map((file) => ({ url: URL.createObjectURL(file), type: file.type.startsWith("video/") ? "video" as const : "image" as const }));
+
+      // Generate thumbnail for first video file
+      const firstFile = mediaFiles[0];
+      let clientThumbnailUrl: string | null = null;
+      if (firstFile.type.startsWith("video/")) {
+        clientThumbnailUrl = await new Promise<string | null>((resolve) => {
+          const video  = document.createElement("video");
+          const objUrl = URL.createObjectURL(firstFile);
+          video.preload = "metadata";
+          video.muted   = true;
+          video.src     = objUrl;
+          video.onloadeddata = () => {
+            video.currentTime = 0.5;
+          };
+          video.onseeked = () => {
+            const canvas  = document.createElement("canvas");
+            canvas.width  = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext("2d")?.drawImage(video, 0, 0);
+            URL.revokeObjectURL(objUrl);
+            resolve(canvas.toDataURL("image/jpeg", 0.7));
+          };
+          video.onerror = () => { URL.revokeObjectURL(objUrl); resolve(null); };
+        });
+      }
+
       const optimistic: Message = {
+        ...( clientThumbnailUrl ? { thumbnailUrl: clientThumbnailUrl } : {} ),
         id: Date.now(), conversationId: conversation.id, senderId: currentUserId,
         type: ppvPrice ? "ppv" : "media", text: text.trim() || undefined,
         mediaUrls: blobItems.map((b) => b.type === "video" ? `${b.url}#video` : b.url),
@@ -309,13 +337,15 @@ export function ChatPanel({
 
     } else if (text.trim()) {
       const tempId         = `temp_text_${Date.now()}_${Math.random()}`;
-      const savedReplyToId = replyTo?.id ?? null;
+      const savedReplyToId        = replyTo?.id ?? null;
+      const savedReplyToMediaIndex = replyToMediaIndex;
       setReplyTo(null);
+      setReplyToMediaIndex(0);
 
       const optimistic: Message = {
         id: Date.now(), conversationId: conversation.id, senderId: currentUserId,
         type: "text", text: text.trim(), createdAt: new Date().toISOString(),
-        isRead: false, status: "sending", tempId, replyToId: savedReplyToId,
+        isRead: false, status: "sending", tempId, replyToId: savedReplyToId, replyToMediaIndex: savedReplyToMediaIndex,
       };
       appendMessage(optimistic);
 
@@ -336,11 +366,11 @@ export function ChatPanel({
         }
         const res  = await fetch(`/api/conversations/${convId}/messages`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: text.trim(), reply_to_id: savedReplyToId }),
+          body: JSON.stringify({ content: text.trim(), reply_to_id: savedReplyToId, reply_to_media_index: savedReplyToMediaIndex }),
         });
         const data = await res.json();
         if (data.message) {
-          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m));
+          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId, replyToMediaIndex: savedReplyToMediaIndex } : m));
           updateConversations((prev) => prev.map((c) => c.id === convId ? { ...c, lastMessage: text.trim(), lastMessageAt: new Date().toISOString() } : c));
         } else {
           setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
@@ -369,6 +399,8 @@ export function ChatPanel({
     const tempId = `temp_gif_${Date.now()}_${Math.random()}`;
     const createdAt = new Date().toISOString();
 
+    const savedReplyToId        = replyTo?.id ?? null;
+    const savedReplyToMediaIndex = replyToMediaIndex;
     const optimistic: Message = {
       id:             Date.now(),
       conversationId: conversation.id,
@@ -379,7 +411,11 @@ export function ChatPanel({
       isRead:         false,
       status:         "sending",
       tempId,
+      replyToId:           savedReplyToId,
+      replyToMediaIndex:   savedReplyToMediaIndex,
     };
+    setReplyTo(null);
+    setReplyToMediaIndex(0);
     appendMessage(optimistic);
 
     try {
@@ -405,12 +441,12 @@ export function ChatPanel({
       const res  = await fetch(`/api/conversations/${convId}/messages`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ gif_url: gif.url }),
+        body:    JSON.stringify({ gif_url: gif.url, reply_to_id: savedReplyToId, reply_to_media_index: savedReplyToMediaIndex }),
       });
       const data = await res.json();
 
       if (data.message) {
-        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m));
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId, replyToMediaIndex: savedReplyToMediaIndex } : m));
         updateConversations((prev) => prev.map((c) =>
           c.id === convId ? { ...c, lastMessage: "🎞️ GIF", lastMessageAt: createdAt } : c
         ));
@@ -420,7 +456,7 @@ export function ChatPanel({
     } catch {
       setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
     }
-  }, [conversation, currentUserId, appendMessage, setMessages, realConversationIdRef, onConversationCreated]);
+  }, [conversation, currentUserId, replyTo, appendMessage, setMessages, realConversationIdRef, onConversationCreated]);
 
   // ── PPV unlock success: patch message to unlocked with media ────────────
   const handlePPVUnlockSuccess = useCallback((data: any) => {
@@ -665,7 +701,7 @@ background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
                 conversation={conversation}
                 currentUserId={currentUserId}
                 isTyping={isTyping}
-                onReply={(msg) => setReplyTo(msg)}
+                onReply={(msg, mediaIndex?: number) => { setReplyTo(msg); setReplyToMediaIndex(mediaIndex ?? 0); }}
                 onDelete={handleDelete}
                 onLoadMore={onLoadMore}
                 hasMore={hasMore}
@@ -702,7 +738,8 @@ background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
                 viewerUserId={currentUserId}
                 disabled={false}
                 replyTo={replyTo}
-                onCancelReply={() => setReplyTo(null)}
+                replyToMediaIndex={replyToMediaIndex}
+                onCancelReply={() => { setReplyTo(null); setReplyToMediaIndex(0); }}
               />
             )}
           </>

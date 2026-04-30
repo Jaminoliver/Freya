@@ -17,7 +17,7 @@ interface Props {
   conversation:         Conversation;
   currentUserId?:       string;
   isTyping?:            boolean;
-  onReply?:             (message: Message) => void;
+  onReply?:             (message: Message, mediaIndex?: number) => void;
   onDelete?:            (message: Message, deleteFor: "me" | "everyone") => void;
   onLoadMore?:          () => void;
   hasMore?:             boolean;
@@ -242,10 +242,19 @@ export function MessagesList({
     }
   }, [messages]);
 
+  const lastScrollTopRef = useRef(0);
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     updateNearBottom();
+    // column-reverse: scrollTop is 0 at bottom, negative going up
+    const prev = lastScrollTopRef.current;
+    const curr = el.scrollTop;
+    // scrolling up = curr more negative than prev
+    if (curr < prev - 5) {
+      (document.activeElement as HTMLElement)?.blur?.();
+    }
+    lastScrollTopRef.current = curr;
     if (!onLoadMore || !hasMore || loadingMore) return;
     const distanceFromTop = el.scrollHeight + el.scrollTop - el.clientHeight;
     if (distanceFromTop < 200) onLoadMore();
@@ -398,8 +407,10 @@ export function MessagesList({
                 j++;
               }
               if (run.length >= 4) {
+                console.log("[GROUP DEBUG] grouping", run.length, "messages");
                 items.push({ kind: "group", msgs: run.map((r) => r.msg), originalIndices: run.map((r) => r.idx) });
               } else {
+                console.log("[GROUP DEBUG] NOT grouping, run.length:", run.length);
                 for (const r of run) items.push({ kind: "single", msg: r.msg, originalIndex: r.idx });
               }
               i = j;
@@ -430,16 +441,28 @@ export function MessagesList({
                   <div
                     key={msgKey}
                     className={animClass}
+                    onClick={() => selectMode && onToggleSelect?.(msg.id)}
                     style={{
-                      display:       "flex",
-                      flexDirection: "column",
-                      gap:           "2px",
-                      marginTop:     isSameGroup ? "2px" : "10px",
+                      display:         "flex",
+                      flexDirection:   "column",
+                      gap:             "2px",
+                      marginTop:       isSameGroup ? "2px" : "10px",
+                      cursor:          selectMode ? "pointer" : undefined,
+                      backgroundColor: selectMode && selectedIds?.has(msg.id) ? "rgba(139,92,246,0.08)" : "transparent",
+                      borderRadius:    "8px",
+                      transition:      "background-color 0.15s ease",
                     }}
                   >
                     {showTime && (
                       <div style={{ textAlign: "center", margin: "6px 0" }}>
                         <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{formatMessageTime(msg.createdAt)}</span>
+                      </div>
+                    )}
+                    {selectMode && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingLeft: "4px" }}>
+                        <div className="select-checkbox-wrap">
+                          <SelectCheckbox checked={!!selectedIds?.has(msg.id)} onClick={() => onToggleSelect?.(msg.id)} />
+                        </div>
                       </div>
                     )}
                     <GifMessage
@@ -448,6 +471,17 @@ export function MessagesList({
                       isOwn={isOwn}
                       time={formatMessageTime(msg.createdAt)}
                       isSameGroup={!!isSameGroup}
+                      onReply={selectMode ? undefined : onReply}
+                      onDelete={selectMode ? undefined : onDelete}
+                      onSelect={onSelectMessage}
+                      replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
+                      onSaveGif={(gifUrl) => {
+                        fetch("/api/gifs/favorites", {
+                          method:  "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body:    JSON.stringify({ gif_id: gifUrl, gif_url: gifUrl, preview_url: gifUrl, title: "" }),
+                        }).catch(() => {});
+                      }}
                     />
                   </div>
                 );
@@ -599,7 +633,8 @@ export function MessagesList({
               getMediaItems(m, isOwn).map((mi) => ({ ...mi, messageId: m.id }))
             );
             const gridItems  = allGroupMedia.map((mi) => ({ url: mi.url, type: mi.type }));
-            const groupKey   = groupMsgs.map((m) => m.tempId ?? m.id).join("-");
+            console.log("[REPLY DEBUG] groupMsgs ids and urls:", groupMsgs.map((m) => ({ id: m.id, urls: m.mediaUrls })));
+const groupKey   = groupMsgs.map((m) => m.tempId ?? m.id).join("-");
             const firstKey   = String(groupMsgs[0].tempId ?? groupMsgs[0].id);
             const groupAnim  = olderAnimIds.has(firstKey) ? "msg-older" : newerAnimIds.has(firstKey) ? "msg-newer" : "";
             const isGroupSelected = selectMode && selectedIds?.has(firstMsg.id);
@@ -653,7 +688,24 @@ export function MessagesList({
                           {!isOwn && !isSameGroup && <InlineAvatar src={conversation.participant.avatarUrl} name={conversation.participant.name} />}
                           {!isOwn && isSameGroup  && <div style={{ width: "36px", flexShrink: 0 }} />}
                           <div style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
-                            <MediaGrid mediaItems={gridItems} onClickItem={handleGroupClick} />
+                            <MediaGrid mediaItems={gridItems} onClickItem={handleGroupClick} onLongPressItem={(flatIndex) => {
+  console.log("[REPLY DEBUG] flatIndex:", flatIndex);
+  console.log("[REPLY DEBUG] groupMsgs:", groupMsgs.map((m) => ({ id: m.id, mediaCount: getMediaItems(m, m.senderId === currentUserId).length })));
+  let count = 0;
+  for (const m of groupMsgs) {
+    const mIsOwn = m.senderId === currentUserId;
+    const mItems = getMediaItems(m, mIsOwn);
+    count += mItems.length;
+    console.log("[REPLY DEBUG] checking m.id:", m.id, "cumulative count:", count);
+    if (flatIndex < count) {
+      console.log("[REPLY DEBUG] selected message id:", m.id);
+      const localIndex = flatIndex - (count - mItems.length);
+onReply?.(m, localIndex); return;
+    }
+  }
+  console.log("[REPLY DEBUG] fallback to groupMsgs[0]:", groupMsgs[0].id);
+  onReply?.(groupMsgs[0]);
+}} />
                             <div style={{ padding: "2px 8px 6px", display: "flex", justifyContent: isOwn ? "flex-end" : "space-between", alignItems: "center" }}>
                               <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{allGroupMedia.length} media</span>
                               {isOwn && <ReadTick status={lastMsg.status} isDelivered={lastMsg.isDelivered} isRead={lastMsg.isRead ?? false} />}
@@ -669,7 +721,24 @@ export function MessagesList({
                       {!isOwn && !isSameGroup && <InlineAvatar src={conversation.participant.avatarUrl} name={conversation.participant.name} />}
                       {!isOwn && isSameGroup  && <div style={{ width: "36px", flexShrink: 0 }} />}
                       <div style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
-                        <MediaGrid mediaItems={gridItems} onClickItem={handleGroupClick} />
+                        <MediaGrid mediaItems={gridItems} onClickItem={handleGroupClick} onLongPressItem={(flatIndex) => {
+  console.log("[REPLY DEBUG] flatIndex:", flatIndex);
+  console.log("[REPLY DEBUG] groupMsgs:", groupMsgs.map((m) => ({ id: m.id, mediaCount: getMediaItems(m, m.senderId === currentUserId).length })));
+  let count = 0;
+  for (const m of groupMsgs) {
+    const mIsOwn = m.senderId === currentUserId;
+    const mItems = getMediaItems(m, mIsOwn);
+    count += mItems.length;
+    console.log("[REPLY DEBUG] checking m.id:", m.id, "cumulative count:", count);
+    if (flatIndex < count) {
+      console.log("[REPLY DEBUG] selected message id:", m.id);
+      const localIndex = flatIndex - (count - mItems.length);
+      onReply?.(m, localIndex); return;
+    }
+  }
+  console.log("[REPLY DEBUG] fallback to groupMsgs[0]:", groupMsgs[0].id);
+  onReply?.(groupMsgs[0]);
+}} />
                         <div style={{ padding: "2px 8px 6px", display: "flex", justifyContent: isOwn ? "flex-end" : "space-between", alignItems: "center" }}>
                           <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{allGroupMedia.length} media</span>
                           {isOwn && <ReadTick status={lastMsg.status} isDelivered={lastMsg.isDelivered} isRead={lastMsg.isRead ?? false} />}

@@ -161,7 +161,7 @@ export function GifPicker({ onSelect, onClose, viewerUserId }: {
     "No GIFs found";
 
   return (
-    <div style={{ position: "absolute", bottom: "100%", left: 0, right: 0, marginBottom: "8px", backgroundColor: "#13131F", border: "1px solid #2A2A3D", borderRadius: "14px", overflow: "hidden", boxShadow: "0 -8px 32px rgba(0,0,0,0.5)", zIndex: 100 }}>
+    <div style={{ width: "100%", backgroundColor: "#13131F", borderTop: "1px solid #2A2A3D", overflow: "hidden", boxShadow: "0 -8px 32px rgba(0,0,0,0.5)" }}>
 
       <div style={{ display: "flex", borderBottom: "1px solid #1F1F2E" }}>
         {tabs.map((tab) => {

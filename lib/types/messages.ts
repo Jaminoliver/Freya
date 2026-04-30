@@ -49,7 +49,8 @@ export interface Message {
   isRead?:         boolean;
   isDelivered?:    boolean;
   createdAt:       string;
-  replyToId?:      number | null;
+  replyToId?:         number | null;
+  replyToMediaIndex?: number;
   // Optimistic upload state — only set on sender's side during upload
   status?:         MessageStatus;
   uploadProgress?: number; // 0–100

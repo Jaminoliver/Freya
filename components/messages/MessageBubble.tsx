@@ -144,15 +144,38 @@ export function MessageBubble({
 
   // ── Normal reply preview ──────────────────────────────────────────────────
   const replyPreview = replyToMessage ? (
-    <div style={{ borderLeft: `3px solid ${isOwn ? "rgba(255,255,255,0.5)" : "#8B5CF6"}`, backgroundColor: isOwn ? "rgba(0,0,0,0.15)" : "rgba(139,92,246,0.1)", borderRadius: "8px", padding: "5px 8px", marginBottom: "6px" }}>
+  <div style={{ borderLeft: `3px solid ${isOwn ? "rgba(255,255,255,0.5)" : "#8B5CF6"}`, backgroundColor: isOwn ? "rgba(0,0,0,0.15)" : "rgba(139,92,246,0.1)", borderRadius: "8px", padding: "5px 8px", marginBottom: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
+    <div style={{ flex: 1, minWidth: 0 }}>
       <p style={{ margin: 0, fontSize: "11px", fontWeight: 700, color: isOwn ? "rgba(255,255,255,0.7)" : "#8B5CF6", marginBottom: "2px" }}>
         {replyToMessage.senderId === message.senderId ? (isOwn ? "You" : participant.name) : (isOwn ? participant.name : "You")}
       </p>
       <p style={{ margin: 0, fontSize: "12px", color: isOwn ? "rgba(255,255,255,0.65)" : "#A3A3C2", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "200px" }}>
-        {replyToMessage.text ?? "Media"}
+        {replyToMessage.text
+          ? replyToMessage.text
+          : replyToMessage.type === "gif"
+          ? "GIF"
+          : replyToMessage.type === "media" || replyToMessage.type === "ppv"
+          ? (replyToMessage.mediaUrls?.[0]?.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || replyToMessage.mediaUrls?.[0]?.includes("#video") ? "Video" : "Photo")
+          : "Media"}
       </p>
     </div>
-  ) : null;
+
+    {/* Thumbnail */}
+    {replyToMessage.type === "gif" && replyToMessage.gifUrl && (
+      <img src={replyToMessage.gifUrl} alt="GIF" style={{ width: "40px", height: "40px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }} />
+    )}
+    {(replyToMessage.type === "media" || replyToMessage.type === "ppv") && replyToMessage.mediaUrls?.[message.replyToMediaIndex ?? 0] && (
+      replyToMessage.mediaUrls[message.replyToMediaIndex ?? 0].match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || replyToMessage.mediaUrls[message.replyToMediaIndex ?? 0].includes("#video")
+        ? <div style={{ width: "40px", height: "40px", borderRadius: "6px", backgroundColor: "#1C1C2E", flexShrink: 0, position: "relative", overflow: "hidden" }}>
+            <video src={replyToMessage.mediaUrls[message.replyToMediaIndex ?? 0].replace("#video", "")} muted playsInline preload="metadata" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onLoadedMetadata={(e) => { (e.currentTarget as HTMLVideoElement).currentTime = 0.5; }} />
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFFFFF"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </div>
+          </div>
+        : <img src={replyToMessage.thumbnailUrl ?? replyToMessage.mediaUrls[message.replyToMediaIndex ?? 0]} alt="" style={{ width: "40px", height: "40px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }} />
+    )}
+  </div>
+) : null;
 
   if ((message as any).isDeleted) {
     return (

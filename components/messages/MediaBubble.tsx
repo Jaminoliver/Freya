@@ -30,7 +30,7 @@ interface Props {
   mediaItems:    { url: string; type: "image" | "video" }[];
   unlocking:     Set<number>;
   currentUserId: string;
-  onReply?:      (msg: Message) => void;
+  onReply?:      (msg: Message, mediaIndex?: number) => void;
   onDelete?:     (msg: Message, deleteFor: "me" | "everyone") => void;
   onUnlock:      (msg: Message) => void;
   onOpenLightbox:(msg: Message, i: number) => void;
@@ -52,8 +52,9 @@ export function MediaBubble({
   onSelect,
 }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const didMove        = useRef(false);
+  const longPressTimer       = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didMove              = useRef(false);
+  const pendingMediaIndexRef = useRef<number>(0);
 
   const startPress = () => {
     didMove.current = false;
@@ -71,6 +72,12 @@ export function MediaBubble({
     cancelPress();
   };
 
+  const handleLongPressItem = (index: number) => {
+    setSheetOpen(true);
+    // store index for reply
+    pendingMediaIndexRef.current = index;
+  };
+
   return (
     <>
       {sheetOpen && (
@@ -78,7 +85,7 @@ export function MediaBubble({
           message={msg}
           isOwn={isOwn}
           onCopy={() => {}}
-          onReply={() => { onReply?.(msg); setSheetOpen(false); }}
+          onReply={() => { onReply?.(msg, pendingMediaIndexRef.current); setSheetOpen(false); }}
           onDeleteForMe={() => { onDelete?.(msg, "me"); setSheetOpen(false); }}
           onDeleteForEveryone={() => { onDelete?.(msg, "everyone"); setSheetOpen(false); }}
           onSelect={onSelect}
@@ -87,11 +94,6 @@ export function MediaBubble({
       )}
 
       <div
-        onTouchStart={startPress}
-        onTouchMove={onMove}
-        onTouchEnd={cancelPress}
-        onTouchCancel={cancelPress}
-        onContextMenu={(e) => { e.preventDefault(); setSheetOpen(true); }}
         style={{
           display:           "flex",
           flexDirection:     isOwn ? "row-reverse" : "row",
@@ -117,6 +119,7 @@ export function MediaBubble({
             isUnlocked={isOwn || msg.ppv?.isUnlocked}
             thumbnailUrl={msg.thumbnailUrl}
             onClickItem={(i) => onOpenLightbox(msg, i)}
+            onLongPressItem={handleLongPressItem}
             isSending={msg.status === "sending"}
             uploadProgress={msg.uploadProgress}
             isFailed={msg.status === "failed"}
