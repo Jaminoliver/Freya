@@ -9,7 +9,7 @@ import type { User } from "@/lib/types/profile";
 import { useStoryUpload } from "@/lib/context/StoryUploadContext";
 import type { UploadJob } from "@/lib/context/StoryUploadContext";
 
-const StoryUploadModal = dynamic(() => import("@/components/story/StoryUploadModal"), { ssr: false });
+const StoryUploadModal = dynamic(() => import("@/components/story/upload/StoryUploadModal"), { ssr: false });
 
 export interface PostComposerProps {
   user: User;

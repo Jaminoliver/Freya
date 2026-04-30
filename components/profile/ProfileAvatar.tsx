@@ -7,7 +7,7 @@ import AvatarPreviewModal from "@/components/ui/AvatarPreviewModal";
 import { uploadImage } from "@/lib/utils/uploadImage";
 import { createClient } from "@/lib/supabase/client";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
-import StoryUploadModal from "@/components/story/StoryUploadModal";
+import StoryUploadModal from "@/components/story/upload/StoryUploadModal";
 import type { UploadJob } from "@/lib/context/StoryUploadContext";
 import StoryViewer from "@/components/story/StoryViewer";
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";

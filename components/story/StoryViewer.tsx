@@ -257,7 +257,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     topBarRef.current?.resetBars(storyIdx);
     const s = localGroups[groupIdx]?.items[storyIdx];
     if (!s) return;
-    trackView(s.id);
+    if (!isOwner) trackView(s.id);
 
     if (s.mediaType !== "video") {
       topBarRef.current?.startImageBar(storyIdx, pausedRef.current);
@@ -435,7 +435,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     setViewersLoading(true);
     setViewersError(null);
     try {
-      const res  = await fetch(`/api/stories/${story?.id}/viewers`);
+      const res  = await fetch(`/api/stories/${story?.id}/viewers`, { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load viewers");
       setViewers(data.viewers);
@@ -684,34 +684,38 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
             </div>
           )}
 
-          {/* Subscribe CTA card — non-owner only */}
+          {/* Subscribe CTA card — non-owner only, positioned by ctaPositionY */}
           {!isOwner && !replyOpen && !viewersOpen && story.ctaType === "subscribe" && (
             <div
               onTouchStart={(e) => e.stopPropagation()}
               onTouchEnd={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onMouseUp={(e) => e.stopPropagation()}
-              style={{ position: "absolute", bottom: 90, left: 16, right: 16, zIndex: 10, animation: "sv-cta-in 0.3s ease 0.6s forwards", opacity: 0 }}
+              style={{
+                position: "absolute",
+                top: `calc(${(story.ctaPositionY ?? 0.75) * 100}% - 72px)`,
+                left: 16, right: 16, zIndex: 10,
+                animation: "sv-cta-in 0.3s ease 0.6s forwards", opacity: 0,
+              }}
             >
-              <div style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(16px)", borderRadius: 18, padding: "14px 16px", border: "1px solid rgba(139,92,246,0.3)" }}>
+              <div style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)" }}>
                 {story.ctaMessage && (
-                  <p style={{ margin: "0 0 12px", fontSize: 13, color: "rgba(255,255,255,0.85)", fontFamily: "Inter,sans-serif", fontStyle: "italic", textAlign: "center", lineHeight: 1.45 }}>
-                    "{story.ctaMessage}"
+                  <p style={{ margin: "0 0 8px", fontSize: 13, color: "#fff", fontFamily: "Inter,sans-serif", fontWeight: 500, textAlign: "center", lineHeight: 1.4, letterSpacing: "0.01em" }}>
+                    {story.ctaMessage}
                   </p>
                 )}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "Inter,sans-serif" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, padding: "0 2px" }}>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", fontFamily: "Inter,sans-serif", fontWeight: 500 }}>
                     {group.subscriptionPrice === 0 ? "Free" : `From ₦${(group.subscriptionPrice).toLocaleString()}/mo`}
                   </span>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "Inter,sans-serif" }}>Cancel anytime</span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "Inter,sans-serif" }}>Cancel anytime</span>
                 </div>
                 <button
                   onClick={handleCtaTap}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "linear-gradient(135deg,#8B5CF6,#EC4899)", border: "none", borderRadius: 24, padding: "13px 20px", cursor: "pointer", position: "relative", overflow: "hidden" }}
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "linear-gradient(90deg,#8B5CF6,#EC4899)", border: "none", borderRadius: 50, padding: "9px 20px", cursor: "pointer", position: "relative", overflow: "hidden" }}
                 >
-                  <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "Inter,sans-serif", position: "relative", zIndex: 1 }}>Subscribe</span>
-                  <span style={{ fontSize: 14, color: "rgba(255,255,255,0.75)", fontFamily: "Inter,sans-serif", position: "relative", zIndex: 1 }}>✦</span>
-                  <div style={{ position: "absolute", top: 0, left: "-80%", width: "50%", height: "100%", background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.2),transparent)", transform: "skewX(-20deg)", animation: "sv-sweep 2.5s ease-in-out infinite" }} />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#fff", fontFamily: "Inter,sans-serif", position: "relative", zIndex: 1, letterSpacing: "0.01em" }}>Subscribe</span>
+                  <div style={{ position: "absolute", top: 0, left: "-80%", width: "50%", height: "100%", background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)", transform: "skewX(-20deg)", animation: "sv-sweep 2.5s ease-in-out infinite" }} />
                 </button>
               </div>
             </div>

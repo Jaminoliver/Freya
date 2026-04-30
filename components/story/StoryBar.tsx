@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 
 // ── Dynamic import: only loaded when user taps "Add to story" ────────────────
-const StoryUploadModal = dynamic(() => import("@/components/story/StoryUploadModal"), { ssr: false });
+const StoryUploadModal = dynamic(() => import("@/components/story/upload/StoryUploadModal"), { ssr: false });
 
 export interface StoryItem {
   id:           number;
