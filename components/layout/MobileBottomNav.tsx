@@ -15,7 +15,7 @@ export function MobileBottomNav() {
   const unreadCount = useUnreadConversationCount();
 
   const inChat = pathname.startsWith("/messages/");
-  if (inChat) return null;
+  if (inChat || pathname === "/create-story") return null;
 
   const activeColor   = "#A78BFA";
 const inactiveColor = "#A3A3C2";
