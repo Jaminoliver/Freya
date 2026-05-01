@@ -173,9 +173,9 @@ export default function ProfileAvatar({
 
   const menuItems = [
     ...(hasStory ? [{ label: "View story", action: () => { setSheetOpen(false); setStoryViewerOpen(true); } }] : []),
+    ...(isCreator && isEditable ? [{ label: isStoryUploading ? "Posting…" : "Add to Story", action: isStoryUploading ? () => {} : triggerAddToStory }] : []),
     { label: "View profile photo", action: () => { setSheetOpen(false); setPreview(true); } },
     ...(isEditable ? [{ label: "Edit profile photo", action: triggerEditPhoto }] : []),
-    ...(isCreator && isEditable ? [{ label: isStoryUploading ? "Posting…" : "Add to Story", action: isStoryUploading ? () => {} : triggerAddToStory }] : []),
   ];
 
   return (

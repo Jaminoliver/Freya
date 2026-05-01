@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ImagePlus, BarChart2, Type, Plus } from "lucide-react";
+import { ImagePlus, BarChart2, Type } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/types/profile";
 
@@ -26,7 +26,6 @@ const iconBtnStyle: React.CSSProperties = {
 
   const handleHoverIn  = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.opacity = "0.6"; };
   const handleHoverOut = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.opacity = "1"; };
-  const firstLetter = (user.display_name || user.username || "?").charAt(0).toUpperCase();
 
   return (
     <div
@@ -44,28 +43,7 @@ borderRadius: "12px",
     >
       {/* Avatar */}
       
-      <div style={{ position: "relative", flexShrink: 0 }} onClick={() => router.push("/create-story")}>
-        <div style={{
-        width: "56px", height: "56px", borderRadius: "50%",
-          background: user.avatar_url
-            ? `url(${user.avatar_url}) center/cover no-repeat`
-            : "linear-gradient(135deg, #8B5CF6, #EC4899)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "16px", fontWeight: 700, color: "#fff", cursor: "pointer",
-        }}>
-          {!user.avatar_url && firstLetter}
-        </div>
-        <div style={{
-          position: "absolute", bottom: 0, right: 0,
-          width: "18px", height: "18px", borderRadius: "50%",
-          background: "linear-gradient(135deg, #8B5CF6, #7C3AED)",
-          border: "2px solid #0D0D18",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          pointerEvents: "none",
-        }}>
-          <Plus size={10} color="#fff" strokeWidth={2.8} />
-        </div>
-      </div>
+      
 
       {/* Buttons row */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>

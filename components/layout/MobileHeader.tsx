@@ -221,6 +221,7 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
   const showMobileHeader = pathname === "/dashboard" || pathname === "/explore";
 
   const [searchOpen, setSearchOpen] = useState(false);
+  const [plusOpen,   setPlusOpen]   = useState(false);
   useEffect(() => {
   if (searchOpen) document.body.classList.add("search-open");
   else document.body.classList.remove("search-open");
@@ -307,6 +308,7 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
 
   useEffect(() => {
     setSearchOpen(false);
+    setPlusOpen(false);
     setQuery("");
     setResults([]);
   }, [pathname]);
@@ -348,9 +350,32 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
         {/* Default bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
   {isCreator ? (
-    <button onClick={() => navigate("/create")} aria-label="Create post" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
-      <Plus size={30} strokeWidth={1.8} />
-    </button>
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setPlusOpen((o) => !o)} aria-label="Create" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
+        <Plus size={30} strokeWidth={1.8} />
+      </button>
+      {plusOpen && (
+        <>
+          <div onClick={() => setPlusOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 199 }} />
+          <div style={{ position: "absolute", top: "44px", left: 0, zIndex: 200, background: "rgba(13,13,24,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, overflow: "hidden", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", backdropFilter: "blur(24px)" }}>
+            {[
+              { label: "Create Post", path: "/create" },
+              { label: "Add to Story", path: "/create-story" },
+            ].map((item) => (
+              <button
+                key={item.path}
+                onClick={() => { setPlusOpen(false); navigate(item.path); }}
+                style={{ display: "block", width: "100%", padding: "12px 16px", background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.85)", fontSize: 14, fontWeight: 500, fontFamily: "'Inter', sans-serif", textAlign: "left" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   ) : <div style={{ width: "46px" }} />}
   <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none" }}>
     <img src="/freya_logo.png" alt="Fréya" style={{ height: "110px", width: "auto", marginTop: "12px" }} />
