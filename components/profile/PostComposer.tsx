@@ -4,12 +4,8 @@ import * as React from "react";
 import { useState } from "react";
 import { ImagePlus, BarChart2, Type, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
 import type { User } from "@/lib/types/profile";
-import { useStoryUpload } from "@/lib/context/StoryUploadContext";
-import type { UploadJob } from "@/lib/context/StoryUploadContext";
 
-const StoryUploadModal = dynamic(() => import("@/components/story/upload/StoryUploadModal"), { ssr: false });
 
 export interface PostComposerProps {
   user: User;
@@ -21,8 +17,8 @@ export interface PostComposerProps {
 
 export default function PostComposer({ user, className }: PostComposerProps) {
   const router = useRouter();
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const { startUpload } = useStoryUpload();
+  
+  
 const iconBtnStyle: React.CSSProperties = {
     background: "none", border: "none",
     display: "flex", alignItems: "center", justifyContent: "center",
@@ -48,13 +44,8 @@ borderRadius: "12px",
       className={className}
     >
       {/* Avatar */}
-      {uploadOpen && (
-        <StoryUploadModal
-          onClose={() => setUploadOpen(false)}
-          onUploadStart={(job: UploadJob) => { setUploadOpen(false); startUpload(job); }}
-        />
-      )}
-      <div style={{ position: "relative", flexShrink: 0 }} onClick={() => setUploadOpen(true)}>
+      
+      <div style={{ position: "relative", flexShrink: 0 }} onClick={() => router.push("/create-story")}>
         <div style={{
         width: "56px", height: "56px", borderRadius: "50%",
           background: user.avatar_url
