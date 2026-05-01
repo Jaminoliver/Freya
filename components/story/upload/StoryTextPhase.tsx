@@ -9,12 +9,10 @@ import {
 } from "@/lib/hooks/useStoryUploadState";
 
 interface StoryTextPhaseProps {
-  ctaType:         "subscribe" | null;
-  setCtaType:      (t: "subscribe" | null) => void;
-  ctaMessage:      string;
-  setCtaMessage:   (m: string) => void;
-  ctaPositionY:    number;
-  setCtaPositionY: (n: number) => void;
+  getCtaForSlide:        (i: number) => { type: "subscribe" | null; message: string; positionY: number };
+  setCtaTypeForSlide:    (i: number, t: "subscribe" | null) => void;
+  setCtaMessageForSlide: (i: number, m: string) => void;
+  setCtaPositionForSlide:(i: number, n: number) => void;
   textContent:     string;
   setTextContent:  (t: string) => void;
   textBg:          string;
@@ -29,12 +27,15 @@ interface StoryTextPhaseProps {
 }
 
 export default function StoryTextPhase({
-  ctaType, setCtaType, ctaMessage, setCtaMessage,
-  ctaPositionY, setCtaPositionY,
+  getCtaForSlide, setCtaTypeForSlide, setCtaMessageForSlide, setCtaPositionForSlide,
   textContent, setTextContent, textBg, setTextBg,
   textPosting, textPostErr, setPhase, handleSendText,
   ctaDragRef, ctaPosRef, ctaCardRef,
 }: StoryTextPhaseProps) {
+  const { type: ctaType, message: ctaMessage, positionY: ctaPositionY } = getCtaForSlide(0);
+  const setCtaType      = (t: "subscribe" | null) => setCtaTypeForSlide(0, t);
+  const setCtaMessage   = (m: string) => setCtaMessageForSlide(0, m);
+  const setCtaPositionY = (n: number) => setCtaPositionForSlide(0, n);
   const [ctaSheetOpen, setCtaSheetOpen] = useState(false);
 
   return (

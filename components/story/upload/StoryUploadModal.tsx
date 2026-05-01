@@ -40,14 +40,14 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
       const parentH = card.parentElement.clientHeight;
       const cardH   = card.offsetHeight;
       const dy      = clientY - ctaDragRef.current.startY;
-      const newTop  = Math.max(0, Math.min(parentH - cardH, ctaDragRef.current.startPosY + dy));
+      const newTop  = Math.max(0, Math.min(parentH - cardH - 80, ctaDragRef.current.startPosY + dy));
       ctaPosRef.current  = (newTop + 72) / parentH;
       card.style.top     = `${newTop}px`;
     };
     const onUp = () => {
       if (!ctaDragRef.current.active) return;
       ctaDragRef.current.active = false;
-      state.setCtaPositionY(ctaPosRef.current);
+      state.setCtaPositionForSlide(state.carouselIdx, ctaPosRef.current);
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("touchmove", onMove, { passive: true });
@@ -99,8 +99,8 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
             addFiles={state.addFiles}
             removeFile={state.removeFile}
             setPhase={state.setPhase}
-            setCtaType={state.setCtaType}
-            setCtaMessage={state.setCtaMessage}
+            setCtaType={(t) => state.setCtaTypeForSlide(0, t)}
+            setCtaMessage={(m) => state.setCtaMessageForSlide(0, m)}
             setTextContent={state.setTextContent}
             setTextBg={state.setTextBg}
           />
@@ -124,12 +124,10 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
             selected={state.selected}
             carouselIdx={state.carouselIdx}
             setCarouselIdx={state.setCarouselIdx}
-            ctaType={state.ctaType}
-            setCtaType={state.setCtaType}
-            ctaMessage={state.ctaMessage}
-            setCtaMessage={state.setCtaMessage}
-            ctaPositionY={state.ctaPositionY}
-            setCtaPositionY={state.setCtaPositionY}
+            getCtaForSlide={state.getCtaForSlide}
+            setCtaTypeForSlide={state.setCtaTypeForSlide}
+            setCtaMessageForSlide={state.setCtaMessageForSlide}
+            setCtaPositionForSlide={state.setCtaPositionForSlide}
             caption={state.caption}
             setCaption={state.setCaption}
             captionFocus={state.captionFocus}
@@ -149,12 +147,10 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
 
         {phase === "text" && (
           <StoryTextPhase
-            ctaType={state.ctaType}
-            setCtaType={state.setCtaType}
-            ctaMessage={state.ctaMessage}
-            setCtaMessage={state.setCtaMessage}
-            ctaPositionY={state.ctaPositionY}
-            setCtaPositionY={state.setCtaPositionY}
+            getCtaForSlide={state.getCtaForSlide}
+            setCtaTypeForSlide={state.setCtaTypeForSlide}
+            setCtaMessageForSlide={state.setCtaMessageForSlide}
+            setCtaPositionForSlide={state.setCtaPositionForSlide}
             textContent={state.textContent}
             setTextContent={state.setTextContent}
             textBg={state.textBg}

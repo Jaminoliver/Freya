@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
     const { data: stories, error: storiesErr } = await supabase
       .from("stories")
-      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, created_at, expires_at, is_processing")
+      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, created_at, expires_at, is_processing, cta_type, cta_message, cta_position_y, text_content, text_background, display_order")
       .eq("creator_id", creatorId)
       .eq("is_expired", false)
       .eq("is_processing", false)
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     const storyIds = stories.map((s: any) => s.id);
 
     const [{ data: profile }, { data: views }] = await Promise.all([
-      supabase.from("profiles").select("id, username, display_name, avatar_url").eq("id", creatorId).single(),
+      supabase.from("profiles").select("id, username, display_name, avatar_url, subscription_price, bundle_price_3_months, bundle_price_6_months").eq("id", creatorId).single(),
       supabase.from("story_views").select("story_id").eq("user_id", user.id).in("story_id", storyIds),
     ]);
 
@@ -45,19 +45,29 @@ export async function GET(req: NextRequest) {
       caption:      s.caption ?? null,
       createdAt:    s.created_at,
       expiresAt:    s.expires_at,
-      viewed:       viewedSet.has(s.id),
-      isProcessing: false,
+      viewed:          viewedSet.has(s.id),
+      isProcessing:    false,
+      ctaType:         s.cta_type       ?? null,
+      ctaMessage:      s.cta_message    ?? null,
+      ctaPositionY:    s.cta_position_y ?? 0.75,
+      textContent:     s.text_content   ?? null,
+      textBackground:  s.text_background ?? null,
+      displayOrder:    s.display_order   ?? 0,
     }));
 
+    items.sort((a: any, b: any) => a.displayOrder - b.displayOrder);
     const hasUnviewed     = items.some((s: any) => !s.viewed);
     const latestStory     = stories[stories.length - 1] as any;
     const latestThumbnail = latestStory.thumbnail_url ?? (latestStory.media_type === "photo" ? latestStory.media_url : null);
 
     const group = {
       creatorId,
-      username:        (profile as any)?.username     ?? "unknown",
-      displayName:     (profile as any)?.display_name ?? (profile as any)?.username ?? "unknown",
-      avatarUrl:       (profile as any)?.avatar_url   ?? null,
+      username:          (profile as any)?.username              ?? "unknown",
+      displayName:       (profile as any)?.display_name          ?? (profile as any)?.username ?? "unknown",
+      avatarUrl:         (profile as any)?.avatar_url            ?? null,
+      subscriptionPrice: (profile as any)?.subscription_price    ?? 0,
+      threeMonthPrice:   (profile as any)?.bundle_price_3_months ?? undefined,
+      sixMonthPrice:     (profile as any)?.bundle_price_6_months ?? undefined,
       hasUnviewed,
       latestStoryAt:   latestStory.created_at,
       latestThumbnail: latestThumbnail ?? null,

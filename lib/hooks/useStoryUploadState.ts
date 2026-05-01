@@ -64,9 +64,12 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
   const [error,         setError]         = useState<string | null>(null);
   const [captionFocus,  setCaptionFocus]  = useState(false);
   const [carouselIdx,   setCarouselIdx]   = useState(0);
-  const [ctaType,       setCtaType]       = useState<"subscribe" | null>(null);
-  const [ctaMessage,    setCtaMessage]    = useState("");
-  const [ctaPositionY,  setCtaPositionY]  = useState(0.75);
+  const [ctaMap, setCtaMap] = useState<Record<number, { type: "subscribe" | null; message: string; positionY: number }>>({});
+  const _ctaDefault = { type: null as "subscribe" | null, message: "", positionY: 0.75 };
+  const getCtaForSlide       = useCallback((i: number) => ctaMap[i] ?? _ctaDefault, [ctaMap]);
+  const setCtaTypeForSlide   = useCallback((i: number, type: "subscribe" | null) => setCtaMap((p) => ({ ...p, [i]: { ...(p[i] ?? _ctaDefault), type } })), []);
+  const setCtaMessageForSlide    = useCallback((i: number, message: string) => setCtaMap((p) => ({ ...p, [i]: { ...(p[i] ?? _ctaDefault), message } })), []);
+  const setCtaPositionForSlide   = useCallback((i: number, positionY: number) => setCtaMap((p) => ({ ...p, [i]: { ...(p[i] ?? _ctaDefault), positionY } })), []);
   const [isMuted,       setIsMuted]       = useState(true);
   const [toolbarOpen,   setToolbarOpen]   = useState(false);
   const [textContent,   setTextContent]   = useState("");
@@ -194,12 +197,13 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
       mediaType:    mediaType as any,
       clipStart,
       clipEnd,
-      ctaType,
-      ctaMessage:   ctaMessage.trim() || null,
-      ctaPositionY: ctaType ? ctaPositionY : null,
+      ctaData: selected.map((_, i) => {
+        const c = ctaMap[i] ?? _ctaDefault;
+        return { ctaType: c.type, ctaMessage: c.message.trim() || null, ctaPositionY: c.type ? c.positionY : null };
+      }),
     });
     onClose();
-  }, [selected, caption, clipStart, ctaType, ctaMessage, ctaPositionY, onUploadStart, onClose]);
+  }, [selected, caption, clipStart, ctaMap, onUploadStart, onClose]);
 
   const handleSendText = useCallback(async () => {
     if (!textContent.trim() || textPosting) return;
@@ -212,9 +216,9 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
         body:    JSON.stringify({
           textContent:  textContent.trim(),
           textBg,
-          ctaType:      ctaType ?? null,
-          ctaMessage:   ctaMessage.trim() || null,
-          ctaPositionY: ctaType ? ctaPositionY : null,
+          ctaType:      null,
+          ctaMessage:   null,
+          ctaPositionY: null,
         }),
       });
       const data = await res.json();
@@ -225,13 +229,13 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
     } finally {
       setTextPosting(false);
     }
-  }, [textContent, textBg, ctaType, ctaMessage, ctaPositionY, textPosting, onClose]);
+  }, [textContent, textBg, textPosting, onClose]);
 
   const reset = useCallback(() => {
     selected.forEach((s) => URL.revokeObjectURL(s.previewUrl));
     setSelected([]); setCaption(""); setError(null);
     setThumbnails([]); setClipStart(0); setPhase("pick");
-    setTextContent(""); setCtaMessage(""); setCtaType(null); setCtaPositionY(0.75);
+    setTextContent(""); setCtaMap({});
   }, [selected]);
 
   // ── Computed ──────────────────────────────────────────────────────────────
@@ -248,9 +252,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
     error, setError,
     captionFocus, setCaptionFocus,
     carouselIdx, setCarouselIdx,
-    ctaType, setCtaType,
-    ctaMessage, setCtaMessage,
-    ctaPositionY, setCtaPositionY,
+    getCtaForSlide, setCtaTypeForSlide, setCtaMessageForSlide, setCtaPositionForSlide,
     isMuted, setIsMuted,
     toolbarOpen, setToolbarOpen,
     textContent, setTextContent,

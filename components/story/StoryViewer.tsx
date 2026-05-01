@@ -228,7 +228,10 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   useEffect(() => { goNextRef.current = goNext; }, [goNext]);
   useEffect(() => { goPrevRef.current = goPrev; }, [goPrev]);
 
-  const handleBarComplete = useCallback(() => goNextRef.current(), []);
+  const handleBarComplete = useCallback(() => {
+    if (menuOpen || deleting) return;
+    goNextRef.current();
+  }, [menuOpen, deleting]);
 
   // ── View tracking ────────────────────────────────────────────────────────
   const trackView = useCallback((id: number) => {
@@ -310,10 +313,19 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   // ── Pause/resume bar ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!isVideo) {
-      if (paused) topBarRef.current?.pauseBar(storyIdxRef.current);
+      if (paused || menuOpen) topBarRef.current?.pauseBar(storyIdxRef.current);
       else topBarRef.current?.resumeBar(storyIdxRef.current);
     }
-  }, [paused, isVideo]);
+  }, [paused, isVideo, menuOpen]);
+
+  useEffect(() => {
+    if (menuOpen) {
+      topBarRef.current?.pauseBar(storyIdxRef.current);
+      setPaused(true);
+    } else if (!deleting) {
+      setPaused(false);
+    }
+  }, [menuOpen, deleting]);
 
   // ── Preload ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -694,13 +706,16 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
               style={{
                 position: "absolute",
                 top: `calc(${(story.ctaPositionY ?? 0.75) * 100}% - 72px)`,
-                left: 16, right: 16, zIndex: 10,
+                left: 0, right: 0,
+                zIndex: 10,
+                display: "flex", justifyContent: "center",
+                padding: "0 16px",
                 animation: "sv-cta-in 0.3s ease 0.6s forwards", opacity: 0,
               }}
             >
-              <div style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 20, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)", width: "100%", maxWidth: 280 }}>
                 {story.ctaMessage && (
-                  <p style={{ margin: "0 0 8px", fontSize: 13, color: "#fff", fontFamily: "Inter,sans-serif", fontWeight: 500, textAlign: "center", lineHeight: 1.4, letterSpacing: "0.01em" }}>
+                  <p style={{ margin: "0 0 7px", fontSize: 13, color: "rgba(255,255,255,0.9)", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter',sans-serif", fontWeight: 500, textAlign: "center", lineHeight: 1.4, letterSpacing: "0.01em" }}>
                     {story.ctaMessage}
                   </p>
                 )}
@@ -710,13 +725,10 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
                   </span>
                   <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "Inter,sans-serif" }}>Cancel anytime</span>
                 </div>
-                <button
-                  onClick={handleCtaTap}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "linear-gradient(90deg,#8B5CF6,#EC4899)", border: "none", borderRadius: 50, padding: "9px 20px", cursor: "pointer", position: "relative", overflow: "hidden" }}
-                >
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#fff", fontFamily: "Inter,sans-serif", position: "relative", zIndex: 1, letterSpacing: "0.01em" }}>Subscribe</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(90deg,#8B5CF6,#EC4899)", borderRadius: 50, padding: "8px 20px", position: "relative", overflow: "hidden", justifyContent: "center", cursor: "pointer" }} onClick={handleCtaTap}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter',sans-serif", position: "relative", zIndex: 1, letterSpacing: "0.01em" }}>Subscribe</span>
                   <div style={{ position: "absolute", top: 0, left: "-80%", width: "50%", height: "100%", background: "linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)", transform: "skewX(-20deg)", animation: "sv-sweep 2.5s ease-in-out infinite" }} />
-                </button>
+                </div>
               </div>
             </div>
           )}
@@ -914,9 +926,11 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
           monthlyPrice={group.subscriptionPrice ?? 0}
           threeMonthPrice={group.threeMonthPrice}
           sixMonthPrice={group.sixMonthPrice}
-          autoCloseOnSuccess={true}
-          onSuccess={handleCtaCheckoutClose}
+          autoCloseOnSuccess={ctaCheckoutType === "tips"}
+          onSuccess={ctaCheckoutType === "tips" ? () => {} : handleCtaCheckoutClose}
           onSubscriptionSuccess={handleCtaCheckoutClose}
+          onViewContent={() => { setCtaCheckoutOpen(false); setPaused(false); }}
+          onGoToSubscriptions={() => { setCtaCheckoutOpen(false); setPaused(false); }}
         />
       )}
 

@@ -23,9 +23,7 @@ export interface UploadJob {
   mediaType: "photo" | "video" | "mixed";
   clipStart: number;
   clipEnd:   number;
-  ctaType?:      "subscribe" | "tip" | null;
-  ctaMessage?:   string | null;
-  ctaPositionY?: number | null;
+  ctaData?:  { ctaType: "subscribe" | "tip" | null; ctaMessage: string | null; ctaPositionY: number | null }[];
 }
 interface StoryUploadState {
   phase:       StoryUploadPhase;
@@ -162,45 +160,43 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
       // ── Step 2: upload photos (if any) via multipart POST ─────────────────
       let photoStoryIds: number[] = [];
       if (photos.length > 0) {
-        const fd = new FormData();
-        for (const p of photos) fd.append("file", p);
-        fd.append("mediaType", "photo");
-        if (job.caption)       fd.append("caption",       job.caption);
-        if (job.ctaType)       fd.append("ctaType",       job.ctaType);
-        if (job.ctaMessage)    fd.append("ctaMessage",    job.ctaMessage);
-        if (job.ctaPositionY != null) fd.append("ctaPositionY", String(job.ctaPositionY));
-
         patch({ uploadPct: 10 });
-
-        const photoData = await new Promise<any>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.upload.onprogress = (e) => {
-            if (!e.lengthComputable || cancelledRef.current) return;
-            // If no video, photos take 0-100%; with video they take 0-40%
-            const scale = videoFile ? 0.4 : 1;
-            patch({ uploadPct: Math.round((e.loaded / e.total) * 90 * scale) });
-          };
-          xhr.onload = () => {
-            try {
-              const json = JSON.parse(xhr.responseText);
-              if (xhr.status >= 200 && xhr.status < 300) resolve(json);
-              else reject(new Error(json.error ?? `Server error (${xhr.status})`));
-            } catch { reject(new Error(`Server error (${xhr.status})`)); }
-          };
-          xhr.onerror   = () => reject(new Error("Network error — check your connection and retry"));
-          xhr.ontimeout = () => reject(new Error("Upload timed out — please retry"));
-          xhr.onabort   = () => reject(new Error("Upload cancelled"));
-          xhr.timeout   = 120_000;
-          xhr.open("POST", "/api/stories/init");
-          xhr.send(fd);
-        });
+        const photoResults = await Promise.all(photos.map((photo) => {
+          const fileIdx = job.files.indexOf(photo);
+          const cta = job.ctaData?.[fileIdx] ?? null;
+          const fd = new FormData();
+          fd.append("file", photo);
+          fd.append("mediaType", "photo");
+          if (job.caption) fd.append("caption", job.caption);
+          if (cta?.ctaType) fd.append("ctaType", cta.ctaType);
+          if (cta?.ctaMessage) fd.append("ctaMessage", cta.ctaMessage);
+          if (cta?.ctaPositionY != null) fd.append("ctaPositionY", String(cta.ctaPositionY));
+          fd.append("displayOrder", String(fileIdx));
+          return new Promise<any>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.upload.onprogress = (e) => {
+              if (!e.lengthComputable || cancelledRef.current) return;
+              const scale = videoFile ? 0.4 : 1;
+              patch({ uploadPct: Math.round((e.loaded / e.total) * 90 * scale) });
+            };
+            xhr.onload = () => {
+              try {
+                const json = JSON.parse(xhr.responseText);
+                if (xhr.status >= 200 && xhr.status < 300) resolve(json);
+                else reject(new Error(json.error ?? `Server error (${xhr.status})`));
+              } catch { reject(new Error(`Server error (${xhr.status})`)); }
+            };
+            xhr.onerror   = () => reject(new Error("Network error — check your connection and retry"));
+            xhr.ontimeout = () => reject(new Error("Upload timed out — please retry"));
+            xhr.onabort   = () => reject(new Error("Upload cancelled"));
+            xhr.timeout   = 120_000;
+            xhr.open("POST", "/api/stories/init");
+            xhr.send(fd);
+          });
+        }));
 
         if (cancelledRef.current) return;
-        photoStoryIds = Array.isArray(photoData.storyIds)
-          ? photoData.storyIds
-          : photoData.storyId
-          ? [photoData.storyId]
-          : [];
+        photoStoryIds = photoResults.map((d) => d.storyId).filter(Boolean);
       }
 
       // ── Step 3: if no video, we're done ───────────────────────────────────
@@ -226,9 +222,10 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
           body:    JSON.stringify({
             mediaType:    "video",
             caption:      job.caption,
-            ctaType:      job.ctaType      ?? null,
-            ctaMessage:   job.ctaMessage   ?? null,
-            ctaPositionY: job.ctaPositionY ?? 0.75,
+            ctaType:      job.ctaData?.[job.files.findIndex(f => f.type.startsWith("video/"))]?.ctaType      ?? null,
+            ctaMessage:   job.ctaData?.[job.files.findIndex(f => f.type.startsWith("video/"))]?.ctaMessage   ?? null,
+            ctaPositionY: job.ctaData?.[job.files.findIndex(f => f.type.startsWith("video/"))]?.ctaPositionY ?? 0.75,
+            displayOrder: job.files.findIndex(f => f.type.startsWith("video/")),
             clipStart:    job.clipStart,
             clipEnd:      job.clipEnd,
             photoStoryIds,

@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       const ctaType      = (formData.get("ctaType")      as string) || null;
       const ctaMessage   = (formData.get("ctaMessage")   as string) || null;
       const ctaPositionY = parseFloat(formData.get("ctaPositionY") as string) || 0.75;
+      const displayOrder = parseInt(formData.get("displayOrder") as string) || 0;
       console.log("[stories/init] photo ctaType:", ctaType, "ctaMessage:", ctaMessage);
 
       if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
           cta_type:       ctaType      ?? null,
           cta_message:    ctaMessage   ?? null,
           cta_position_y: ctaPositionY ?? 0.75,
+          display_order:  displayOrder,
         })
         .select("id")
         .single();
@@ -95,6 +97,7 @@ export async function POST(req: NextRequest) {
     const ctaType      = (body.ctaType      as string) || null;
     const ctaMessage   = (body.ctaMessage   as string) || null;
     const ctaPositionY = parseFloat(body.ctaPositionY) || 0.75;
+    const displayOrder = parseInt(body.displayOrder) ?? 0;
     console.log("[stories/init] video ctaType:", ctaType, "ctaMessage:", ctaMessage);
     const clipStart = parseFloat(body.clipStart) || 0;
     const clipEnd   = parseFloat(body.clipEnd)   || 0;
@@ -124,6 +127,7 @@ export async function POST(req: NextRequest) {
         cta_type:       ctaType      ?? null,
           cta_message:    ctaMessage   ?? null,
           cta_position_y: ctaPositionY ?? 0.75,
+          display_order:  displayOrder,
         })
       .select("id")
       .single();

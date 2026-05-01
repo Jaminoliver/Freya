@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const t2 = Date.now();
     let query = supabase
       .from("stories")
-      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, view_count, cta_type, cta_message, cta_position_y, text_content, text_background, created_at, expires_at, is_processing")
+      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, view_count, cta_type, cta_message, cta_position_y, text_content, text_background, created_at, expires_at, is_processing, display_order")
       .in("creator_id", creatorIds)
       .eq("is_expired", false)
       .gt("expires_at", now)
@@ -124,10 +124,14 @@ export async function GET(req: NextRequest) {
         ctaPositionY:    story.cta_position_y ?? 0.75,
         textContent:     story.text_content   ?? null,
         textBackground:  story.text_background ?? null,
+        displayOrder:    story.display_order   ?? 0,
       });
     }
 
     // Split into unviewed / viewed buckets, each sorted by latestStoryAt desc (most recent first)
+    for (const group of Object.values(groupMap) as any[]) {
+      group.items.sort((a: any, b: any) => a.displayOrder - b.displayOrder);
+    }
     const allGroups = Object.values(groupMap) as any[];
     const unviewed  = allGroups.filter((g) =>  g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));
     const viewed    = allGroups.filter((g) => !g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));

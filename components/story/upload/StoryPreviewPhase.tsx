@@ -12,12 +12,10 @@ interface StoryPreviewPhaseProps {
   selected:         SelectedFile[];
   carouselIdx:      number;
   setCarouselIdx:   (n: number) => void;
-  ctaType:          "subscribe" | null;
-  setCtaType:       (t: "subscribe" | null) => void;
-  ctaMessage:       string;
-  setCtaMessage:    (m: string) => void;
-  ctaPositionY:     number;
-  setCtaPositionY:  (n: number) => void;
+  getCtaForSlide:        (i: number) => { type: "subscribe" | null; message: string; positionY: number };
+  setCtaTypeForSlide:    (i: number, t: "subscribe" | null) => void;
+  setCtaMessageForSlide: (i: number, m: string) => void;
+  setCtaPositionForSlide:(i: number, n: number) => void;
   caption:          string;
   setCaption:       (s: string) => void;
   captionFocus:     boolean;
@@ -36,13 +34,16 @@ interface StoryPreviewPhaseProps {
 
 export default function StoryPreviewPhase({
   selected, carouselIdx, setCarouselIdx,
-  ctaType, setCtaType, ctaMessage, setCtaMessage,
-  ctaPositionY, setCtaPositionY,
+  getCtaForSlide, setCtaTypeForSlide, setCtaMessageForSlide, setCtaPositionForSlide,
   caption, setCaption, captionFocus, setCaptionFocus,
   isMuted, setIsMuted, toolbarOpen, setToolbarOpen,
   clipStart, setPhase, handleSend,
   ctaDragRef, ctaPosRef, ctaCardRef,
 }: StoryPreviewPhaseProps) {
+  const { type: ctaType, message: ctaMessage, positionY: ctaPositionY } = getCtaForSlide(carouselIdx);
+  const setCtaType      = (t: "subscribe" | null) => setCtaTypeForSlide(carouselIdx, t);
+  const setCtaMessage   = (m: string) => setCtaMessageForSlide(carouselIdx, m);
+  const setCtaPositionY = (n: number) => setCtaPositionForSlide(carouselIdx, n);
   const previewCanvasRef = useRef<HTMLDivElement>(null);
   const touchStartX      = useRef(0);
   const [ctaInset, setCtaInset] = useState(16);
