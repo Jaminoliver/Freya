@@ -241,7 +241,7 @@ export default function StoryPreviewPhase({
       )}
 
       {/* Floating caption / message + send */}
-      <div style={{ position:"absolute", bottom:0, left:0, right:0, zIndex:10, padding:"12px 16px", paddingBottom:"calc(env(safe-area-inset-bottom) + 12px)" }}>
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, zIndex:10, padding:"12px 16px", paddingBottom:"calc(env(safe-area-inset-bottom) + 20px)" }}>
         {ctaType === "subscribe" && (
           <p style={{ margin:"0 0 6px 4px", fontSize:11, color:"#8B5CF6", fontFamily:"'Inter',sans-serif", fontWeight:600 }}>
             ✦ Subscribe button added — drag it to reposition

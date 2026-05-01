@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useState } from "react";
 import { ImagePlus, BarChart2, Type, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/types/profile";

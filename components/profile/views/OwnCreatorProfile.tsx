@@ -68,7 +68,7 @@ export default function OwnCreatorProfile({
         <ProfileAvatar
           avatarUrl={profile.avatar_url || undefined}
           displayName={profile.display_name || profile.username}
-          isEditable={true} isOnline={true} userId={profile.id}
+          isEditable={true} isOnline={true} userId={profile.id} isCreator={true}
           onAvatarUpdated={onAvatarUpdated}
         />
         <div style={{ paddingBottom: "12px" }}>

@@ -82,7 +82,7 @@ export default function CreateStoryPage() {
         .sum-add-more:hover { border-color:rgba(255,255,255,0.25) !important; background:rgba(255,255,255,0.05) !important; }
       `}</style>
 
-      <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.95)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "#000", display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
         {phase === "pick" && (
           <StoryPickPhase
             selected={state.selected}

@@ -1,15 +1,14 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Camera } from "lucide-react";
 import { AvatarCropModal } from "@/components/ui/AvatarCropModal";
 import AvatarPreviewModal from "@/components/ui/AvatarPreviewModal";
 import { uploadImage } from "@/lib/utils/uploadImage";
 import { createClient } from "@/lib/supabase/client";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
-import StoryUploadModal from "@/components/story/upload/StoryUploadModal";
 import { useStoryUpload } from "@/lib/context/StoryUploadContext";
-import type { UploadJob } from "@/lib/context/StoryUploadContext";
 import StoryViewer from "@/components/story/StoryViewer";
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
 import { createPortal } from "react-dom";
@@ -37,13 +36,13 @@ export default function ProfileAvatar({
   onAvatarUpdated,
   isCreator = false,
 }: ProfileAvatarProps) {
+  const router = useRouter();
   const [avatarUrl,       setAvatarUrl]       = useState(initialAvatarUrl);
   const [cropSrc,         setCropSrc]         = useState<string | null>(null);
   const [preview,         setPreview]         = useState(false);
   const [uploading,       setUploading]       = useState(false);
-  const [storyOpen,       setStoryOpen]       = useState(false);
   const [storyToast, setStoryToast] = useState(false);
-  const { phase: uploadPhase, uploadPct: displayPct, startUpload, storyId, markProcessingComplete } = useStoryUpload();
+  const { phase: uploadPhase, storyId, markProcessingComplete } = useStoryUpload();
   const isStoryUploading = uploadPhase !== "idle" && uploadPhase !== "done" && uploadPhase !== "error";
   const [sheetOpen,       setSheetOpen]       = useState(false);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
@@ -158,10 +157,7 @@ export default function ProfileAvatar({
     }
   };
 
-  const handleStoryUploadStart = useCallback((job: UploadJob) => {
-    setStoryOpen(false);
-    startUpload(job);
-  }, [startUpload]);
+  
 
   const triggerEditPhoto = () => {
     setSheetOpen(false);
@@ -172,7 +168,7 @@ export default function ProfileAvatar({
   const triggerAddToStory = () => {
     setSheetOpen(false);
     setPreview(false);
-    setStoryOpen(true);
+    router.push("/create-story");
   };
 
   const menuItems = [
@@ -213,9 +209,7 @@ export default function ProfileAvatar({
         <AvatarCropModal imageSrc={cropSrc} onSave={handleCropSave} onCancel={() => setCropSrc(null)} />
       )}
 
-      {storyOpen && (
-        <StoryUploadModal onClose={() => setStoryOpen(false)} onUploadStart={handleStoryUploadStart} />
-      )}
+      
 
       {storyViewerOpen && storyGroup && (
         <StoryViewer
