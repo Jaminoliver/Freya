@@ -265,7 +265,6 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     if (!isOwner) trackView(s.id);
 
     if (s.mediaType !== "video") {
-      topBarRef.current?.startImageBar(storyIdx, pausedRef.current);
       return;
     }
     spinnerTimerRef.current = setTimeout(() => {
@@ -283,7 +282,12 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   }, [groupIdx, checkGroupComplete]);
 
   // ── Photo handlers ───────────────────────────────────────────────────────
-  const onPhotoLoad = useCallback(() => { if (imgLoadedRef.current) return; imgLoadedRef.current = true; setImgLoaded(true); }, []);
+  const onPhotoLoad = useCallback(() => {
+    if (imgLoadedRef.current) return;
+    imgLoadedRef.current = true;
+    setImgLoaded(true);
+    topBarRef.current?.startImageBar(storyIdxRef.current, pausedRef.current);
+  }, []);
   const onPhotoError = useCallback(() => {
     setImgError(true);
     topBarRef.current?.startImageBar(storyIdxRef.current, pausedRef.current);
