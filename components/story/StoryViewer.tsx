@@ -158,6 +158,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const storyKeyRef     = useRef("");
   const viewTrackedRef  = useRef(false);
   const localGroupsRef  = useRef(localGroups);
+  const isVideoRef      = useRef(false);
   const touchRef        = useRef({ x: 0, y: 0, time: 0, moved: false, holding: false, draggingDown: false });
   const dragRef         = useRef({ active: false, startY: 0 });
   const containerRef    = useRef<HTMLDivElement>(null);
@@ -183,6 +184,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const story    = group?.items[storyIdx] as StoryItem | undefined;
   const isOwner  = viewer?.id === group?.creatorId;
   const isVideo  = story?.mediaType === "video";
+  useEffect(() => { isVideoRef.current = isVideo; }, [isVideo]);
   const hasPrev  = storyIdx > 0 || groupIdx > 0;
   const hasNext  = storyIdx < (group?.items.length ?? 1) - 1 || groupIdx < localGroups.length - 1;
   const storyKey = `${groupIdx}-${storyIdx}`;
@@ -302,6 +304,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     goNextRef.current();
   }, []);
   const handleVideoBuffering = useCallback((buffering: boolean) => {
+    if (!isVideoRef.current) return;
     if (buffering) {
       if (!spinnerTimerRef.current) spinnerTimerRef.current = setTimeout(() => { if (mountedRef.current) setShowSpinner(true); }, SPINNER_DELAY_MS);
     } else {
