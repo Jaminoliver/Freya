@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef } from "react";
 import { X, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   type Phase,
@@ -44,25 +44,8 @@ export default function StoryPreviewPhase({
   const setCtaType      = (t: "subscribe" | null) => setCtaTypeForSlide(carouselIdx, t);
   const setCtaMessage   = (m: string) => setCtaMessageForSlide(carouselIdx, m);
   const setCtaPositionY = (n: number) => setCtaPositionForSlide(carouselIdx, n);
-  const previewCanvasRef = useRef<HTMLDivElement>(null);
   const touchStartX      = useRef(0);
-  const [ctaInset, setCtaInset] = useState(16);
-
-  const measureVideoInset = useCallback(() => {
-    const canvas = previewCanvasRef.current;
-    const allVids = canvas?.querySelectorAll("video");
-    const vid = allVids?.[0] as HTMLVideoElement | undefined;
-    if (!vid || !canvas) return;
-    const cW = canvas.clientWidth;
-    const cH = canvas.clientHeight;
-    const vW = vid.videoWidth;
-    const vH = vid.videoHeight;
-    if (!vW || !vH) return;
-    const containerAR = cW / cH;
-    const videoAR     = vW / vH;
-    const renderedW   = videoAR > containerAR ? cW : cH * videoAR;
-    setCtaInset((cW - renderedW) / 2 + 8);
-  }, []);
+  
 
   const onCarouselTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -126,7 +109,6 @@ export default function StoryPreviewPhase({
                   const next = ctaType === "subscribe" ? null : "subscribe";
                   setCtaType(next);
                   setToolbarOpen(false);
-                  if (next) setTimeout(measureVideoInset, 50);
                 }}
                 style={{ width:"100%", background:"none", border:"none", cursor:"pointer", display:"flex", alignItems:"center", gap:10, padding:"11px 14px", transition:"background 0.15s" }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(139,92,246,0.15)")}
@@ -152,7 +134,6 @@ export default function StoryPreviewPhase({
 
       {/* Carousel */}
       <div
-        ref={previewCanvasRef}
         style={{ flex:1, position:"relative", overflow:"hidden", minHeight:0 }}
         onTouchStart={(e) => { if (ctaDragRef.current.active) return; onCarouselTouchStart(e); }}
         onTouchEnd={(e)   => { if (ctaDragRef.current.active) return; onCarouselTouchEnd(e); }}
@@ -205,7 +186,7 @@ export default function StoryPreviewPhase({
       {ctaType === "subscribe" && (
         <div
           ref={ctaCardRef}
-          style={{ position:"absolute", left:ctaInset, right:ctaInset, zIndex:8, top:`calc(${ctaPositionY * 100}% - 72px)`, userSelect:"none", WebkitUserSelect:"none" as any }}
+          style={{ position:"absolute", left:0, right:0, zIndex:8, top:`calc(${ctaPositionY * 100}% - 72px)`, userSelect:"none", WebkitUserSelect:"none" as any, display:"flex", flexDirection:"column", alignItems:"center", padding:"0 16px" }}
         >
           {/* Grip handle */}
           <div
@@ -218,7 +199,7 @@ export default function StoryPreviewPhase({
             </div>
           </div>
           {/* Card */}
-          <div style={{ background:"rgba(0,0,0,0.45)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderRadius:20, padding:"10px 12px", border:"1px solid rgba(255,255,255,0.08)", position:"relative" }}>
+          <div style={{ background:"rgba(0,0,0,0.45)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderRadius:20, padding:"10px 12px", border:"1px solid rgba(255,255,255,0.08)", position:"relative", width:"100%", maxWidth:280 }}>
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
