@@ -381,7 +381,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
           style={{ display:"flex", gap:10, overflowX:"auto", scrollbarWidth:"none", msOverflowStyle:"none", alignItems:"flex-start" }}
         >
           {/* ── CREATOR CARD ── */}
-          {isCreator && globalViewer && (
+          {isCreator && globalViewer && hasOwnStories && (
             <div className="sb-add-card" style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
               <div style={{ position:"relative", width:CARD_W, height:CARD_H }}>
                 <div style={{
@@ -389,11 +389,11 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                   inset:        0,
                   borderRadius: CARD_RADIUS,
                   padding:      BORDER,
-                  background:   isUploading ? "transparent" : hasOwnStories ? GRADIENT : "transparent",
-                  border:       !isUploading && !hasOwnStories ? `${BORDER}px solid #6D6D8A` : "none",
+                  background:   "transparent",
+                  border:       `${BORDER}px solid #FFFFFF`,
                   boxSizing:    "border-box",
-                  boxShadow:    !isUploading && hasOwnStories ? GLOW : "none",
-                  animation:    !isUploading && hasOwnStories ? "sb-pulse 3s ease-in-out infinite" : "none",
+                  boxShadow:    "none",
+                  animation:    "none",
                 }}>
                   <div
                     onClick={!isUploading && hasOwnStories ? handleOpenOwnStories : undefined}
@@ -430,7 +430,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                     {!isUploading && (
                       <div style={{ position:"absolute", bottom:0, left:0, right:0, background:"linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 100%)", padding:"18px 6px 7px", borderBottomLeftRadius:CARD_RADIUS - BORDER, borderBottomRightRadius:CARD_RADIUS - BORDER }}>
                         <span style={{ color:"#fff", fontSize:11, fontWeight:700, fontFamily:"'Inter',sans-serif", display:"block", textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                          Your story
+                          You
                         </span>
                       </div>
                     )}
@@ -443,17 +443,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                   </div>
                 )}
 
-                {!isUploading && (
-                  <button
-  onClick={(e) => { e.stopPropagation(); openUpload(); }}
-  style={{ position:"absolute", top:6, right:6, width:28, height:28,
-    borderRadius:"50%", background:GRADIENT,
-    display:"flex", alignItems:"center", justifyContent:"center",
-    cursor:"pointer", padding:0, zIndex:4 }}
->
-  <Plus size={16} color="#fff" strokeWidth={2.5} />
-</button>
-                )}
+                
 
                 {uploadError && !isUploading && (
                   <button
@@ -466,12 +456,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
                 )}
               </div>
 
-              <button
-                onClick={isUploading ? cancelUpload : openUpload}
-                style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 4px", fontSize:11, fontWeight:700, color: isUploading ? "#EF4444" : uploadError ? "#EF4444" : "#C084FC", maxWidth:CARD_W, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", textAlign:"center", fontFamily:"'Inter',sans-serif" }}
-              >
-                {isUploading ? "Cancel" : "Add to story"}
-              </button>
+              
             </div>
           )}
 

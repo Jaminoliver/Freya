@@ -11,6 +11,17 @@ interface UseCreatorStoryResult {
   refresh:     () => void;
 }
 
+function getLocalViewed(): Set<number> {
+  try { return new Set(JSON.parse(sessionStorage.getItem("sb_viewed_story_ids") ?? "[]")); } catch { return new Set(); }
+}
+
+function applyViewed(group: CreatorStoryGroup): CreatorStoryGroup {
+  const viewed = getLocalViewed();
+  if (viewed.size === 0) return group;
+  const items = group.items.map((s) => viewed.has(s.id) ? { ...s, viewed: true } : s);
+  return { ...group, items, hasUnviewed: items.some((s) => !s.viewed && !s.isProcessing) };
+}
+
 const cache:    Record<string, { group: CreatorStoryGroup; fetchedAt: number }> = {};
 const inflight: Record<string, Promise<CreatorStoryGroup | null>>               = {};
 const CACHE_TTL_MS = 60_000;
@@ -18,7 +29,7 @@ const CACHE_TTL_MS = 60_000;
 function fetchGroup(id: string): Promise<CreatorStoryGroup | null> {
   const cached = cache[id];
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-    return Promise.resolve(cached.group);
+    return Promise.resolve(applyViewed(cached.group));
   }
 
   if (id in inflight) return inflight[id];
@@ -46,12 +57,12 @@ export function useCreatorStory(creatorId: string | undefined): UseCreatorStoryR
     if (!creatorId) return;
     const cached = cache[creatorId];
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-      setGroup(cached.group);
+      setGroup(applyViewed(cached.group));
       return;
     }
     setLoading(true);
     fetchGroup(creatorId).then((g) => {
-      setGroup(g);
+      setGroup(g ? applyViewed(g) : null);
       setLoading(false);
     });
   }, [creatorId]);
@@ -62,7 +73,7 @@ export function useCreatorStory(creatorId: string | undefined): UseCreatorStoryR
     delete inflight[creatorId];
     setLoading(true);
     fetchGroup(creatorId).then((g) => {
-      setGroup(g);
+      setGroup(g ? applyViewed(g) : null);
       setLoading(false);
     });
   };

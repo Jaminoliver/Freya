@@ -408,8 +408,6 @@ export default function ContentFeed({
 
   return (
     <div className={className} style={{ fontFamily: "'Inter', sans-serif" }}>
-      ss
-
       <TabBar
         postCount={apiPosts.length} mediaCount={apiMedia.length}
         active={activeTab} extraTab={extraTab}

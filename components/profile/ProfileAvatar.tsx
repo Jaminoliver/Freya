@@ -8,6 +8,7 @@ import { uploadImage } from "@/lib/utils/uploadImage";
 import { createClient } from "@/lib/supabase/client";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 import StoryUploadModal from "@/components/story/upload/StoryUploadModal";
+import { useStoryUpload } from "@/lib/context/StoryUploadContext";
 import type { UploadJob } from "@/lib/context/StoryUploadContext";
 import StoryViewer from "@/components/story/StoryViewer";
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
@@ -41,7 +42,9 @@ export default function ProfileAvatar({
   const [preview,         setPreview]         = useState(false);
   const [uploading,       setUploading]       = useState(false);
   const [storyOpen,       setStoryOpen]       = useState(false);
-  const [storyUploading,  setStoryUploading]  = useState(false);
+  const [storyToast, setStoryToast] = useState(false);
+  const { phase: uploadPhase, uploadPct: displayPct, startUpload, storyId, markProcessingComplete } = useStoryUpload();
+  const isStoryUploading = uploadPhase !== "idle" && uploadPhase !== "done" && uploadPhase !== "error";
   const [sheetOpen,       setSheetOpen]       = useState(false);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const [dropdownPos,     setDropdownPos]     = useState({ top: 0, left: 0 });
@@ -50,6 +53,31 @@ export default function ProfileAvatar({
   const avatarWrapRef = useRef<HTMLDivElement>(null);
 
   const { group: storyGroup, hasStory, hasUnviewed, refresh } = useCreatorStory(creatorId ?? userId);
+
+  const prevPhaseRef = useRef<string>("idle");
+  useEffect(() => {
+    if (prevPhaseRef.current !== "done" && uploadPhase === "done") {
+      refresh();
+      setStoryToast(true);
+      setTimeout(() => setStoryToast(false), 2500);
+    }
+    prevPhaseRef.current = uploadPhase;
+  }, [uploadPhase, refresh]);
+
+  useEffect(() => {
+    if (uploadPhase !== "processing" || !storyId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res  = await fetch(`/api/stories/${storyId}/status`);
+        const data = await res.json();
+        if (res.ok && data.isProcessing === false) {
+          clearInterval(interval);
+          markProcessingComplete();
+        }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [uploadPhase, storyId, markProcessingComplete]);
 
   const handleAvatarClick = () => {
     if (!hasStory && !isEditable) { setPreview(true); return; }
@@ -130,26 +158,10 @@ export default function ProfileAvatar({
     }
   };
 
-  const handleStoryUploadStart = useCallback(async (job: UploadJob) => {
+  const handleStoryUploadStart = useCallback((job: UploadJob) => {
     setStoryOpen(false);
-    setStoryUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file",      job.files[0]);
-      form.append("mediaType", job.mediaType);
-      if (job.caption) form.append("caption", job.caption);
-      form.append("clipStart", String(job.clipStart));
-      form.append("clipEnd",   String(job.clipEnd));
-      const res  = await fetch("/api/stories", { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
-    } catch (err) {
-      console.error("Story upload failed:", err);
-    } finally {
-      setStoryUploading(false);
-      refresh();
-    }
-  }, [refresh]);
+    startUpload(job);
+  }, [startUpload]);
 
   const triggerEditPhoto = () => {
     setSheetOpen(false);
@@ -167,7 +179,7 @@ export default function ProfileAvatar({
     ...(hasStory ? [{ label: "View story", action: () => { setSheetOpen(false); setStoryViewerOpen(true); } }] : []),
     { label: "View profile photo", action: () => { setSheetOpen(false); setPreview(true); } },
     ...(isEditable ? [{ label: "Edit profile photo", action: triggerEditPhoto }] : []),
-    ...(isCreator && isEditable ? [{ label: storyUploading ? "Posting…" : "Add to Story", action: triggerAddToStory }] : []),
+    ...(isCreator && isEditable ? [{ label: isStoryUploading ? "Posting…" : "Add to Story", action: isStoryUploading ? () => {} : triggerAddToStory }] : []),
   ];
 
   return (
@@ -209,7 +221,15 @@ export default function ProfileAvatar({
         <StoryViewer
           groups={[storyGroup]}
           startGroupIndex={0}
-          onClose={() => { setStoryViewerOpen(false); refresh(); }}
+          onClose={() => {
+            try {
+              const existing = new Set<number>(JSON.parse(sessionStorage.getItem("sb_viewed_story_ids") ?? "[]"));
+              storyGroup.items.forEach((s) => existing.add(s.id));
+              sessionStorage.setItem("sb_viewed_story_ids", JSON.stringify([...existing]));
+            } catch {}
+            setStoryViewerOpen(false);
+            refresh();
+          }}
         />
       )}
 
@@ -220,7 +240,7 @@ export default function ProfileAvatar({
           displayName={displayName}
           isEditable={isEditable}
           isCreator={isCreator}
-          storyUploading={storyUploading}
+          storyUploading={isStoryUploading}
           onClose={() => setPreview(false)}
           onEditAvatar={triggerEditPhoto}
           onAddToStory={triggerAddToStory}
@@ -293,12 +313,20 @@ export default function ProfileAvatar({
             src={avatarUrl ?? undefined}
             alt={displayName ?? "?"}
             size={96}
-            hasStory={hasStory}
+            hasStory={hasStory || isStoryUploading}
             hasUnviewed={hasUnviewed}
             onClick={handleAvatarClick}
             borderColor="#0A0A0F"
           />
+          {isStoryUploading && (
+            <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "3px solid transparent", borderTop: "3px solid #8B5CF6", borderRight: "3px solid #EC4899", animation: "spin 1s linear infinite", pointerEvents: "none", zIndex: 20 }} />
+          )}
         </div>
+        {storyToast && (
+          <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: "rgba(20,20,35,0.92)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 24, padding: "10px 20px", backdropFilter: "blur(12px)", pointerEvents: "none", animation: "sv-toast 0.2s ease" }}>
+            <span style={{ color: "#fff", fontSize: 14, fontWeight: 500, fontFamily: "Inter,sans-serif" }}>Your story has been shared ✓</span>
+          </div>
+        )}
 
         {/* Camera badge — outside inner click div to avoid story-ring clipping, always visible when editable */}
         {isEditable && (
