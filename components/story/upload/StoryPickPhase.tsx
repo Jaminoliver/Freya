@@ -84,9 +84,21 @@ export default function StoryPickPhase({
                 style={{ position:"relative", width:90, height:120, borderRadius:10, overflow:"hidden", flexShrink:0, border:"1.5px solid rgba(255,255,255,0.1)" }}
               >
                 {s.mediaType === "video" ? (
-                  <video src={s.previewUrl} muted playsInline style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+                  <video
+                    src={s.previewUrl}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    onLoadedMetadata={(e) => { e.currentTarget.currentTime = 0.1; }}
+                    style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
+                  />
                 ) : (
-                  <img src={s.previewUrl} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+                  <img
+                    src={s.previewUrl}
+                    alt=""
+                    decoding="async"
+                    style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
+                  />
                 )}
                 {s.mediaType === "video" && s.duration && (
                   <div style={{ position:"absolute", bottom:5, left:5, backgroundColor:"rgba(0,0,0,0.65)", borderRadius:4, padding:"2px 5px", fontSize:10, color:"#fff", fontFamily:"'Inter',sans-serif", fontWeight:600 }}>
