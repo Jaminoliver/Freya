@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const t2 = Date.now();
     let query = supabase
       .from("stories")
-      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, view_count, cta_type, cta_message, cta_position_y, text_content, text_background, created_at, expires_at, is_processing, display_order")
+      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, duration_seconds, view_count, cta_type, cta_message, cta_position_y, text_content, text_background, created_at, expires_at, is_processing, display_order, is_muted")
       .in("creator_id", creatorIds)
       .eq("is_expired", false)
       .gt("expires_at", now)
@@ -125,6 +125,7 @@ export async function GET(req: NextRequest) {
         textContent:     story.text_content   ?? null,
         textBackground:  story.text_background ?? null,
         displayOrder:    story.display_order   ?? 0,
+        isMuted:         story.is_muted        ?? false,
       });
     }
 

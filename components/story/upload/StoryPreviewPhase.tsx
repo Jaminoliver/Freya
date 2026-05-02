@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useCallback } from "react";
 import { X, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   type Phase,
@@ -46,6 +46,20 @@ export default function StoryPreviewPhase({
   const setCtaMessage   = (m: string) => setCtaMessageForSlide(carouselIdx, m);
   const setCtaPositionY = (n: number) => setCtaPositionForSlide(carouselIdx, n);
   const touchStartX      = useRef(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const overlayTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
+
+  const togglePlayPause = useCallback((idx: number) => {
+    const vid = videoRefs.current.get(idx);
+    if (!vid) return;
+    if (isPaused) { vid.play().catch(() => {}); setIsPaused(false); }
+    else { vid.pause(); setIsPaused(true); }
+    setShowOverlay(true);
+    if (overlayTimeout.current) clearTimeout(overlayTimeout.current);
+    overlayTimeout.current = setTimeout(() => setShowOverlay(false), 900);
+  }, [isPaused]);
   
 
   const onCarouselTouchStart = (e: React.TouchEvent) => {
@@ -79,6 +93,17 @@ export default function StoryPreviewPhase({
           >
             <X size={18} />
           </button>
+          {hasVideo && (
+            <button
+              onClick={() => togglePlayPause(carouselIdx)}
+              style={{ background:"rgba(0,0,0,0.55)", border:"none", borderRadius:"50%", width:38, height:38, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#fff" }}
+            >
+              {isPaused
+                ? <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg>
+                : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              }
+            </button>
+          )}
           {hasVideo && (
             <button
               onClick={() => setIsMuted((m) => !m)}
@@ -155,18 +180,19 @@ export default function StoryPreviewPhase({
             {s.mediaType === "video"
               ? <video
                   key={`vid-${idx}-${carouselIdx}`}
+                  ref={(el) => { if (el) videoRefs.current.set(idx, el); else videoRefs.current.delete(idx); }}
                   src={s.previewUrl}
                   autoPlay
                   playsInline
                   muted={isMuted}
                   style={{ position:"relative", zIndex:1, width:"100%", height:"100%", objectFit:"contain", display:"block" }}
-                  onLoadedMetadata={(e) => { e.currentTarget.currentTime = clipStart; }}
+                  onLoadedMetadata={(e) => { e.currentTarget.currentTime = clipStart; if (isPaused) e.currentTarget.pause(); }}
                   onTimeUpdate={(e) => {
                     const vid = e.currentTarget;
                     const end = clipEnd > 0 ? clipEnd : clipStart + Math.min(CLIP_DURATION, vid.duration - clipStart);
                     if (vid.currentTime >= end) {
                       vid.currentTime = clipStart;
-                      vid.play().catch(() => {});
+                      if (!isPaused) vid.play().catch(() => {});
                     }
                   }}
                 />
@@ -175,7 +201,21 @@ export default function StoryPreviewPhase({
           </div>
         ))}
 
-        {/* Multi-file arrows + dots + counter */}
+        {/* Center tap overlay */}
+        {hasVideo && (
+          <div
+            onClick={() => togglePlayPause(carouselIdx)}
+            onTouchEnd={(e) => { e.stopPropagation(); }}
+            style={{ position:"absolute", inset:0, zIndex:4, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}
+          >
+            <div style={{ opacity: showOverlay ? 1 : 0, transition:"opacity 0.4s ease", background:"rgba(0,0,0,0.45)", borderRadius:"50%", width:64, height:64, display:"flex", alignItems:"center", justifyContent:"center", pointerEvents:"none" }}>
+              {isPaused
+                ? <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg>
+                : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              }
+            </div>
+          </div>
+        )}
         {selected.length > 1 && (
           <>
             <button onClick={() => setCarouselIdx(Math.max(carouselIdx - 1, 0))} disabled={carouselIdx === 0}

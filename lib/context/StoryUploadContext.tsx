@@ -23,6 +23,7 @@ export interface UploadJob {
   mediaType: "photo" | "video" | "mixed";
   clipStart: number;
   clipEnd:   number;
+  isMuted?:  boolean;
   ctaData?:  { ctaType: "subscribe" | "tip" | null; ctaMessage: string | null; ctaPositionY: number | null }[];
 }
 interface StoryUploadState {
@@ -228,6 +229,7 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
             displayOrder: job.files.findIndex(f => f.type.startsWith("video/")),
             clipStart:    job.clipStart,
             clipEnd:      job.clipEnd,
+            isMuted:      job.isMuted ?? false,
             photoStoryIds,
           }),
           signal: controller.signal,

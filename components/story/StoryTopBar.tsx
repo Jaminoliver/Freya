@@ -137,7 +137,8 @@ export default forwardRef<StoryTopBarRef, Props>(function StoryTopBar(
               <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.6)", fontFamily: "Inter,sans-serif" }}>{timeAgo(story.createdAt)}</p>
             </div>
           </a>
-          {isVideo && (
+          {(() => { console.log("[TopBar] id:", story.id, "isMuted:", story.isMuted); return null; })()}
+          {isVideo && !story.isMuted && (
             <button {...stop} onClick={(e) => { e.stopPropagation(); onMuteToggle(); }} style={ICON_BTN}>
               {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
             </button>

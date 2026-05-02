@@ -112,6 +112,8 @@ export default function CreateStoryPage() {
             thumbsLoading={state.thumbsLoading}
             setPhase={state.setPhase}
             setCarouselIdx={state.setCarouselIdx}
+            isMuted={state.isMuted}
+            setIsMuted={state.setIsMuted}
           />
         )}
 

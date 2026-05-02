@@ -118,6 +118,8 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
             thumbsLoading={state.thumbsLoading}
             setPhase={state.setPhase}
             setCarouselIdx={state.setCarouselIdx}
+            isMuted={state.isMuted}
+            setIsMuted={state.setIsMuted}
           />
         )}
 

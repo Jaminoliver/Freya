@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
     const { data: stories, error: storiesErr } = await supabase
       .from("stories")
-      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, created_at, expires_at, is_processing, cta_type, cta_message, cta_position_y, text_content, text_background, display_order")
+      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, created_at, expires_at, is_processing, cta_type, cta_message, cta_position_y, text_content, text_background, display_order, is_muted")
       .eq("creator_id", creatorId)
       .eq("is_expired", false)
       .eq("is_processing", false)
@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
       textContent:     s.text_content   ?? null,
       textBackground:  s.text_background ?? null,
       displayOrder:    s.display_order   ?? 0,
+      isMuted:         s.is_muted        ?? false,
     }));
 
     items.sort((a: any, b: any) => a.displayOrder - b.displayOrder);

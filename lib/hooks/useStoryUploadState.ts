@@ -200,13 +200,14 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
       mediaType:    mediaType as any,
       clipStart,
       clipEnd: clipEndVal,
+      isMuted: hasVideo ? isMuted : false,
       ctaData: selected.map((_, i) => {
         const c = ctaMap[i] ?? _ctaDefault;
         return { ctaType: c.type, ctaMessage: c.message.trim() || null, ctaPositionY: c.type ? c.positionY : null };
       }),
     });
     onClose();
-  }, [selected, caption, clipStart, ctaMap, onUploadStart, onClose]);
+  }, [selected, caption, clipStart, clipEnd, isMuted, ctaMap, onUploadStart, onClose]);
 
   const handleSendText = useCallback(async () => {
     if (!textContent.trim() || textPosting) return;

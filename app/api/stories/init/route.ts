@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
     console.log("[stories/init] video ctaType:", ctaType, "ctaMessage:", ctaMessage);
     const clipStart = parseFloat(body.clipStart) || 0;
     const clipEnd   = parseFloat(body.clipEnd)   || 0;
+    const isMuted   = body.isMuted === true;
 
     if (mediaType !== "video") {
       return NextResponse.json({ error: "Invalid mediaType" }, { status: 400 });
@@ -120,6 +121,7 @@ export async function POST(req: NextRequest) {
         caption,
         clip_start:     clipStart > 0 ? clipStart : null,
         clip_end:       clipEnd   > 0 ? clipEnd   : null,
+        is_muted:       isMuted,
         expires_at:     expiresAt,
         is_expired:     false,
         is_processing:  true,

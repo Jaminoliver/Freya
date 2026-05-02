@@ -24,6 +24,7 @@ export interface StoryItem {
   viewed:       boolean;
   isProcessing?: boolean;
   viewCount?:    number;
+  isMuted?:      boolean;
   ctaType?:      "subscribe" | "tip" | null;
   ctaMessage?:     string | null;
   ctaPositionY?:   number | null;
