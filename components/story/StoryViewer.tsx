@@ -507,6 +507,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (replyOpenRef.current || viewersOpenRef.current) return;
+    if (menuOpen) { setMenuOpen(false); return; }
     const t = e.touches[0];
     touchRef.current = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false, holding: false, draggingDown: false };
     dragRef.current = { active: false, startY: t.clientY };
@@ -549,6 +550,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (replyOpenRef.current || viewersOpenRef.current) return;
     if ((e.target as HTMLElement).closest("button, input")) return;
+    if (menuOpen) { setMenuOpen(false); return; }
     holdTimerRef.current = setTimeout(() => { touchRef.current.holding = true; setPaused(true); }, HOLD_THRESHOLD_MS);
   }, []);
 
