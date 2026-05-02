@@ -36,6 +36,8 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
   const touchStartY      = useRef(0);
   const didSwipe         = useRef(false);
   const swipeTriggered   = useRef(false);
+  const capturedRect     = useRef<DOMRect | null>(null);
+  const gifRef           = useRef<HTMLDivElement>(null);
 
   const startLongPress = (e: React.TouchEvent) => {
     touchStartX.current    = e.touches[0].clientX;
@@ -43,7 +45,7 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
     didSwipe.current       = false;
     swipeTriggered.current = false;
     longPressTimer.current = setTimeout(() => {
-      if (!didSwipe.current) { setSheetOpen(true); setSwiping(false); setSwipeX(0); }
+      if (!didSwipe.current) { capturedRect.current = gifRef.current?.getBoundingClientRect() ?? null; setSheetOpen(true); setSwiping(false); setSwipeX(0); }
     }, 500);
   };
 
@@ -81,6 +83,7 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
         <MessageActionModal
           message={message}
           isOwn={isOwn}
+          bubbleRect={capturedRect.current}
           onCopy={() => {}}
           onReply={() => { onReply?.(message); setSheetOpen(false); }}
           onDeleteForMe={() => { onDelete?.(message, "me"); setSheetOpen(false); }}
@@ -119,7 +122,7 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
         onTouchMove={moveLongPress}
         onTouchEnd={endLongPress}
         onTouchCancel={endLongPress}
-        onContextMenu={(e) => { e.preventDefault(); setSheetOpen(true); }}
+        onContextMenu={(e) => { e.preventDefault(); capturedRect.current = gifRef.current?.getBoundingClientRect() ?? null; setSheetOpen(true); }}
         style={{
           transform:  `translateX(${swipeX}px)`,
           transition: swiping ? "none" : "transform 0.25s ease",
@@ -141,6 +144,7 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
         {!isOwn && isSameGroup && <div style={{ width: "36px", flexShrink: 0 }} />}
 
         <div
+          ref={gifRef}
           onClick={onClick}
           style={{
             position:        "relative",

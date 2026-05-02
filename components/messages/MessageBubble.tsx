@@ -49,9 +49,11 @@ export function MessageBubble({
 }: Props) {
   const { participant } = conversation;
 
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [swipeX,    setSwipeX]    = useState(0);
-  const [swiping,   setSwiping]   = useState(false);
+  const [sheetOpen,  setSheetOpen]  = useState(false);
+const [swipeX,     setSwipeX]     = useState(0);
+const [swiping,    setSwiping]    = useState(false);
+const capturedRect = useRef<DOMRect | null>(null);
+const bubbleRef = useRef<HTMLDivElement>(null);
 
   const longPressTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartX      = useRef(0);
@@ -65,8 +67,11 @@ export function MessageBubble({
     didSwipe.current       = false;
     swipeTriggered.current = false;
     longPressTimer.current = setTimeout(() => {
-      if (!didSwipe.current) { setSheetOpen(true); setSwiping(false); setSwipeX(0); }
-    }, 500);
+  if (!didSwipe.current) {
+    capturedRect.current = bubbleRef.current?.getBoundingClientRect() ?? null;
+    setSheetOpen(true); setSwiping(false); setSwipeX(0);
+  }
+}, 500);
   };
 
   const moveLongPress = (e: React.TouchEvent) => {
@@ -219,6 +224,7 @@ export function MessageBubble({
         <MessageActionModal
           message={message}
           isOwn={isOwn}
+          bubbleRect={capturedRect.current}
           onCopy={() => { if (message.text) copyToClipboard(message.text); }}
           onReply={() => onReply?.(message)}
           onDeleteForMe={() => onDelete?.(message, "me")}
@@ -248,7 +254,7 @@ export function MessageBubble({
           onTouchMove={moveLongPress}
           onTouchEnd={endLongPress}
           onTouchCancel={endLongPress}
-          onContextMenu={(e) => { e.preventDefault(); setSheetOpen(true); }}
+          onContextMenu={(e) => { e.preventDefault(); capturedRect.current = bubbleRef.current?.getBoundingClientRect() ?? null; setSheetOpen(true); }}
           style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "8px", fontFamily: "'Inter', sans-serif", transform: `translateX(${swipeX}px)`, transition: swiping ? "none" : "transform 0.25s ease", userSelect: "none", WebkitUserSelect: "none", touchAction: "pan-y" }}
         >
           {!isOwn && (
@@ -260,7 +266,7 @@ export function MessageBubble({
             </div>
           )}
 
-          <div style={{ backgroundColor: isOwn ? "#8B5CF6" : "#1E1E2E", borderRadius: isOwn ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "8px 12px 6px", maxWidth: "100%", cursor: "pointer" }}>
+          <div ref={bubbleRef} style={{ backgroundColor: isOwn ? "#8B5CF6" : "#1E1E2E", borderRadius: isOwn ? "18px 18px 4px 18px" : "18px 18px 18px 4px", padding: "8px 12px 6px", maxWidth: "100%", cursor: "pointer" }}>
             {storyReplyPreview}
             {replyPreview}
             <p style={{ margin: 0, fontSize: "14px", color: "#FFFFFF", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>

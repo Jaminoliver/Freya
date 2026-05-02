@@ -58,6 +58,8 @@ export function MediaBubble({
   const longPressTimer       = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didMove              = useRef(false);
   const pendingMediaIndexRef = useRef<number>(0);
+  const capturedRect         = useRef<DOMRect | null>(null);
+  const bubbleRef            = useRef<HTMLDivElement>(null);
 
   const startPress = () => {
     didMove.current = false;
@@ -76,8 +78,8 @@ export function MediaBubble({
   };
 
   const handleLongPressItem = (index: number) => {
+    capturedRect.current = bubbleRef.current?.getBoundingClientRect() ?? null;
     setSheetOpen(true);
-    // store index for reply
     pendingMediaIndexRef.current = index;
   };
 
@@ -87,6 +89,7 @@ export function MediaBubble({
         <MessageActionModal
           message={msg}
           isOwn={isOwn}
+          bubbleRect={capturedRect.current}
           onCopy={() => {}}
           onReply={() => { onReply?.(msg, pendingMediaIndexRef.current); setSheetOpen(false); }}
           onDeleteForMe={() => { onDelete?.(msg, "me"); setSheetOpen(false); }}
@@ -116,7 +119,7 @@ export function MediaBubble({
         )}
         {!isOwn && isSameGroup && <div style={{ width: "36px", flexShrink: 0 }} />}
 
-        <div style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
+        <div ref={bubbleRef} style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
           <MediaGrid
             mediaItems={mediaItems}
             isPPV={msg.type === "ppv"}
