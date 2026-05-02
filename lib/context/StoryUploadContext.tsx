@@ -151,7 +151,7 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
         patch({ phase: "compressing", compressPct: 0 });
         compressedVideo = await compressVideoIfNeeded(videoFile, (p) => {
           patch({ compressPct: p.percent });
-        });
+        }, job.clipStart ?? 0, job.clipEnd ?? 0);
         if (cancelledRef.current) return;
       }
 

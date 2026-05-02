@@ -105,6 +105,8 @@ export default function CreateStoryPage() {
             videoEntry={state.videoEntry}
             clipStart={state.clipStart}
             setClipStart={state.setClipStart}
+            clipEnd={state.clipEnd}
+            setClipEnd={state.setClipEnd}
             videoDuration={state.videoDuration}
             thumbnails={state.thumbnails}
             thumbsLoading={state.thumbsLoading}

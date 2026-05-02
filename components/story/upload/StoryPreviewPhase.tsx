@@ -163,7 +163,10 @@ export default function StoryPreviewPhase({
                   onTimeUpdate={(e) => {
                     const vid = e.currentTarget;
                     const end = clipStart + Math.min(CLIP_DURATION, vid.duration - clipStart);
-                    if (vid.currentTime >= end) vid.currentTime = clipStart;
+                    if (vid.currentTime >= end) {
+                      vid.currentTime = clipStart;
+                      vid.play().catch(() => {});
+                    }
                   }}
                 />
               : <img   src={s.previewUrl} alt="" style={{ position:"relative", zIndex:1, width:"100%", height:"100%", objectFit:"contain", display:"block" }} />

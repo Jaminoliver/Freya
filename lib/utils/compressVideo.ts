@@ -13,14 +13,17 @@ export interface CompressProgress {
 
 export async function compressVideoIfNeeded(
   file: File,
-  onProgress?: (p: CompressProgress) => void
+  onProgress?: (p: CompressProgress) => void,
+  clipStart = 0,
+  clipEnd = 0,
 ): Promise<File> {
-  const fileMB = file.size / (1024 * 1024);
+  const fileMB    = file.size / (1024 * 1024);
+  const needsTrim = clipEnd > 0 && (clipStart > 0 || clipEnd < (file.size / 1024 / 1024 * 60));
 
   console.log(`[compress] File: ${file.name} | Size: ${fileMB.toFixed(1)} MB`);
 
-  if (fileMB <= COMPRESS_THRESHOLD_MB) {
-    console.log(`[compress] Skipping — file is under ${COMPRESS_THRESHOLD_MB}MB threshold`);
+  if (fileMB <= COMPRESS_THRESHOLD_MB && !needsTrim) {
+    console.log(`[compress] Skipping — file is under ${COMPRESS_THRESHOLD_MB}MB threshold and no trim needed`);
     onProgress?.({ phase: "done", percent: 100, message: "No compression needed" });
     return file;
   }
@@ -60,16 +63,24 @@ export async function compressVideoIfNeeded(
   console.log("[compress] Writing file to FFmpeg FS…");
   await ffmpegInstance.writeFile(inputName, await fetchFile(file));
 
-  console.log("[compress] Running FFmpeg…");
+  const trimFlags  = needsTrim ? ["-ss", String(clipStart), "-t", String(clipEnd - clipStart)] : [];
+  const needsEncode = fileMB > COMPRESS_THRESHOLD_MB;
+
+  console.log("[compress] Running FFmpeg…", { needsTrim, needsEncode, clipStart, clipEnd });
   await ffmpegInstance.exec([
+    ...trimFlags,
     "-i",        inputName,
-    "-vf",       "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:flags=lanczos",
-    "-c:v",      "libx264",
-    "-crf",      "26",
-    "-preset",   "ultrafast",
-    "-c:a",      "aac",
-    "-b:a",      "128k",
-    "-movflags", "+faststart",
+    ...(needsEncode ? [
+      "-vf",       "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:flags=lanczos",
+      "-c:v",      "libx264",
+      "-crf",      "26",
+      "-preset",   "ultrafast",
+      "-c:a",      "aac",
+      "-b:a",      "128k",
+      "-movflags", "+faststart",
+    ] : [
+      "-c",        "copy",
+    ]),
     "-y",        outputName,
   ]);
 

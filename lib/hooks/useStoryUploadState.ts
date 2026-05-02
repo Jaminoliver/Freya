@@ -29,7 +29,8 @@ export const TEXT_BACKGROUNDS = [
 
 export const MAX_PHOTOS    = 3;
 export const MAX_WITH_VID  = 2;
-export const CLIP_DURATION = 90;
+export const CLIP_DURATION     = 90;
+export const MIN_CLIP_DURATION = 3;
 export const THUMB_COUNT   = 14;
 
 export function getTextFontSize(len: number): number {
@@ -77,6 +78,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
   const [textPosting,   setTextPosting]   = useState(false);
   const [textPostErr,   setTextPostErr]   = useState<string | null>(null);
   const [clipStart,     setClipStart]     = useState(0);
+  const [clipEnd,       setClipEnd]       = useState(0);
   const [videoDuration, setVideoDur]      = useState(0);
   const [thumbnails,    setThumbnails]    = useState<string[]>([]);
   const [thumbsLoading, setThumbsLoading] = useState(false);
@@ -171,9 +173,10 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
   const handleContinue = useCallback(() => {
     if (!selected.length) return;
     const videoEntry = selected.find((s) => s.mediaType === "video");
-    if (videoEntry && videoEntry.duration && videoEntry.duration > CLIP_DURATION) {
+    if (videoEntry && videoEntry.duration && videoEntry.duration >= MIN_CLIP_DURATION) {
       setVideoDur(videoEntry.duration);
       setClipStart(0);
+      setClipEnd(Math.min(CLIP_DURATION, videoEntry.duration));
       setPhase("clip");
       generateThumbnails(videoEntry.previewUrl, videoEntry.duration);
     } else {
@@ -187,7 +190,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
   const handleSend = useCallback(() => {
     if (!selected.length) return;
     const videoEntry = selected.find((s) => s.mediaType === "video");
-    const clipEnd    = videoEntry ? Math.min(clipStart + CLIP_DURATION, videoEntry.duration ?? CLIP_DURATION) : 0;
+    const clipEndVal = videoEntry ? clipEnd : 0;
     const hasVideo   = !!videoEntry;
     const hasPhoto   = selected.some((s) => s.mediaType === "photo");
     const mediaType  = hasVideo && hasPhoto ? "mixed" : hasVideo ? "video" : "photo";
@@ -196,7 +199,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
       caption:      caption.trim(),
       mediaType:    mediaType as any,
       clipStart,
-      clipEnd,
+      clipEnd: clipEndVal,
       ctaData: selected.map((_, i) => {
         const c = ctaMap[i] ?? _ctaDefault;
         return { ctaType: c.type, ctaMessage: c.message.trim() || null, ctaPositionY: c.type ? c.positionY : null };
@@ -234,7 +237,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
   const reset = useCallback(() => {
     selected.forEach((s) => URL.revokeObjectURL(s.previewUrl));
     setSelected([]); setCaption(""); setError(null);
-    setThumbnails([]); setClipStart(0); setPhase("pick");
+    setThumbnails([]); setClipStart(0); setClipEnd(0); setPhase("pick");
     setTextContent(""); setCtaMap({});
   }, [selected]);
 
@@ -260,6 +263,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
     textPosting,
     textPostErr, setTextPostErr,
     clipStart, setClipStart,
+    clipEnd,   setClipEnd,
     videoDuration, setVideoDur,
     thumbnails,
     thumbsLoading,
