@@ -34,13 +34,19 @@ export function ReactionPills({ reactions, isOwn, onToggle }: Props) {
         .r-pill { -webkit-tap-highlight-color: transparent; }
         .r-pill:active { opacity: 0.72; }
       `}</style>
-      <div style={{
+      <style>{`
+        .rp-wrap-receiver { padding-left: 74px; }
+        .rp-wrap-own      { padding-right: 10px; }
+        @media (max-width: 767px) {
+          .rp-wrap-receiver { padding-left: 52px; }
+          .rp-wrap-own      { padding-right: 10px; }
+        }
+      `}</style>
+      <div className={isOwn ? "rp-wrap-own" : "rp-wrap-receiver"} style={{
         display:        "flex",
         flexWrap:       "wrap",
         gap:            "4px",
         justifyContent: isOwn ? "flex-end" : "flex-start",
-        paddingLeft:    isOwn ? 0 : "54px",
-        paddingRight:   isOwn ? "10px" : 0,
       }}>
         {reactions.map((r) => (
           <ReactionPill key={r.emoji} reaction={r} onToggle={onToggle} />
