@@ -59,12 +59,10 @@ export function MessageActionModal({
     }
   }
 
-  // Vertical: try to start stack just above the bubble; clamp to screen
+  // Vertical: center the stack on screen (like WhatsApp)
   let anchorTop: number | undefined;
   if (bubbleRect) {
-    anchorTop = bubbleRect.top - STACK_H - 8;
-    if (anchorTop < PAD) anchorTop = Math.min(bubbleRect.bottom + 8, vh - STACK_H - PAD);
-    anchorTop = Math.max(PAD, Math.min(anchorTop, vh - STACK_H - PAD));
+    anchorTop = Math.max(PAD, (vh - STACK_H) / 2);
   }
 
   console.log("[MAM] computed:", { anchorLeft, anchorRight, anchorTop });
@@ -358,7 +356,7 @@ export function MessageActionModal({
                       border:      "none",
                       cursor:      "pointer",
                       color:       getColor(item),
-                      fontSize:    "13px",
+                      fontSize:    "15px",
                       fontFamily:  "'Inter', sans-serif",
                       textAlign:   "left",
                     }}
