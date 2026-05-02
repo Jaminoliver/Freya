@@ -81,7 +81,7 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
     const onTouchEnd = (e: TouchEvent) => {
       if (longPressTimer.current) clearTimeout(longPressTimer.current);
       if (longPressFired.current) { longPressFired.current = false; return; }
-      const avatarEl = (el as HTMLElement).querySelector("[data-avatar-ring]");
+      const avatarEl = (el as HTMLElement).querySelector("[data-avatar-ring='true']");
       if (avatarEl && avatarEl.contains(e.target as Node)) return;
       if (!didScroll.current) onSelect();
       setTimeout(() => { wasTouched.current = false; }, 50);
@@ -201,16 +201,24 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
           {storyViewerOpen && group && (
             <StoryViewer groups={[group]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refresh(); }} />
           )}
-          <AvatarWithStoryRing
-            src={participant.avatarUrl ?? null}
-            alt={participant.name}
-            size={52}
-            hasStory={hasStory}
-            hasUnviewed={hasUnviewed}
-            borderColor="#0A0A0F"
-            data-avatar-ring
-            onClick={(e) => { e.stopPropagation(); if (hasStory && group) setStoryViewerOpen(true); }}
-          />
+          <div
+            data-avatar-ring="true"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (hasStory && group) setStoryViewerOpen(true);
+              else onSelect();
+            }}
+            onTouchEnd={(e) => { e.stopPropagation(); }}
+          >
+            <AvatarWithStoryRing
+              src={participant.avatarUrl ?? null}
+              alt={participant.name}
+              size={52}
+              hasStory={hasStory}
+              hasUnviewed={hasUnviewed}
+              borderColor="#0A0A0F"
+            />
+          </div>
           {participant.isOnline && (
             <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "12px", height: "12px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0A0A0F", zIndex: 10 }} />
           )}
