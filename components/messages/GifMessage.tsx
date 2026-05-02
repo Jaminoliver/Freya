@@ -152,6 +152,9 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
             overflow:        "hidden",
             backgroundColor: "#1C1C2E",
             width:           "220px",
+            WebkitTouchCallout: "none",
+            userSelect:      "none",
+            WebkitUserSelect: "none",
             minHeight:       loaded ? undefined : "160px",
             cursor:          onClick ? "pointer" : "default",
             boxShadow:       "0 2px 10px rgba(0,0,0,0.25)",
@@ -201,13 +204,18 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
           alt="GIF"
           loading="lazy"
           draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
           onLoad={() => setLoaded(true)}
           style={{
-            width:     "100%",
-            height:    "auto",
-            display:   "block",
-            opacity:   loaded ? 1 : 0,
-            animation: loaded ? "gifFade 0.25s ease both" : undefined,
+            width:              "100%",
+            height:             "auto",
+            display:            "block",
+            opacity:            loaded ? 1 : 0,
+            animation:          loaded ? "gifFade 0.25s ease both" : undefined,
+            userSelect:         "none",
+            WebkitUserSelect:   "none" as any,
+            WebkitTouchCallout: "none" as any,
+            pointerEvents:      "none",
           }}
         />
 

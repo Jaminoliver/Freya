@@ -192,7 +192,7 @@ export function MediaGrid({
             ) : item.type === "video" ? (
               <VideoThumb src={item.url} isSending={!!isSending} locked={false} />
             ) : (
-              <img src={item.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, transition: "opacity 0.3s ease", WebkitTouchCallout: "none" as any, userSelect: "none" }} />
+              <img src={item.url} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, transition: "opacity 0.3s ease", WebkitTouchCallout: "none" as any, userSelect: "none", WebkitUserSelect: "none" as any, pointerEvents: "none" }} />
             )}
 
             {!isSending && item.type === "video" && item.url && (
