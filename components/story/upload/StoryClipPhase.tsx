@@ -98,7 +98,7 @@ export default function StoryClipPhase({
     <div
       className="sum-wrap"
       onClick={(e) => e.stopPropagation()}
-      style={{ position:"relative", width:"100%", height:"100dvh", maxWidth:480, backgroundColor:"#000", display:"flex", flexDirection:"column" }}
+      style={{ position:"relative", width:"100%", height:"100dvh", maxWidth:480, backgroundColor:"#000", display:"flex", flexDirection:"column", overscrollBehaviorX:"none", touchAction:"pan-y" }}
     >
       {/* Video preview */}
       <div style={{ flex:1, position:"relative", overflow:"hidden", minHeight:0 }}>
