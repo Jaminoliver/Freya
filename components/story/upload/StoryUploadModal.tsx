@@ -139,6 +139,7 @@ export default function StoryUploadModal({ onClose, onUploadStart }: StoryUpload
             toolbarOpen={state.toolbarOpen}
             setToolbarOpen={state.setToolbarOpen}
             clipStart={state.clipStart}
+            clipEnd={state.clipEnd}
             setPhase={state.setPhase}
             handleSend={state.handleSend}
             ctaDragRef={ctaDragRef}

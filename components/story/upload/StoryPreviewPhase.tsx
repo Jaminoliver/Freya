@@ -25,6 +25,7 @@ interface StoryPreviewPhaseProps {
   toolbarOpen:      boolean;
   setToolbarOpen:   (b: boolean | ((prev: boolean) => boolean)) => void;
   clipStart:        number;
+  clipEnd:          number;
   setPhase:         (p: Phase) => void;
   handleSend:       () => void;
   ctaDragRef:       React.MutableRefObject<{ active: boolean; startY: number; startPosY: number }>;
@@ -37,7 +38,7 @@ export default function StoryPreviewPhase({
   getCtaForSlide, setCtaTypeForSlide, setCtaMessageForSlide, setCtaPositionForSlide,
   caption, setCaption, captionFocus, setCaptionFocus,
   isMuted, setIsMuted, toolbarOpen, setToolbarOpen,
-  clipStart, setPhase, handleSend,
+  clipStart, clipEnd, setPhase, handleSend,
   ctaDragRef, ctaPosRef, ctaCardRef,
 }: StoryPreviewPhaseProps) {
   const { type: ctaType, message: ctaMessage, positionY: ctaPositionY } = getCtaForSlide(carouselIdx);
@@ -162,7 +163,7 @@ export default function StoryPreviewPhase({
                   onLoadedMetadata={(e) => { e.currentTarget.currentTime = clipStart; }}
                   onTimeUpdate={(e) => {
                     const vid = e.currentTarget;
-                    const end = clipStart + Math.min(CLIP_DURATION, vid.duration - clipStart);
+                    const end = clipEnd > 0 ? clipEnd : clipStart + Math.min(CLIP_DURATION, vid.duration - clipStart);
                     if (vid.currentTime >= end) {
                       vid.currentTime = clipStart;
                       vid.play().catch(() => {});

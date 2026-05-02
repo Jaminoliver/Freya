@@ -133,6 +133,7 @@ export default function CreateStoryPage() {
             toolbarOpen={state.toolbarOpen}
             setToolbarOpen={state.setToolbarOpen}
             clipStart={state.clipStart}
+            clipEnd={state.clipEnd}
             setPhase={state.setPhase}
             handleSend={state.handleSend}
             ctaDragRef={ctaDragRef}
