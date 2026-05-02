@@ -42,7 +42,7 @@ export default function ProfileAvatar({
   const [preview,         setPreview]         = useState(false);
   const [uploading,       setUploading]       = useState(false);
   const [storyToast, setStoryToast] = useState(false);
-  const { phase: uploadPhase, storyId, markProcessingComplete } = useStoryUpload();
+  const { phase: uploadPhase, storyId, markProcessingComplete, cancelUpload } = useStoryUpload();
   const isStoryUploading = uploadPhase !== "idle" && uploadPhase !== "done" && uploadPhase !== "error";
   const [sheetOpen,       setSheetOpen]       = useState(false);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
@@ -313,7 +313,15 @@ export default function ProfileAvatar({
             borderColor="#0A0A0F"
           />
           {isStoryUploading && (
-            <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "3px solid transparent", borderTop: "3px solid #8B5CF6", borderRight: "3px solid #EC4899", animation: "spin 1s linear infinite", pointerEvents: "none", zIndex: 20 }} />
+            <>
+              <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "3px solid transparent", borderTop: "3px solid #8B5CF6", borderRight: "3px solid #EC4899", animation: "spin 1s linear infinite", pointerEvents: "none", zIndex: 20 }} />
+              <div
+                onClick={(e) => { e.stopPropagation(); cancelUpload(); }}
+                style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 21 }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </div>
+            </>
           )}
         </div>
         {storyToast && (
