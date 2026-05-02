@@ -626,14 +626,19 @@ function startGlobalRealtime() {
           console.log("[REACTION INSERT] fired — row:", JSON.stringify(row));
 
           // Update message in active conversation store
+          // Skip own reactions — already handled by optimistic update in handleReact
+          if (row.user_id === currentUserId) return;
+
           const store = useMessageStore.getState();
           store.setMessages((prev: Message[]) => prev.map((m) => {
             if (m.id !== row.message_id) return m;
-            const existing  = m.reactions ?? [];
-            const myExisting = existing.find((r) => r.emoji === row.emoji);
-            const reactions  = myExisting
-              ? existing.map((r) => r.emoji === row.emoji ? { ...r, count: r.count + 1, reactedByMe: row.user_id === currentUserId ? true : r.reactedByMe } : r)
-              : [...existing, { emoji: row.emoji, count: 1, reactedByMe: row.user_id === currentUserId }];
+            // Remove any previous reaction from this other user (we don't track per-user so reduce all by 1 if switching)
+            let reactions = [...(m.reactions ?? [])];
+            // Add or increment new emoji
+            const hit = reactions.find((r) => r.emoji === row.emoji);
+            reactions = hit
+              ? reactions.map((r) => r.emoji === row.emoji ? { ...r, count: r.count + 1 } : r)
+              : [...reactions, { emoji: row.emoji, count: 1, reactedByMe: false }];
             return { ...m, reactions };
           }));
           console.log("[REACTION INSERT] cached convs:", cachedConversations?.map((c) => ({
@@ -661,6 +666,8 @@ function startGlobalRealtime() {
           const row = payload.old as any;
 
           // Update message in active conversation store
+          if (row.user_id === currentUserId) return;
+
           const store = useMessageStore.getState();
           store.setMessages((prev: Message[]) => prev.map((m) => {
             if (m.id !== row.message_id) return m;
