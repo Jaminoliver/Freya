@@ -113,19 +113,28 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
   const { viewer: globalViewer } = useAppStore();
   const { group: storyGroup, hasStory, hasUnviewed, refresh: refreshStory } = useCreatorStory(post?.creator_id);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
-  const isLiking   = useRef(false);
+  const isLiking    = useRef(false);
+  const lastScrollY = useRef(0);
+  const [headerHidden, setHeaderHidden] = useState(false);
   const commentRef = useRef<HTMLDivElement>(null);
   const postRef    = useRef<PostData | null>(null);
   useEffect(() => { postRef.current = post; }, [post]);
 
   useEffect(() => {
-    if (scrollRef?.current) {
-      scrollRef.current.scrollTop = 0;
-    } else {
-      const main = document.querySelector("main");
-      if (main) main.scrollTop = 0;
-    }
+    const el = scrollRef?.current ?? document.querySelector("main");
+    if (el) el.scrollTop = 0;
   }, []);
+
+  useEffect(() => {
+    const el = scrollRef?.current ?? document.querySelector("main") ?? window;
+    const onScroll = () => {
+      const y = el === window ? window.scrollY : (el as HTMLElement).scrollTop;
+      setHeaderHidden(y > lastScrollY.current && y > 60);
+      lastScrollY.current = y;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [scrollRef]);
 
   useEffect(() => {
     if (!globalViewer) return;
@@ -313,6 +322,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
     setSavedPost(next);
     try {
       await fetch("/api/saved/posts", { method: next ? "POST" : "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ post_id: post.id }) });
+      if (!next) window.dispatchEvent(new CustomEvent("post-unsaved", { detail: { postId: String(post.id) } }));
     } catch { setSavedPost(!next); }
   }, [savedPost, post, sourceIsMessage]);
 
@@ -341,6 +351,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
   }
 
   const isOwnPost  = viewerId === post.creator_id;
+  console.log("[PostView] isOwnPost:", isOwnPost, "viewerId:", viewerId, "creator_id:", post.creator_id);
   const isTextPost = post.content_type === "text";
   const photoMedia = post.media?.filter((m) => !m.locked && m.media_type !== "video") ?? [];
 
@@ -391,7 +402,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
       )}
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", paddingTop: "env(safe-area-inset-top)", height: "56px", borderBottom: "1px solid #1E1E2E", position: "sticky", top: 0, backgroundColor: "#0A0A0F", zIndex: 10, boxSizing: "content-box" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", paddingTop: "env(safe-area-inset-top)", height: "56px", borderBottom: "1px solid #1E1E2E", position: "sticky", top: 0, backgroundColor: "#0A0A0F", zIndex: 50, boxSizing: "content-box", transform: headerHidden ? "translateY(-100%)" : "translateY(0)", transition: "transform 0.3s ease" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <button onClick={() => { console.log("[PostView] back button clicked, calling onBack"); onBack(); }} style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
             <ArrowLeft size={20} strokeWidth={1.8} />
@@ -430,7 +441,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
             ) : null}
             {!sourceIsMessage && (
               <button
-                onClick={() => isOwnPost ? setCreatorSheetOpen(true) : setSheetOpen(true)}
+                onClick={() => { console.log("[PostView] sheet btn clicked, isOwnPost:", isOwnPost); isOwnPost ? setCreatorSheetOpen(true) : setSheetOpen(true); }}
                 style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")}
                 onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}

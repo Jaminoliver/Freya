@@ -68,6 +68,15 @@ function SavedPageInner() {
 
   // ── Initial loads ─────────────────────────────────────────────────────────
   useEffect(() => {
+    const handler = (e: Event) => {
+      const { postId } = (e as CustomEvent).detail;
+      setSavedPosts((prev) => prev.filter((p) => p.id !== postId));
+    };
+    window.addEventListener("post-unsaved", handler);
+    return () => window.removeEventListener("post-unsaved", handler);
+  }, []);
+
+  useEffect(() => {
     console.log("[SavedPage] fetching posts — page mounted");
     fetch("/api/saved/posts")
       .then((r) => r.json())

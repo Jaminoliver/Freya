@@ -67,20 +67,19 @@ export default function PostHeader({
             fontSize: "13px", color: "#6B6B8A",
           }}>
             <span>@{username}</span>
-            <span>·</span>
-            <span>{timestamp}</span>
             {suffix}
           </div>
         </div>
       </div>
 
-      {rightSlot && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: "8px", flexShrink: 0,
-        }}>
-          {rightSlot}
-        </div>
-      )}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", flexShrink: 0 }}>
+        <span style={{ fontSize: "12px", color: "#6B6B8A", whiteSpace: "nowrap" }}>{timestamp}</span>
+        {rightSlot && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {rightSlot}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -212,7 +212,7 @@ function FeedCreatorCard({
       )}
       <div
         style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -38%)", zIndex: 2 }}
-        onClick={(e) => { e.stopPropagation(); if (hasStory && group) setStoryOpen(true); }}
+        onClick={(e) => { e.stopPropagation(); if (hasStory && group) setStoryOpen(true); else onClick(); }}
       >
         <AvatarWithStoryRing
           src={creator.avatar_url}

@@ -64,6 +64,7 @@ export default function PostOptionsSheet({
     return () => document.removeEventListener("keydown", handleKey);
   }, [isOpen, onClose]);
 
+  console.log("[PostOptionsSheet] isOpen:", isOpen);
   if (typeof window === "undefined") return null;
 
   const restrictDormant = isBlocked;
@@ -77,7 +78,6 @@ export default function PostOptionsSheet({
         setLocalSavedPost(p => !p);
         showToast(localSavedPost ? "Post removed from saved" : "Post saved");
         onSavePost();
-        setTimeout(onClose, 800);
       },
     },
     {
@@ -88,7 +88,6 @@ export default function PostOptionsSheet({
         setLocalSavedCreator(c => !c);
         showToast(localSavedCreator ? "Creator removed from saved" : "Creator saved");
         onSaveCreator();
-        setTimeout(onClose, 800);
       },
     },
     {
@@ -204,7 +203,7 @@ export default function PostOptionsSheet({
       {/* Backdrop */}
       {isOpen && <div
         onClick={onClose}
-        style={{ position: "fixed", inset: 0, zIndex: 200, backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
+        style={{ position: "fixed", inset: 0, zIndex: 999, backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
       />}
 
       {/* Sheet */}
@@ -216,7 +215,7 @@ export default function PostOptionsSheet({
           bottom:        0,
           left:          "50%",
           transform:     "translateX(-50%)",
-          zIndex:        201,
+          zIndex:        1000,
           borderRadius:  "24px 24px 0 0",
           border:        "1px solid rgba(255,255,255,0.08)",
           borderBottom:  "none",
