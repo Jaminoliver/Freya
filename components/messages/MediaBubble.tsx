@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { MediaGrid } from "@/components/messages/MediaGrid";
 import { ReadTick } from "@/components/messages/ReadTick";
 import { MessageActionModal } from "@/components/messages/MessageActionModal";
+import { ReactionPills } from "@/components/messages/ReactionPills";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface InlineAvatarProps {
@@ -35,6 +36,7 @@ interface Props {
   onUnlock:      (msg: Message) => void;
   onOpenLightbox:(msg: Message, i: number) => void;
   onSelect?:     (messageId: number) => void;
+  onReact?:      (msg: Message, emoji: string) => void;
 }
 
 export function MediaBubble({
@@ -50,6 +52,7 @@ export function MediaBubble({
   onUnlock,
   onOpenLightbox,
   onSelect,
+  onReact,
 }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const longPressTimer       = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,17 +92,19 @@ export function MediaBubble({
           onDeleteForMe={() => { onDelete?.(msg, "me"); setSheetOpen(false); }}
           onDeleteForEveryone={() => { onDelete?.(msg, "everyone"); setSheetOpen(false); }}
           onSelect={onSelect}
+          onReact={(emoji) => onReact?.(msg, emoji)}
           onClose={() => setSheetOpen(false)}
         />
       )}
 
+      <div style={{ display: "flex", flexDirection: "column", maxWidth: "75%", gap: "2px", alignItems: isOwn ? "flex-end" : "flex-start" }}>
       <div
         style={{
           display:           "flex",
           flexDirection:     isOwn ? "row-reverse" : "row",
           alignItems:        "flex-end",
           gap:               "8px",
-          maxWidth:          "75%",
+          maxWidth:          "100%",
           userSelect:        "none",
           WebkitUserSelect:  "none",
           // @ts-ignore
@@ -182,6 +187,8 @@ export function MediaBubble({
             </div>
           )}
         </div>
+      </div>
+      <ReactionPills reactions={msg.reactions ?? []} isOwn={isOwn} onToggle={(emoji) => onReact?.(msg, emoji)} />
       </div>
     </>
   );

@@ -238,7 +238,13 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             {!isTyping && hasMedia && <ImageIcon size={12} color="#6B6B8A" strokeWidth={1.8} />}
             <span style={{ fontSize: "13px", color: isTyping ? "#8B5CF6" : "#6B6B8A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "180px", fontStyle: isTyping ? "italic" : "normal", fontWeight: unreadCount > 0 ? 600 : 400 }}>
-              {isTyping ? "typing..." : lastMessage}
+              {isTyping
+                ? "typing..."
+                : conversation.lastMessageReaction
+                ? `Reacted ${conversation.lastMessageReaction} to a message`
+                : conversation.lastMessageSenderId
+                ? `${conversation.lastMessageSenderId === participant.id ? participant.name.split(" ")[0] : "You"}: ${lastMessage}`
+                : lastMessage}
             </span>
           </div>
         </div>

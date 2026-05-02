@@ -5,6 +5,7 @@ import { useState, useRef } from "react";
 import { MoreVertical, Bookmark } from "lucide-react";
 import { MessageActionModal } from "@/components/messages/MessageActionModal";
 import { ReadTick } from "@/components/messages/ReadTick";
+import { ReactionPills } from "@/components/messages/ReactionPills";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
@@ -20,9 +21,10 @@ interface Props {
   onSaveGif?:      (gifUrl: string) => void;
   replyToMessage?:      Message | null;
   onScrollToMessage?:   (messageId: number) => void;
+  onReact?:             (message: Message, emoji: string) => void;
 }
 
-export function GifMessage({ message, conversation, isOwn, time, isSameGroup, onClick, onReply, onDelete, onSelect, onSaveGif, replyToMessage, onScrollToMessage }: Props) {
+export function GifMessage({ message, conversation, isOwn, time, isSameGroup, onClick, onReply, onDelete, onSelect, onSaveGif, replyToMessage, onScrollToMessage, onReact }: Props) {
   const { participant } = conversation;
   const [loaded,     setLoaded]     = useState(false);
   const [sheetOpen,  setSheetOpen]  = useState(false);
@@ -85,18 +87,18 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
           onDeleteForEveryone={() => { onDelete?.(message, "everyone"); setSheetOpen(false); }}
           onSelect={onSelect}
           onSaveGif={onSaveGif && message.gifUrl ? () => onSaveGif(message.gifUrl!) : undefined}
+          onReact={(emoji) => onReact?.(message, emoji)}
           onClose={() => setSheetOpen(false)}
         />
       )}
 
+      <div style={{ display: "flex", flexDirection: "column", alignSelf: isOwn ? "flex-end" : "flex-start", maxWidth: "80%", gap: "2px" }}>
       <div
         style={{
           display:        "flex",
           flexDirection:  isOwn ? "row-reverse" : "row",
           alignItems:     "flex-end",
           gap:            "6px",
-          alignSelf:      isOwn ? "flex-end" : "flex-start",
-          maxWidth:       "80%",
           fontFamily:     "'Inter', sans-serif",
         }}
       >
@@ -242,6 +244,8 @@ export function GifMessage({ message, conversation, isOwn, time, isSameGroup, on
       </div>
       </div>
     </div>
+      <ReactionPills reactions={message.reactions ?? []} isOwn={isOwn} onToggle={(emoji) => onReact?.(message, emoji)} />
+      </div>
   </>
   );
 }

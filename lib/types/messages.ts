@@ -17,8 +17,11 @@ export interface Conversation {
   id:            number;
   createdAt?:    string;
   participant:   ConversationParticipant;
-  lastMessage:   string;
-  lastMessageAt: string;
+  lastMessage:          string;
+  lastMessageAt:        string;
+  lastMessageId?:       number;
+  lastMessageSenderId?: string;
+  lastMessageReaction?: string;
   unreadCount:   number;
   hasMedia:      boolean;
   isBlocked?:    boolean;
@@ -57,4 +60,11 @@ export interface Message {
   // Temp ID for pending messages before server assigns real ID
   tempId?:         string;
   isDeleted?:      boolean;
+  reactions?:      MessageReaction[];
+}
+
+export interface MessageReaction {
+  emoji:       string;
+  count:       number;
+  reactedByMe: boolean;
 }

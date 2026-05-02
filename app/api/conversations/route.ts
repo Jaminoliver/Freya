@@ -50,6 +50,35 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const convIds = (data ?? []).map((r: any) => r.id);
+  const { data: lastMsgs } = convIds.length > 0
+    ? await supabase
+        .from("messages")
+        .select("id, conversation_id, sender_id, gif_url")
+        .in("conversation_id", convIds)
+        .eq("is_deleted_for_everyone", false)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const lastMsgByConvId = new Map<number, any>();
+  for (const m of lastMsgs ?? []) {
+    if (!lastMsgByConvId.has(m.conversation_id)) lastMsgByConvId.set(m.conversation_id, m);
+  }
+
+  const lastMsgIds = [...lastMsgByConvId.values()].map((m) => m.id);
+  const { data: lastReactions } = lastMsgIds.length > 0
+    ? await supabase
+        .from("message_reactions")
+        .select("message_id, emoji, user_id")
+        .in("message_id", lastMsgIds)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const lastReactionByMsgId = new Map<number, string>();
+  for (const r of lastReactions ?? []) {
+    if (!lastReactionByMsgId.has(r.message_id)) lastReactionByMsgId.set(r.message_id, r.emoji);
+  }
+
   const allConversations = (data ?? [])
     .filter((row: any) => {
       const isCreator = row.creator_id === user.id;
@@ -82,6 +111,9 @@ export async function GET(request: Request) {
       const viewLastMessage   = clearedAfterLastMessage ? "" : (row.last_message_preview ?? "");
       const viewLastMessageAt = clearedAfterLastMessage ? deletedBefore : (lastAt ?? "");
 
+      const lastMsg        = lastMsgByConvId.get(row.id);
+      const lastReaction   = lastMsg ? lastReactionByMsgId.get(lastMsg.id) : undefined;
+
       return {
         id:          row.id,
         createdAt:   row.created_at,
@@ -94,13 +126,16 @@ export async function GET(request: Request) {
           isOnline:   false,
           role:       participant.role ?? "fan",
         },
-        lastMessage:   viewLastMessage,
-        lastMessageAt: viewLastMessageAt,
-        unreadCount:   unreadCount ?? 0,
-        hasMedia:      false,
-        isPinned:      settings?.is_pinned   ?? false,
-        isArchived:    settings?.is_archived  ?? false,
-        isMuted:       settings?.is_muted     ?? false,
+        lastMessage:            viewLastMessage,
+        lastMessageAt:          viewLastMessageAt,
+        lastMessageId:          lastMsg?.id ?? null,
+        lastMessageSenderId:    lastMsg?.sender_id ?? null,
+        lastMessageReaction:    lastReaction ?? null,
+        unreadCount:            unreadCount ?? 0,
+        hasMedia:               false,
+        isPinned:               settings?.is_pinned   ?? false,
+        isArchived:             settings?.is_archived  ?? false,
+        isMuted:                settings?.is_muted     ?? false,
       };
     });
 

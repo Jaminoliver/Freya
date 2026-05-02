@@ -281,7 +281,18 @@ function startGlobalRealtime() {
           setTyping(row.conversation_id, false);
           console.log("[MSG INSERT] receiver_id:", row.receiver_id, "currentUserId:", currentUserId, "isOnMessagesPage:", isOnMessagesPage);
 
-          if (isOwn) return;
+          if (isOwn) {
+            updateConversations((prev) =>
+              prev.map((c) =>
+                c.id !== row.conversation_id ? c : {
+                  ...c,
+                  lastMessageId:       row.id,
+                  lastMessageSenderId: row.sender_id,
+                } as any
+              )
+            );
+            return;
+          }
 
           const convoExists = cachedConversations?.some((c) => c.id === row.conversation_id) ?? false;
           console.log("[MSG INSERT] convoExists:", convoExists, "conv_id:", row.conversation_id);
@@ -339,10 +350,12 @@ function startGlobalRealtime() {
               prev.map((c) =>
                 c.id !== row.conversation_id ? c : {
                   ...c,
-                  lastMessage:   "🎬 GIF",
-                  lastMessageAt: row.created_at,
-                  unreadCount:   c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
-                  hasMedia:      true,
+                  lastMessage:         "🎬 GIF",
+                  lastMessageAt:       row.created_at,
+                  lastMessageId:       row.id,
+                  lastMessageSenderId: row.sender_id,
+                  unreadCount:         c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
+                  hasMedia:            true,
                 }
               )
             );
@@ -418,10 +431,12 @@ function startGlobalRealtime() {
             prev.map((c) =>
               c.id !== row.conversation_id ? c : {
                 ...c,
-                lastMessage:   row.content ?? "",
-                lastMessageAt: row.created_at,
-                unreadCount:   c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
-                hasMedia:      false,
+                lastMessage:         row.content ?? "",
+                lastMessageAt:       row.created_at,
+                lastMessageId:       row.id,
+                lastMessageSenderId: row.sender_id,
+                unreadCount:         c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
+                hasMedia:            false,
               }
             )
           );
@@ -599,6 +614,47 @@ function startGlobalRealtime() {
               };
             });
           });
+        }
+      )
+
+      // ── message_reactions INSERT ───────────────────────────────────────────
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "message_reactions" },
+        (payload: any) => {
+          const row = payload.new as any;
+          console.log("[REACTION INSERT] fired — row:", JSON.stringify(row));
+          console.log("[REACTION INSERT] cached convs:", cachedConversations?.map((c) => ({
+            id: c.id,
+            lastMessageId: (c as any).lastMessageId,
+          })));
+          updateConversations((prev) =>
+            prev.map((c) => {
+              const lastMsgId = (c as any).lastMessageId;
+              console.log("[REACTION INSERT] conv", c.id, "lastMessageId:", lastMsgId, "reaction message_id:", row.message_id, "match:", lastMsgId === row.message_id);
+              if (!lastMsgId) return c;
+              if (lastMsgId !== row.message_id) return c;
+              console.log("[REACTION INSERT] updating conv", c.id, "with emoji:", row.emoji);
+              return { ...c, lastMessageReaction: row.emoji } as any;
+            })
+          );
+        }
+      )
+
+      // ── message_reactions DELETE ───────────────────────────────────────────
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "message_reactions" },
+        (payload: any) => {
+          const row = payload.old as any;
+          updateConversations((prev) =>
+            prev.map((c) => {
+              const lastMsg = c as any;
+              if (!lastMsg.lastMessageId) return c;
+              if (lastMsg.lastMessageId !== row.message_id) return c;
+              return { ...c, lastMessageReaction: null } as any;
+            })
+          );
         }
       )
 

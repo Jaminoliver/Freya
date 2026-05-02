@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { MoreVertical, Film } from "lucide-react";
 import { ReadTick } from "@/components/messages/ReadTick";
 import { MessageActionModal } from "@/components/messages/MessageActionModal";
+import { ReactionPills } from "@/components/messages/ReactionPills";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
   replyToMessage?:      Message | null;
   onStoryReplyClick?:   (storyId: number) => void;
   onScrollToMessage?:   (messageId: number) => void;
+  onReact?:             (message: Message, emoji: string) => void;
 }
 
 function copyToClipboard(text: string) {
@@ -43,7 +45,7 @@ function fallbackCopy(text: string) {
 
 export function MessageBubble({
   message, conversation, isOwn, isRead, isDelivered, time,
-  onReply, onDelete, onSelect, replyToMessage, onStoryReplyClick, onScrollToMessage,
+  onReply, onDelete, onSelect, replyToMessage, onStoryReplyClick, onScrollToMessage, onReact,
 }: Props) {
   const { participant } = conversation;
 
@@ -222,11 +224,13 @@ export function MessageBubble({
           onDeleteForMe={() => onDelete?.(message, "me")}
           onDeleteForEveryone={() => onDelete?.(message, "everyone")}
           onSelect={onSelect}
+          onReact={(emoji) => onReact?.(message, emoji)}
           onClose={() => setSheetOpen(false)}
         />
       )}
 
-      <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "6px", alignSelf: isOwn ? "flex-end" : "flex-start", maxWidth: "80%" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignSelf: isOwn ? "flex-end" : "flex-start", maxWidth: "80%", gap: "2px" }}>
+      <div style={{ display: "flex", flexDirection: isOwn ? "row-reverse" : "row", alignItems: "flex-end", gap: "6px" }}>
         <div style={{ position: "relative", flexShrink: 0, display: "flex", alignItems: "center" }}>
           <button
             onClick={() => setSheetOpen(true)}
@@ -268,6 +272,8 @@ export function MessageBubble({
             </div>
           </div>
         </div>
+      </div>
+      <ReactionPills reactions={message.reactions ?? []} isOwn={isOwn} onToggle={(emoji) => onReact?.(message, emoji)} />
       </div>
     </>
   );

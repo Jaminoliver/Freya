@@ -2,190 +2,285 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Copy, CornerUpLeft, Trash2, X, CheckSquare, Bookmark } from "lucide-react";
+import { Copy, CornerUpLeft, Trash2, CheckSquare, Bookmark, Plus } from "lucide-react";
 import type { Message } from "@/lib/types/messages";
 
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
 interface Props {
-  message: Message;
-  isOwn:   boolean;
+  message:             Message;
+  isOwn:               boolean;
   onCopy:              () => void;
   onReply:             () => void;
   onDeleteForMe:       () => void;
   onDeleteForEveryone: () => void;
   onSelect?:           (messageId: number) => void;
   onSaveGif?:          () => void;
+  onReact?:            (emoji: string) => void;
   onClose:             () => void;
-}
-
-interface MenuItem {
-  icon:    React.ReactNode;
-  label:   string;
-  danger?: boolean;
-  action:  () => void;
 }
 
 export function MessageActionModal({
   message, isOwn,
-  onCopy, onReply, onDeleteForMe, onDeleteForEveryone, onSelect, onSaveGif, onClose,
+  onCopy, onReply, onDeleteForMe, onDeleteForEveryone, onSelect, onSaveGif, onReact, onClose,
 }: Props) {
-  const [closing, setClosing] = useState(false);
-  const [ready,   setReady]   = useState(false);
+  const [closing,     setClosing]     = useState(false);
+  const [ready,       setReady]       = useState(false);
+  const [tappedEmoji, setTappedEmoji] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setReady(true), 320);
+    const t = setTimeout(() => setReady(true), 200);
     return () => clearTimeout(t);
   }, []);
 
   const triggerClose = () => {
     setClosing(true);
-    setTimeout(() => {
-      setClosing(false);
-      onClose();
-    }, 280);
+    setTimeout(() => { setClosing(false); onClose(); }, 260);
   };
 
-  const menuItems: MenuItem[] = [
+  const handleReact = (emoji: string) => {
+    setTappedEmoji(emoji);
+    setTimeout(() => { onReact?.(emoji); triggerClose(); }, 390);
+  };
+
+  const myReaction = (message.reactions ?? []).find((r) => r.reactedByMe)?.emoji ?? null;
+
+  const previewText =
+    message.text ??
+    (message.type === "media" ? "📷 Photo"  :
+     message.type === "gif"   ? "🎞️ GIF"   :
+     message.type === "ppv"   ? "🔒 PPV"    : "Message");
+
+  const menuItems = [
     ...(onSaveGif ? [{
-      icon:   <Bookmark size={20} strokeWidth={1.6} />,
-      label:  "Save GIF",
+      icon: <Bookmark size={18} strokeWidth={1.6} />, label: "Save GIF", danger: false,
       action: () => { onSaveGif(); triggerClose(); },
     }] : []),
-    {
-      icon:   <Copy size={20} strokeWidth={1.6} />,
-      label:  "Copy",
-      action: () => { onCopy(); triggerClose(); },
-    },
-    {
-      icon:   <CornerUpLeft size={20} strokeWidth={1.6} />,
-      label:  "Reply",
-      action: () => { onReply(); triggerClose(); },
-    },
-    {
-      icon:   <CheckSquare size={20} strokeWidth={1.6} />,
-      label:  "Select",
-      action: () => { triggerClose(); setTimeout(() => onSelect?.(message.id), 300); },
-    },
-    {
-      icon:   <Trash2 size={20} strokeWidth={1.6} />,
-      label:  "Delete for me",
-      danger: true,
-      action: () => { onDeleteForMe(); triggerClose(); },
-    },
+    { icon: <CornerUpLeft size={18} strokeWidth={1.6} />, label: "Reply",               danger: false, action: () => { onReply();               triggerClose(); } },
+    { icon: <Copy         size={18} strokeWidth={1.6} />, label: "Copy",                danger: false, action: () => { onCopy();                triggerClose(); } },
+    { icon: <CheckSquare  size={18} strokeWidth={1.6} />, label: "Select",              danger: false, action: () => { triggerClose(); setTimeout(() => onSelect?.(message.id), 300); } },
+    { icon: <Trash2       size={18} strokeWidth={1.6} />, label: "Delete for me",       danger: true,  action: () => { onDeleteForMe();       triggerClose(); } },
     ...(isOwn ? [{
-      icon:   <Trash2 size={20} strokeWidth={1.6} />,
-      label:  "Delete for everyone",
-      danger: true,
+      icon: <Trash2 size={18} strokeWidth={1.6} />, label: "Delete for everyone", danger: true,
       action: () => { onDeleteForEveryone(); triggerClose(); },
     }] : []),
   ];
-
   const dangerStart = menuItems.findIndex((m) => m.danger);
 
   return createPortal(
     <>
       <style>{`
-        @keyframes _maSheetUp   { from { transform: translateX(-50%) translateY(100%); } to { transform: translateX(-50%) translateY(0); } }
-        @keyframes _maSheetDown { from { transform: translateX(-50%) translateY(0);    } to { transform: translateX(-50%) translateY(100%); } }
-        @keyframes _maFadeIn    { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes _maFadeOut   { from { opacity: 1; } to { opacity: 0; } }
-        .ma-sheet, .ma-sheet * {
-          -webkit-user-select:   none !important;
-          user-select:           none !important;
-          -webkit-touch-callout: none !important;
+        @keyframes _maBgIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes _maBgOut { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes _maIn {
+          0%   { opacity: 0; transform: scale(0.88) translateY(16px); }
+          65%  { opacity: 1; transform: scale(1.01) translateY(-2px); }
+          100% { opacity: 1; transform: scale(1)    translateY(0);    }
         }
-        .ma-sheet button { -webkit-tap-highlight-color: transparent !important; }
-        .ma-sheet button:active { background-color: transparent !important; opacity: 1 !important; }
-        .ma-sheet::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: 20px 20px 0 0;
-          background: rgba(8, 8, 18, 0.88);
-          -webkit-backdrop-filter: blur(32px);
-          backdrop-filter: blur(32px);
-          z-index: -1;
+        @keyframes _maOut {
+          from { opacity: 1; transform: scale(1)    translateY(0);    }
+          to   { opacity: 0; transform: scale(0.88) translateY(12px); }
         }
-        .ma-item:hover  { background-color: rgba(255,255,255,0.05) !important; }
-        .ma-item:active { background-color: rgba(255,255,255,0.08) !important; }
+        @keyframes _trayIn {
+          0%   { opacity: 0; transform: translateY(12px) scale(0.82); }
+          65%  { opacity: 1; transform: translateY(-2px) scale(1.02); }
+          100% { opacity: 1; transform: translateY(0)    scale(1);    }
+        }
+        @keyframes _emojiIn {
+          0%   { opacity: 0; transform: scale(0.35) translateY(8px); }
+          65%  { opacity: 1; transform: scale(1.18) translateY(-2px); }
+          100% { opacity: 1; transform: scale(1)    translateY(0);    }
+        }
+        @keyframes _emojiPop {
+          0%   { transform: scale(1)    rotate(0deg);   }
+          22%  { transform: scale(1.6)  rotate(-12deg); }
+          50%  { transform: scale(0.78) rotate(6deg);   }
+          72%  { transform: scale(1.14) rotate(-3deg);  }
+          100% { transform: scale(1)    rotate(0deg);   }
+        }
+        @keyframes _actionsIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0);    }
+        }
+        .ma2-emoji  { -webkit-tap-highlight-color: transparent; transition: transform 0.12s ease; }
+        .ma2-emoji:active { transform: scale(0.82) !important; }
+        .ma2-action { -webkit-tap-highlight-color: transparent; }
+        .ma2-action:hover  { background-color: rgba(255,255,255,0.05) !important; }
+        .ma2-action:active { background-color: rgba(255,255,255,0.10) !important; }
       `}</style>
 
-      {/* Backdrop */}
+      {/* ── Blurred backdrop ── */}
       <div
         onClick={ready ? triggerClose : undefined}
         style={{
-          position:        "fixed",
-          inset:           0,
-          backgroundColor: "rgba(0,0,0,0.65)",
-          zIndex:          500,
-          animation:       closing ? "_maFadeOut 0.28s ease forwards" : "_maFadeIn 0.18s ease",
-          pointerEvents:   "auto",
+          position:             "fixed",
+          inset:                0,
+          zIndex:               500,
+          backgroundColor:      "rgba(0,0,0,0.62)",
+          backdropFilter:       "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
+          animation:            closing ? "_maBgOut 0.26s ease forwards" : "_maBgIn 0.2s ease",
         }}
       />
 
-      {/* Sheet */}
+      {/* ── Floating content ── */}
       <div
-        className="ma-sheet"
         style={{
-          position:        "fixed",
-          bottom:          0,
-          left:            "50%",
-          transform:       "translateX(-50%)",
-          width:           "100%",
-          maxWidth:        "520px",
-          backgroundColor: "transparent",
-          borderRadius:    "20px 20px 0 0",
-          border:          "1px solid rgba(255,255,255,0.08)",
-          borderBottom:    "none",
-          boxShadow:       "0 -12px 40px rgba(0,0,0,0.5)",
-          zIndex:          501,
-          fontFamily:      "'Inter', sans-serif",
-          animation:       closing ? "_maSheetDown 0.28s cubic-bezier(0.32,0.72,0,1) forwards" : "_maSheetUp 0.32s cubic-bezier(0.32,0.72,0,1)",
-          paddingBottom:   "env(safe-area-inset-bottom, 24px)",
-          display:         "flex",
-          flexDirection:   "column",
+          position:       "fixed",
+          inset:          0,
+          zIndex:         501,
+          display:        "flex",
+          flexDirection:  "column",
+          alignItems:     "center",
+          justifyContent: "center",
+          padding:        "20px",
+          gap:            "10px",
+          pointerEvents:  "none",
+          animation:      closing
+            ? "_maOut 0.26s ease forwards"
+            : "_maIn 0.3s cubic-bezier(0.34,1.56,0.64,1)",
         }}
       >
-        {!ready && <div style={{ position: "absolute", inset: 0, zIndex: 999 }} />}
 
-        {/* Drag handle */}
-        <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.12)", margin: "12px auto 0" }} />
+        {/* ── Emoji reaction tray ── */}
+        <div
+          style={{
+            pointerEvents:        "auto",
+            display:              "flex",
+            alignItems:           "center",
+            gap:                  "2px",
+            backgroundColor:      "rgba(16,16,28,0.92)",
+            backdropFilter:       "blur(32px)",
+            WebkitBackdropFilter: "blur(32px)",
+            border:               "1px solid rgba(255,255,255,0.1)",
+            borderRadius:         "999px",
+            padding:              "5px 8px",
+            boxShadow:            "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)",
+            animation:            "_trayIn 0.34s cubic-bezier(0.34,1.56,0.64,1) 0.04s both",
+          }}
+        >
+          {REACTION_EMOJIS.map((emoji, i) => (
+            <button
+              key={emoji}
+              className="ma2-emoji"
+              onClick={() => handleReact(emoji)}
+              style={{
+                width:           "46px",
+                height:          "46px",
+                borderRadius:    "50%",
+                border:          myReaction === emoji ? "2px solid #8B5CF6" : "2px solid transparent",
+                backgroundColor: myReaction === emoji ? "rgba(139,92,246,0.18)" : "transparent",
+                cursor:          "pointer",
+                display:         "flex",
+                alignItems:      "center",
+                justifyContent:  "center",
+                fontSize:        "24px",
+                lineHeight:      1,
+                padding:         0,
+                flexShrink:      0,
+                animation:       tappedEmoji === emoji
+                  ? "_emojiPop 0.44s cubic-bezier(0.34,1.56,0.64,1) forwards"
+                  : `_emojiIn 0.32s cubic-bezier(0.34,1.56,0.64,1) ${0.06 + i * 0.032}s both`,
+                transition:      tappedEmoji ? undefined : "border-color 0.15s, background-color 0.15s",
+              }}
+            >
+              {emoji}
+            </button>
+          ))}
 
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "16px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-          <p style={{
-            margin: 0, fontSize: "14px", color: "rgba(255,255,255,0.45)",
-            fontFamily: "'Inter', sans-serif",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            flex: 1, letterSpacing: "0.01em",
-          }}>
-            {message.text ?? "Media"}
-          </p>
+          {/* + button */}
           <button
-            onClick={triggerClose}
-            style={{ width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+            className="ma2-emoji"
+            style={{
+              width:           "46px",
+              height:          "46px",
+              borderRadius:    "50%",
+              border:          "2px solid transparent",
+              backgroundColor: "rgba(255,255,255,0.07)",
+              cursor:          "pointer",
+              display:         "flex",
+              alignItems:      "center",
+              justifyContent:  "center",
+              flexShrink:      0,
+              padding:         0,
+              animation:       `_emojiIn 0.32s cubic-bezier(0.34,1.56,0.64,1) ${0.06 + REACTION_EMOJIS.length * 0.032}s both`,
+            }}
           >
-            <X size={16} color="rgba(255,255,255,0.45)" strokeWidth={2} />
+            <Plus size={18} color="rgba(255,255,255,0.5)" strokeWidth={2.2} />
           </button>
         </div>
 
-        {/* Menu items */}
-        <div style={{ padding: "6px 0", pointerEvents: ready ? "auto" : "none" }}>
+        {/* ── Message preview bubble ── */}
+        <div
+          style={{
+            pointerEvents:   "none",
+            maxWidth:        "72%",
+            backgroundColor: isOwn ? "#8B5CF6" : "#1E1E2E",
+            borderRadius:    isOwn ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+            padding:         "10px 14px",
+            boxShadow:       isOwn
+              ? "0 6px 24px rgba(139,92,246,0.4)"
+              : "0 6px 24px rgba(0,0,0,0.4)",
+          }}
+        >
+          <p style={{
+            margin:             0,
+            fontSize:           "14px",
+            color:              "#FFFFFF",
+            lineHeight:         1.5,
+            wordBreak:          "break-word",
+            display:            "-webkit-box",
+            WebkitLineClamp:    3,
+            WebkitBoxOrient:    "vertical",
+            overflow:           "hidden",
+            fontFamily:         "'Inter', sans-serif",
+          }}>
+            {previewText}
+          </p>
+        </div>
+
+        {/* ── Action list ── */}
+        <div
+          style={{
+            pointerEvents: "auto",
+            width:         "100%",
+            maxWidth:      "340px",
+            borderRadius:  "16px",
+            border:        "1px solid rgba(255,255,255,0.08)",
+            boxShadow:     "0 12px 40px rgba(0,0,0,0.55)",
+            overflow:      "hidden",
+            position:      "relative",
+            animation:     "_actionsIn 0.3s ease 0.1s both",
+          }}
+        >
+          {/* Frosted glass bg — matches ChatActionModal exactly */}
+          <div style={{
+            position:             "absolute",
+            inset:                0,
+            backgroundColor:      "rgba(8,8,18,0.9)",
+            backdropFilter:       "blur(32px)",
+            WebkitBackdropFilter: "blur(32px)",
+            zIndex:               -1,
+          }} />
+
+          {/* Block touches until animation settles */}
+          {!ready && <div style={{ position: "absolute", inset: 0, zIndex: 99 }} />}
+
           {menuItems.map((item, i) => (
             <div key={item.label}>
               {i === dangerStart && (
-                <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
+                <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
               )}
               <button
-                className="ma-item"
+                className="ma2-action"
                 onClick={item.action}
-                onTouchStart={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.08)")}
-                onTouchEnd={(e)   => { e.currentTarget.style.backgroundColor = "transparent"; item.action(); }}
+                onTouchEnd={(e) => { e.preventDefault(); item.action(); }}
                 style={{
                   display:        "flex",
                   alignItems:     "center",
                   justifyContent: "space-between",
                   width:          "100%",
-                  padding:        "14px 20px",
+                  padding:        "15px 20px",
                   background:     "none",
                   border:         "none",
                   cursor:         "pointer",
@@ -193,12 +288,13 @@ export function MessageActionModal({
                   fontSize:       "15px",
                   fontFamily:     "'Inter', sans-serif",
                   textAlign:      "left",
-                  transition:     "background-color 0.12s ease",
                   letterSpacing:  "0.01em",
                 }}
               >
                 <span>{item.label}</span>
-                <span style={{ color: item.danger ? "#EF4444" : "rgba(255,255,255,0.25)", display: "flex" }}>{item.icon}</span>
+                <span style={{ color: item.danger ? "#EF4444" : "rgba(255,255,255,0.3)", display: "flex" }}>
+                  {item.icon}
+                </span>
               </button>
             </div>
           ))}

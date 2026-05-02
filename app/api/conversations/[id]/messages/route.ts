@@ -72,7 +72,7 @@ export async function GET(
   const ppvMessageIds = rows.filter((r) => r.is_ppv).map((r) => r.id);
   const tipIds        = rows.filter((r) => r.is_tip && r.tip_id).map((r) => r.tip_id as number);
 
-  const [mediaResult, ppvResult, tipResult] = await Promise.all([
+  const [mediaResult, ppvResult, tipResult, reactionsResult] = await Promise.all([
     messageIds.length > 0
       ? supabase.from("message_media")
           .select("message_id, url, thumbnail_url, media_type, display_order")
@@ -88,6 +88,11 @@ export async function GET(
       ? supabase.from("tips")
           .select("id, amount")
           .in("id", tipIds)
+      : Promise.resolve({ data: [] }),
+    messageIds.length > 0
+      ? supabase.from("message_reactions")
+          .select("message_id, user_id, emoji")
+          .in("message_id", messageIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -111,6 +116,15 @@ export async function GET(
   const tipById = new Map<number, { amount: number }>();
   for (const t of tipResult.data ?? []) {
     tipById.set(t.id, { amount: t.amount });
+  }
+
+  const reactionsByMessageId = new Map<number, { emoji: string; count: number; reactedByMe: boolean }[]>();
+  for (const r of reactionsResult.data ?? []) {
+    if (!reactionsByMessageId.has(r.message_id)) reactionsByMessageId.set(r.message_id, []);
+    const arr = reactionsByMessageId.get(r.message_id)!;
+    const hit = arr.find((x) => x.emoji === r.emoji);
+    if (hit) { hit.count++; if (r.user_id === user.id) hit.reactedByMe = true; }
+    else arr.push({ emoji: r.emoji, count: 1, reactedByMe: r.user_id === user.id });
   }
 
   const deletedBefore = isCreator ? (convo as any).deleted_before_creator : (convo as any).deleted_before_fan;
@@ -145,9 +159,9 @@ export async function GET(
       isDelivered:            row.is_delivered ?? false,
       replyToId:              row.reply_to_id        ?? null,
       replyToMediaIndex:      row.reply_to_media_index ?? 0,
-      // Story reply fields — present on all message types
       storyReplyStoryId:      row.story_reply_story_id      ?? null,
       storyReplyThumbnailUrl: row.story_reply_thumbnail_url ?? null,
+      reactions:              reactionsByMessageId.get(row.id) ?? [],
     };
 
     // ── GIF bubble ─────────────────────────────────────────────────────────

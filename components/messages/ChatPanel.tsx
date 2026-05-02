@@ -469,6 +469,34 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
     } as any);
   }, [ppvUnlockTarget, patchMessage]);
 
+  const handleReact = useCallback(async (message: Message, emoji: string) => {
+    const convId = realConversationIdRef.current ?? conversation.id;
+    if (convId === 0) return;
+    const myExisting  = (message.reactions ?? []).find((r) => r.reactedByMe);
+    const isToggleOff = myExisting?.emoji === emoji;
+    setMessages((prev) => prev.map((m) => {
+      if (m.id !== message.id) return m;
+      let reactions = [...(m.reactions ?? [])];
+      if (isToggleOff) {
+        reactions = reactions.map((r) => r.emoji === emoji ? { ...r, count: r.count - 1, reactedByMe: false } : r).filter((r) => r.count > 0);
+      } else {
+        if (myExisting) reactions = reactions.map((r) => r.emoji === myExisting.emoji ? { ...r, count: r.count - 1, reactedByMe: false } : r).filter((r) => r.count > 0);
+        const hit = reactions.find((r) => r.emoji === emoji);
+        reactions = hit
+          ? reactions.map((r) => r.emoji === emoji ? { ...r, count: r.count + 1, reactedByMe: true } : r)
+          : [...reactions, { emoji, count: 1, reactedByMe: true }];
+      }
+      return { ...m, reactions };
+    }));
+    try {
+      await fetch(`/api/conversations/${convId}/messages/${message.id}/reactions`, {
+        method:  isToggleOff ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ emoji }),
+      });
+    } catch {}
+  }, [conversation.id, realConversationIdRef, setMessages]);
+
   const handleMessagesUpdate  = useCallback((updater: (msgs: Message[]) => Message[]) => { setMessages((prev) => updater(prev)); }, [setMessages]);
   const handleBlockConfirm    = useCallback(async () => { await block();    handleBack(); }, [block]);
   const handleRestrictConfirm = useCallback(async () => { await restrict(); handleBack(); }, [restrict]);
@@ -714,6 +742,7 @@ background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
                 onSelectMessage={handleSelectMessage}
                 onStoryReplyClick={handleStoryReplyClick}
                 onRequestPPVUnlock={(msg) => setPpvUnlockTarget(msg)}
+                onReact={handleReact}
               />
             </div>
 

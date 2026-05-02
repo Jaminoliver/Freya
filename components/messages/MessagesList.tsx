@@ -30,6 +30,7 @@ interface Props {
   onSelectMessage?:     (messageId: number) => void;
   onStoryReplyClick?:   (storyId: number) => void;
   onRequestPPVUnlock?:  (message: Message) => void;
+  onReact?:             (message: Message, emoji: string) => void;
 }
 
 interface LightboxState {
@@ -170,6 +171,7 @@ export function MessagesList({
   onSelectMessage,
   onStoryReplyClick,
   onRequestPPVUnlock,
+  onReact,
 }: Props) {
   const scrollRef         = useRef<HTMLDivElement>(null);
   const prevMessageIdsRef = useRef<Set<string>>(new Set(messages.map((m) => String(m.tempId ?? m.id))));
@@ -490,6 +492,7 @@ const scrollToMessage = useCallback((replyToId: number) => {
                       onSelect={onSelectMessage}
                       replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
                       onScrollToMessage={scrollToMessage}
+                      onReact={selectMode ? undefined : onReact}
                       onSaveGif={(gifUrl) => {
                         fetch("/api/gifs/favorites", {
                           method:  "POST",
@@ -573,6 +576,7 @@ const scrollToMessage = useCallback((replyToId: number) => {
                             replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
                             onStoryReplyClick={onStoryReplyClick}
                             onScrollToMessage={scrollToMessage}
+                            onReact={onReact}
                           />
                         )}
                         {(msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0 && (
@@ -590,6 +594,7 @@ const scrollToMessage = useCallback((replyToId: number) => {
                               onUnlock={handleUnlock}
                               onOpenLightbox={openLightbox}
                               currentUserId={currentUserId}
+                              onReact={undefined}
                             />
                           </MediaSwipeWrapper>
                         )}
@@ -611,6 +616,7 @@ const scrollToMessage = useCallback((replyToId: number) => {
                           replyToMessage={msg.replyToId ? messages.find((m) => m.id === msg.replyToId) ?? null : null}
                       onScrollToMessage={scrollToMessage}
                           onStoryReplyClick={onStoryReplyClick}
+                          onReact={onReact}
                         />
                       )}
                       {(msg.type === "media" || msg.type === "ppv") && mediaItems.length > 0 && (
@@ -628,6 +634,7 @@ const scrollToMessage = useCallback((replyToId: number) => {
                             onUnlock={handleUnlock}
                             onOpenLightbox={openLightbox}
                             currentUserId={currentUserId}
+                            onReact={onReact}
                           />
                         </MediaSwipeWrapper>
                       )}
