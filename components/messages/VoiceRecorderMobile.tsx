@@ -173,9 +173,16 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
   }, [recorder, changePhase]);
 
   const doSend = useCallback(() => {
+    if (recorder.state !== "recording") {
+        changePhase("idle");
+        setSlideX(0); setSlideY(0);
+        setAnalyser(null);
+        activeTouch.current = null;
+        return;
+    }
     recorder.stop();
     activeTouch.current = null;
-  }, [recorder]);
+}, [recorder, changePhase]);
 
   // ── Single persistent touch handler on the capture div ───────────────────
   const onTouchStart = useCallback((e: React.TouchEvent) => {
