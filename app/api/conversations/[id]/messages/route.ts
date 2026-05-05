@@ -52,7 +52,7 @@ export async function GET(
 
   let query = supabase
     .from("messages")
-    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, is_tip, tip_id, gif_url, media_type, media_url, thumbnail_url, is_read, is_delivered, created_at, reply_to_id, reply_to_media_index, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone, story_reply_story_id, story_reply_thumbnail_url")
+    .select("id, conversation_id, sender_id, receiver_id, content, is_ppv, ppv_price, is_unlocked, is_tip, tip_id, gif_url, media_type, media_url, thumbnail_url, is_read, is_delivered, created_at, reply_to_id, reply_to_media_index, deleted_for_creator, deleted_for_fan, is_deleted_for_everyone, story_reply_story_id, story_reply_thumbnail_url, audio_url, audio_duration, audio_peaks")
     .eq("conversation_id", conversationId)
     .eq(deleteField, false)
     .order("created_at", { ascending: false })
@@ -163,6 +163,17 @@ export async function GET(
       storyReplyThumbnailUrl: row.story_reply_thumbnail_url ?? null,
       reactions:              reactionsByMessageId.get(row.id) ?? [],
     };
+
+    // ── Voice bubble ────────────────────────────────────────────────────────
+    if (row.audio_url) {
+      return {
+        ...base,
+        type:          "voice" as const,
+        audioUrl:      row.audio_url,
+        audioDuration: row.audio_duration ?? 0,
+        audioPeaks:    row.audio_peaks    ?? [],
+      };
+    }
 
     // ── GIF bubble ─────────────────────────────────────────────────────────
     if (row.gif_url) {
