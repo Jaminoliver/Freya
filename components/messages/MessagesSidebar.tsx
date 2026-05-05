@@ -28,10 +28,11 @@ interface Props {
   activeId:             number | null;
   onSelect?:            (id: string) => void;
   onNewConversation?:   (conv: Conversation) => void;
-  typingConversations?: Set<number>;
+  typingConversations?:   Set<number>;
+  recordingConversations?: Set<number>;
 }
 
-export function MessagesSidebar({ conversations, activeId, onSelect, onNewConversation, typingConversations = new Set() }: Props) {
+export function MessagesSidebar({ conversations, activeId, onSelect, onNewConversation, typingConversations = new Set(), recordingConversations = new Set() }: Props) {
   const router   = useRouter();
   const pathname = usePathname();
   const { viewer } = useAppStore();
@@ -357,6 +358,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
               activeId={urlActiveId}
               onSelect={handleSelect}
               typingConversations={typingConversations}
+              recordingConversations={recordingConversations}
               favouritedIds={favouritedIds}
             />
           )}

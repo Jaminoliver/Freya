@@ -9,7 +9,7 @@ import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
-import { updateConversations, subscribeTypingForConversation, blockConversation, sendRecordingEvent } from "@/app/(main)/messages/page";
+import { updateConversations, subscribeTypingForConversation, blockConversation, sendRecordingEvent, useRecordingConversations } from "@/app/(main)/messages/page";
 import { useMessageStore } from "@/lib/store/messageStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { ChatHeader } from "@/components/messages/ChatHeader";
@@ -99,6 +99,8 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
 
   const { group: storyGroup2, hasStory, hasUnviewed, refresh: refreshStory } = useCreatorStory(participant.id);
 
+  const recordingConvIds = useRecordingConversations();
+  const isRecording      = recordingConvIds.has(conversation.id);
   const { startMessageUpload, uploads } = useUpload();
   const desktopMenuBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -536,6 +538,7 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
   // ── Broadcast recording state to other participant ──────────────────────
   const handleRecordingStateChange = useCallback((isRecording: boolean) => {
     const convId = realConversationIdRef.current ?? conversation.id;
+    console.log("[Recording] state changed:", isRecording, "convId:", convId, "userId:", currentUserId);
     if (!convId || !currentUserId) return;
     sendRecordingEvent(convId, currentUserId, isRecording);
   }, [conversation.id, currentUserId, realConversationIdRef]);
@@ -716,6 +719,7 @@ background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
           conversation={conversation}
           onBack={onBack}
           isTyping={isTyping}
+          isRecording={isRecording}
           onSelectMode={handleEnterSelectMode}
           onMessagesCleared={() => { onClearMessages?.(); setMessages([]); }}
         />

@@ -4,7 +4,7 @@ import { useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { MessagesSidebar } from "@/components/messages/MessagesSidebar";
 import { MessagesProvider, useMessagesContext } from "@/lib/context/MessagesContext";
-import { useConversations, useTypingConversations, setOnMessagesPage } from "@/app/(main)/messages/page";
+import { useConversations, useTypingConversations, useRecordingConversations, setOnMessagesPage } from "@/app/(main)/messages/page";
 import type { Conversation } from "@/lib/types/messages";
 
 function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
@@ -12,7 +12,8 @@ function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
   const inChat   = pathname !== "/messages";
   const { conversations, setConversations } = useConversations();
   const { typingConversationId } = useMessagesContext();
-  const typingConversations = useTypingConversations();
+  const typingConversations   = useTypingConversations();
+  const recordingConversations = useRecordingConversations();
 
   useEffect(() => {
     setOnMessagesPage(true);
@@ -77,6 +78,7 @@ function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
           activeId={null}
           onNewConversation={handleNewConversation}
           typingConversations={typingConversations}
+          recordingConversations={recordingConversations}
         />
       </div>
 

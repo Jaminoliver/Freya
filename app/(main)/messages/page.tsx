@@ -178,6 +178,7 @@ function subscribeTyping(supabase: any, conversationId: number) {
       );
     })
     .on("broadcast", { event: "recording" }, (payload: any) => {
+      console.log("[Recording] broadcast received — payload:", JSON.stringify(payload), "currentUserId:", currentUserId);
       if (payload.payload?.userId === currentUserId) return;
       const isRecording = !!payload.payload?.isRecording;
       setRecording(conversationId, isRecording);
@@ -208,6 +209,7 @@ export function sendTypingEvent(conversationId: number, userId: string) {
 
 export function sendRecordingEvent(conversationId: number, userId: string, isRecording: boolean) {
   const channel = typingChannels.get(conversationId);
+  console.log("[Recording] sendRecordingEvent — convId:", conversationId, "channel exists:", !!channel, "isRecording:", isRecording);
   if (!channel) return;
   channel.send({ type: "broadcast", event: "recording", payload: { userId, isRecording } });
 }

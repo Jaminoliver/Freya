@@ -14,13 +14,14 @@ interface Props {
   conversation:  Conversation;
   isActive:      boolean;
   isTyping?:     boolean;
+  isRecording?:  boolean;
   isFavourited?: boolean;
   onSelect:      () => void;
 }
 
 const prefetchMap = new Map<number, any[]>();
 
-export function ConversationRow({ conversation, isActive, isTyping = false, isFavourited = false, onSelect }: Props) {
+export function ConversationRow({ conversation, isActive, isTyping = false, isRecording = false, isFavourited = false, onSelect }: Props) {
   const { participant, lastMessage, lastMessageAt, unreadCount, hasMedia, isPinned, isMuted } = conversation;
   const router = useRouter();
 
@@ -238,7 +239,9 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isFa
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             {!isTyping && hasMedia && <ImageIcon size={12} color="#6B6B8A" strokeWidth={1.8} />}
             <span style={{ fontSize: "13px", color: isTyping ? "#8B5CF6" : "#6B6B8A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "180px", fontStyle: isTyping ? "italic" : "normal", fontWeight: unreadCount > 0 ? 600 : 400 }}>
-              {isTyping
+              {isRecording
+                ? "🎙️ recording..."
+                : isTyping
                 ? "typing..."
                 : conversation.lastMessageReaction
                 ? `Reacted ${conversation.lastMessageReaction} to a message`

@@ -8,8 +8,9 @@ interface Props {
   conversations:        Conversation[];
   activeId:             string | null;
   onSelect:             (id: string) => void;
-  typingConversations?: Set<number>;
-  favouritedIds?:       Set<number>;
+  typingConversations?:   Set<number>;
+  recordingConversations?: Set<number>;
+  favouritedIds?:          Set<number>;
 }
 
 export function ConversationList({
@@ -17,6 +18,7 @@ export function ConversationList({
   activeId,
   onSelect,
   typingConversations = new Set(),
+  recordingConversations = new Set(),
   favouritedIds = new Set(),
 }: Props) {
   if (conversations.length === 0) {
@@ -67,6 +69,7 @@ export function ConversationList({
               conversation={conversation}
               isActive={String(conversation.id) === activeId}
               isTyping={typingConversations.has(conversation.id)}
+              isRecording={recordingConversations.has(conversation.id)}
               isFavourited={favouritedIds.has(conversation.id)}
               onSelect={() => onSelect(String(conversation.id))}
             />
