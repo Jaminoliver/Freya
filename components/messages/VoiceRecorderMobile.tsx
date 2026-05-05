@@ -294,7 +294,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
       {phase === "holding" && (
         <>
           {/* Lock chevron */}
-          <div style={{ position: "absolute", right: "14px", bottom: "68px", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", opacity: 0.4 + lockProgress * 0.6, transform: `translateY(${-lockProgress * 10}px) scale(${0.85 + lockProgress * 0.25})`, transition: "transform 0.12s ease, opacity 0.12s ease", pointerEvents: "none", zIndex: 10 }}>
+          <div style={{ position: "absolute", right: "14px", bottom: "68px", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", opacity: 0.4 + lockProgress * 0.6, transform: `translateY(${-lockProgress * 10}px) scale(${0.85 + lockProgress * 0.25})`, transition: "transform 0.12s ease, opacity 0.12s ease", pointerEvents: "none", zIndex: 10, animation: "vrmFadeIn 0.15s ease 0.2s both" }}>
             <ChevronUp size={15} strokeWidth={2.5} color={lockProgress > 0.6 ? "#8B5CF6" : "rgba(255,255,255,0.45)"} style={{ transition: "color 0.15s ease" }} />
             <div style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: lockProgress > 0.6 ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.06)", border: `1.5px solid ${lockProgress > 0.6 ? "#8B5CF6" : "rgba(255,255,255,0.2)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s ease" }}>
               <Lock size={13} strokeWidth={2} color={lockProgress > 0.6 ? "#8B5CF6" : "rgba(255,255,255,0.5)"} />
@@ -302,7 +302,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
           </div>
 
           {/* Slide to cancel bar */}
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", gap: "8px", padding: "0 12px 0 10px", backgroundColor: "rgba(10,10,20,0.97)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", zIndex: 4, pointerEvents: "none", animation: "vrmFadeIn 0.15s ease" }}>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", gap: "8px", padding: "0 12px 0 10px", backgroundColor: "rgba(10,10,20,0.97)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", zIndex: 4, pointerEvents: "none", animation: "vrmFadeIn 0.15s ease 0.2s both" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
               <div style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "#EF4444", animation: "vrmPulse 1.1s ease-in-out infinite" }} />
               <span style={{ fontSize: "13px", color: "#FFFFFF", fontFamily: "'Inter', sans-serif", fontVariantNumeric: "tabular-nums", minWidth: "36px" }}>
@@ -320,7 +320,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
           </div>
 
           {/* Mic button visual */}
-          <div style={{ position: "absolute", right: "8px", bottom: "8px", width: "44px", height: "44px", borderRadius: "50%", background: willCancel ? "#EF4444" : "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", animation: "vrmMicPulse 1.3s ease-in-out infinite", zIndex: 5, transition: "background 0.15s ease", boxShadow: willCancel ? "0 0 0 8px rgba(239,68,68,0.12)" : "0 0 0 8px rgba(139,92,246,0.12)", pointerEvents: "none" }}>
+          <div style={{ position: "absolute", right: "8px", bottom: "8px", width: "44px", height: "44px", borderRadius: "50%", background: willCancel ? "#EF4444" : "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", animation: "vrmMicPulse 1.3s ease-in-out 0.2s infinite", zIndex: 5, transition: "background 0.15s ease", boxShadow: willCancel ? "0 0 0 8px rgba(239,68,68,0.12)" : "0 0 0 8px rgba(139,92,246,0.12)", pointerEvents: "none" }}>
             <Mic size={20} strokeWidth={1.8} />
           </div>
         </>
