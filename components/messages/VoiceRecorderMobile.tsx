@@ -174,12 +174,14 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
 
   const doSend = useCallback(() => {
     if (recorder.state !== "recording") {
+    if (phaseRef.current !== "locked") {
         changePhase("idle");
         setSlideX(0); setSlideY(0);
         setAnalyser(null);
         activeTouch.current = null;
-        return;
     }
+    return;
+}
     recorder.stop();
     activeTouch.current = null;
 }, [recorder, changePhase]);
