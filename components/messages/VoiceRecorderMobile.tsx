@@ -197,17 +197,10 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
     slideYRef.current    = 0;
     setSlideX(0); setSlideY(0);
     recorder.start();
-    holdTimerRef.current = setTimeout(() => {
-      holdTimerRef.current = null;
-      if (phaseRef.current === "idle") changePhase("holding");
-    }, 200);
+    changePhase("holding");
   }, [disabled, changePhase, recorder]);
 
   const onTouchMove = useCallback((e: TouchEvent) => {
-    if (phaseRef.current === "idle") {
-      if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-      changePhase("holding");
-    }
     if (phaseRef.current !== "holding") return;
     // find our tracked touch
     const t = Array.from(e.changedTouches).find(x => x.identifier === activeTouch.current);
@@ -242,6 +235,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
 
     if (isTap) { doLock(); return; }
     if (slideXRef.current <= -CANCEL_THRESHOLD) doCancel();
+    else if (recorder.duration < 1) doLock();
     else doSend();
   }, [doLock, doCancel, doSend]);
 

@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, X, MoreVertical, Images, Trash2 } from "lucide-react";
+import { ArrowLeft, X, MoreVertical, Images, Trash2, Mic } from "lucide-react";
 import { Sparkles } from "lucide-react";
 
 import { useMessagesContext } from "@/lib/context/MessagesContext";
@@ -618,6 +618,12 @@ background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
         .typing-dot { width: 4px; height: 4px; border-radius: 50%; background-color: #8B5CF6; display: inline-block; animation: typing-bounce 1.2s infinite ease-in-out; }
         .typing-dot:nth-child(2) { animation-delay: 0.15s; }
         .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes rec-wave { 0%,100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+        .rec-bar { display: inline-block; width: 2px; height: 10px; background-color: #EF4444; border-radius: 1px; transform-origin: center; animation: rec-wave 0.9s ease-in-out infinite; }
+        .rec-bar:nth-child(2) { animation-delay: 0.12s; }
+        .rec-bar:nth-child(3) { animation-delay: 0.24s; }
+        .rec-bar:nth-child(4) { animation-delay: 0.36s; }
+        @keyframes rec-mic-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } }
         @keyframes avatarFadeIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
         .avatar-lightbox-inner { animation: avatarFadeIn 0.2s ease forwards; }
         .desktop-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 8px; border-radius: 8px; transition: all 0.15s ease; color: #A3A3C2; }
@@ -781,7 +787,15 @@ background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
                 <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{participant.name}</span>
                 {participant.isVerified && <Sparkles size={14} color="#8B5CF6" strokeWidth={1.8} style={{ flexShrink: 0 }} />}
               </div>
-              {isTyping ? (
+              {isRecording ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <Mic size={12} strokeWidth={2} style={{ color: "#EF4444", animation: "rec-mic-pulse 1.4s ease-in-out infinite" }} />
+                  <div style={{ display: "flex", gap: "2px", alignItems: "center", height: "12px" }}>
+                    <span className="rec-bar" /><span className="rec-bar" /><span className="rec-bar" /><span className="rec-bar" />
+                  </div>
+                  <span style={{ fontSize: "12px", color: "#EF4444", whiteSpace: "nowrap", fontWeight: 600 }}>recording...</span>
+                </div>
+              ) : isTyping ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <div style={{ display: "flex", gap: "3px", alignItems: "center" }}><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></div>
                   <span style={{ fontSize: "12px", color: "#8B5CF6", whiteSpace: "nowrap" }}>typing...</span>
