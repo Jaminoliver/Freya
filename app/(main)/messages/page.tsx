@@ -27,6 +27,11 @@ const typingTimers    = new Map<number, ReturnType<typeof setTimeout>>();
 const typingChannels  = new Map<number, any>();
 
 let typingConvIds = new Set<number>();
+
+const recordingListeners = new Set<(set: Set<number>) => void>();
+const recordingTimers    = new Map<number, ReturnType<typeof setTimeout>>();
+let   recordingConvIds   = new Set<number>();
+
 const blockedConversationIds  = new Set<number>();
 const archivedConversationIds = new Set<number>();
 const pendingHydrationIds     = new Set<number>();
@@ -135,6 +140,14 @@ function setTyping(conversationId: number, isTyping: boolean) {
   typingListeners.forEach((fn) => fn(updated));
 }
 
+function setRecording(conversationId: number, isRecording: boolean) {
+  const updated = new Set(recordingConvIds);
+  if (isRecording) updated.add(conversationId);
+  else updated.delete(conversationId);
+  recordingConvIds = updated;
+  recordingListeners.forEach((fn) => fn(updated));
+}
+
 export function unsubscribeTypingForConversation(conversationId: number) {
   const ch = typingChannels.get(conversationId);
   if (!ch) return;
@@ -164,6 +177,25 @@ function subscribeTyping(supabase: any, conversationId: number) {
         }, 2000)
       );
     })
+    .on("broadcast", { event: "recording" }, (payload: any) => {
+      if (payload.payload?.userId === currentUserId) return;
+      const isRecording = !!payload.payload?.isRecording;
+      setRecording(conversationId, isRecording);
+      if (recordingTimers.has(conversationId)) {
+        clearTimeout(recordingTimers.get(conversationId)!);
+        recordingTimers.delete(conversationId);
+      }
+      if (isRecording) {
+        // Safety: auto-clear after 3 minutes if no explicit stop arrives
+        recordingTimers.set(
+          conversationId,
+          setTimeout(() => {
+            setRecording(conversationId, false);
+            recordingTimers.delete(conversationId);
+          }, 180000)
+        );
+      }
+    })
     .subscribe();
   typingChannels.set(conversationId, channel);
 }
@@ -172,6 +204,12 @@ export function sendTypingEvent(conversationId: number, userId: string) {
   const channel = typingChannels.get(conversationId);
   if (!channel) return;
   channel.send({ type: "broadcast", event: "typing", payload: { userId } });
+}
+
+export function sendRecordingEvent(conversationId: number, userId: string, isRecording: boolean) {
+  const channel = typingChannels.get(conversationId);
+  if (!channel) return;
+  channel.send({ type: "broadcast", event: "recording", payload: { userId, isRecording } });
 }
 
 // ─── Fetch conversations ──────────────────────────────────────────────────────
@@ -279,6 +317,7 @@ function startGlobalRealtime() {
           const isOwn = row.sender_id === currentUserId;
 
           setTyping(row.conversation_id, false);
+          setRecording(row.conversation_id, false);
           console.log("[MSG INSERT] receiver_id:", row.receiver_id, "currentUserId:", currentUserId, "isOnMessagesPage:", isOnMessagesPage);
 
           if (isOwn) {
@@ -351,6 +390,44 @@ function startGlobalRealtime() {
                 c.id !== row.conversation_id ? c : {
                   ...c,
                   lastMessage:         "🎬 GIF",
+                  lastMessageAt:       row.created_at,
+                  lastMessageId:       row.id,
+                  lastMessageSenderId: row.sender_id,
+                  unreadCount:         c.id === activeConversationId ? c.unreadCount : c.unreadCount + 1,
+                  hasMedia:            true,
+                }
+              )
+            );
+            return;
+          }
+
+          // ── Voice message ──
+          if (row.audio_url) {
+            const voiceMessage: Message = {
+              id:             row.id,
+              conversationId: row.conversation_id,
+              senderId:       row.sender_id,
+              type:           "voice",
+              audioUrl:       row.audio_url,
+              audioDuration:  row.audio_duration ?? 0,
+              audioPeaks:     row.audio_peaks    ?? [],
+              isRead:         row.is_read ?? false,
+              isDelivered:    true,
+              createdAt:      row.created_at,
+              replyToId:      row.reply_to_id ?? null,
+            };
+
+            const store = useMessageStore.getState();
+            if (row.conversation_id === store.conversationId) {
+              store.appendMessage(voiceMessage);
+              fetch(`/api/conversations/${row.conversation_id}/read`, { method: "PATCH" }).catch(() => {});
+            }
+
+            updateConversations((prev) =>
+              prev.map((c) =>
+                c.id !== row.conversation_id ? c : {
+                  ...c,
+                  lastMessage:         "🎙️ Voice message",
                   lastMessageAt:       row.created_at,
                   lastMessageId:       row.id,
                   lastMessageSenderId: row.sender_id,
@@ -747,6 +824,15 @@ export function useTypingConversations() {
     return () => { typingListeners.delete(setTypers); };
   }, []);
   return typers;
+}
+
+export function useRecordingConversations() {
+  const [recorders, setRecorders] = useState<Set<number>>(new Set(recordingConvIds));
+  useEffect(() => {
+    recordingListeners.add(setRecorders);
+    return () => { recordingListeners.delete(setRecorders); };
+  }, []);
+  return recorders;
 }
 
 export function useUnreadConversationCount() {

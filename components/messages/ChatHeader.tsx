@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { ArrowLeft, X, MoreVertical, Images } from "lucide-react";
+import { ArrowLeft, X, MoreVertical, Images, Mic } from "lucide-react";
 import { Sparkles } from "lucide-react";
 import { ChatActionModal } from "@/components/messages/ChatActionModal";
 import { ReportModal } from "@/components/messages/ReportModal";
@@ -21,10 +21,11 @@ interface Props {
   onBack:             () => void;
   onMessagesCleared?: () => void;
   isTyping?:          boolean;
+  isRecording?:       boolean;
   onSelectMode?:      () => void;
 }
 
-export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping = false, onSelectMode }: Props) {
+export function ChatHeader({ conversation, onBack, onMessagesCleared, isTyping = false, isRecording = false, onSelectMode }: Props) {
   const { participant } = conversation;
   const router = useRouter();
   const { setMessages } = useMessageStore();
@@ -136,7 +137,7 @@ const avatarWrapRef = useRef<HTMLDivElement>(null);
     return () => document.removeEventListener("keydown", handler);
   }, [avatarDropdownOpen]);
 
-  const showStatus = isTyping || participant.isOnline;
+  const showStatus = isRecording || isTyping || participant.isOnline;
 
   return (
     <>
@@ -153,6 +154,13 @@ const avatarWrapRef = useRef<HTMLDivElement>(null);
         .typing-dot { width: 4px; height: 4px; border-radius: 50%; background-color: #8B5CF6; display: inline-block; animation: typing-bounce 1.2s infinite ease-in-out; }
         .typing-dot:nth-child(2) { animation-delay: 0.15s; }
         .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes rec-wave { 0%,100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+        .rec-bar { display: inline-block; width: 2px; height: 10px; background-color: #EF4444; border-radius: 1px; transform-origin: center; animation: rec-wave 0.9s ease-in-out infinite; }
+        .rec-bar:nth-child(2) { animation-delay: 0.12s; }
+        .rec-bar:nth-child(3) { animation-delay: 0.24s; }
+        .rec-bar:nth-child(4) { animation-delay: 0.36s; }
+        @keyframes rec-mic-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } }
+        .rec-mic { animation: rec-mic-pulse 1.4s ease-in-out infinite; color: #EF4444; }
         .header-icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; padding: 8px; border-radius: 8px; transition: all 0.15s ease; color: #A3A3C2; }
         .header-icon-btn:hover { color: #FFFFFF; background-color: #1C1C2E; }
         @keyframes _avatarCtxPop {
@@ -288,7 +296,15 @@ const avatarWrapRef = useRef<HTMLDivElement>(null);
               <span style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "calc(100vw - 200px)" }}>{participant.name}</span>
               {participant.isVerified && <Sparkles size={14} color="#8B5CF6" strokeWidth={1.8} style={{ flexShrink: 0 }} />}
             </div>
-            {isTyping ? (
+            {isRecording ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <Mic size={12} strokeWidth={2} className="rec-mic" />
+                <div style={{ display: "flex", gap: "2px", alignItems: "center", height: "12px" }}>
+                  <span className="rec-bar" /><span className="rec-bar" /><span className="rec-bar" /><span className="rec-bar" />
+                </div>
+                <span style={{ fontSize: "12px", color: "#EF4444", whiteSpace: "nowrap", fontWeight: 600 }}>recording...</span>
+              </div>
+            ) : isTyping ? (
               <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                 <div style={{ display: "flex", gap: "3px", alignItems: "center" }}>
                   <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />

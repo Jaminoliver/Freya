@@ -3,9 +3,39 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Copy, CornerUpLeft, Trash2, CheckSquare, Bookmark, Plus } from "lucide-react";
+import dynamic from "next/dynamic";
 import type { Message } from "@/lib/types/messages";
 
-const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), { ssr: false });
+
+const DEFAULT_EMOJIS    = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const FREQUENTS_KEY     = "freya:emoji-frequents";
+const FREQUENTS_LIMIT   = 6;
+
+function getFrequentEmojis(): string[] {
+  if (typeof window === "undefined") return DEFAULT_EMOJIS;
+  try {
+    const raw    = localStorage.getItem(FREQUENTS_KEY);
+    const counts: Record<string, number> = raw ? JSON.parse(raw) : {};
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([e]) => e);
+    const result = [...sorted];
+    for (const e of DEFAULT_EMOJIS) {
+      if (result.length >= FREQUENTS_LIMIT) break;
+      if (!result.includes(e)) result.push(e);
+    }
+    return result.slice(0, FREQUENTS_LIMIT);
+  } catch { return DEFAULT_EMOJIS; }
+}
+
+function trackEmojiUse(emoji: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const raw    = localStorage.getItem(FREQUENTS_KEY);
+    const counts: Record<string, number> = raw ? JSON.parse(raw) : {};
+    counts[emoji] = (counts[emoji] || 0) + 1;
+    localStorage.setItem(FREQUENTS_KEY, JSON.stringify(counts));
+  } catch {}
+}
 
 interface Props {
   message:             Message;
@@ -25,9 +55,12 @@ export function MessageActionModal({
   message, isOwn, bubbleRect,
   onCopy, onReply, onDeleteForMe, onDeleteForEveryone, onSelect, onSaveGif, onReact, onClose,
 }: Props) {
-  const [closing,     setClosing]     = useState(false);
-  const [ready,       setReady]       = useState(false);
-  const [tappedEmoji, setTappedEmoji] = useState<string | null>(null);
+  const [closing,        setClosing]        = useState(false);
+  const [ready,          setReady]          = useState(false);
+  const [tappedEmoji,    setTappedEmoji]    = useState<string | null>(null);
+  const [showFullPicker, setShowFullPicker] = useState(false);
+  const [reactionEmojis] = useState<string[]>(() => getFrequentEmojis());
+  const [panelRect,      setPanelRect]      = useState<{ top: number; left: number; width: number; height: number } | null>(null);
 
   // ── Compute anchored position from bubbleRect ──────────────────────────────
   const PAD        = 10;
@@ -91,8 +124,19 @@ export function MessageActionModal({
     return () => document.removeEventListener("keydown", key);
   }, [triggerClose]);
 
+  // Constrain backdrop + picker overlay to chat panel on desktop
+  useEffect(() => {
+    const isDesktop = window.innerWidth >= 768;
+    if (!isDesktop) { setPanelRect(null); return; }
+    const panel = document.querySelector(".chat-panel-root") as HTMLElement | null;
+    if (!panel) { setPanelRect(null); return; }
+    const rect = panel.getBoundingClientRect();
+    setPanelRect({ top: rect.top, left: rect.left, width: rect.width, height: rect.height });
+  }, []);
+
   const handleReact = (emoji: string) => {
     setTappedEmoji(emoji);
+    trackEmojiUse(emoji);
     setTimeout(() => { onReact?.(emoji); triggerClose(); }, 390);
   };
 
@@ -174,6 +218,24 @@ export function MessageActionModal({
         .ma3-item { -webkit-tap-highlight-color: transparent; }
         .ma3-item:hover  { background-color: rgba(255,255,255,0.05) !important; }
         .ma3-item:active { background-color: rgba(255,255,255,0.08) !important; }
+
+        .EmojiPickerReact.epr-dark-theme {
+          --epr-bg-color:                 #0D0D18;
+          --epr-category-label-bg-color:  #0D0D18;
+          --epr-hover-bg-color:           rgba(139,92,246,0.18);
+          --epr-focus-bg-color:           rgba(139,92,246,0.25);
+          --epr-highlight-color:          #8B5CF6;
+          --epr-search-input-bg-color:    rgba(255,255,255,0.06);
+          --epr-search-input-text-color:  #FFFFFF;
+          --epr-picker-border-color:      rgba(255,255,255,0.08);
+          --epr-text-color:               #FFFFFF;
+          --epr-category-icon-active-color: #8B5CF6;
+          --epr-skin-tone-picker-menu-color: #0D0D18;
+          border-radius: 16px !important;
+        }
+
+        @keyframes _pickerIn   { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+        @keyframes _pickerBgIn { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
 
       {/* ── Backdrop ── */}
@@ -181,7 +243,10 @@ export function MessageActionModal({
         onClick={ready ? triggerClose : undefined}
         style={{
           position:             "fixed",
-          inset:                0,
+          top:                  panelRect?.top    ?? 0,
+          left:                 panelRect?.left   ?? 0,
+          width:                panelRect?.width  ?? "100vw",
+          height:               panelRect?.height ?? "100vh",
           zIndex:               500,
           backgroundColor:      "rgba(0,0,0,0.62)",
           backdropFilter:       "blur(14px)",
@@ -229,7 +294,7 @@ export function MessageActionModal({
             animation:            "_trayIn 0.3s cubic-bezier(0.34,1.56,0.64,1) 0.04s both",
           }}
         >
-          {REACTION_EMOJIS.map((emoji, i) => (
+          {reactionEmojis.map((emoji, i) => (
             <button
               key={emoji}
               className="ma3-emoji"
@@ -260,6 +325,7 @@ export function MessageActionModal({
           {/* + button */}
           <button
             className="ma3-emoji"
+            onClick={() => setShowFullPicker(true)}
             style={{
               width:           "44px",
               height:          "44px",
@@ -272,7 +338,7 @@ export function MessageActionModal({
               justifyContent:  "center",
               flexShrink:      0,
               padding:         0,
-              animation:       `_emojiIn 0.32s cubic-bezier(0.34,1.56,0.64,1) ${0.06 + REACTION_EMOJIS.length * 0.032}s both`,
+              animation:       `_emojiIn 0.32s cubic-bezier(0.34,1.56,0.64,1) ${0.06 + reactionEmojis.length * 0.032}s both`,
             }}
           >
             <Plus size={17} color="rgba(255,255,255,0.5)" strokeWidth={2.2} />
@@ -373,6 +439,51 @@ export function MessageActionModal({
         </div>
 
       </div>
+
+      {/* ── Full emoji picker (opens when + is tapped) ── */}
+      {showFullPicker && (
+        <div
+          onClick={() => setShowFullPicker(false)}
+          style={{
+            position:             "fixed",
+            top:                  panelRect?.top    ?? 0,
+            left:                 panelRect?.left   ?? 0,
+            width:                panelRect?.width  ?? "100vw",
+            height:               panelRect?.height ?? "100vh",
+            zIndex:               600,
+            backgroundColor:      "rgba(0,0,0,0.4)",
+            backdropFilter:       "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            display:              "flex",
+            alignItems:           "center",
+            justifyContent:       "center",
+            padding:              "16px",
+            animation:            "_pickerBgIn 0.22s ease",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              animation:    "_pickerIn 0.26s cubic-bezier(0.34,1.56,0.64,1)",
+              borderRadius: "16px",
+              overflow:     "hidden",
+              boxShadow:    "0 20px 60px rgba(0,0,0,0.6)",
+            }}
+          >
+            <EmojiPicker
+              theme={"dark" as any}
+              lazyLoadEmojis
+              previewConfig={{ showPreview: false }}
+              onEmojiClick={(emojiData: any) => {
+                setShowFullPicker(false);
+                handleReact(emojiData.emoji);
+              }}
+              width={Math.min(360, typeof window !== "undefined" ? window.innerWidth - 32 : 360)}
+              height={Math.min(420, typeof window !== "undefined" ? window.innerHeight - 120 : 420)}
+            />
+          </div>
+        </div>
+      )}
     </>,
     document.body!
   );

@@ -10,6 +10,7 @@ import { TypingBubble } from "@/components/messages/TypingBubble";
 import { ReadTick } from "@/components/messages/ReadTick";
 import { TipMessage } from "@/components/messages/TipMessage";
 import { GifMessage } from "@/components/messages/GifMessage";
+import { VoiceMessageBubble } from "@/components/messages/VoiceMessageBubble";
 import type { Message, Conversation } from "@/lib/types/messages";
 
 interface Props {
@@ -500,6 +501,54 @@ const scrollToMessage = useCallback((replyToId: number) => {
                           body:    JSON.stringify({ gif_id: gifUrl, gif_url: gifUrl, preview_url: gifUrl, title: "" }),
                         }).catch(() => {});
                       }}
+                    />
+                  </div>
+                );
+              }
+
+              // ── Voice message bubble ──────────────────────────────────────
+              if (msg.type === "voice") {
+                return (
+                  <div
+                    key={msgKey}
+                    data-message-id={msg.id}
+                    className={`${animClass}${highlightId === String(msg.id) ? " msg-highlight" : ""}`}
+                    onClick={() => selectMode && onToggleSelect?.(msg.id)}
+                    style={{
+                      display:         "flex",
+                      flexDirection:   "column",
+                      gap:             "2px",
+                      marginTop:       isSameGroup ? "2px" : "10px",
+                      cursor:          selectMode ? "pointer" : undefined,
+                      backgroundColor: selectMode && selectedIds?.has(msg.id) ? "rgba(139,92,246,0.08)" : "transparent",
+                      borderRadius:    "8px",
+                      transition:      "background-color 0.15s ease",
+                    }}
+                  >
+                    {showTime && (
+                      <div style={{ textAlign: "center", margin: "6px 0" }}>
+                        <span style={{ fontSize: "11px", color: "#4A4A6A" }}>{formatMessageTime(msg.createdAt)}</span>
+                      </div>
+                    )}
+                    {selectMode && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingLeft: "4px" }}>
+                        <div className="select-checkbox-wrap">
+                          <SelectCheckbox checked={!!selectedIds?.has(msg.id)} onClick={() => onToggleSelect?.(msg.id)} />
+                        </div>
+                      </div>
+                    )}
+                    <VoiceMessageBubble
+                      message={msg}
+                      conversation={conversation}
+                      isOwn={isOwn}
+                      isSameGroup={!!isSameGroup}
+                      isRead={msg.isRead ?? false}
+                      isDelivered={msg.isDelivered ?? false}
+                      time={formatMessageTime(msg.createdAt)}
+                      onReply={selectMode ? undefined : onReply}
+                      onDelete={selectMode ? undefined : onDelete}
+                      onSelect={onSelectMessage}
+                      onReact={selectMode ? undefined : onReact}
                     />
                   </div>
                 );

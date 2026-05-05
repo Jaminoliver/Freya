@@ -6,21 +6,25 @@ import { ImageIcon, Send, X, CornerUpLeft } from "lucide-react";
 import { PPVToggle } from "@/components/messages/PPVToggle";
 import { MediaPreviewRow } from "@/components/messages/MediaPreviewRow";
 import { GifPicker, GifItem } from "@/components/gif/GifComponents";
+import { VoiceRecorder } from "@/components/messages/VoiceRecorder";
 import type { Message } from "@/lib/types/messages";
+import type { RecordResult } from "@/lib/hooks/useVoiceRecorder";
 
 interface Props {
-  onSend:         (text: string, mediaFiles?: File[], ppvPrice?: number) => void;
-  onSendGif?:     (gif: GifItem) => void;
-  onTyping?:      () => void;
-  onTipClick?:    () => void;
-  disabled?:      boolean;
-  replyTo?:            Message | null;
-  replyToMediaIndex?:  number;
-  onCancelReply?:      () => void;
-  viewerUserId?:       string;
+  onSend:                  (text: string, mediaFiles?: File[], ppvPrice?: number) => void;
+  onSendGif?:              (gif: GifItem) => void;
+  onSendVoice?:            (result: RecordResult) => void;
+  onRecordingStateChange?: (isRecording: boolean) => void;
+  onTyping?:               () => void;
+  onTipClick?:             () => void;
+  disabled?:               boolean;
+  replyTo?:                Message | null;
+  replyToMediaIndex?:      number;
+  onCancelReply?:          () => void;
+  viewerUserId?:           string;
 }
 
-export function MessageInput({ onSend, onSendGif, onTyping, onTipClick, disabled = false, replyTo, replyToMediaIndex = 0, onCancelReply, viewerUserId }: Props) {
+export function MessageInput({ onSend, onSendGif, onSendVoice, onRecordingStateChange, onTyping, onTipClick, disabled = false, replyTo, replyToMediaIndex = 0, onCancelReply, viewerUserId }: Props) {
   const [text,          setText]          = useState("");
   const [mediaFiles,    setMediaFiles]    = useState<File[]>([]);
   const [ppvEnabled,    setPpvEnabled]    = useState(false);
@@ -151,7 +155,7 @@ export function MessageInput({ onSend, onSendGif, onTyping, onTipClick, disabled
         />
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 12px", minHeight: "64px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 12px", minHeight: "64px", position: "relative" }}>
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={handleFileChange} />
 
         <button title="Gallery" onClick={() => fileRef.current?.click()} disabled={disabled}
@@ -225,26 +229,34 @@ export function MessageInput({ onSend, onSendGif, onTyping, onTipClick, disabled
           }}
         />
 
-        <button onClick={handleSend} disabled={!canSend}
-          style={{
-            display:         "flex",
-            alignItems:      "center",
-            justifyContent:  "center",
-            width:           "42px",
-            height:          "42px",
-            borderRadius:    "50%",
-            border:          "none",
-            cursor:          canSend ? "pointer" : "default",
-            background:      canSend ? "linear-gradient(to right, #8B5CF6, #EC4899)" : "#1C1C2E",
-            color:           canSend ? "#FFFFFF" : "#4A4A6A",
-            transition:      "all 0.15s ease",
-            flexShrink:      0,
-          }}
-          onMouseEnter={(e) => { if (canSend) e.currentTarget.style.opacity = "0.88"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
-        >
-          <Send size={16} strokeWidth={2} />
-        </button>
+        {canSend ? (
+          <button onClick={handleSend}
+            style={{
+              display:         "flex",
+              alignItems:      "center",
+              justifyContent:  "center",
+              width:           "42px",
+              height:          "42px",
+              borderRadius:    "50%",
+              border:          "none",
+              cursor:          "pointer",
+              background:      "linear-gradient(to right, #8B5CF6, #EC4899)",
+              color:           "#FFFFFF",
+              transition:      "all 0.15s ease",
+              flexShrink:      0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+          >
+            <Send size={16} strokeWidth={2} />
+          </button>
+        ) : (
+          <VoiceRecorder
+            onSendVoice={(r) => onSendVoice?.(r)}
+            onRecordingStateChange={onRecordingStateChange}
+            disabled={disabled}
+          />
+        )}
       </div>
     </div>
   );

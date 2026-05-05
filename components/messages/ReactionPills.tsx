@@ -48,19 +48,36 @@ export function ReactionPills({ reactions, isOwn, onToggle }: Props) {
         gap:            "4px",
         justifyContent: isOwn ? "flex-end" : "flex-start",
       }}>
-        {reactions.map((r) => (
-          <ReactionPill key={r.emoji} reaction={r} onToggle={onToggle} />
-        ))}
+        {reactions.flatMap((r) => {
+          // 2-person chat: max 2 pills per emoji (one mine + one theirs)
+          if (r.count >= 2) {
+            if (r.reactedByMe) {
+              return [
+                <ReactionPill key={`${r.emoji}-other`} emoji={r.emoji} isMine={false} onToggle={onToggle} />,
+                <ReactionPill key={`${r.emoji}-mine`}  emoji={r.emoji} isMine={true}  onToggle={onToggle} />,
+              ];
+            }
+            return [
+              <ReactionPill key={`${r.emoji}-1`} emoji={r.emoji} isMine={false} onToggle={onToggle} />,
+              <ReactionPill key={`${r.emoji}-2`} emoji={r.emoji} isMine={false} onToggle={onToggle} />,
+            ];
+          }
+          return [
+            <ReactionPill key={r.emoji} emoji={r.emoji} isMine={r.reactedByMe} onToggle={onToggle} />,
+          ];
+        })}
       </div>
     </>
   );
 }
 
 function ReactionPill({
-  reaction,
+  emoji,
+  isMine,
   onToggle,
 }: {
-  reaction: MessageReaction;
+  emoji:    string;
+  isMine:   boolean;
   onToggle?: (emoji: string) => void;
 }) {
   const [mounted, setMounted] = useState(false);
@@ -75,7 +92,7 @@ function ReactionPill({
     if (bumping) return;
     setBumping(true);
     setTimeout(() => setBumping(false), 420);
-    onToggle?.(reaction.emoji);
+    onToggle?.(emoji);
   };
 
   return (
@@ -85,14 +102,18 @@ function ReactionPill({
       style={{
         display:         "flex",
         alignItems:      "center",
-        gap:             "4px",
-        padding:         "0",
-        border:          "none",
-        backgroundColor: "transparent",
+        justifyContent:  "center",
+        width:           "28px",
+        height:          "28px",
+        borderRadius:    "50%",
+        padding:         0,
+        border:          isMine ? "1.5px solid #8B5CF6" : "1.5px solid rgba(255,255,255,0.06)",
+        backgroundColor: isMine ? "rgba(139,92,246,0.22)" : "rgba(20,20,32,0.92)",
         marginTop:       "-4px",
         cursor:          "pointer",
         fontFamily:      "'Inter', sans-serif",
         lineHeight:      1,
+        boxShadow:       isMine ? "0 0 0 2px rgba(139,92,246,0.18)" : "0 1px 4px rgba(0,0,0,0.4)",
         animation:       !mounted
           ? undefined
           : bumping
@@ -103,8 +124,7 @@ function ReactionPill({
         transition:      "border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease",
       }}
     >
-      <span style={{ fontSize: "20px", lineHeight: 1 }}>{reaction.emoji}</span>
-      
+      <span style={{ fontSize: "15px", lineHeight: 1 }}>{emoji}</span>
     </button>
   );
 }

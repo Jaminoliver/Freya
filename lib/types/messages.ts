@@ -1,5 +1,5 @@
 // lib/types/messages.ts
-export type MessageType   = "text" | "media" | "ppv" | "tip" | "gif";
+export type MessageType   = "text" | "media" | "ppv" | "tip" | "gif" | "voice";
 export type MessageStatus = "sending" | "sent" | "failed";
 
 export type FilterTab = "all" | "priority" | "unread" | "favourites";
@@ -49,6 +49,9 @@ export interface Message {
     tipId:  number;
   };
   gifUrl?:         string | null;
+  audioUrl?:       string | null;
+  audioDuration?:  number;       // seconds
+  audioPeaks?:     number[];     // 50 amplitude values for waveform
   isRead?:         boolean;
   isDelivered?:    boolean;
   createdAt:       string;

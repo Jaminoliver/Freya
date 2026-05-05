@@ -9,7 +9,7 @@ import { Sparkles } from "lucide-react";
 import { useMessagesContext } from "@/lib/context/MessagesContext";
 import { useTypingIndicator } from "@/lib/hooks/useTypingIndicator";
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
-import { updateConversations, subscribeTypingForConversation, blockConversation } from "@/app/(main)/messages/page";
+import { updateConversations, subscribeTypingForConversation, blockConversation, sendRecordingEvent } from "@/app/(main)/messages/page";
 import { useMessageStore } from "@/lib/store/messageStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { ChatHeader } from "@/components/messages/ChatHeader";
@@ -28,6 +28,7 @@ import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 import type { Conversation, Message } from "@/lib/types/messages";
 import type { User } from "@/lib/types/profile";
 import type { GifItem } from "@/components/gif/GifComponents";
+import type { RecordResult } from "@/lib/hooks/useVoiceRecorder";
 
 interface Props {
   conversation:           Conversation;
@@ -458,6 +459,87 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
     }
   }, [conversation, currentUserId, replyTo, appendMessage, setMessages, realConversationIdRef, onConversationCreated]);
 
+  // ── Send voice message ──────────────────────────────────────────────────
+  const handleSendVoice = useCallback(async (result: RecordResult) => {
+    const tempId    = `temp_voice_${Date.now()}_${Math.random()}`;
+    const createdAt = new Date().toISOString();
+    const blobUrl   = URL.createObjectURL(result.blob);
+
+    const optimistic: Message = {
+      id:             Date.now(),
+      conversationId: conversation.id,
+      senderId:       currentUserId,
+      type:           "voice",
+      audioUrl:       blobUrl,
+      audioDuration:  result.duration,
+      audioPeaks:     result.peaks,
+      createdAt,
+      isRead:         false,
+      status:         "sending",
+      tempId,
+    };
+    appendMessage(optimistic);
+
+    try {
+      let convId = realConversationIdRef.current ?? conversation.id;
+      if (convId === 0) {
+        const createRes  = await fetch("/api/conversations", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ targetUserId: conversation.participant.id }),
+        });
+        const createData = await createRes.json();
+        convId = createData.conversationId;
+        realConversationIdRef.current = convId;
+        useMessageStore.getState().setConversationId(convId);
+        subscribeTypingForConversation(convId);
+        onConversationCreated?.(convId);
+        updateConversations((prev) => {
+          if (prev.some((c) => c.id === convId)) return prev;
+          return [{ ...conversation, id: convId, lastMessage: "🎙️ Voice message", lastMessageAt: createdAt, unreadCount: 0 }, ...prev];
+        });
+      }
+
+      const ext = result.mimeType.includes("mp4") ? "m4a" : result.mimeType.includes("webm") ? "webm" : result.mimeType.includes("ogg") ? "ogg" : "audio";
+      const formData = new FormData();
+      formData.append("audio",    result.blob, `voice.${ext}`);
+      formData.append("duration", String(result.duration));
+      formData.append("peaks",    JSON.stringify(result.peaks));
+      formData.append("mimeType", result.mimeType);
+
+      const res  = await fetch(`/api/conversations/${convId}/messages/voice`, {
+        method: "POST",
+        body:   formData,
+      });
+      const data = await res.json();
+
+      console.log("[Voice] server response:", JSON.stringify(data, null, 2));
+      console.log("[Voice] data.message:", data.message);
+      console.log("[Voice] audioUrl:", data.message?.audioUrl);
+
+      URL.revokeObjectURL(blobUrl);
+
+      if (data.message) {
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m));
+        updateConversations((prev) => prev.map((c) =>
+          c.id === convId ? { ...c, lastMessage: "🎙️ Voice message", lastMessageAt: createdAt } : c
+        ));
+      } else {
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
+      }
+    } catch {
+      URL.revokeObjectURL(blobUrl);
+      setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
+    }
+  }, [conversation, currentUserId, appendMessage, setMessages, realConversationIdRef, onConversationCreated]);
+
+  // ── Broadcast recording state to other participant ──────────────────────
+  const handleRecordingStateChange = useCallback((isRecording: boolean) => {
+    const convId = realConversationIdRef.current ?? conversation.id;
+    if (!convId || !currentUserId) return;
+    sendRecordingEvent(convId, currentUserId, isRecording);
+  }, [conversation.id, currentUserId, realConversationIdRef]);
+
   // ── PPV unlock success: patch message to unlocked with media ────────────
   const handlePPVUnlockSuccess = useCallback((data: any) => {
     if (!ppvUnlockTarget) return;
@@ -764,6 +846,8 @@ background-image: ${DOTS_PATTERN}; background-size: 200px 200px;
                 onTyping={handleTyping}
                 onTipClick={() => setTipModalOpen(true)}
                 onSendGif={handleSendGif}
+                onSendVoice={handleSendVoice}
+                onRecordingStateChange={handleRecordingStateChange}
                 viewerUserId={currentUserId}
                 disabled={false}
                 replyTo={replyTo}
