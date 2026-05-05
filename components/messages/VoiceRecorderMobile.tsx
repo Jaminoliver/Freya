@@ -320,7 +320,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
           </div>
 
           {/* Mic button visual */}
-          <div style={{ position: "absolute", right: "8px", bottom: "8px", width: "44px", height: "44px", borderRadius: "50%", background: willCancel ? "#EF4444" : "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", animation: "vrmMicPulse 1.3s ease-in-out 0.2s infinite", zIndex: 5, transition: "background 0.15s ease", boxShadow: willCancel ? "0 0 0 8px rgba(239,68,68,0.12)" : "0 0 0 8px rgba(139,92,246,0.12)", pointerEvents: "none" }}>
+          <div style={{ position: "absolute", right: "8px", bottom: "8px", width: "44px", height: "44px", borderRadius: "50%", background: willCancel ? "#EF4444" : "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", animation: "vrmMicPulse 1.3s ease-in-out 0.2s infinite, vrmFadeIn 0.15s ease 0.2s both", zIndex: 5, transition: "background 0.15s ease", boxShadow: willCancel ? "0 0 0 8px rgba(239,68,68,0.12)" : "0 0 0 8px rgba(139,92,246,0.12)", pointerEvents: "none" }}>
             <Mic size={20} strokeWidth={1.8} />
           </div>
         </>
