@@ -260,7 +260,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
       el.removeEventListener("touchend",    onTouchEnd   as any);
       el.removeEventListener("touchcancel", onTouchEnd   as any);
     };
-  }, [onTouchStart, onTouchMove, onTouchEnd]);
+  }, [onTouchStart, onTouchMove, onTouchEnd, phase]);
 
   // ── Derived UI values ─────────────────────────────────────────────────────
   const willCancel     = phase === "holding" && slideX <= -CANCEL_THRESHOLD;
