@@ -110,6 +110,8 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
   const slideYRef   = useRef(0);
   const activeTouch    = useRef<number | null>(null);
   const touchDownTime  = useRef(0);
+  const holdTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const captureRef     = useRef<HTMLDivElement>(null);
 
   // Keep phaseRef in sync
   const changePhase = useCallback((p: Phase) => {
@@ -174,20 +176,17 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
 
   const doSend = useCallback(() => {
     if (recorder.state !== "recording") {
-    if (phaseRef.current !== "locked") {
-        changePhase("idle");
-        setSlideX(0); setSlideY(0);
-        setAnalyser(null);
-        activeTouch.current = null;
+      changePhase("idle");
+      setSlideX(0); setSlideY(0);
+      setAnalyser(null);
+      activeTouch.current = null;
+      return;
     }
-    return;
-}
     recorder.stop();
     activeTouch.current = null;
-}, [recorder, changePhase]);
+  }, [recorder, changePhase]);
 
-  // ── Single persistent touch handler on the capture div ───────────────────
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
+  const onTouchStart = useCallback((e: TouchEvent) => {
     if (disabled || phaseRef.current !== "idle") return;
     e.preventDefault();
     const t = e.changedTouches[0];
@@ -197,11 +196,18 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
     slideXRef.current    = 0;
     slideYRef.current    = 0;
     setSlideX(0); setSlideY(0);
-    changePhase("holding");
     recorder.start();
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null;
+      if (phaseRef.current === "idle") changePhase("holding");
+    }, 200);
   }, [disabled, changePhase, recorder]);
 
-  const onTouchMove = useCallback((e: React.TouchEvent) => {
+  const onTouchMove = useCallback((e: TouchEvent) => {
+    if (phaseRef.current === "idle") {
+      if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+      changePhase("holding");
+    }
     if (phaseRef.current !== "holding") return;
     // find our tracked touch
     const t = Array.from(e.changedTouches).find(x => x.identifier === activeTouch.current);
@@ -221,7 +227,9 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
     if (dy <= -LOCK_THRESHOLD) doLock();
   }, [doLock]);
 
-  const onTouchEnd = useCallback((e: React.TouchEvent) => {
+  const onTouchEnd = useCallback((e: TouchEvent) => {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    if (phaseRef.current === "idle") { doLock(); return; }
     if (phaseRef.current !== "holding") return;
     const t = Array.from(e.changedTouches).find(x => x.identifier === activeTouch.current);
     if (!t) return;
@@ -236,6 +244,23 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
     if (slideXRef.current <= -CANCEL_THRESHOLD) doCancel();
     else doSend();
   }, [doLock, doCancel, doSend]);
+
+  // ── Imperative touch listeners (passive: false required for preventDefault) ─
+  useEffect(() => {
+    const el = captureRef.current;
+    if (!el) return;
+    const opts = { passive: false };
+    el.addEventListener("touchstart",  onTouchStart as any, opts);
+    el.addEventListener("touchmove",   onTouchMove  as any, opts);
+    el.addEventListener("touchend",    onTouchEnd   as any, opts);
+    el.addEventListener("touchcancel", onTouchEnd   as any, opts);
+    return () => {
+      el.removeEventListener("touchstart",  onTouchStart as any);
+      el.removeEventListener("touchmove",   onTouchMove  as any);
+      el.removeEventListener("touchend",    onTouchEnd   as any);
+      el.removeEventListener("touchcancel", onTouchEnd   as any);
+    };
+  }, [onTouchStart, onTouchMove, onTouchEnd]);
 
   // ── Derived UI values ─────────────────────────────────────────────────────
   const willCancel     = phase === "holding" && slideX <= -CANCEL_THRESHOLD;
@@ -329,10 +354,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
       {/* ── Persistent touch capture div — ALWAYS mounted, ALWAYS on top ── */}
       {phase !== "locked" && (
         <div
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          onTouchCancel={onTouchEnd}
+          ref={captureRef}
           className="vrm-no-callout"
           style={{
             position:                "absolute",

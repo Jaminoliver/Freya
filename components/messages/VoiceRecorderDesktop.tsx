@@ -1,7 +1,7 @@
 // components/messages/VoiceRecorderDesktop.tsx
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Mic, Trash2, Send } from "lucide-react";
 import { useVoiceRecorder, type RecordResult } from "@/lib/hooks/useVoiceRecorder";
 
@@ -26,6 +26,24 @@ export function VoiceRecorderDesktop({ onSendVoice, onRecordingStateChange, disa
       onSendVoice(result);
     },
   });
+
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+
+  useEffect(() => {
+    if (recorder.state !== "recording") { setAnalyser(null); return; }
+    const stream = (recorder as any).stream as MediaStream | undefined;
+    if (!stream) return;
+    try {
+      const actx = new AudioContext();
+      const src  = actx.createMediaStreamSource(stream);
+      const node = actx.createAnalyser();
+      node.fftSize = 256;
+      node.smoothingTimeConstant = 0.75;
+      src.connect(node);
+      setAnalyser(node);
+      return () => { actx.close(); setAnalyser(null); };
+    } catch { setAnalyser(null); }
+  }, [recorder.state]);
 
   // Broadcast recording state on transitions
   const wasRecordingRef = useRef(false);
@@ -166,7 +184,7 @@ export function VoiceRecorderDesktop({ onSendVoice, onRecordingStateChange, disa
           >
             {formatTime(recorder.duration)}
           </span>
-          <LiveLevelBar level={recorder.level} />
+          <ScrollingWaveform analyser={analyser} />
           <span
             style={{
               fontSize:    "11px",
@@ -206,28 +224,74 @@ export function VoiceRecorderDesktop({ onSendVoice, onRecordingStateChange, disa
   );
 }
 
-// ── Live level bar (mirrors mobile) ───────────────────────────────────────────
-function LiveLevelBar({ level }: { level: number }) {
-  const bars = Array.from({ length: 18 }, (_, i) => {
-    const variance = ((i * 7 + 3) % 5) / 4;
-    const h        = Math.max(0.15, Math.min(1, level * (0.6 + variance * 0.8)));
-    return h;
-  });
+// ── Scrolling waveform (matches mobile) ───────────────────────────────────────
+function ScrollingWaveform({ analyser }: { analyser: AnalyserNode | null }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const barsRef   = useRef<number[]>([]);
+  const rafRef    = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const BAR_W = 3, BAR_GAP = 2;
+    const MAX_H = canvas.height * 0.85, MIN_H = canvas.height * 0.08;
+    const TOTAL_W = canvas.width;
+    const maxBars = Math.floor(TOTAL_W / (BAR_W + BAR_GAP));
+    let lastPushTime = 0;
+    const dataArray = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
+
+    const draw = (now: number) => {
+      rafRef.current = requestAnimationFrame(draw);
+      let level = 0;
+      if (analyser && dataArray) {
+        analyser.getByteFrequencyData(dataArray);
+        const start = Math.floor(dataArray.length * 0.02);
+        const end   = Math.floor(dataArray.length * 0.35);
+        let sum = 0;
+        for (let i = start; i < end; i++) sum += dataArray[i];
+        level = sum / ((end - start) * 255);
+      }
+      if (now - lastPushTime >= 80) {
+        lastPushTime = now;
+        const h = analyser
+          ? Math.max(MIN_H, Math.min(MAX_H, (level + (Math.random() - 0.5) * 0.1) * MAX_H * 1.4))
+          : MIN_H;
+        barsRef.current.push(h);
+        if (barsRef.current.length > maxBars) barsRef.current.shift();
+      }
+      ctx.clearRect(0, 0, TOTAL_W, canvas.height);
+      const cy = canvas.height / 2;
+      barsRef.current.forEach((barH, i) => {
+        const x = i * (BAR_W + BAR_GAP);
+        const halfH = barH / 2;
+        const alpha = 0.3 + (i / (maxBars - 1 || 1)) * 0.7;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#8B5CF6";
+        const r = BAR_W / 2, y = cy - halfH;
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + BAR_W - r, y);
+        ctx.quadraticCurveTo(x + BAR_W, y, x + BAR_W, y + r);
+        ctx.lineTo(x + BAR_W, y + barH - r);
+        ctx.quadraticCurveTo(x + BAR_W, y + barH, x + BAR_W - r, y + barH);
+        ctx.lineTo(x + r, y + barH);
+        ctx.quadraticCurveTo(x, y + barH, x, y + barH - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+    };
+    rafRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [analyser]);
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "2px", flex: 1, minWidth: 0, height: "22px" }}>
-      {bars.map((h, i) => (
-        <div
-          key={i}
-          style={{
-            flex:            1,
-            height:          `${h * 100}%`,
-            backgroundColor: "#8B5CF6",
-            borderRadius:    "1px",
-            transition:      "height 0.08s ease",
-            opacity:         0.5 + h * 0.5,
-          }}
-        />
-      ))}
-    </div>
+    <canvas ref={canvasRef} width={220} height={36}
+      style={{ flex: 1, maxWidth: "100%", display: "block" }} />
   );
 }
