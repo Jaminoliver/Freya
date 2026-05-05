@@ -14,7 +14,7 @@ interface Props {
 const CANCEL_THRESHOLD = 80;   // px left to cancel
 const LOCK_THRESHOLD   = 60;   // px up to lock
 const MAX_DURATION     = 120;  // seconds
-const TAP_THRESHOLD    = 250;  // ms — under this = tap → lock mode
+const TAP_THRESHOLD    = 500;  // ms — under this = tap → lock mode
 
 function formatTime(s: number): string {
   const m   = Math.floor(s / 60);
@@ -137,6 +137,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
   const touchDownTime = useRef(0);
   const phaseRef      = useRef<Phase>("idle");
   const slideXRef     = useRef(0);
+const holdTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep phaseRef in sync
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -214,7 +215,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
     touchDownTime.current = Date.now();
     setSlideX(0);
     setSlideY(0);
-    setPhase("holding");
+    holdTimerRef.current = setTimeout(() => setPhase("holding"), TAP_THRESHOLD);
     doStart();
   }, [disabled, doStart]);
 
