@@ -586,7 +586,7 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
   const handleBlockConfirm    = useCallback(async () => { await block();    handleBack(); }, [block]);
   const handleRestrictConfirm = useCallback(async () => { await restrict(); handleBack(); }, [restrict]);
 
-  const showStatus   = isTyping || participant.isOnline;
+  const showStatus   = isRecording || isTyping || participant.isOnline;
   const showSkeleton = loadingMessages && messages.length === 0;
 
   return (
