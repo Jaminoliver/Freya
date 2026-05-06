@@ -14,12 +14,22 @@ interface Props {
 const CANCEL_THRESHOLD = 80;
 const LOCK_THRESHOLD   = 60;
 const MAX_DURATION     = 120;
-const TAP_THRESHOLD    = 300; // ms — under this = tap → locked state
+const TAP_THRESHOLD    = 300;     // ms — under this = tap → locked state
+const WARN_AT          = 100;     // s — time turns yellow
+const URGENT_AT        = 110;     // s — time turns red + haptic
 
 function formatTime(s: number): string {
   const m   = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+function safeVibrate(ms: number) {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(ms);
+    }
+  } catch {}
 }
 
 // ── Scrolling waveform ────────────────────────────────────────────────────────
@@ -110,8 +120,10 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
   const slideYRef   = useRef(0);
   const activeTouch    = useRef<number | null>(null);
   const touchDownTime  = useRef(0);
-  const holdTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureRef     = useRef<HTMLDivElement>(null);
+  const lockPopTimerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHapticFiredRef  = useRef(false);
+  const urgentHapticFiredRef  = useRef(false);
 
   // Keep phaseRef in sync
   const changePhase = useCallback((p: Phase) => {
@@ -128,6 +140,8 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
       setSlideY(0);
       setAnalyser(null);
       activeTouch.current = null;
+      cancelHapticFiredRef.current = false;
+      urgentHapticFiredRef.current = false;
     },
   });
 
@@ -158,12 +172,28 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
     } catch { setAnalyser(null); }
   }, [recorder.state]);
 
+  // One-shot haptic when approaching MAX_DURATION
+  useEffect(() => {
+    if (recorder.duration >= URGENT_AT && !urgentHapticFiredRef.current) {
+      urgentHapticFiredRef.current = true;
+      safeVibrate(20);
+    }
+    if (recorder.duration < WARN_AT) urgentHapticFiredRef.current = false;
+  }, [recorder.duration]);
+
+  // Cleanup lock-pop timer on unmount
+  useEffect(() => () => {
+    if (lockPopTimerRef.current) clearTimeout(lockPopTimerRef.current);
+  }, []);
+
   const doLock = useCallback(() => {
     changePhase("locked");
     setSlideX(0); setSlideY(0);
     slideXRef.current = 0; slideYRef.current = 0;
     setShowLockPop(true);
-    setTimeout(() => setShowLockPop(false), 700);
+    if (lockPopTimerRef.current) clearTimeout(lockPopTimerRef.current);
+    lockPopTimerRef.current = setTimeout(() => setShowLockPop(false), 700);
+    safeVibrate(15);
   }, [changePhase]);
 
   const doCancel = useCallback(() => {
@@ -172,6 +202,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
     setSlideX(0); setSlideY(0);
     setAnalyser(null);
     activeTouch.current = null;
+    cancelHapticFiredRef.current = false;
   }, [recorder, changePhase]);
 
   const doSend = useCallback(() => {
@@ -182,6 +213,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
       activeTouch.current = null;
       return;
     }
+    safeVibrate(8);
     recorder.stop();
     activeTouch.current = null;
   }, [recorder, changePhase]);
@@ -196,13 +228,13 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
     slideXRef.current    = 0;
     slideYRef.current    = 0;
     setSlideX(0); setSlideY(0);
+    cancelHapticFiredRef.current = false;
     recorder.start();
     changePhase("holding");
   }, [disabled, changePhase, recorder]);
 
   const onTouchMove = useCallback((e: TouchEvent) => {
     if (phaseRef.current !== "holding") return;
-    // find our tracked touch
     const t = Array.from(e.changedTouches).find(x => x.identifier === activeTouch.current);
     if (!t) return;
     e.preventDefault();
@@ -217,27 +249,37 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
     setSlideX(clampedX);
     setSlideY(clampedY);
 
+    // One-shot haptic on cancel-threshold crossing (per direction)
+    if (clampedX <= -CANCEL_THRESHOLD && !cancelHapticFiredRef.current) {
+      cancelHapticFiredRef.current = true;
+      safeVibrate(12);
+    } else if (clampedX > -CANCEL_THRESHOLD && cancelHapticFiredRef.current) {
+      cancelHapticFiredRef.current = false;
+    }
+
     if (dy <= -LOCK_THRESHOLD) doLock();
   }, [doLock]);
 
   const onTouchEnd = useCallback((e: TouchEvent) => {
-    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-    if (phaseRef.current === "idle") { doLock(); return; }
     if (phaseRef.current !== "holding") return;
     const t = Array.from(e.changedTouches).find(x => x.identifier === activeTouch.current);
     if (!t) return;
     e.preventDefault();
 
-    console.log("[VRM] touchEnd slideX:", slideXRef.current);
+    // Mic permission still pending — abort cleanly
+    if (recorder.state !== "recording") {
+      doCancel();
+      return;
+    }
 
     const elapsed = Date.now() - touchDownTime.current;
     const isTap   = elapsed < TAP_THRESHOLD && Math.abs(slideXRef.current) < 10;
 
     if (isTap) { doLock(); return; }
-    if (slideXRef.current <= -CANCEL_THRESHOLD) doCancel();
-    else if (recorder.duration < 1) doLock();
-    else doSend();
-  }, [doLock, doCancel, doSend]);
+    if (slideXRef.current <= -CANCEL_THRESHOLD) { doCancel(); return; }
+    if (recorder.duration < 1) { doCancel(); return; }
+    doSend();
+  }, [doLock, doCancel, doSend, recorder.state, recorder.duration]);
 
   // ── Imperative touch listeners (passive: false required for preventDefault) ─
   useEffect(() => {
@@ -260,6 +302,12 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
   const willCancel     = phase === "holding" && slideX <= -CANCEL_THRESHOLD;
   const cancelProgress = Math.min(1, Math.abs(slideX) / CANCEL_THRESHOLD);
   const lockProgress   = Math.min(1, Math.abs(slideY) / LOCK_THRESHOLD);
+  const isRequesting   = recorder.state === "requesting";
+
+  // Duration warning state
+  const inWarnZone   = recorder.duration >= WARN_AT && recorder.duration < URGENT_AT;
+  const inUrgentZone = recorder.duration >= URGENT_AT;
+  const timeColor    = inUrgentZone ? "#EF4444" : inWarnZone ? "#F59E0B" : "#FFFFFF";
 
   if (recorder.state === "denied") {
     return (
@@ -285,7 +333,7 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
 
       {/* ── Idle mic icon ── */}
       {phase === "idle" && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "44px", height: "44px", color: "#A3A3C2", pointerEvents: "none" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "44px", height: "44px", color: "#A3A3C2", pointerEvents: "none", animation: "vrmIdleFadeIn 0.18s ease both" }}>
           <Mic size={20} strokeWidth={1.8} />
         </div>
       )}
@@ -293,9 +341,11 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
       {/* ── Holding overlay ── */}
       {phase === "holding" && (
         <>
-          {/* Lock chevron */}
+          {/* Lock chevron — bobs to invite slide-up gesture */}
           <div style={{ position: "absolute", right: "14px", bottom: "68px", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", opacity: 0.4 + lockProgress * 0.6, transform: `translateY(${-lockProgress * 10}px) scale(${0.85 + lockProgress * 0.25})`, transition: "transform 0.12s ease, opacity 0.12s ease", pointerEvents: "none", zIndex: 10, animation: "vrmFadeIn 0.15s ease 0.2s both" }}>
-            <ChevronUp size={15} strokeWidth={2.5} color={lockProgress > 0.6 ? "#8B5CF6" : "rgba(255,255,255,0.45)"} style={{ transition: "color 0.15s ease" }} />
+            <div className={lockProgress < 0.1 ? "vrm-chevron-bob" : ""}>
+              <ChevronUp size={15} strokeWidth={2.5} color={lockProgress > 0.6 ? "#8B5CF6" : "rgba(255,255,255,0.45)"} style={{ transition: "color 0.15s ease" }} />
+            </div>
             <div style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: lockProgress > 0.6 ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.06)", border: `1.5px solid ${lockProgress > 0.6 ? "#8B5CF6" : "rgba(255,255,255,0.2)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s ease" }}>
               <Lock size={13} strokeWidth={2} color={lockProgress > 0.6 ? "#8B5CF6" : "rgba(255,255,255,0.5)"} />
             </div>
@@ -304,9 +354,9 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
           {/* Slide to cancel bar */}
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", gap: "8px", padding: "0 12px 0 10px", backgroundColor: "rgba(10,10,20,0.97)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", zIndex: 4, pointerEvents: "none", animation: "vrmFadeIn 0.15s ease 0.2s both" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-              <div style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "#EF4444", animation: "vrmPulse 1.1s ease-in-out infinite" }} />
-              <span style={{ fontSize: "13px", color: "#FFFFFF", fontFamily: "'Inter', sans-serif", fontVariantNumeric: "tabular-nums", minWidth: "36px" }}>
-                {formatTime(recorder.duration)}
+              <div style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "#EF4444", animation: "vrmHeartbeat 1.4s ease-in-out infinite" }} />
+              <span style={{ fontSize: "13px", color: timeColor, fontFamily: "'Inter', sans-serif", fontVariantNumeric: "tabular-nums", minWidth: "36px", transition: "color 0.2s ease", fontWeight: inUrgentZone ? 700 : 400 }}>
+                {isRequesting ? "..." : formatTime(recorder.duration)}
               </span>
             </div>
             <div style={{ flex: 1, overflow: "hidden", display: "flex", justifyContent: "center" }}>
@@ -319,27 +369,29 @@ export function VoiceRecorderMobile({ onSendVoice, onRecordingStateChange, disab
             </div>
           </div>
 
-          {/* Mic button visual */}
-          <div style={{ position: "absolute", right: "8px", bottom: "8px", width: "44px", height: "44px", borderRadius: "50%", background: willCancel ? "#EF4444" : "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", animation: "vrmMicPulse 1.3s ease-in-out 0.2s infinite", zIndex: 5, transition: "background 0.15s ease", boxShadow: willCancel ? "0 0 0 8px rgba(239,68,68,0.12)" : "0 0 0 8px rgba(139,92,246,0.12)", pointerEvents: "none" }}>
-            <Mic size={20} strokeWidth={1.8} />
+          {/* Mic button visual — translates with finger during slide */}
+          <div style={{ position: "absolute", right: "8px", bottom: "8px", transform: `translateX(${slideX * 0.5}px)`, transition: "transform 0.05s linear", zIndex: 5, pointerEvents: "none" }}>
+            <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: willCancel ? "#EF4444" : "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", animation: "vrmMicPulse 1.3s ease-in-out 0.2s infinite", transition: "background 0.15s ease", boxShadow: willCancel ? "0 0 0 8px rgba(239,68,68,0.12)" : "0 0 0 8px rgba(139,92,246,0.12)" }}>
+              <Mic size={20} strokeWidth={1.8} />
+            </div>
           </div>
         </>
       )}
 
       {/* ── Locked overlay ── */}
       {phase === "locked" && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", gap: "8px", padding: "0 10px", backgroundColor: "rgba(10,10,20,0.97)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", zIndex: 4, animation: "vrmFadeIn 0.18s ease" }}>
-          <button onClick={doCancel} className="vrm-no-callout" style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", borderRadius: "8px", color: "#EF4444", flexShrink: 0, WebkitTapHighlightColor: "transparent", touchAction: "manipulation" }}>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", gap: "8px", padding: "0 10px", backgroundColor: "rgba(10,10,20,0.97)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", zIndex: 4, animation: "vrmLockedIn 0.22s cubic-bezier(0.34,1.56,0.64,1)", transformOrigin: "right center" }}>
+          <button onClick={doCancel} className="vrm-no-callout vrm-press-btn" style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", borderRadius: "8px", color: "#EF4444", flexShrink: 0, WebkitTapHighlightColor: "transparent", touchAction: "manipulation" }}>
             <Trash2 size={19} strokeWidth={1.8} />
           </button>
           <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "7px", minWidth: 0, overflow: "hidden" }}>
-            <div style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "#EF4444", flexShrink: 0, animation: "vrmPulse 1.1s ease-in-out infinite" }} />
-            <span style={{ fontSize: "13px", color: "#FFFFFF", fontFamily: "'Inter', sans-serif", fontVariantNumeric: "tabular-nums", flexShrink: 0, minWidth: "36px" }}>
-              {formatTime(recorder.duration)}
+            <div style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "#EF4444", flexShrink: 0, animation: "vrmHeartbeat 1.4s ease-in-out infinite" }} />
+            <span style={{ fontSize: "13px", color: timeColor, fontFamily: "'Inter', sans-serif", fontVariantNumeric: "tabular-nums", flexShrink: 0, minWidth: "36px", transition: "color 0.2s ease", fontWeight: inUrgentZone ? 700 : 400 }}>
+              {isRequesting ? "..." : formatTime(recorder.duration)}
             </span>
             <ScrollingWaveform analyser={analyser} />
           </div>
-          <button onClick={doSend} className="vrm-no-callout" style={{ width: "38px", height: "38px", borderRadius: "50%", backgroundColor: "#8B5CF6", border: "none", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", cursor: "pointer", flexShrink: 0, WebkitTapHighlightColor: "transparent", touchAction: "manipulation", boxShadow: "0 0 0 6px rgba(139,92,246,0.15)" }}>
+          <button onClick={doSend} className="vrm-no-callout vrm-press-btn" style={{ width: "38px", height: "38px", borderRadius: "50%", background: "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFFFFF", cursor: "pointer", flexShrink: 0, WebkitTapHighlightColor: "transparent", touchAction: "manipulation", boxShadow: "0 0 0 6px rgba(139,92,246,0.15)" }}>
             <Send size={17} strokeWidth={2} />
           </button>
         </div>
@@ -390,24 +442,42 @@ function GlobalStyles() {
         -webkit-tap-highlight-color: transparent !important;
         outline: none !important;
       }
+      .vrm-press-btn { transition: transform 0.08s ease; }
+      .vrm-press-btn:active { transform: scale(0.88); }
       @keyframes vrmFadeIn { from { opacity: 0; } to { opacity: 1; } }
-      @keyframes vrmPulse {
-        0%,100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.4; transform: scale(0.85); }
+      @keyframes vrmIdleFadeIn {
+        from { opacity: 0; transform: scale(0.85); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+      @keyframes vrmHeartbeat {
+        0%, 100% { transform: scale(1);   opacity: 1;    }
+        18%      { transform: scale(1.4); opacity: 0.85; }
+        36%      { transform: scale(1);   opacity: 1;    }
+        54%      { transform: scale(1.4); opacity: 0.85; }
+        72%      { transform: scale(1);   opacity: 1;    }
       }
       @keyframes vrmMicPulse {
-        0%,100% { transform: scale(1); box-shadow: 0 0 0 8px rgba(139,92,246,0.12); }
-        50% { transform: scale(1.07); box-shadow: 0 0 0 12px rgba(139,92,246,0.06); }
+        0%,100% { transform: scale(1);    box-shadow: 0 0 0 8px rgba(139,92,246,0.12); }
+        50%     { transform: scale(1.07); box-shadow: 0 0 0 12px rgba(139,92,246,0.06); }
       }
       @keyframes vrmSlideHint {
-        0%,100% { transform: translateX(0); opacity: 0.7; }
-        50% { transform: translateX(-5px); opacity: 1; }
+        0%,100% { transform: translateX(0);    opacity: 0.7; }
+        50%     { transform: translateX(-5px); opacity: 1;   }
+      }
+      .vrm-chevron-bob { animation: vrmChevronBob 1.6s ease-in-out infinite; }
+      @keyframes vrmChevronBob {
+        0%,100% { transform: translateY(0);    }
+        50%     { transform: translateY(-3px); }
       }
       @keyframes vrmLockPop {
-        0% { opacity: 0; transform: scale(0.6) translateY(6px); }
-        40% { opacity: 1; transform: scale(1.15) translateY(-4px); }
-        70% { transform: scale(0.95) translateY(0); }
-        100% { opacity: 0; transform: scale(1) translateY(-8px); }
+        0%   { opacity: 0; transform: scale(0.6) translateY(6px);   }
+        40%  { opacity: 1; transform: scale(1.15) translateY(-4px); }
+        70%  { transform: scale(0.95) translateY(0);                }
+        100% { opacity: 0; transform: scale(1) translateY(-8px);    }
+      }
+      @keyframes vrmLockedIn {
+        0%   { opacity: 0; transform: scale(0.85); }
+        100% { opacity: 1; transform: scale(1);    }
       }
     `}</style>
   );
