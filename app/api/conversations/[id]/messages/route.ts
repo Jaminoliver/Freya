@@ -101,8 +101,8 @@ export async function GET(
     if (!mediaByMessageId.has(m.message_id)) mediaByMessageId.set(m.message_id, []);
     mediaByMessageId.get(m.message_id)!.push({
       ...m,
-      url:           refreshBunnyUrl(m.url) ?? m.url,
-      thumbnail_url: refreshBunnyUrl(m.thumbnail_url),
+      url:           m.url.includes("b-cdn.net") && !m.url.includes("freya-media-cdn") ? m.url : (refreshBunnyUrl(m.url) ?? m.url),
+      thumbnail_url: m.thumbnail_url?.includes("b-cdn.net") && !m.thumbnail_url.includes("freya-media-cdn") ? m.thumbnail_url : refreshBunnyUrl(m.thumbnail_url),
     });
   }
 

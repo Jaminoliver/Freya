@@ -24,6 +24,7 @@ export function MassMessageStyles() {
       }
       @keyframes mmFade    { from { opacity: 0; }           to { opacity: 1; } }
       @keyframes mmSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      @keyframes mmSpin    { to   { transform: rotate(360deg); } }
     `}</style>
   );
 }

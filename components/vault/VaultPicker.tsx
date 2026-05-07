@@ -144,7 +144,7 @@ function FilterChips({ value, onChange, locked }: { value: TypeFilter; onChange:
 function VaultTile({ item, selected, onClick }: { item: VaultItem; selected: boolean; onClick: () => void }) {
   const isVideo = item.media_type === "video";
   const isAudio = item.media_type === "audio";
-  const thumb   = item.thumbnail_url || item.file_url;
+  const thumb   = item.thumbnail_url ?? (!isVideo ? item.file_url : null);
 
   return (
     <button
@@ -171,7 +171,7 @@ function VaultTile({ item, selected, onClick }: { item: VaultItem; selected: boo
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#8B5CF6" }}>
           <Music size={32} strokeWidth={1.6} />
         </div>
-      ) : (
+      ) : thumb ? (
         <img
           src={thumb}
           alt=""
@@ -179,6 +179,10 @@ function VaultTile({ item, selected, onClick }: { item: VaultItem; selected: boo
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
         />
+      ) : (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#8B5CF6" }}>
+          <Film size={32} strokeWidth={1.6} />
+        </div>
       )}
 
       {/* Video play badge */}

@@ -94,9 +94,13 @@ export async function POST(
           is_delivered:    true,                                          // creator → fan, instant deliver
         };
         if (hasMedia && firstMedia) {
+          const { getBunnyStreamUrls } = await import("@/lib/utils/bunny");
+          const streamThumb = firstMedia.media_type === "video" && firstMedia.bunny_video_id
+            ? getBunnyStreamUrls(firstMedia.bunny_video_id).thumbnailUrl
+            : null;
           messageRow.media_type    = firstMedia.media_type === "gif" ? "photo" : firstMedia.media_type;
-          messageRow.media_url     = firstMedia.file_url;
-          messageRow.thumbnail_url = firstMedia.thumbnail_url ?? null;
+          messageRow.media_url     = firstMedia.media_type === "video" ? `${firstMedia.file_url}#video` : firstMedia.file_url;
+          messageRow.thumbnail_url = streamThumb ?? firstMedia.thumbnail_url ?? null;
         }
 
         const { data: msg, error: msgErr } = await service
@@ -108,13 +112,19 @@ export async function POST(
 
         // Insert message_media rows for all attachments (multi-media support)
         if (hasMedia) {
-          const mmediaRows = mediaItems.map((m, idx) => ({
-            message_id:    msg.id,
-            url:           m.file_url,
-            thumbnail_url: m.thumbnail_url ?? null,
-            media_type:    m.media_type === "gif" ? "photo" : m.media_type,
-            display_order: idx,
-          }));
+          const { getBunnyStreamUrls } = await import("@/lib/utils/bunny");
+          const mmediaRows = mediaItems.map((m, idx) => {
+            const streamThumb = m.media_type === "video" && m.bunny_video_id
+              ? getBunnyStreamUrls(m.bunny_video_id).thumbnailUrl
+              : null;
+            return {
+              message_id:    msg.id,
+              url:           m.media_type === "video" ? `${m.file_url}#video` : m.file_url,
+              thumbnail_url: streamThumb ?? m.thumbnail_url ?? null,
+              media_type:    m.media_type === "gif" ? "photo" : m.media_type,
+              display_order: idx,
+            };
+          });
           await service.from("message_media").insert(mmediaRows);
         }
 

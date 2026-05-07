@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     .from("vault_items")
     .select("*", { count: "exact" })
     .eq("creator_id", user.id)
+    .neq("source_type", "mass_message")
     .order(sort, { ascending: false, nullsFirst: false })
     .range(offset, offset + limit - 1);
 

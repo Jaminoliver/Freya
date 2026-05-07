@@ -53,77 +53,63 @@ export default function MassMessageComposePage() {
   const [audienceOpen,          setAudienceOpen]          = useState(false);
   const [scheduleOpen,          setScheduleOpen]          = useState(false);
   const [sending,               setSending]               = useState(false);
+  const [showSent,              setShowSent]              = useState(false);
   const [error,                 setError]                 = useState<string | null>(null);
   const [uploading,             setUploading]             = useState(false);
+  const [uploadProgress,        setUploadProgress]        = useState(0);
+  // Local files picked from device — held until Send, never auto-uploaded
+  const [localFiles, setLocalFiles] = useState<{ file: File; objectURL: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Upload from device ─────────────────────────────────────────────────────
-  const handleUploadFiles = useCallback(async (files: FileList | null) => {
+  // ── Add local files to preview (no upload yet) ─────────────────────────────
+  const handleUploadFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setUploading(true);
-    setError(null);
+    const newEntries = Array.from(files).map((f) => ({ file: f, objectURL: URL.createObjectURL(f) }));
+    setLocalFiles((prev) => [...prev, ...newEntries]);
+  }, []);
 
-    // 1. Optimistic: show instant local previews immediately
-    const tempItems: VaultItemWithPreview[] = Array.from(files).map((f, i) => ({
-      id:               BigInt(-(Date.now() + i)),       // temporary negative id
-      media_type:       f.type.startsWith("video") ? "video" : "photo",
-      file_url:         "",
-      thumbnail_url:    null,
-      width:            null,
-      height:           null,
-      duration_seconds: null,
-      blur_hash:        null,
-      aspect_ratio:     null,
-      bunny_video_id:   null,
-      created_at:       new Date().toISOString(),
-      last_used_at:     null,
-      objectURL:        URL.createObjectURL(f),
-    }));
-    setSelected((prev) => mergeUnique(prev, tempItems));
+  const removeLocalFile = useCallback((idx: number) => {
+    setLocalFiles((prev) => {
+      URL.revokeObjectURL(prev[idx].objectURL);
+      return prev.filter((_, i) => i !== idx);
+    });
+  }, []);
 
-    try {
-      const fd = new FormData();
-      for (const f of Array.from(files)) fd.append("file", f);
-      const res  = await fetch("/api/upload/photo", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+  // ── Upload all files (photos + videos) via single XHR FormData ───────────
+  const uploadAllFiles = useCallback(async (files: File[]): Promise<VaultItemWithPreview[]> => {
+    const fd = new FormData();
+    for (const f of files) fd.append("file", f);
+    fd.append("skipVault", "true");
 
-      const realItems: VaultItemWithPreview[] = (data.results ?? [])
-        .filter((r: any) => r.vaultItemId)
-        .map((r: any) => ({
-          id:               r.vaultItemId,
-          media_type:       r.mediaType,
-          file_url:         r.url,
-          thumbnail_url:    null,
-          width:            null,
-          height:           null,
-          duration_seconds: null,
-          blur_hash:        null,
-          aspect_ratio:     null,
-          bunny_video_id:   null,
-          created_at:       new Date().toISOString(),
-          last_used_at:     null,
-        }));
+    const data = await new Promise<any>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/upload/photo");
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload  = () => { try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error("Invalid response")); } };
+      xhr.onerror = () => reject(new Error("Upload failed"));
+      xhr.send(fd);
+    });
 
-      // 2. Replace temp items with real ones
-      setSelected((prev) => {
-        const tempIds = new Set(tempItems.map((t) => Number(t.id)));
-        const withoutTemps = prev.filter((v) => !tempIds.has(Number(v.id)));
-        // Revoke object URLs to free memory
-        tempItems.forEach((t) => t.objectURL && URL.revokeObjectURL(t.objectURL));
-        return mergeUnique(withoutTemps, realItems);
-      });
-    } catch (err: any) {
-      // Remove temp items on failure
-      setSelected((prev) => {
-        const tempIds = new Set(tempItems.map((t) => Number(t.id)));
-        tempItems.forEach((t) => t.objectURL && URL.revokeObjectURL(t.objectURL));
-        return prev.filter((v) => !tempIds.has(Number(v.id)));
-      });
-      setError(err?.message ?? "Upload failed");
-    } finally {
-      setUploading(false);
-    }
+    if (data.error) throw new Error(data.error);
+
+    return (data.results ?? [])
+      .filter((r: any) => r.vaultItemId)
+      .map((r: any) => ({
+        id:               r.vaultItemId,
+        media_type:       r.mediaType ?? "photo",
+        file_url:         r.url,
+        thumbnail_url:    r.thumbnailUrl ?? null,
+        width:            null,
+        height:           null,
+        duration_seconds: null,
+        blur_hash:        null,
+        aspect_ratio:     null,
+        bunny_video_id:   r.bunnyVideoId ?? null,
+        created_at:       new Date().toISOString(),
+        last_used_at:     null,
+      } as VaultItemWithPreview));
   }, []);
 
   // ── Live audience count ────────────────────────────────────────────────────
@@ -143,16 +129,36 @@ export default function MassMessageComposePage() {
   }, [segment, excludeActiveChatters]);
 
   // ── Validation ─────────────────────────────────────────────────────────────
-  const hasContent = text.trim().length > 0 || selected.length > 0;
-  const ppvValid   = !isPPV || (selected.length > 0 && Number(ppvPrice) >= 100);
-  const canSend    = hasContent && ppvValid && (audienceCount ?? 0) > 0 && !sending;
+  const totalMediaCount = selected.length + localFiles.length;
+  const hasContent = text.trim().length > 0 || selected.length > 0 || localFiles.length > 0;
+  const ppvValid   = !isPPV || ((selected.length > 0 || localFiles.length > 0) && Number(ppvPrice) >= 100);
+  const canSend    = hasContent && ppvValid && (audienceCount ?? 0) > 0 && !sending && !uploading && !showSent;
 
-  // ── Send ───────────────────────────────────────────────────────────────────
+  // ── Send — upload local files first, then dispatch ────────────────────────
   const handleSend = useCallback(async () => {
     if (!canSend) return;
     setSending(true);
+    setUploading(localFiles.length > 0);
+    setUploadProgress(0);
     setError(null);
+    // Snapshot previews into bubble immediately
+    const snapshotFiles = [...localFiles];
+    setPendingBubbleURLs(snapshotFiles.map((e) => e.objectURL));
+    setPendingSnapshot(snapshotFiles);
     try {
+      let uploadedItems: VaultItemWithPreview[] = [];
+
+      if (localFiles.length > 0) {
+        const files = localFiles.map((e) => e.file);
+        const items = await uploadAllFiles(files);
+        uploadedItems.push(...items);
+        setLocalFiles([]);
+      }
+
+      setUploading(false);
+
+      const allVaultItems = [...selected.filter((v) => Number(v.id) > 0), ...uploadedItems];
+
       const res = await fetch("/api/mass-messages", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -162,17 +168,32 @@ export default function MassMessageComposePage() {
           audience_segment:        segment,
           exclude_active_chatters: excludeActiveChatters,
           scheduled_for:           scheduledFor ? scheduledFor.toISOString() : null,
-          vault_item_ids:          selected.filter((v) => Number(v.id) > 0).map((v) => Number(v.id)),
+          vault_item_ids:          allVaultItems.map((v) => Number(v.id)),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to send");
-      router.push("/messages");
+      setShowSent(true);
+      setPendingBubbleURLs([]);
+      setTimeout(() => {
+        setShowSent(false);
+        setText("");
+        setSelected([]);
+        setLocalFiles([]);
+        setPendingSnapshot([]);
+        setIsPPV(false);
+        setPpvPrice("");
+        setScheduledFor(null);
+        setError(null);
+      }, 2000);
     } catch (err: any) {
       setError(err?.message ?? "Something went wrong");
+    } finally {
       setSending(false);
+      setUploading(false);
+      setUploadProgress(0);
     }
-  }, [canSend, text, isPPV, ppvPrice, segment, excludeActiveChatters, scheduledFor, selected, router]);
+  }, [canSend, text, isPPV, ppvPrice, segment, excludeActiveChatters, scheduledFor, selected, localFiles, uploadAllFiles]);
 
   const removeSelected = (id: number | bigint) => {
     setSelected((prev) => {
@@ -182,21 +203,71 @@ export default function MassMessageComposePage() {
     });
   };
 
-  const sendLabel = scheduledFor ? "Schedule" : sending ? "Sending…" : "Send";
+  // Snapshot of localFiles shown in preview bubble while uploading/sending
+  const [pendingBubbleURLs, setPendingBubbleURLs] = useState<string[]>([]);
+  const [pendingSnapshot,   setPendingSnapshot]   = useState<{ file: File; objectURL: string }[]>([]);
+
+  const previewForBubble: VaultItemWithPreview[] = sending || showSent
+    ? [
+        ...selected.map((v) => {
+          const streamThumb = v.bunny_video_id
+            ? `https://vz-8bc100f4-3c0.b-cdn.net/${v.bunny_video_id}/thumbnail.jpg`
+            : null;
+          const thumb = v.objectURL ?? v.thumbnail_url ?? streamThumb ?? (v.media_type !== "video" ? v.file_url : null) ?? undefined;
+          return { ...v, objectURL: thumb };
+        }),
+        ...pendingBubbleURLs.map((url, i) => {
+          const entry = pendingSnapshot[i];
+          const isVideo = entry?.file.type.startsWith("video") ?? false;
+          return {
+            id:               BigInt(-(i + 1)),
+            media_type:       isVideo ? "video" as const : "photo" as const,
+            file_url:         url,
+            thumbnail_url:    url,
+            width:            null,
+            height:           null,
+            duration_seconds: null,
+            blur_hash:        null,
+            aspect_ratio:     null,
+            bunny_video_id:   null,
+            created_at:       new Date().toISOString(),
+            last_used_at:     null,
+            objectURL:        url,
+          };
+        }),
+      ]
+    : [];
+
+  const sendLabel = showSent
+    ? "Sent ✓"
+    : uploading
+    ? `Uploading${uploadProgress > 0 ? ` ${uploadProgress}%` : "…"}`
+    : sending
+    ? "Sending…"
+    : scheduledFor
+    ? "Schedule"
+    : "Send";
+
+  const sendBg = showSent
+    ? "linear-gradient(135deg, #10B981 0%, #059669 100%)"
+    : canSend
+    ? "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)"
+    : "#1F1F2A";
 
   return (
     <>
       <MassMessageStyles />
 
-      {/* ── Scrollable page wrapper ─────────────────────────────────────────── */}
       <div style={{
         maxWidth:        "680px",
         margin:          "0 auto",
         backgroundColor: "#0A0A0F",
         fontFamily:      "'Inter', sans-serif",
-        minHeight:       "100dvh",
+        width:           "100%",
+        height:          "100%",
         overflowY:       "auto",
         paddingBottom:   "calc(env(safe-area-inset-bottom, 0px) + 24px)",
+        boxSizing:       "border-box" as const,
       }}>
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div style={{
@@ -227,15 +298,24 @@ export default function MassMessageComposePage() {
               padding:      "8px 18px",
               borderRadius: "20px",
               border:       "none",
-              background:   canSend ? "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)" : "#1F1F2A",
-              color:        canSend ? "#FFFFFF" : "#4A4A6A",
+              background:   sendBg,
+              color:        (canSend || showSent) ? "#FFFFFF" : "#4A4A6A",
               fontSize:     "14px",
               fontWeight:   700,
               cursor:       canSend ? "pointer" : "default",
               fontFamily:   "inherit",
-              transition:   "background 0.15s ease",
+              transition:   "background 0.2s ease",
+              display:      "flex",
+              alignItems:   "center",
+              gap:          "6px",
             }}
           >
+            {(sending || uploading) && (
+              <svg width="14" height="14" viewBox="0 0 14 14" style={{ animation: "mmSpin 0.8s linear infinite", flexShrink: 0 }}>
+                <circle cx="7" cy="7" r="5.5" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
+                <path d="M7 1.5a5.5 5.5 0 0 1 5.5 5.5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            )}
             {sendLabel}
           </button>
         </div>
@@ -303,7 +383,7 @@ export default function MassMessageComposePage() {
         {/* ── Live preview ─────────────────────────────────────────────────── */}
         <div style={{ padding: "8px 16px 12px" }}>
           <div style={{ fontSize: "11px", color: "#4A4A6A", marginBottom: "6px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Preview</div>
-          <PreviewBubble text={text} media={selected} isPPV={isPPV} ppvPrice={ppvPrice} />
+          <PreviewBubble text={text} media={previewForBubble} isPPV={isPPV} ppvPrice={ppvPrice} uploadProgress={uploadProgress} isSending={uploading || sending} isSent={showSent} />
         </div>
 
         {/* ── Composer ─────────────────────────────────────────────────────── */}
@@ -329,38 +409,58 @@ export default function MassMessageComposePage() {
             }}
           />
 
-          {/* Selected media thumbnails */}
-          {selected.length > 0 && (
+          {/* Selected media thumbnails — vault items + local files */}
+          {(selected.length > 0 || localFiles.length > 0) && (
             <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px" }}>
               {selected.map((v) => {
-                const src = v.objectURL ?? v.thumbnail_url ?? v.file_url ?? null;
+                const isVaultVideo = v.media_type === "video";
+                const streamThumb = v.bunny_video_id ? `https://vz-8bc100f4-3c0.b-cdn.net/${v.bunny_video_id}/thumbnail.jpg` : null;
+                const src = v.objectURL ?? v.thumbnail_url ?? streamThumb ?? (!isVaultVideo ? v.file_url : null);
                 return (
                   <div key={Number(v.id)} style={{ position: "relative", width: "72px", height: "72px", flexShrink: 0, borderRadius: "10px", overflow: "hidden", backgroundColor: "#1A1A2E" }}>
-                    {src && <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                    {src
+                      ? <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : isVaultVideo && (
+                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#8B5CF6" }}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="#8B5CF6"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                          </div>
+                        )
+                    }
                     <button
                       onClick={() => removeSelected(v.id)}
-                      style={{
-                        position:        "absolute",
-                        top:             "4px",
-                        right:           "4px",
-                        width:           "20px",
-                        height:          "20px",
-                        borderRadius:    "50%",
-                        backgroundColor: "rgba(0,0,0,0.7)",
-                        border:          "none",
-                        color:           "#FFF",
-                        cursor:          "pointer",
-                        display:         "flex",
-                        alignItems:      "center",
-                        justifyContent:  "center",
-                        padding:         0,
-                      }}
+                      style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.7)", border: "none", color: "#FFF", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
                     >
                       <X size={11} strokeWidth={2.5} />
                     </button>
                   </div>
                 );
               })}
+              {localFiles.map(({ file: f, objectURL: src }, idx) => (
+                  <div key={`local-${idx}-${f.name}`} style={{ position: "relative", width: "72px", height: "72px", flexShrink: 0, borderRadius: "10px", overflow: "hidden", backgroundColor: "#1A1A2E" }}>
+                    {f.type.startsWith("video")
+                      ? <video src={src} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover" }} onLoadedMetadata={(e) => { (e.currentTarget as HTMLVideoElement).currentTime = 0.5; }} />
+                      : <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    }
+                    {f.type.startsWith("video") && (
+                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#FFFFFF" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }}><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => removeLocalFile(idx)}
+                      style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.7)", border: "none", color: "#FFF", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
+                    >
+                      <X size={11} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* Upload progress bar — shown only while sending */}
+          {uploading && uploadProgress > 0 && (
+            <div style={{ height: "3px", borderRadius: "2px", backgroundColor: "#1F1F2A", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${uploadProgress}%`, background: "linear-gradient(90deg, #8B5CF6, #EC4899)", borderRadius: "2px", transition: "width 0.2s ease" }} />
             </div>
           )}
 
@@ -387,7 +487,7 @@ export default function MassMessageComposePage() {
                   caretColor: "#8B5CF6",
                 }}
               />
-              {selected.length === 0 && (
+              {(selected.length + localFiles.length) === 0 && (
                 <span style={{ fontSize: "11px", color: "#EF4444" }}>Add media first</span>
               )}
             </div>
@@ -397,7 +497,7 @@ export default function MassMessageComposePage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             style={{ display: "none" }}
             onChange={(e) => { handleUploadFiles(e.target.files); e.target.value = ""; }}
@@ -405,14 +505,14 @@ export default function MassMessageComposePage() {
           <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
             <ToolbarBtn
               icon={<ImageIcon size={20} strokeWidth={1.8} />}
-              active={selected.length > 0}
-              label={selected.length > 0 ? `${selected.length}` : undefined}
+              active={totalMediaCount > 0}
+              label={totalMediaCount > 0 ? `${totalMediaCount}` : undefined}
               onClick={() => setVaultOpen(true)}
             />
             <ToolbarBtn
               icon={<Upload size={19} strokeWidth={1.8} />}
-              active={uploading}
-              label={uploading ? "…" : undefined}
+              active={false}
+              label={undefined}
               onClick={() => fileInputRef.current?.click()}
             />
             <ToolbarBtn
@@ -439,7 +539,10 @@ export default function MassMessageComposePage() {
       <VaultPicker
         open={vaultOpen}
         onClose={() => setVaultOpen(false)}
-        onConfirm={(items) => setSelected((prev) => mergeUnique(prev, items))}
+        onConfirm={(items) => {
+          console.log("[VaultPicker] confirmed items:", items.map((i) => ({ id: Number(i.id), media_type: i.media_type, thumbnail_url: i.thumbnail_url, bunny_video_id: i.bunny_video_id })));
+          setSelected((prev) => mergeUnique(prev, items));
+        }}
       />
 
       {/* ── Audience sheet ────────────────────────────────────────────────── */}

@@ -56,7 +56,7 @@ function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
           display: flex;
           flex: 1;
           flex-direction: column;
-          overflow: hidden;
+          overflow-y: ${pathname.includes("mass-message") ? "auto" : "hidden"};
           height: 100%;
           min-height: 0;
         }

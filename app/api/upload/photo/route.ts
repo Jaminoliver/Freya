@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { encode } from "blurhash";
 
 const MAX_SIZE_BYTES = 50 * 1024 * 1024;
-const ALLOWED_TYPES  = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ALLOWED_TYPES  = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/quicktime", "video/webm", "video/mov"];
 
 async function generateBlurHash(buffer: Buffer): Promise<string | null> {
   try {
@@ -55,8 +55,9 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const formData = await req.formData();
-    const files     = formData.getAll("file") as File[];
+    const formData  = await req.formData();
+    const files      = formData.getAll("file") as File[];
+    const skipVault  = formData.get("skipVault") === "true";
 
     if (!files || files.length === 0) {
       return NextResponse.json({ error: "No files provided" }, { status: 400 });
@@ -80,16 +81,17 @@ export async function POST(req: NextRequest) {
       try {
         const buffer    = Buffer.from(await file.arrayBuffer());
         const isGif     = file.type === "image/gif";
-        const mediaType = isGif ? "gif" : "photo";
+        const isVideo   = file.type.startsWith("video/");
+        const mediaType = isVideo ? "video" : isGif ? "gif" : "photo";
 
         console.log(`[Upload Photo] Processing file: ${file.name} (${file.type}, ${file.size} bytes)`);
 
         // Generate blurhash, thumbnail, dimensions, and upload in parallel
         const [{ url, path }, blurHash, thumbnailBuffer, dimensions] = await Promise.all([
           uploadPhotoToBunny(buffer, user.id, file.name, file.type),
-          isGif ? Promise.resolve(null) : generateBlurHash(buffer),
-          isGif ? Promise.resolve(null) : generateThumbnail(buffer, file.type),
-          isGif ? Promise.resolve(null) : getImageDimensions(buffer),
+          (isGif || isVideo) ? Promise.resolve(null) : generateBlurHash(buffer),
+          (isGif || isVideo) ? Promise.resolve(null) : generateThumbnail(buffer, file.type),
+          (isGif || isVideo) ? Promise.resolve(null) : getImageDimensions(buffer),
         ]);
 
         console.log(`[Upload Photo] file_url: ${url}`);
@@ -139,7 +141,7 @@ export async function POST(req: NextRequest) {
 
         const vaultResult = await autoArchiveToVault(service, {
           creator_id:      user.id,
-          media_type:      mediaType as "photo" | "gif",
+          media_type:      mediaType as "photo" | "gif" | "video",
           file_url:        url,
           thumbnail_url:   thumbnailUrl,
           width:           dimensions?.width ?? null,
@@ -148,7 +150,7 @@ export async function POST(req: NextRequest) {
           mime_type:       file.type,
           blur_hash:       blurHash ?? null,
           aspect_ratio:    dimensions ? dimensions.width / dimensions.height : null,
-          source_type:     "post",
+          source_type:     skipVault ? "mass_message" : "post",
           source_id:       mediaRow.id,
         });
 
