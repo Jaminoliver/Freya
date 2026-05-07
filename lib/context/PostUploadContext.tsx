@@ -95,7 +95,9 @@ interface PostUploadContextValue {
   uploads:               UploadItem[];
   startVideoUpload:      (p: {
     file: File; title: string; thumbnailBlob?: Blob;
-    onMediaId: (id: number) => void; onError: (e: string) => void;
+    onMediaId:      (id: number) => void;
+    onVaultItemId?: (id: number | null) => void;
+    onError:        (e: string) => void;
   }) => string;
   startPhotoUpload:      (p: {
     file: File; onMediaId: (id: number) => void; onError: (e: string) => void;
@@ -281,6 +283,7 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
   const runVideoUpload = useCallback(async (
     uploadId: string, file: File, title: string, thumbnailBlob: Blob | undefined,
     onMediaId: (mediaId: number) => void, onError: (err: string) => void,
+    onVaultItemId?: (id: number | null) => void,
   ) => {
     try {
       // Optional thumbnail
@@ -395,6 +398,7 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
       const mediaId: number = completeData.mediaId;
       updateUpload(uploadId, { mediaId, progress: 85, phase: "processing" });
       onMediaId(mediaId);
+      onVaultItemId?.(completeData.vaultItemId ?? null);
       startPolling(uploadId, mediaId, videoId);
 
     } catch (err) {
@@ -406,10 +410,12 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
   }, [updateUpload, startPolling]);
 
   const startVideoUpload = useCallback(({
-    file, title, thumbnailBlob, onMediaId, onError,
+    file, title, thumbnailBlob, onMediaId, onVaultItemId, onError,
   }: {
     file: File; title: string; thumbnailBlob?: Blob;
-    onMediaId: (id: number) => void; onError: (e: string) => void;
+    onMediaId:      (id: number) => void;
+    onVaultItemId?: (id: number | null) => void;
+    onError:        (e: string) => void;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
     setUploads((prev) => [...prev, {
@@ -417,7 +423,7 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
       file, _title: title, _onMediaId: onMediaId, _onError: onError,
       _thumbnailBlob: thumbnailBlob,
     }]);
-    runVideoUpload(uploadId, file, title, thumbnailBlob, onMediaId, onError);
+    runVideoUpload(uploadId, file, title, thumbnailBlob, onMediaId, onError, onVaultItemId);
     return uploadId;
   }, [runVideoUpload]);
 

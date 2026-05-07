@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { encode } from "blurhash";
 
 const MAX_SIZE_BYTES = 50 * 1024 * 1024;
-const ALLOWED_TYPES  = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/quicktime", "video/webm", "video/mov"];
+const ALLOWED_TYPES  = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 async function generateBlurHash(buffer: Buffer): Promise<string | null> {
   try {
@@ -50,16 +50,36 @@ async function getImageDimensions(buffer: Buffer): Promise<{ width: number; heig
 }
 
 export async function POST(req: NextRequest) {
+  const reqId = `up_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const ua    = req.headers.get("user-agent") ?? "unknown";
+  const cl    = req.headers.get("content-length") ?? "unknown";
+  const ct    = req.headers.get("content-type") ?? "unknown";
+  console.log(`[Upload Photo ${reqId}] ▶ POST — ua="${ua.slice(0, 100)}" content-length=${cl} content-type="${ct.slice(0, 80)}"`);
+
   try {
     const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr) console.warn(`[Upload Photo ${reqId}] auth.getUser error:`, authErr.message);
+    if (!user) {
+      console.warn(`[Upload Photo ${reqId}] ✗ Unauthorized — no session`);
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.log(`[Upload Photo ${reqId}] ✓ User: ${user.id}`);
 
-    const formData  = await req.formData();
-    const files      = formData.getAll("file") as File[];
-    const skipVault  = formData.get("skipVault") === "true";
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch (err: any) {
+      console.error(`[Upload Photo ${reqId}] ✗ formData parse failed:`, err?.message ?? err, "\nStack:", err?.stack);
+      return NextResponse.json({ error: "Could not parse upload — try again" }, { status: 400 });
+    }
+    const files     = formData.getAll("file") as File[];
+    const skipVault = formData.get("skipVault") === "true";
+    const totalBytes = files.reduce((s, f) => s + (f?.size ?? 0), 0);
+    console.log(`[Upload Photo ${reqId}] ✓ Parsed ${files.length} file(s) — total ${totalBytes} bytes — skipVault=${skipVault}`);
 
     if (!files || files.length === 0) {
+      console.warn(`[Upload Photo ${reqId}] ✗ No files in payload`);
       return NextResponse.json({ error: "No files provided" }, { status: 400 });
     }
 
@@ -81,17 +101,16 @@ export async function POST(req: NextRequest) {
       try {
         const buffer    = Buffer.from(await file.arrayBuffer());
         const isGif     = file.type === "image/gif";
-        const isVideo   = file.type.startsWith("video/");
-        const mediaType = isVideo ? "video" : isGif ? "gif" : "photo";
+        const mediaType = isGif ? "gif" : "photo";
 
         console.log(`[Upload Photo] Processing file: ${file.name} (${file.type}, ${file.size} bytes)`);
 
         // Generate blurhash, thumbnail, dimensions, and upload in parallel
         const [{ url, path }, blurHash, thumbnailBuffer, dimensions] = await Promise.all([
           uploadPhotoToBunny(buffer, user.id, file.name, file.type),
-          (isGif || isVideo) ? Promise.resolve(null) : generateBlurHash(buffer),
-          (isGif || isVideo) ? Promise.resolve(null) : generateThumbnail(buffer, file.type),
-          (isGif || isVideo) ? Promise.resolve(null) : getImageDimensions(buffer),
+          isGif ? Promise.resolve(null) : generateBlurHash(buffer),
+          isGif ? Promise.resolve(null) : generateThumbnail(buffer, file.type),
+          isGif ? Promise.resolve(null) : getImageDimensions(buffer),
         ]);
 
         console.log(`[Upload Photo] file_url: ${url}`);
@@ -141,7 +160,7 @@ export async function POST(req: NextRequest) {
 
         const vaultResult = await autoArchiveToVault(service, {
           creator_id:      user.id,
-          media_type:      mediaType as "photo" | "gif" | "video",
+          media_type:      mediaType as "photo" | "gif",
           file_url:        url,
           thumbnail_url:   thumbnailUrl,
           width:           dimensions?.width ?? null,
@@ -161,9 +180,9 @@ export async function POST(req: NextRequest) {
           mediaType:   mediaRow.media_type,
           path,
         });
-      } catch (err) {
-        console.error("[Upload Photo] File error:", err);
-        errors.push({ name: file.name, error: "Upload failed" });
+      } catch (err: any) {
+        console.error(`[Upload Photo] ✗ File "${file.name}" failed:`, err?.message ?? err, "\nStack:", err?.stack);
+        errors.push({ name: file.name, error: err?.message ?? "Upload failed" });
       }
     }
 
@@ -177,8 +196,8 @@ export async function POST(req: NextRequest) {
       ...(errors.length > 0 && { partialErrors: errors }),
     });
 
-  } catch (err) {
-    console.error("[Upload Photo] Error:", err);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+  } catch (err: any) {
+    console.error(`[Upload Photo] ✗ Fatal error:`, err?.message ?? err, "\nStack:", err?.stack);
+    return NextResponse.json({ error: err?.message ?? "Upload failed" }, { status: 500 });
   }
 }

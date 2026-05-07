@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, Image as ImageIcon, Lock, Calendar, X, Users, Clock, Upload } from "lucide-react";
 import { VaultPicker } from "@/components/vault/VaultPicker";
+import { usePostUpload } from "@/lib/context/PostUploadContext";
 
 import { MassMessageStyles }            from "@/components/messages/mass-messages/Styles";
 import { ToolbarBtn }                   from "@/components/messages/mass-messages/ToolbarBtn";
@@ -39,6 +40,7 @@ function formatScheduledShort(d: Date): string {
 
 export default function MassMessageComposePage() {
   const router = useRouter();
+  const { startVideoUpload } = usePostUpload();
 
   const [text,                  setText]                  = useState("");
   const [selected,              setSelected]              = useState<VaultItemWithPreview[]>([]);
@@ -75,22 +77,37 @@ export default function MassMessageComposePage() {
     });
   }, []);
 
-  // ── Upload all files (photos + videos) via single XHR FormData ───────────
+  // ── Upload all files via XHR (iOS Safari + Vercel reliability) ──────────
   const uploadAllFiles = useCallback(async (files: File[]): Promise<VaultItemWithPreview[]> => {
     const fd = new FormData();
     for (const f of files) fd.append("file", f);
     fd.append("skipVault", "true");
 
-    setUploadProgress(10);
+    setUploadProgress(5);
 
-    const res = await fetch("/api/upload/photo", { method: "POST", body: fd });
-    setUploadProgress(90);
-
-    let data: any;
-    try { data = await res.json(); } catch { throw new Error("Invalid response from server"); }
-
-    if (!res.ok) throw new Error(data?.error ?? `Upload failed (${res.status})`);
-    if (data.error) throw new Error(data.error);
+    const data = await new Promise<any>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        const pct = Math.round((e.loaded / e.total) * 90);
+        setUploadProgress(Math.max(5, pct));
+      };
+      xhr.onload = () => {
+        try {
+          const json = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) resolve(json);
+          else reject(new Error(json?.error ?? `Upload failed (${xhr.status})`));
+        } catch {
+          reject(new Error(`Invalid response (${xhr.status}): ${xhr.responseText?.slice(0, 200) || "(empty)"}`));
+        }
+      };
+      xhr.onerror   = () => reject(new Error("Network error — check your connection"));
+      xhr.ontimeout = () => reject(new Error("Upload timed out — try again"));
+      xhr.onabort   = () => reject(new Error("Upload cancelled"));
+      xhr.timeout   = 180_000;
+      xhr.open("POST", "/api/upload/photo");
+      xhr.send(fd);
+    });
 
     setUploadProgress(100);
 
@@ -149,9 +166,48 @@ export default function MassMessageComposePage() {
       let uploadedItems: VaultItemWithPreview[] = [];
 
       if (localFiles.length > 0) {
-        const files = localFiles.map((e) => e.file);
-        const items = await uploadAllFiles(files);
-        uploadedItems.push(...items);
+        const photoEntries = localFiles.filter((e) => !e.file.type.startsWith("video/"));
+        const videoEntries = localFiles.filter((e) =>  e.file.type.startsWith("video/"));
+
+        // Photos via XHR to /api/upload/photo
+        const photoPromise = photoEntries.length > 0
+          ? uploadAllFiles(photoEntries.map((e) => e.file))
+          : Promise.resolve([] as VaultItemWithPreview[]);
+
+        // Videos via TUS through PostUploadContext (chunked direct to Bunny)
+        const videoPromises = videoEntries.map((entry) =>
+          new Promise<VaultItemWithPreview>((resolve, reject) => {
+            startVideoUpload({
+              file:  entry.file,
+              title: entry.file.name,
+              onMediaId:     () => {},
+              onVaultItemId: (vaultItemId) => {
+                if (vaultItemId == null) {
+                  reject(new Error("Video uploaded but vault id missing"));
+                  return;
+                }
+                resolve({
+                  id:               vaultItemId,
+                  media_type:       "video",
+                  file_url:         "",
+                  thumbnail_url:    null,
+                  width:            null,
+                  height:           null,
+                  duration_seconds: null,
+                  blur_hash:        null,
+                  aspect_ratio:     null,
+                  bunny_video_id:   null,
+                  created_at:       new Date().toISOString(),
+                  last_used_at:     null,
+                } as VaultItemWithPreview);
+              },
+              onError: (msg) => reject(new Error(msg)),
+            });
+          })
+        );
+
+        const [photoItems, ...videoItems] = await Promise.all([photoPromise, ...videoPromises]);
+        uploadedItems.push(...photoItems, ...videoItems);
         setLocalFiles([]);
       }
 
