@@ -87,7 +87,10 @@ export default function MassMessageComposePage() {
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
       };
-      xhr.onload  = () => { try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error("Invalid response")); } };
+      xhr.onreadystatechange = () => {
+  if (xhr.readyState !== 4) return;
+  try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error("Invalid response")); }
+};
       xhr.onerror = () => reject(new Error("Upload failed"));
       xhr.send(fd);
     });

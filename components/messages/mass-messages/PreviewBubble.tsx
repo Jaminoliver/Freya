@@ -25,13 +25,12 @@ export function PreviewBubble({ text, media, isPPV, ppvPrice, uploadProgress, is
 
   const mediaItems = media.map((m) => {
     const isVideo  = m.media_type === "video";
-    const isBlobVideo = isVideo && (m.objectURL?.startsWith("blob:") ?? false);
-    const thumbUrl = !isBlobVideo ? (m.thumbnail_url ?? null) : null;
-    const src      = m.objectURL ?? thumbUrl ?? (!isVideo ? m.file_url : null) ?? "";
-    return {
-      url:  src,
-      type: (isVideo && !thumbUrl ? "video" : "image") as "image" | "video",
-    };
+    const thumbUrl = m.thumbnail_url ?? null;
+const src      = m.objectURL ?? thumbUrl ?? (!isVideo ? m.file_url : null) ?? "";
+return {
+  url:  src,
+  type: (isVideo && !src ? "video" : "image") as "image" | "video",
+};
   });
 
   return (
