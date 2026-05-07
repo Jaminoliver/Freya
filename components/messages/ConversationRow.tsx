@@ -237,7 +237,7 @@ export function ConversationRow({ conversation, isActive, isTyping = false, isRe
             {isFavourited && <Star size={12} color="#F59E0B" fill="#F59E0B" strokeWidth={0} style={{ flexShrink: 0 }} />}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            {!isTyping && hasMedia && <ImageIcon size={12} color="#6B6B8A" strokeWidth={1.8} />}
+            {!isTyping && hasMedia && !lastMessage?.startsWith("📹") && !lastMessage?.startsWith("📎") && !lastMessage?.startsWith("🔒") && !lastMessage?.startsWith("🎙") && <ImageIcon size={12} color="#6B6B8A" strokeWidth={1.8} />}
             <span style={{ fontSize: "13px", color: isTyping ? "#8B5CF6" : "#6B6B8A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "180px", fontStyle: isTyping ? "italic" : "normal", fontWeight: unreadCount > 0 ? 600 : 400 }}>
               {isRecording
                 ? "🎙️ recording..."

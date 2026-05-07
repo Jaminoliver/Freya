@@ -91,7 +91,7 @@ export async function POST(
           is_ppv:          isPPV,
           ppv_price:       ppvPrice,
           is_unlocked:     !isPPV,                                        // PPV starts locked
-          is_delivered:    true,                                          // creator → fan, instant deliver
+          is_delivered:    false,
         };
         if (hasMedia && firstMedia) {
           const { getBunnyStreamUrls } = await import("@/lib/utils/bunny");

@@ -419,7 +419,8 @@ const scrollToMessage = useCallback((replyToId: number) => {
                 const nextMedia = getMediaItems(next, nextIsOwn);
                 const nextIsGroupable = (next.type === "media" || next.type === "ppv") && nextMedia.length > 0
                   && next.type !== "ppv" && !next.text && next.status !== "sending" && next.status !== "failed"
-                  && next.senderId === msg.senderId;
+                  && next.senderId === msg.senderId
+                  && (new Date(next.createdAt).getTime() - new Date(run[run.length - 1].msg.createdAt).getTime()) < 24 * 60 * 60 * 1000;
                 if (!nextIsGroupable) break;
                 run.push({ msg: next, idx: j });
                 j++;

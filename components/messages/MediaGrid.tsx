@@ -23,11 +23,11 @@ function VideoThumb({ src, isSending, locked }: { src: string; isSending: boolea
     const onSeeked = () => {
       try {
         const canvas  = document.createElement("canvas");
-        canvas.width  = 280;
-        canvas.height = 200;
+        canvas.width  = video.videoWidth  || 280;
+        canvas.height = video.videoHeight || 200;
         const ctx     = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(video, 0, 0, 280, 200);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           setThumbUrl(canvas.toDataURL("image/jpeg", 0.8));
         }
       } catch {}

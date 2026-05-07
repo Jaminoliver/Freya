@@ -397,11 +397,32 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
       const completeData = await completeRes.json();
       if (!completeRes.ok) throw new Error(completeData.error || "Failed to save record");
 
-      const mediaId: number = completeData.mediaId;
+      console.log("[VideoUpload] completeData:", JSON.stringify(completeData));
+const mediaId: number = completeData.mediaId;
       updateUpload(uploadId, { mediaId, progress: 85, phase: "processing" });
       onMediaId(mediaId);
-      onVaultItemId?.(completeData.vaultItemId ?? null);
-      if (!silent) startPolling(uploadId, mediaId, videoId);
+      console.log("[VideoUpload] vaultItemId passed to caller:", completeData.vaultItemId ?? null);
+if (!silent) {
+        onVaultItemId?.(completeData.vaultItemId ?? null);
+        startPolling(uploadId, mediaId, videoId);
+      } else {
+        const vaultId = completeData.vaultItemId ?? null;
+        let attempts = 0;
+        const MAX = 60;
+        const silentPoll = setInterval(async () => {
+          attempts++;
+          try {
+            const r = await fetch(`/api/media/${mediaId}/status`);
+            const d = await r.json();
+            if (d.status === "completed" || attempts >= MAX) {
+              clearInterval(silentPoll);
+              onVaultItemId?.(vaultId);
+            }
+          } catch {
+            if (attempts >= MAX) { clearInterval(silentPoll); onVaultItemId?.(vaultId); }
+          }
+        }, 3000);
+      }
 
     } catch (err) {
       if (abortedRef.current.has(uploadId)) return;

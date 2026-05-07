@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, Image as ImageIcon, Lock, Calendar, X, Users, Clock, Upload } from "lucide-react";
 import { VaultPicker } from "@/components/vault/VaultPicker";
 import { usePostUpload } from "@/lib/context/PostUploadContext";
+import { useMassMessageStore } from "@/lib/store/massMessageStore";
+import { fileToThumbnailDataURL } from "@/lib/utils/thumbnailFromFile";
 
 import { MassMessageStyles }            from "@/components/messages/mass-messages/Styles";
 import { ToolbarBtn }                   from "@/components/messages/mass-messages/ToolbarBtn";
@@ -64,6 +66,83 @@ export default function MassMessageComposePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 const [videoProgress, setVideoProgress] = useState(0);
 const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Hydrate from store on mount ──────────────────────────────────────────
+  useEffect(() => {
+    const s = useMassMessageStore.getState();
+    if (s.text)                              setText(s.text);
+    if (s.segment)                           setSegment(s.segment as Segment);
+    if (s.isPPV)                             setIsPPV(s.isPPV);
+    if (s.ppvPrice)                          setPpvPrice(s.ppvPrice);
+    if (s.scheduledFor)                      setScheduledFor(new Date(s.scheduledFor));
+    if (s.selectedVaultItems.length > 0)     setSelected(s.selectedVaultItems as VaultItemWithPreview[]);
+    if (s.excludeActiveChatters !== undefined) setExcludeActiveChatters(s.excludeActiveChatters);
+
+    if (s.activeUpload) {
+      const { videoUploadIds, receivedVaultIds, pendingMessage } = s.activeUpload;
+      const allDone = receivedVaultIds.length >= videoUploadIds.length && videoUploadIds.length > 0;
+      if (allDone) {
+        const allVaultIds = [...pendingMessage.existingVaultItemIds, ...receivedVaultIds];
+        setSending(true);
+        fetch("/api/mass-messages", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text:                    pendingMessage.text,
+            ppv_price_kobo:          pendingMessage.ppvPriceKobo,
+            audience_segment:        pendingMessage.audienceSegment,
+            exclude_active_chatters: pendingMessage.excludeActiveChatters,
+            scheduled_for:           pendingMessage.scheduledFor,
+            vault_item_ids:          allVaultIds,
+          }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (!data.error) { setShowSent(true); useMassMessageStore.getState().clearDraft(); setTimeout(() => { setShowSent(false); setSending(false); }, 2000); }
+            else { setError(data.error); setSending(false); }
+          })
+          .catch(() => { setError("Failed to send after upload"); setSending(false); });
+      } else {
+        // Still uploading — restore loading UI then watch for completion
+        setSending(true);
+        setUploading(true);
+        setPendingBubbleURLs(s.activeUpload.previewThumbnails);
+        let vp = 0;
+        videoProgressTimer.current = setInterval(() => {
+          const step = vp < 40 ? Math.random() * 3 + 2 : vp < 80 ? Math.random() * 1.2 + 0.5 : vp < 95 ? Math.random() * 0.3 + 0.05 : 0;
+          vp = Math.min(95, vp + step);
+          setVideoProgress(Math.round(vp));
+        }, 300);
+        const unsub = useMassMessageStore.subscribe((state) => {
+          const au = state.activeUpload;
+          if (!au || au.receivedVaultIds.length < au.videoUploadIds.length) return;
+          unsub();
+          clearInterval(videoProgressTimer.current!);
+          setVideoProgress(100);
+          const ids = [...au.pendingMessage.existingVaultItemIds, ...au.receivedVaultIds];
+          setSending(true);
+          fetch("/api/mass-messages", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text:                    au.pendingMessage.text,
+              ppv_price_kobo:          au.pendingMessage.ppvPriceKobo,
+              audience_segment:        au.pendingMessage.audienceSegment,
+              exclude_active_chatters: au.pendingMessage.excludeActiveChatters,
+              scheduled_for:           au.pendingMessage.scheduledFor,
+              vault_item_ids:          ids,
+            }),
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (!data.error) { setShowSent(true); useMassMessageStore.getState().clearDraft(); setTimeout(() => { setShowSent(false); setSending(false); }, 2000); }
+              else { setError(data.error); setSending(false); }
+            })
+            .catch(() => { setError("Failed to send after upload"); setSending(false); });
+        });
+      }
+    }
+  }, []);
 
   // ── Add local files to preview (no upload yet) ─────────────────────────────
   const handleUploadFiles = useCallback((files: FileList | null) => {
@@ -131,6 +210,19 @@ const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
       } as VaultItemWithPreview));
   }, []);
 
+  // ── Sync draft to store on change ────────────────────────────────────────
+  useEffect(() => {
+    useMassMessageStore.getState().patch({
+      text,
+      segment,
+      excludeActiveChatters,
+      isPPV,
+      ppvPrice,
+      scheduledFor: scheduledFor ? scheduledFor.toISOString() : null,
+      selectedVaultItems: selected as any,
+    });
+  }, [text, segment, excludeActiveChatters, isPPV, ppvPrice, scheduledFor, selected]);
+
   // ── Live audience count ────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -177,43 +269,69 @@ const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
           : Promise.resolve([] as VaultItemWithPreview[]);
 
         // Videos via TUS through PostUploadContext (chunked direct to Bunny)
-        const videoPromises = videoEntries.map((entry) =>
-          new Promise<VaultItemWithPreview>((resolve, reject) => {
-            startVideoUpload({
-              file:  entry.file,
-              title: entry.file.name,
-              silent: true,
-              onMediaId:     () => {},
-              onVaultItemId: (vaultItemId) => {
-                if (vaultItemId == null) {
-                  reject(new Error("Video uploaded but vault id missing"));
-                  return;
-                }
-                resolve({
-                  id:               vaultItemId,
-                  media_type:       "video",
-                  file_url:         "",
-                  thumbnail_url:    null,
-                  width:            null,
-                  height:           null,
-                  duration_seconds: null,
-                  blur_hash:        null,
-                  aspect_ratio:     null,
-                  bunny_video_id:   null,
-                  created_at:       new Date().toISOString(),
-                  last_used_at:     null,
-                } as VaultItemWithPreview);
-              },
-              onError: (msg) => { clearInterval(videoProgressTimer.current!); reject(new Error(msg)); },
-            });
-            let vp = 0;
-            videoProgressTimer.current = setInterval(() => {
-              const step = vp < 40 ? Math.random() * 3 + 2 : vp < 80 ? Math.random() * 1.2 + 0.5 : vp < 95 ? Math.random() * 0.3 + 0.05 : 0;
-              vp = Math.min(95, vp + step);
-              setVideoProgress(Math.round(vp));
-            }, 300);
-          })
+        const collectedUploadIds: string[] = [];
+        const videoPromises = videoEntries.map((entry) => {
+          let resolveVault!: (v: VaultItemWithPreview) => void;
+          let rejectVault!:  (e: Error) => void;
+          const promise = new Promise<VaultItemWithPreview>((res, rej) => { resolveVault = res; rejectVault = rej; });
+          const uploadId = startVideoUpload({
+            file:  entry.file,
+            title: entry.file.name,
+            silent: true,
+            onMediaId:     () => {},
+            onVaultItemId: (vaultItemId) => {
+              if (vaultItemId == null) {
+                rejectVault(new Error("Video uploaded but vault id missing"));
+                return;
+              }
+              useMassMessageStore.getState().addReceivedVaultId(vaultItemId);
+              resolveVault({
+                id:               vaultItemId,
+                media_type:       "video",
+                file_url:         "",
+                thumbnail_url:    null,
+                width:            null,
+                height:           null,
+                duration_seconds: null,
+                blur_hash:        null,
+                aspect_ratio:     null,
+                bunny_video_id:   null,
+                created_at:       new Date().toISOString(),
+                last_used_at:     null,
+              } as VaultItemWithPreview);
+            },
+            onError: (msg) => { clearInterval(videoProgressTimer.current!); rejectVault(new Error(msg)); },
+          });
+          collectedUploadIds.push(uploadId);
+          let vp = 0;
+          videoProgressTimer.current = setInterval(() => {
+            const step = vp < 40 ? Math.random() * 3 + 2 : vp < 80 ? Math.random() * 1.2 + 0.5 : vp < 95 ? Math.random() * 0.3 + 0.05 : 0;
+            vp = Math.min(95, vp + step);
+            setVideoProgress(Math.round(vp));
+          }, 300);
+          return promise;
+        });
+        // Generate persistent data URL thumbnails — survive navigation, unlike blob URLs
+        const videoDataURLs = await Promise.all(
+          videoEntries.map(async (e) => (await fileToThumbnailDataURL(e.file)) ?? "")
         );
+
+        useMassMessageStore.getState().patch({
+          activeUpload: {
+            videoUploadIds:    collectedUploadIds,
+            receivedVaultIds:  [],
+            previewThumbnails: videoDataURLs,
+            previewTypes:      videoEntries.map(() => "video" as const),
+            pendingMessage: {
+              text:                  text.trim() || null,
+              ppvPriceKobo:          isPPV ? Math.round(Number(ppvPrice) * 100) : null,
+              audienceSegment:       segment,
+              excludeActiveChatters,
+              scheduledFor:          scheduledFor ? scheduledFor.toISOString() : null,
+              existingVaultItemIds:  selected.filter((v) => Number(v.id) > 0).map((v) => Number(v.id)),
+            },
+          },
+        });
 
         const [photoItems, ...videoItems] = await Promise.all([photoPromise, ...videoPromises]);
         uploadedItems.push(...photoItems, ...videoItems);
@@ -224,7 +342,8 @@ const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
       const allVaultItems = [...selected.filter((v) => Number(v.id) > 0), ...uploadedItems];
 
-      const res = await fetch("/api/mass-messages", {
+      console.log("[MassMessage] sending vault_item_ids:", allVaultItems.map((v) => Number(v.id)));
+const res = await fetch("/api/mass-messages", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -239,6 +358,8 @@ const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to send");
       setShowSent(true);
+      useMassMessageStore.getState().patch({ activeUpload: null });
+      useMassMessageStore.getState().clearDraft();
       setPendingBubbleURLs([]);
       setTimeout(() => {
         setShowSent(false);
@@ -475,7 +596,7 @@ const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
           />
 
           {/* Selected media thumbnails — vault items + local files */}
-          {(selected.length > 0 || localFiles.length > 0) && (
+          {(selected.length > 0 || localFiles.length > 0 || (localFiles.length === 0 && pendingBubbleURLs.length > 0)) && (
             <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px" }}>
               {selected.map((v) => {
                 const isVaultVideo = v.media_type === "video";
@@ -519,6 +640,17 @@ const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
                     </button>
                   </div>
                 ))}
+
+              {/* In-flight uploads after navigation back — render persisted data URLs */}
+              {localFiles.length === 0 && pendingBubbleURLs.map((src, idx) => (
+                <div key={`inflight-${idx}`} style={{ position: "relative", width: "72px", height: "72px", flexShrink: 0, borderRadius: "10px", overflow: "hidden", backgroundColor: "#1A1A2E" }}>
+                  {src && <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />}
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#FFFFFF" style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.8))" }}><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  </div>
+                  <div style={{ position: "absolute", inset: 0, background: "rgba(10,10,15,0.35)", pointerEvents: "none" }} />
+                </div>
+              ))}
             </div>
           )}
 
