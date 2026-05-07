@@ -98,6 +98,7 @@ interface PostUploadContextValue {
     onMediaId:      (id: number) => void;
     onVaultItemId?: (id: number | null) => void;
     onError:        (e: string) => void;
+    silent?:        boolean;
   }) => string;
   startPhotoUpload:      (p: {
     file: File; onMediaId: (id: number) => void; onError: (e: string) => void;
@@ -284,6 +285,7 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
     uploadId: string, file: File, title: string, thumbnailBlob: Blob | undefined,
     onMediaId: (mediaId: number) => void, onError: (err: string) => void,
     onVaultItemId?: (id: number | null) => void,
+    silent: boolean = false,
   ) => {
     try {
       // Optional thumbnail
@@ -399,7 +401,7 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
       updateUpload(uploadId, { mediaId, progress: 85, phase: "processing" });
       onMediaId(mediaId);
       onVaultItemId?.(completeData.vaultItemId ?? null);
-      startPolling(uploadId, mediaId, videoId);
+      if (!silent) startPolling(uploadId, mediaId, videoId);
 
     } catch (err) {
       if (abortedRef.current.has(uploadId)) return;
@@ -410,20 +412,23 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
   }, [updateUpload, startPolling]);
 
   const startVideoUpload = useCallback(({
-    file, title, thumbnailBlob, onMediaId, onVaultItemId, onError,
+    file, title, thumbnailBlob, onMediaId, onVaultItemId, onError, silent = false,
   }: {
     file: File; title: string; thumbnailBlob?: Blob;
     onMediaId:      (id: number) => void;
     onVaultItemId?: (id: number | null) => void;
     onError:        (e: string) => void;
+    silent?:        boolean;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
-    setUploads((prev) => [...prev, {
-      id: uploadId, fileName: file.name, progress: 0, phase: "uploading",
-      file, _title: title, _onMediaId: onMediaId, _onError: onError,
-      _thumbnailBlob: thumbnailBlob,
-    }]);
-    runVideoUpload(uploadId, file, title, thumbnailBlob, onMediaId, onError, onVaultItemId);
+    if (!silent) {
+      setUploads((prev) => [...prev, {
+        id: uploadId, fileName: file.name, progress: 0, phase: "uploading",
+        file, _title: title, _onMediaId: onMediaId, _onError: onError,
+        _thumbnailBlob: thumbnailBlob,
+      }]);
+    }
+    runVideoUpload(uploadId, file, title, thumbnailBlob, onMediaId, onError, onVaultItemId, silent);
     return uploadId;
   }, [runVideoUpload]);
 

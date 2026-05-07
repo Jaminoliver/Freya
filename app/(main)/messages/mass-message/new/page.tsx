@@ -180,6 +180,7 @@ export default function MassMessageComposePage() {
             startVideoUpload({
               file:  entry.file,
               title: entry.file.name,
+              silent: true,
               onMediaId:     () => {},
               onVaultItemId: (vaultItemId) => {
                 if (vaultItemId == null) {
