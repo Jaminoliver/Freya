@@ -62,6 +62,8 @@ export default function MassMessageComposePage() {
   // Local files picked from device — held until Send, never auto-uploaded
   const [localFiles, setLocalFiles] = useState<{ file: File; objectURL: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+const [videoProgress, setVideoProgress] = useState(0);
+const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Add local files to preview (no upload yet) ─────────────────────────────
   const handleUploadFiles = useCallback((files: FileList | null) => {
@@ -202,8 +204,14 @@ export default function MassMessageComposePage() {
                   last_used_at:     null,
                 } as VaultItemWithPreview);
               },
-              onError: (msg) => reject(new Error(msg)),
+              onError: (msg) => { clearInterval(videoProgressTimer.current!); reject(new Error(msg)); },
             });
+            let vp = 0;
+            videoProgressTimer.current = setInterval(() => {
+              const step = vp < 40 ? Math.random() * 3 + 2 : vp < 80 ? Math.random() * 1.2 + 0.5 : vp < 95 ? Math.random() * 0.3 + 0.05 : 0;
+              vp = Math.min(95, vp + step);
+              setVideoProgress(Math.round(vp));
+            }, 300);
           })
         );
 
@@ -515,9 +523,13 @@ export default function MassMessageComposePage() {
           )}
 
           {/* Upload progress bar — shown only while sending */}
-          {uploading && uploadProgress > 0 && (
+          {uploading && (
             <div style={{ height: "3px", borderRadius: "2px", backgroundColor: "#1F1F2A", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${uploadProgress}%`, background: "linear-gradient(90deg, #8B5CF6, #EC4899)", borderRadius: "2px", transition: "width 0.2s ease" }} />
+              {(() => {
+                const p = videoProgress > 0 ? videoProgress : uploadProgress;
+                const done = p >= 100;
+                return <div style={{ height: "100%", width: `${p}%`, background: done ? "#22C55E" : "#8B5CF6", borderRadius: "2px", transition: "width 0.3s ease, background 0.3s ease" }} />;
+              })()}
             </div>
           )}
 
@@ -561,13 +573,13 @@ export default function MassMessageComposePage() {
           />
           <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
             <ToolbarBtn
-              icon={<ImageIcon size={20} strokeWidth={1.8} />}
+              icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>}
               active={totalMediaCount > 0}
               label={totalMediaCount > 0 ? `${totalMediaCount}` : undefined}
               onClick={() => setVaultOpen(true)}
             />
             <ToolbarBtn
-              icon={<Upload size={19} strokeWidth={1.8} />}
+              icon={<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>}
               active={false}
               label={undefined}
               onClick={() => fileInputRef.current?.click()}

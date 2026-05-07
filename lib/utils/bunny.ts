@@ -129,13 +129,23 @@ export async function uploadPhotoToBunny(
   const safeName = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
   const path     = `/posts/${userId}/${safeName}`;
 
+  console.log(`[uploadPhotoToBunny] Starting upload — file: ${filename}, size: ${buffer.length} bytes, path: ${path}`);
+  console.log(`[uploadPhotoToBunny] STORAGE_BASE_URL: ${STORAGE_BASE_URL}`);
+  console.log(`[uploadPhotoToBunny] STORAGE_API_KEY set: ${!!STORAGE_API_KEY}`);
+
   const res = await fetchWithTimeout(`${STORAGE_BASE_URL}${path}`, {
     method: "PUT",
     headers: { AccessKey: STORAGE_API_KEY, "Content-Type": mimeType },
     body: new Uint8Array(buffer),
   }, 15000);
 
-  if (!res.ok) throw new Error(`Bunny Storage upload failed: ${res.status} — ${await res.text()}`);
+  console.log(`[uploadPhotoToBunny] Response status: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`[uploadPhotoToBunny] Failed — status: ${res.status}, body: ${body}`);
+    throw new Error(`Bunny Storage upload failed: ${res.status} — ${body}`);
+  }
+  console.log(`[uploadPhotoToBunny] ✅ Upload success — path: ${path}`);
   return { url: signBunnyUrl(path), path };
 }
 

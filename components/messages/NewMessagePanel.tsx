@@ -113,7 +113,7 @@ export function NewMessagePanel({ onClose, fans, creators, loading, isCreator }:
         {/* Mass message — creator only */}
         {isCreator && (
           <button
-            onClick={() => { onClose(); router.push("/messages/mass-message/new"); }}
+            onClick={() => { router.push("/messages/mass-message/new"); if (window.innerWidth >= 768) onClose(); }}
             style={{
               display:         "flex",
               alignItems:      "center",

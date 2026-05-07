@@ -64,8 +64,10 @@ function getMediaItems(msg: Message, isOwn: boolean): { url: string; type: "imag
     return Array.from({ length: count }, () => ({ url: "", type: "image" as const }));
   }
   return urls.filter(Boolean).map((url) => ({
-    url,
-    type: url.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || url.includes('#video') ? "video" : "image",
+    url: url.includes('b-cdn.net') && url.includes('playlist.m3u8')
+      ? url.replace('playlist.m3u8', 'play_720p.mp4')
+      : url,
+    type: url.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || url.includes('#video') || (url.includes('b-cdn.net') && url.includes('playlist.m3u8')) ? "video" : "image",
   }));
 }
 

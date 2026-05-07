@@ -97,11 +97,9 @@ function useVaultData(filterType: TypeFilter | null) {
 // ── Filter chips ─────────────────────────────────────────────────────────────
 function FilterChips({ value, onChange, locked }: { value: TypeFilter; onChange: (v: TypeFilter) => void; locked?: boolean }) {
   const filters: { id: TypeFilter; label: string; Icon: any }[] = [
-    { id: "all",   label: "All",    Icon: Sparkles },
+    { id: "all",   label: "All",    Icon: ImageIcon },
     { id: "photo", label: "Photos", Icon: ImageIcon },
     { id: "video", label: "Videos", Icon: Film },
-    { id: "audio", label: "Audio",  Icon: Music },
-    { id: "gif",   label: "GIFs",   Icon: ImageIcon },
   ];
   return (
     <div style={{ display: "flex", gap: "6px", padding: "10px 14px", overflowX: "auto", scrollbarWidth: "none", flexShrink: 0 }}>
