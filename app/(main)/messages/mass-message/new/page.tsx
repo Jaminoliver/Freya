@@ -265,15 +265,13 @@ export default function MassMessageComposePage() {
         fontFamily:      "'Inter', sans-serif",
         width:           "100%",
         height:          "100%",
-        overflowY:       "auto",
-        paddingBottom:   "calc(env(safe-area-inset-bottom, 0px) + 24px)",
+        display:         "flex",
+        flexDirection:   "column",
         boxSizing:       "border-box" as const,
       }}>
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div style={{
-          position:             "sticky",
-          top:                  0,
-          zIndex:               20,
+          flexShrink:           0,
           backgroundColor:      "rgba(10,10,15,0.92)",
           backdropFilter:       "blur(16px)",
           WebkitBackdropFilter: "blur(16px)",
@@ -320,6 +318,8 @@ export default function MassMessageComposePage() {
           </button>
         </div>
 
+        {/* ── Scrollable body ─────────────────────────────────────────────── */}
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}>
         {/* ── Audience chip ────────────────────────────────────────────────── */}
         <div style={{ padding: "14px 16px 8px", display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
           <span style={{ fontSize: "13px", color: "#6B6B8A", fontWeight: 600 }}>To:</span>
@@ -532,6 +532,7 @@ export default function MassMessageComposePage() {
               {error}
             </div>
           )}
+        </div>
         </div>
       </div>
 
