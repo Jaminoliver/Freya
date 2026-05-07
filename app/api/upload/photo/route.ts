@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { uploadPhotoToBunny } from "@/lib/utils/bunny";
+import { autoArchiveToVault } from "@/lib/vault/autoArchive";
 import sharp from "sharp";
 import { encode } from "blurhash";
 
@@ -136,10 +137,26 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Upload Photo] ✅ Saved to DB — mediaId: ${mediaRow.id}, thumbnail_url: ${mediaRow.thumbnail_url ?? "null"}, blur_hash: ${mediaRow.blur_hash ?? "null"}, dimensions: ${mediaRow.width}x${mediaRow.height}`);
 
+        const vaultResult = await autoArchiveToVault(service, {
+          creator_id:      user.id,
+          media_type:      mediaType as "photo" | "gif",
+          file_url:        url,
+          thumbnail_url:   thumbnailUrl,
+          width:           dimensions?.width ?? null,
+          height:          dimensions?.height ?? null,
+          file_size_bytes: file.size,
+          mime_type:       file.type,
+          blur_hash:       blurHash ?? null,
+          aspect_ratio:    dimensions ? dimensions.width / dimensions.height : null,
+          source_type:     "post",
+          source_id:       mediaRow.id,
+        });
+
         results.push({
-          mediaId:   mediaRow.id,
-          url:       mediaRow.file_url,
-          mediaType: mediaRow.media_type,
+          mediaId:     mediaRow.id,
+          vaultItemId: vaultResult?.id ?? null,
+          url:         mediaRow.file_url,
+          mediaType:   mediaRow.media_type,
           path,
         });
       } catch (err) {

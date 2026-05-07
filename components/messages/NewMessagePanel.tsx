@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, Search } from "lucide-react";
+import { X, Search, Megaphone, ChevronRight } from "lucide-react";
 import { startConversation } from "@/app/(main)/messages/page";
 interface Person {
   id:          string;
@@ -109,6 +109,47 @@ export function NewMessagePanel({ onClose, fans, creators, loading, isCreator }:
             <X size={20} strokeWidth={1.8} />
           </button>
         </div>
+
+        {/* Mass message — creator only */}
+        {isCreator && (
+          <button
+            onClick={() => { onClose(); router.push("/messages/mass-message/new"); }}
+            style={{
+              display:         "flex",
+              alignItems:      "center",
+              gap:             "12px",
+              width:           "100%",
+              padding:         "14px 16px",
+              background:      "linear-gradient(90deg, rgba(139,92,246,0.08) 0%, rgba(236,72,153,0.06) 100%)",
+              border:          "none",
+              borderBottom:    "1px solid #1A1A2A",
+              cursor:          "pointer",
+              textAlign:       "left",
+              fontFamily:      "'Inter', sans-serif",
+              transition:      "background 0.15s ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(90deg, rgba(139,92,246,0.14) 0%, rgba(236,72,153,0.1) 100%)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "linear-gradient(90deg, rgba(139,92,246,0.08) 0%, rgba(236,72,153,0.06) 100%)"; }}
+          >
+            <div style={{
+              width:           "44px",
+              height:          "44px",
+              borderRadius:    "50%",
+              background:      "linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)",
+              display:         "flex",
+              alignItems:      "center",
+              justifyContent:  "center",
+              flexShrink:      0,
+            }}>
+              <Megaphone size={20} color="#FFF" strokeWidth={2} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>Mass message</div>
+              <div style={{ fontSize: "12px", color: "#8A8AA0", marginTop: "2px" }}>Reach multiple fans at once</div>
+            </div>
+            <ChevronRight size={18} color="#8A8AA0" strokeWidth={2} />
+          </button>
+        )}
 
         {/* Search */}
         <div style={{ padding: "12px 16px", flexShrink: 0, borderBottom: "1px solid #1A1A2A" }}>

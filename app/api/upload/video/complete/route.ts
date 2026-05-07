@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { getBunnyStreamUrls, getBunnyRawVideoUrl } from "@/lib/utils/bunny";
+import { autoArchiveToVault } from "@/lib/vault/autoArchive";
 import sharp from "sharp";
 import { encode } from "blurhash";
 
@@ -65,9 +66,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to save record" }, { status: 500 });
     }
 
+    const vaultResult = await autoArchiveToVault(service, {
+      creator_id:      user.id,
+      media_type:      "video",
+      file_url:        hlsUrl,
+      thumbnail_url:   finalThumbnailUrl,
+      file_size_bytes: fileSizeBytes ?? null,
+      mime_type:       mimeType ?? "video/mp4",
+      bunny_video_id:  videoId,
+      blur_hash:       blurHash ?? null,
+      source_type:     "post",
+      source_id:       mediaRow.id,
+    });
+
     return NextResponse.json({
       success:      true,
       mediaId:      mediaRow.id,
+      vaultItemId:  vaultResult?.id ?? null,
       videoId:      mediaRow.bunny_video_id,
       url:          mediaRow.file_url,
       rawVideoUrl:  mediaRow.raw_video_url,
