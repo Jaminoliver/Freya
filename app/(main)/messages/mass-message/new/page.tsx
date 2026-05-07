@@ -81,21 +81,18 @@ export default function MassMessageComposePage() {
     for (const f of files) fd.append("file", f);
     fd.append("skipVault", "true");
 
-    const data = await new Promise<any>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/upload/photo");
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
-      };
-      xhr.onreadystatechange = () => {
-  if (xhr.readyState !== 4) return;
-  try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error("Invalid response")); }
-};
-      xhr.onerror = () => reject(new Error("Upload failed"));
-      xhr.send(fd);
-    });
+    setUploadProgress(10);
 
+    const res = await fetch("/api/upload/photo", { method: "POST", body: fd });
+    setUploadProgress(90);
+
+    let data: any;
+    try { data = await res.json(); } catch { throw new Error("Invalid response from server"); }
+
+    if (!res.ok) throw new Error(data?.error ?? `Upload failed (${res.status})`);
     if (data.error) throw new Error(data.error);
+
+    setUploadProgress(100);
 
     return (data.results ?? [])
       .filter((r: any) => r.vaultItemId)
