@@ -98,7 +98,8 @@ const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
         })
           .then((r) => r.json())
           .then((data) => {
-            if (!data.error) { setShowSent(true); useMassMessageStore.getState().clearDraft(); setTimeout(() => { setShowSent(false); setSending(false); }, 2000); }
+            if (!data.error) { setShowSent(true);
+Promise.allSettled(allVaultIds.map(id => fetch(`/api/vault/${id}`, { method: "PATCH" }))); useMassMessageStore.getState().clearDraft(); setTimeout(() => { setShowSent(false); setSending(false); }, 2000); }
             else { setError(data.error); setSending(false); }
           })
           .catch(() => { setError("Failed to send after upload"); setSending(false); });
@@ -135,7 +136,8 @@ const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
           })
             .then((r) => r.json())
             .then((data) => {
-              if (!data.error) { setShowSent(true); useMassMessageStore.getState().clearDraft(); setTimeout(() => { setShowSent(false); setSending(false); }, 2000); }
+              if (!data.error) { setShowSent(true);
+Promise.allSettled(ids.map(id => fetch(`/api/vault/${id}`, { method: "PATCH" }))); useMassMessageStore.getState().clearDraft(); setTimeout(() => { setShowSent(false); setSending(false); }, 2000); }
               else { setError(data.error); setSending(false); }
             })
             .catch(() => { setError("Failed to send after upload"); setSending(false); });
@@ -254,7 +256,7 @@ const videoProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
     setError(null);
     // Snapshot previews into bubble immediately
     const snapshotFiles = [...localFiles];
-    setPendingBubbleURLs(snapshotFiles.map((e) => e.objectURL));
+    setPendingBubbleURLs(await Promise.all(snapshotFiles.map(async (e) => e.file.type.startsWith("video/") ? ((await fileToThumbnailDataURL(e.file)) ?? e.objectURL) : e.objectURL)));
     setPendingSnapshot(snapshotFiles);
     try {
       let uploadedItems: VaultItemWithPreview[] = [];
@@ -358,6 +360,7 @@ const res = await fetch("/api/mass-messages", {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to send");
       setShowSent(true);
+      Promise.allSettled(allVaultItems.map(v => fetch(`/api/vault/${Number(v.id)}`, { method: "PATCH" })));
       useMassMessageStore.getState().patch({ activeUpload: null });
       useMassMessageStore.getState().clearDraft();
       setPendingBubbleURLs([]);

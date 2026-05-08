@@ -10,10 +10,13 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url    = new URL(req.url);
-  const type   = url.searchParams.get("type");                  // photo | video | audio | gif | null (all)
+  const type   = url.searchParams.get("type");
   const limit  = Math.min(parseInt(url.searchParams.get("limit") ?? `${PAGE_SIZE}`, 10), 100);
   const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
-  const sort   = url.searchParams.get("sort") === "recent" ? "last_used_at" : "created_at";
+
+  // Fix: "recent" → created_at, "last_used" → last_used_at (was inverted before)
+  const sortParam = url.searchParams.get("sort");
+  const sort      = sortParam === "last_used" ? "last_used_at" : "created_at";
 
   let q = supabase
     .from("vault_items")
