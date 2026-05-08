@@ -9,8 +9,9 @@ interface MediaItem {
 }
 
 function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string; isSending: boolean; locked: boolean; precomputedThumb?: string | null }) {
+  const bunnyThumb = !precomputedThumb && src.includes("b-cdn.net") ? src.replace(/play_720p\.mp4|playlist\.m3u8/, "thumbnail.jpg").split("#")[0] : null;
   const [thumbUrl, setThumbUrl] = useState<string | null>(precomputedThumb ?? null);
-  const isBlobUrl = src.startsWith("blob:") && !precomputedThumb;
+  const isBlobUrl = src.startsWith("blob:") && !precomputedThumb && !bunnyThumb;
 
   useEffect(() => {
     if (!isBlobUrl) return;
@@ -48,6 +49,11 @@ function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string;
   if (isBlobUrl && thumbUrl) {
     return (
       <img src={thumbUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, filter: locked ? "blur(12px)" : "none", transform: locked ? "scale(1.1)" : "scale(1)", transition: "filter 0.3s ease" }} />
+    );
+  }
+  if (bunnyThumb) {
+    return (
+      <img src={bunnyThumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, filter: locked ? "blur(12px)" : "none", transform: locked ? "scale(1.1)" : "scale(1)" }} />
     );
   }
   if (isBlobUrl && !thumbUrl) {
