@@ -170,7 +170,7 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
               {item.type === "image" ? (
                 <img src={item.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : (
-                <video src={item.url} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted />
+                <img src={item.url.includes("b-cdn.net") && (item.url.includes("play_720p.mp4") || item.url.includes("playlist.m3u8")) ? item.url.replace(/play_720p\.mp4|playlist\.m3u8/, "thumbnail.jpg").split("#")[0] : item.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               )}
             </button>
           ))}
