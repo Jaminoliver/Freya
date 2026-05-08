@@ -314,6 +314,8 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
             resolve(canvas.toDataURL("image/jpeg", 0.7));
           };
           video.onerror = () => { URL.revokeObjectURL(objUrl); resolve(null); };
+      setTimeout(() => { URL.revokeObjectURL(objUrl); resolve(null); }, 3000);
+      video.playsInline = true;
         });
       }
 
