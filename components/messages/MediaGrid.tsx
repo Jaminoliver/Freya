@@ -9,7 +9,7 @@ interface MediaItem {
 }
 
 function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string; isSending: boolean; locked: boolean; precomputedThumb?: string | null }) {
-  const bunnyThumb = !precomputedThumb && src.includes("b-cdn.net") ? src.replace(/play_720p\.mp4|playlist\.m3u8/, "thumbnail.jpg").split("#")[0] : null;
+  const bunnyThumb = !precomputedThumb && src.includes("b-cdn.net") && (src.includes("play_720p.mp4") || src.includes("playlist.m3u8")) ? src.replace(/play_720p\.mp4|playlist\.m3u8/, "thumbnail.jpg").split("#")[0] : null;
   const [thumbUrl, setThumbUrl] = useState<string | null>(precomputedThumb ?? null);
   const isBlobUrl = src.startsWith("blob:") && !precomputedThumb && !bunnyThumb;
 
