@@ -8,9 +8,9 @@ interface MediaItem {
   type: "image" | "video";
 }
 
-function VideoThumb({ src, isSending, locked }: { src: string; isSending: boolean; locked: boolean }) {
-  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
-  const isBlobUrl = src.startsWith("blob:");
+function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string; isSending: boolean; locked: boolean; precomputedThumb?: string | null }) {
+  const [thumbUrl, setThumbUrl] = useState<string | null>(precomputedThumb ?? null);
+  const isBlobUrl = src.startsWith("blob:") && !precomputedThumb;
 
   useEffect(() => {
     if (!isBlobUrl) return;
@@ -190,7 +190,7 @@ export function MediaGrid({
             {!item.url ? (
               <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg, #1C1C2E 0%, #2A1F3D 50%, #1A1A2E 100%)" }} />
             ) : item.type === "video" ? (
-              <VideoThumb src={item.url} isSending={!!isSending} locked={false} />
+              <VideoThumb src={item.url} isSending={!!isSending} locked={false} precomputedThumb={thumbnailUrl ?? null} />
             ) : (
               <img src={item.url} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, transition: "opacity 0.3s ease", WebkitTouchCallout: "none" as any, userSelect: "none", WebkitUserSelect: "none" as any, pointerEvents: "none" }} />
             )}

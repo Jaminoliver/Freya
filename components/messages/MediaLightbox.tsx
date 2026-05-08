@@ -127,6 +127,7 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
               src={current.url}
               controls
               autoPlay
+              playsInline
               onCanPlay={() => setLoading(false)}
               style={{ maxWidth: "90vw", maxHeight: "80vh", borderRadius: "8px", backgroundColor: "#000", opacity: loading ? 0 : 1, transition: "opacity 0.2s" }}
             />
