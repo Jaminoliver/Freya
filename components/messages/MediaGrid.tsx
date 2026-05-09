@@ -27,7 +27,7 @@ function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string;
     const video  = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
-    const handleSeeked = () => {
+    const tryCapture = () => {
       try {
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
@@ -37,9 +37,12 @@ function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string;
         setReady(true);
       } catch {}
     };
-    video.addEventListener("seeked", handleSeeked);
-    video.currentTime = 0.001;
-    return () => video.removeEventListener("seeked", handleSeeked);
+    video.addEventListener("seeked",     tryCapture, { once: true });
+    video.addEventListener("loadeddata", tryCapture, { once: true });
+    return () => {
+      video.removeEventListener("seeked",     tryCapture);
+      video.removeEventListener("loadeddata", tryCapture);
+    };
   }, [src, precomputedThumb]);
 
   if (precomputedThumb) return <img src={precomputedThumb} alt="" style={{ ...shared, position: "relative", inset: "unset" }} />;
@@ -182,8 +185,7 @@ export function MediaGrid({
               <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg, #1C1C2E 0%, #2A1F3D 50%, #1A1A2E 100%)" }} />
             ) : item.type === "video" ? (
               <div style={{ position: "relative", width: "100%", height: "100%" }}>
-                {(() => { console.log("[THUMB DEBUG] MediaGrid item.url:", item.url, "item.thumbnailUrl:", item.thumbnailUrl, "fallback thumbnailUrl:", thumbnailUrl); return null; })()}
-                <VideoThumb src={item.url} isSending={!!isSending} locked={false} precomputedThumb={item.thumbnailUrl ?? thumbnailUrl ?? null} />
+                <VideoThumb src={item.url.replace(/#.*$/, "")} isSending={!!isSending} locked={false} precomputedThumb={item.thumbnailUrl ?? thumbnailUrl ?? null} />
               </div>
             ) : (
               <img src={item.url} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, transition: "opacity 0.3s ease", WebkitTouchCallout: "none" as any, userSelect: "none", WebkitUserSelect: "none" as any, pointerEvents: "none" }} />
