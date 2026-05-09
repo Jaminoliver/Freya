@@ -1,26 +1,16 @@
 "use client";
 
-import {
-  Users,
-  ShieldCheck,
-  Ban,
-  GitBranch,
-  ClipboardList,
-  Flag,
-  Settings2,
-  DollarSign,
-  CreditCard,
-  Landmark,
-  Radio,
-  MessageSquare,
-  Building2,
-  UserCog,
-  Settings,
-} from "lucide-react";
-
-import SidebarSection from "./SidebarSection";
-import SidebarNavItem from "./SidebarNavItem";
-import SidebarAnalyticsDropdown from "./SidebarAnalyticsDropdown";
+import SidebarSection                    from "./SidebarSection";
+import SidebarAnalyticsDropdown          from "./SidebarAnalyticsDropdown";
+import SidebarUsersDropdown              from "./SidebarUsersDropdown";
+import SidebarContentModerationDropdown  from "./SidebarContentModerationDropdown";
+import SidebarFinanceDropdown            from "./SidebarFinanceDropdown";
+import SidebarSubscriptionDropdown       from "./SidebarSubscriptionDropdown";
+import SidebarMessagingDropdown          from "./SidebarMessagingDropdown";
+import SidebarPlatformSettingsDropdown   from "./SidebarPlatformSettingsDropdown";
+import SidebarAdminRolesDropdown         from "./SidebarAdminRolesDropdown";
+import SidebarCreatorsAgenciesDropdown   from "./SidebarCreatorsAgenciesDropdown";
+import SidebarLiveStreamingDropdown      from "./SidebarLiveStreamingDropdown";
 
 interface Props {
   collapsed: boolean;
@@ -36,30 +26,39 @@ export default function SidebarNav({ collapsed }: Props) {
 
       {/* USERS */}
       <SidebarSection label="Users" collapsed={collapsed} />
-      <SidebarNavItem collapsed={collapsed} label="All Users" href="/admin/users" icon={Users} />
-      <SidebarNavItem collapsed={collapsed} label="KYC Verification" href="/admin/kyc" icon={ShieldCheck} />
-      <SidebarNavItem collapsed={collapsed} label="Banned Users" href="/admin/banned" icon={Ban} />
-      <SidebarNavItem collapsed={collapsed} label="Referrals" href="/admin/referrals" icon={GitBranch} />
+      <SidebarUsersDropdown collapsed={collapsed} />
 
       {/* CONTENT */}
       <SidebarSection label="Content" collapsed={collapsed} />
-      <SidebarNavItem collapsed={collapsed} label="Review Queue" href="/admin/review-queue" icon={ClipboardList} badge={12} />
-      <SidebarNavItem collapsed={collapsed} label="Reported Content" href="/admin/reported" icon={Flag} />
-      <SidebarNavItem collapsed={collapsed} label="Auto-Mod Rules" href="/admin/automod" icon={Settings2} />
+      <SidebarContentModerationDropdown collapsed={collapsed} />
 
       {/* FINANCE */}
       <SidebarSection label="Finance" collapsed={collapsed} />
-      <SidebarNavItem collapsed={collapsed} label="Transactions" href="/admin/transactions" icon={DollarSign} />
-      <SidebarNavItem collapsed={collapsed} label="Payouts" href="/admin/payouts" icon={CreditCard} />
-      <SidebarNavItem collapsed={collapsed} label="Payment Gateways" href="/admin/gateways" icon={Landmark} />
+      <SidebarFinanceDropdown collapsed={collapsed} />
+
+      {/* SUBSCRIPTIONS */}
+      <SidebarSection label="Subscriptions" collapsed={collapsed} />
+      <SidebarSubscriptionDropdown collapsed={collapsed} />
+
+      {/* MESSAGING */}
+      <SidebarSection label="Messaging" collapsed={collapsed} />
+      <SidebarMessagingDropdown collapsed={collapsed} />
+
+      {/* CREATORS */}
+      <SidebarSection label="Creators" collapsed={collapsed} />
+      <SidebarCreatorsAgenciesDropdown collapsed={collapsed} />
+
+      {/* LIVE */}
+      <SidebarSection label="Live" collapsed={collapsed} />
+      <SidebarLiveStreamingDropdown collapsed={collapsed} />
 
       {/* PLATFORM */}
       <SidebarSection label="Platform" collapsed={collapsed} />
-      <SidebarNavItem collapsed={collapsed} label="Live Streams" href="/admin/streams" icon={Radio} />
-      <SidebarNavItem collapsed={collapsed} label="Messaging" href="/admin/messaging" icon={MessageSquare} />
-      <SidebarNavItem collapsed={collapsed} label="Creators & Agencies" href="/admin/creators" icon={Building2} />
-      <SidebarNavItem collapsed={collapsed} label="Admins & Roles" href="/admin/admins" icon={UserCog} />
-      <SidebarNavItem collapsed={collapsed} label="Settings" href="/admin/settings" icon={Settings} />
+      <SidebarPlatformSettingsDropdown collapsed={collapsed} />
+
+      {/* ADMIN */}
+      <SidebarSection label="Admin" collapsed={collapsed} />
+      <SidebarAdminRolesDropdown collapsed={collapsed} />
 
       <style jsx>{`
         .sidebar-nav {
@@ -70,12 +69,8 @@ export default function SidebarNav({ collapsed }: Props) {
           scrollbar-width: thin;
           scrollbar-color: rgba(255,255,255,0.08) transparent;
         }
-        .sidebar-nav::-webkit-scrollbar {
-          width: 4px;
-        }
-        .sidebar-nav::-webkit-scrollbar-track {
-          background: transparent;
-        }
+        .sidebar-nav::-webkit-scrollbar { width: 4px; }
+        .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
         .sidebar-nav::-webkit-scrollbar-thumb {
           background: rgba(255,255,255,0.08);
           border-radius: 4px;

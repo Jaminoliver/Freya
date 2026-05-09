@@ -100,6 +100,7 @@ interface PostUploadContextValue {
     onVaultItemId?: (id: number | null) => void;
     onError:        (e: string) => void;
     silent?:        boolean;
+    skipVault?:     boolean;
   }) => string;
   startPhotoUpload:      (p: {
     file: File; onMediaId: (id: number) => void; onError: (e: string) => void;
@@ -287,6 +288,7 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
     onMediaId: (mediaId: number) => void, onError: (err: string) => void,
     onVaultItemId?: (id: number | null) => void,
     silent: boolean = false,
+    skipVault: boolean = false,
   ) => {
     try {
       // Optional thumbnail
@@ -393,7 +395,7 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
       const completeRes  = await fetch("/api/upload/video/complete", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size, customThumbnailUrl }),
+        body:    JSON.stringify({ videoId, mimeType: file.type, fileSizeBytes: file.size, customThumbnailUrl, skipVault }),
       });
       const completeData = await completeRes.json();
       if (!completeRes.ok) throw new Error(completeData.error || "Failed to save record");
@@ -434,13 +436,14 @@ if (!silent) {
   }, [updateUpload, startPolling]);
 
   const startVideoUpload = useCallback(({
-    file, title, thumbnailBlob, onMediaId, onVaultItemId, onError, silent = false,
+    file, title, thumbnailBlob, onMediaId, onVaultItemId, onError, silent = false, skipVault = false,
   }: {
     file: File; title: string; thumbnailBlob?: Blob;
     onMediaId:      (id: number) => void;
     onVaultItemId?: (id: number | null) => void;
     onError:        (e: string) => void;
     silent?:        boolean;
+    skipVault?:     boolean;
   }): string => {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
     if (!silent) {
@@ -450,7 +453,7 @@ if (!silent) {
         _thumbnailBlob: thumbnailBlob,
       }]);
     }
-    runVideoUpload(uploadId, file, title, thumbnailBlob, onMediaId, onError, onVaultItemId, silent);
+    runVideoUpload(uploadId, file, title, thumbnailBlob, onMediaId, onError, onVaultItemId, silent, skipVault);
     return uploadId;
   }, [runVideoUpload]);
 

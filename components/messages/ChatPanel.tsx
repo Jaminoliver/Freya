@@ -30,6 +30,7 @@ import type { User } from "@/lib/types/profile";
 import type { GifItem } from "@/components/gif/GifComponents";
 import type { RecordResult } from "@/lib/hooks/useVoiceRecorder";
 import { remoteLog } from "@/lib/utils/remoteLog";
+import { compressPhotoIfNeeded } from "@/lib/utils/compressPhoto";
 
 interface Props {
   conversation:           Conversation;
@@ -102,7 +103,7 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
 
   const recordingConvIds = useRecordingConversations();
   const isRecording      = recordingConvIds.has(conversation.id);
-  const { startMessageUpload, uploads } = useUpload();
+  const { startVideoUpload, uploads } = useUpload();
   const desktopMenuBtnRef = useRef<HTMLButtonElement>(null);
 
   // Build User-shaped object for CheckoutModal from conversation participant
@@ -293,36 +294,8 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
       const tempId    = `temp_${Date.now()}_${Math.random()}`;
       const blobItems = mediaFiles.map((file) => ({ url: URL.createObjectURL(file), type: file.type.startsWith("video/") ? "video" as const : "image" as const }));
 
-      // Generate thumbnail for first video file
-      const firstFile = mediaFiles[0];
-      let clientThumbnailUrl: string | null = null;
-      if (firstFile.type.startsWith("video/")) {
-        remoteLog("video_send_start", { name: firstFile.name, size: firstFile.size, type: firstFile.type });
-        const t0 = Date.now();
-        clientThumbnailUrl = await new Promise<string | null>((resolve) => {
-          const video  = document.createElement("video");
-          const objUrl = URL.createObjectURL(firstFile);
-          video.preload = "metadata";
-          video.muted   = true;
-          video.src     = objUrl;
-          video.onloadeddata = () => { remoteLog("thumb_loadeddata", { ms: Date.now() - t0 }); video.currentTime = 0.5; };
-          video.onseeked = () => {
-            remoteLog("thumb_seeked", { ms: Date.now() - t0 });
-            const canvas  = document.createElement("canvas");
-            canvas.width  = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext("2d")?.drawImage(video, 0, 0);
-            URL.revokeObjectURL(objUrl);
-            resolve(canvas.toDataURL("image/jpeg", 0.7));
-          };
-          video.onerror = (e) => { remoteLog("thumb_error", { ms: Date.now() - t0, err: String(e) }); URL.revokeObjectURL(objUrl); resolve(null); };
-          setTimeout(() => { remoteLog("thumb_timeout", { ms: Date.now() - t0 }); URL.revokeObjectURL(objUrl); resolve(null); }, 5000);
-        });
-        remoteLog("thumb_done", { ms: Date.now() - t0, hasThumb: !!clientThumbnailUrl });
-      }
-
+      // Optimistic message — shows instantly while uploads run in background
       const optimistic: Message = {
-        ...( clientThumbnailUrl ? { thumbnailUrl: clientThumbnailUrl } : {} ),
         id: Date.now(), conversationId: conversation.id, senderId: currentUserId,
         type: ppvPrice ? "ppv" : "media", text: text.trim() || undefined,
         mediaUrls: blobItems.map((b) => b.type === "video" ? `${b.url}#video` : b.url),
@@ -330,17 +303,72 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
         ...(ppvPrice ? { ppv: { price: ppvPrice * 100, isUnlocked: true, unlockedCount: 0 } } : {}),
       };
       appendMessage(optimistic);
-      startMessageUpload({
-        files: mediaFiles, conversationId: conversation.id, content: text.trim() || undefined,
-        isPPV: !!ppvPrice, ppvPrice: ppvPrice ? ppvPrice * 100 : undefined, tempId,
-        onProgress: (progress) => { setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, uploadProgress: progress } : m)); },
-        onSent: (serverMessage) => {
-          blobItems.forEach((b) => URL.revokeObjectURL(b.url));
-          setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...serverMessage, status: "sent" as const } : m));
-          updateConversations((prev) => prev.map((c) => c.id === conversation.id ? { ...c, lastMessage: text || "📷 Media", lastMessageAt: new Date().toISOString() } : c));
-        },
-        onError: () => { setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m)); },
-      });
+
+      try {
+        // Upload each file independently — videos direct to Bunny via TUS, photos via /api/upload/photo
+        const mediaIds = await Promise.all(mediaFiles.map(async (file) => {
+          if (file.type.startsWith("video/")) {
+            return new Promise<number>((resolve, reject) => {
+              startVideoUpload({
+                file,
+                title:     file.name,
+                silent:    true,
+                skipVault: true,
+                onMediaId: (mediaId) => resolve(mediaId),
+                onError:   (err)     => reject(new Error(err)),
+              });
+            });
+          }
+          const compressed = await compressPhotoIfNeeded(file);
+          const fd = new FormData();
+          fd.append("file", compressed);
+          fd.append("skipVault", "true");
+          const r    = await fetch("/api/upload/photo", { method: "POST", body: fd });
+          const json = await r.json();
+          if (!r.ok) throw new Error(json.error ?? "Photo upload failed");
+          const mediaId = json.results?.[0]?.mediaId;
+          if (!mediaId) throw new Error("No media ID returned");
+          return mediaId as number;
+        }));
+
+        // Resolve conversation id — create one if this is a brand-new chat
+        let convId = realConversationIdRef.current ?? conversation.id;
+        if (convId === 0) {
+          const createRes  = await fetch("/api/conversations", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ targetUserId: conversation.participant.id }),
+          });
+          const createData = await createRes.json();
+          convId                        = createData.conversationId;
+          realConversationIdRef.current = convId;
+          useMessageStore.getState().setConversationId(convId);
+          subscribeTypingForConversation(convId);
+          onConversationCreated?.(convId);
+        }
+
+        // Tiny JSON request — creates the message + message_media rows
+        const res  = await fetch(`/api/conversations/${convId}/messages/with-media`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            content:   text.trim() || null,
+            mediaIds,
+            is_ppv:    !!ppvPrice,
+            ppv_price: ppvPrice ? ppvPrice * 100 : undefined,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.message) throw new Error(data.error ?? "Send failed");
+
+        blobItems.forEach((b) => URL.revokeObjectURL(b.url));
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m));
+        updateConversations((prev) => prev.map((c) => c.id === convId ? { ...c, lastMessage: text || (ppvPrice ? "🔒 PPV message" : "📷 Media"), lastMessageAt: new Date().toISOString() } : c));
+      } catch (err) {
+        console.error("[handleSend] media error:", err);
+        remoteLog("send_media_error", { err: String(err) });
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "failed" as const } : m));
+      }
 
     } else if (text.trim()) {
       const tempId         = `temp_text_${Date.now()}_${Math.random()}`;
@@ -388,7 +416,7 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
         setSending(false);
       }
     }
-  }, [sending, conversation, currentUserId, replyTo, startMessageUpload, appendMessage, setMessages, realConversationIdRef]);
+  }, [sending, conversation, currentUserId, replyTo, startVideoUpload, appendMessage, setMessages, realConversationIdRef]);
 
   // ── Tip success: append tip message to chat ─────────────────────────────
   const handleTipSuccess = useCallback((data: any) => {

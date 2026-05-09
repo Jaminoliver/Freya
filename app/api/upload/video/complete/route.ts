@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { videoId, mimeType, fileSizeBytes, customThumbnailUrl } = await req.json();
+    const { videoId, mimeType, fileSizeBytes, customThumbnailUrl, skipVault } = await req.json();
 
     if (!videoId) {
       return NextResponse.json({ error: "videoId is required" }, { status: 400 });
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to save record" }, { status: 500 });
     }
 
-    const vaultResult = await autoArchiveToVault(service, {
+    const vaultResult = skipVault ? null : await autoArchiveToVault(service, {
       creator_id:      user.id,
       media_type:      "video",
       file_url:        hlsUrl,
