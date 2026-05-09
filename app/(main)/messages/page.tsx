@@ -567,6 +567,7 @@ function startGlobalRealtime() {
           const isInvolved = row.sender_id === currentUserId || row.receiver_id === currentUserId;
           if (isInvolved && (row.deleted_for_creator || row.deleted_for_fan)) return;
 
+          console.log("[MSG UPDATE] is_ppv:", row.is_ppv, "thumbnail_url:", !!row.thumbnail_url, "old.thumbnail_url:", !!old.thumbnail_url, "is_unlocked:", row.is_unlocked);
           if (row.is_ppv && row.thumbnail_url) {
             const isReceiver = row.receiver_id === currentUserId;
             const isSender   = row.sender_id   === currentUserId;
@@ -599,11 +600,16 @@ function startGlobalRealtime() {
           }
 
           if (row.sender_id === currentUserId) {
+            const existing = useMessageStore.getState().messages.find((m) => m.id === row.id);
+            console.log("[MSG UPDATE SENDER] id:", row.id, "is_ppv:", row.is_ppv, "is_unlocked:", row.is_unlocked, "existing?.ppv:", !!existing?.ppv, "currentUserId:", currentUserId);
             useMessageStore.getState().patchMessage(row.id, {
               isDelivered: row.is_delivered ?? false,
               isRead:      row.is_read      ?? false,
               status:      "sent",
-            });
+              ...(row.is_ppv && row.is_unlocked && existing?.ppv
+                ? { ppv: { ...existing.ppv, isUnlockedByReceiver: true } }
+                : {}),
+            } as any);
             return;
           }
 
