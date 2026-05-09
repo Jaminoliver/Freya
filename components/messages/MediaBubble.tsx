@@ -170,9 +170,6 @@ export function MediaBubble({
             <div style={{ padding: "4px 12px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               {msg.ppv.isUnlockedByReceiver ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                    <path d="M2 7L5.5 10.5L12 3" stroke="#10B981" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
                   <span style={{ fontSize: "11px", color: "#10B981", fontWeight: 600, fontFamily: "'Inter',sans-serif" }}>Unlocked</span>
                 </div>
               ) : (
@@ -186,12 +183,12 @@ export function MediaBubble({
           )}
 
           {msg.type === "ppv" && msg.ppv?.isUnlocked && !isOwn && (
-            <div style={{ padding: "6px 12px 8px", display: "flex", alignItems: "center", gap: "6px" }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M2 7L5.5 10.5L12 3" stroke="#10B981" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span style={{ fontSize: "12px", color: "#10B981", fontWeight: 600 }}>Unlocked</span>
-              <span style={{ fontSize: "12px", color: "#4A4A6A" }}>· ₦{(msg.ppv.price / 100).toLocaleString()} paid</span>
+            <div style={{ padding: "6px 12px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "12px", color: "#10B981", fontWeight: 600 }}>Unlocked</span>
+                <span style={{ fontSize: "12px", color: "#4A4A6A" }}>· ₦{(msg.ppv.price / 100).toLocaleString()} paid</span>
+              </div>
+              <ReadTick status={msg.status} isDelivered={msg.isDelivered} isRead={msg.isRead ?? false} />
             </div>
           )}
 
