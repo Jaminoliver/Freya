@@ -4,6 +4,8 @@ import { use, useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import MessageGalleryGrid, { type MediaItem } from "@/components/messages/MessageGalleryGrid";
+import CheckoutModal from "@/components/checkout/CheckoutModal";
+import type { User } from "@/lib/types/profile";
 
 type Filter = "all" | "images" | "videos" | "unlocked";
 
@@ -24,8 +26,20 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
   const [loadingMore, setLoadingMore] = useState(false);
   const [nextCursor,  setNextCursor]  = useState<string | null>(null);
   const [hasMore,     setHasMore]     = useState(true);
+  const [creator,     setCreator]     = useState<User | null>(null);
+  const [checkoutItem, setCheckoutItem] = useState<MediaItem | null>(null);
 
   const loaderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch(`/api/conversations/${id}`)
+      .then(r => r.json())
+      .then(data => {
+        const p = data.conversation?.participant;
+        if (p) setCreator({ id: p.id, username: p.username, display_name: p.name, avatar_url: p.avatarUrl ?? null, is_verified: p.isVerified ?? false } as User);
+      })
+      .catch(() => {});
+  }, [id]);
 
   const fetchMedia = useCallback(async (cursor: string | null, currentFilter: Filter, reset = false) => {
     if (reset) setLoading(true); else setLoadingMore(true);
@@ -60,20 +74,22 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
     return () => observer.disconnect();
   }, [hasMore, loadingMore, loading, nextCursor, filter, fetchMedia]);
 
-  const handleUnlock = useCallback(async (item: MediaItem) => {
-    const res = await fetch(`/api/conversations/${id}/messages/${item.messageId}/unlock`, { method: "POST" });
-    if (!res.ok) return;
-    const data = await res.json();
+  const handleUnlock = useCallback((item: MediaItem) => {
+    setCheckoutItem(item);
+  }, []);
+
+  const handleUnlockSuccess = useCallback((data: any) => {
+    if (!checkoutItem) return;
     const urls: string[] = data.mediaUrls ?? [];
     setItems(prev => {
-      const siblings = prev.filter(i => i.messageId === item.messageId);
+      const siblings = prev.filter(i => i.messageId === checkoutItem.messageId);
       return prev.map(i => {
-        if (i.messageId !== item.messageId) return i;
+        if (i.messageId !== checkoutItem.messageId) return i;
         const idx = siblings.indexOf(i);
         return { ...i, isUnlocked: true, url: urls[idx] ?? i.url };
       });
     });
-  }, [id]);
+  }, [checkoutItem]);
 
   const handleDelete = useCallback(async (itemIds: number[], messageIds: number[]) => {
     console.log("handleDelete", { itemIds, messageIds });
@@ -167,6 +183,19 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
           onUnlock={handleUnlock}
         />
       </div>
+    {checkoutItem && creator && (
+        <CheckoutModal
+          isOpen={!!checkoutItem}
+          onClose={() => setCheckoutItem(null)}
+          type="ppv"
+          creator={creator}
+          postPrice={checkoutItem.price ?? 0}
+          conversationId={parseInt(id, 10)}
+          messageId={checkoutItem.messageId}
+          onChatPaymentSuccess={handleUnlockSuccess}
+          autoCloseOnSuccess
+        />
+      )}
     </div>
   );
 }

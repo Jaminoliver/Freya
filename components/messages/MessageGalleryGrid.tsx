@@ -25,7 +25,7 @@ interface Props {
   hasMore:        boolean;
   loaderRef:      React.RefObject<HTMLDivElement | null>;
   onDelete:       (itemIds: number[], messageIds: number[]) => Promise<void>;
-  onUnlock?:      (item: MediaItem) => Promise<void>;
+  onUnlock?:      (item: MediaItem) => void;
 }
 
 function groupByMonth(items: MediaItem[]): { label: string; items: MediaItem[] }[] {
@@ -118,7 +118,7 @@ export default function MessageGalleryGrid({
   const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
   const [confirmDelete,  setConfirmDelete]  = useState(false);
   const [deleting,       setDeleting]       = useState(false);
-  const [unlocking,      setUnlocking]      = useState<Set<number>>(new Set());
+ 
 
   const selectModeRef      = useRef(false);
   const longPressTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -434,11 +434,10 @@ export default function MessageGalleryGrid({
                             )}
                             {onUnlock && (
                               <button
-                                onClick={(e) => { e.stopPropagation(); if (unlocking.has(item.id)) return; setUnlocking(prev => new Set(prev).add(item.id)); onUnlock(item).finally(() => setUnlocking(prev => { const n = new Set(prev); n.delete(item.id); return n; })); }}
-                                disabled={unlocking.has(item.id)}
-                                style={{ padding: "4px 10px", borderRadius: "12px", border: "none", backgroundColor: unlocking.has(item.id) ? "#4A4A6A" : "#8B5CF6", color: "#FFFFFF", fontSize: "10px", fontWeight: 700, cursor: unlocking.has(item.id) ? "default" : "pointer", fontFamily: "'Inter',sans-serif" }}
+                                onClick={(e) => { e.stopPropagation(); onUnlock(item); }}
+                                style={{ padding: "4px 10px", borderRadius: "12px", border: "none", backgroundColor: "#8B5CF6", color: "#FFFFFF", fontSize: "10px", fontWeight: 700, cursor: "pointer", fontFamily: "'Inter',sans-serif" }}
                               >
-                                {unlocking.has(item.id) ? "…" : "Unlock"}
+                                Unlock
                               </button>
                             )}
                           </div>
