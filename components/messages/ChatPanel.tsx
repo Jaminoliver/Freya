@@ -314,10 +314,10 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
               video.muted = true;
               video.playsInline = true;
               const url = URL.createObjectURL(file);
-              video.src = url;
-              video.currentTime = 0.001;
+              video.src = `${url}#t=0.001`;
+video.load();
               const cleanup = () => URL.revokeObjectURL(url);
-              video.addEventListener("seeked", () => {
+              const tryCapture = () => {
                 try {
                   const canvas = document.createElement("canvas");
                   canvas.width  = video.videoWidth  || 320;
@@ -325,7 +325,9 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
                   canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
                   canvas.toBlob((blob) => { cleanup(); res(blob ?? undefined); }, "image/jpeg", 0.85);
                 } catch { cleanup(); res(undefined); }
-              }, { once: true });
+              };
+              video.addEventListener("seeked",     tryCapture, { once: true });
+              video.addEventListener("loadeddata", tryCapture, { once: true });
               video.addEventListener("error", () => { cleanup(); res(undefined); }, { once: true });
               setTimeout(() => { cleanup(); res(undefined); }, 5000);
             });
