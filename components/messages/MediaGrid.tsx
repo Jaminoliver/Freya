@@ -47,6 +47,11 @@ function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string;
 
   const videoSrc = !isBlobUrl && !src.includes("#") ? `${src}#t=0.001` : src;
 
+  if (precomputedThumb) {
+    return (
+      <img src={precomputedThumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, filter: locked ? "blur(12px)" : "none", transform: locked ? "scale(1.1)" : "scale(1)" }} />
+    );
+  }
   if (isBlobUrl && thumbUrl) {
     return (
       <img src={thumbUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, filter: locked ? "blur(12px)" : "none", transform: locked ? "scale(1.1)" : "scale(1)", transition: "filter 0.3s ease" }} />
