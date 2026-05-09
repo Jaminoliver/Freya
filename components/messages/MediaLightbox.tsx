@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface MediaItem {
@@ -56,7 +57,7 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
 
   if (!current) return null;
 
-  return (
+  return createPortal(
     <div
       style={{
         position:        "fixed",
@@ -184,6 +185,7 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
       <style>{`
         @keyframes lbSpin { to { transform: rotate(360deg); } }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 }
