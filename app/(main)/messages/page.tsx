@@ -322,7 +322,9 @@ function startGlobalRealtime() {
           setRecording(row.conversation_id, false);
           console.log("[MSG INSERT] receiver_id:", row.receiver_id, "currentUserId:", currentUserId, "isOnMessagesPage:", isOnMessagesPage);
 
+          console.log("[MSG INSERT] RAW fired — id:", row.id, "sender:", row.sender_id, "media_type:", row.media_type, "media_url:", row.media_url, "is_ppv:", row.is_ppv);
           if (isOwn) {
+            console.log("[MSG INSERT] isOwn — skipping append, just updating conv list");
             updateConversations((prev) =>
               prev.map((c) =>
                 c.id !== row.conversation_id ? c : {
@@ -458,6 +460,26 @@ function startGlobalRealtime() {
           }
 
           if (row.media_type && !row.is_ppv) {
+            if (row.media_url) {
+              const mediaMessage: Message = {
+                id:             row.id,
+                conversationId: row.conversation_id,
+                senderId:       row.sender_id,
+                type:           "media",
+                text:           row.content ?? undefined,
+                mediaUrls:      [row.media_url],
+                thumbnailUrl:   row.thumbnail_url ?? null,
+                isRead:         false,
+                isDelivered:    true,
+                createdAt:      row.created_at,
+                replyToId:      row.reply_to_id ?? null,
+              };
+              const store = useMessageStore.getState();
+              if (row.conversation_id === store.conversationId) {
+                store.appendMessage(mediaMessage);
+                fetch(`/api/conversations/${row.conversation_id}/read`, { method: "PATCH" }).catch(() => {});
+              }
+            }
             updateConversations((prev) =>
               prev.map((c) =>
                 c.id !== row.conversation_id ? c : {
@@ -585,9 +607,12 @@ function startGlobalRealtime() {
             return;
           }
 
+          console.log("[MSG UPDATE] receiver check:", row.receiver_id, "===", currentUserId, "->", row.receiver_id === currentUserId);
+          console.log("[MSG UPDATE] media_type:", row.media_type, "media_url:", row.media_url, "old.media_url:", old.media_url);
           if (row.receiver_id !== currentUserId) return;
           if (!row.media_type || !row.media_url) return;
           if (old.media_url) return;
+          console.log("[MSG UPDATE] appending media message to store");
 
           const mediaMessage: Message = {
             id:             row.id,
