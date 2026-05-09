@@ -60,6 +60,21 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
     return () => observer.disconnect();
   }, [hasMore, loadingMore, loading, nextCursor, filter, fetchMedia]);
 
+  const handleUnlock = useCallback(async (item: MediaItem) => {
+    const res = await fetch(`/api/conversations/${id}/messages/${item.messageId}/unlock`, { method: "POST" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const urls: string[] = data.mediaUrls ?? [];
+    setItems(prev => {
+      const siblings = prev.filter(i => i.messageId === item.messageId);
+      return prev.map(i => {
+        if (i.messageId !== item.messageId) return i;
+        const idx = siblings.indexOf(i);
+        return { ...i, isUnlocked: true, url: urls[idx] ?? i.url };
+      });
+    });
+  }, [id]);
+
   const handleDelete = useCallback(async (itemIds: number[], messageIds: number[]) => {
     console.log("handleDelete", { itemIds, messageIds });
     const res = await fetch(`/api/conversations/${id}/media`, {
@@ -149,6 +164,7 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
           hasMore={hasMore}
           loaderRef={loaderRef}
           onDelete={handleDelete}
+          onUnlock={handleUnlock}
         />
       </div>
     </div>

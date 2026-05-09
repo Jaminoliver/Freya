@@ -59,7 +59,7 @@ export async function GET(
   // Step 1: fetch messages that have media
   let msgsQuery = supabase
     .from("messages")
-    .select("id, sender_id, is_ppv, created_at")
+    .select("id, sender_id, is_ppv, ppv_price, created_at")
     .eq("conversation_id", conversationId)
     .eq(deleteField, false)
     .eq("is_deleted_for_everyone", false)
@@ -108,7 +108,7 @@ export async function GET(
   let unlockedByUser = new Set<number>();
   if (ppvMessageIds.length > 0) {
     const { data: unlocks } = await supabase
-      .from("ppv_unlocks")
+      .from("ppv_message_unlocks")
       .select("message_id")
       .eq("fan_id", user.id)
       .in("message_id", ppvMessageIds);
@@ -165,6 +165,7 @@ export async function GET(
         isPPV,
         isUnlocked,
         isSender,
+        price:        isPPV ? (msg.ppv_price ?? 0) : undefined,
         createdAt:    msg.created_at,
       };
     })

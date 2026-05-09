@@ -11,6 +11,7 @@ export interface MediaItem {
   thumbnailUrl: string | null;
   mediaType:    "image" | "video";
   isPPV:        boolean;
+  price?:       number;
   isUnlocked:   boolean;
   isSender:     boolean;
   createdAt:    string;
@@ -24,6 +25,7 @@ interface Props {
   hasMore:        boolean;
   loaderRef:      React.RefObject<HTMLDivElement | null>;
   onDelete:       (itemIds: number[], messageIds: number[]) => Promise<void>;
+  onUnlock?:      (item: MediaItem) => Promise<void>;
 }
 
 function groupByMonth(items: MediaItem[]): { label: string; items: MediaItem[] }[] {
@@ -81,7 +83,7 @@ function VideoThumb({ src, blurred, precomputedThumb }: { src: string; blurred: 
 function MediaThumb({ item }: { item: MediaItem }) {
   const blurred = !item.isUnlocked;
   if (item.mediaType === "image") {
-    const src = item.url;
+    const src = item.url ?? (blurred ? item.thumbnailUrl : null);
     if (!src) return <div style={{ width: "100%", height: "100%", backgroundColor: "#1E1E2E" }} />;
     return (
       <img
@@ -93,7 +95,10 @@ function MediaThumb({ item }: { item: MediaItem }) {
       />
     );
   }
-  if (item.mediaType === "video" && item.url) return <VideoThumb src={item.url} blurred={blurred} precomputedThumb={item.thumbnailUrl ?? null} />;
+  if (item.mediaType === "video") {
+    if (item.url) return <VideoThumb src={item.url} blurred={blurred} precomputedThumb={item.thumbnailUrl ?? null} />;
+    if (blurred && item.thumbnailUrl) return <img src={item.thumbnailUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(8px) brightness(0.6)" }} />;
+  }
   return <div style={{ width: "100%", height: "100%", backgroundColor: "#1E1E2E" }} />;
 }
 
@@ -105,6 +110,7 @@ export default function MessageGalleryGrid({
   hasMore,
   loaderRef,
   onDelete,
+  onUnlock,
 }: Props) {
   const [lightbox,       setLightbox]       = useState<{ items: { url: string; type: "image" | "video"; messageId: number }[]; initialIndex: number } | null>(null);
   const [selectMode,     setSelectMode]     = useState(false);
@@ -112,6 +118,7 @@ export default function MessageGalleryGrid({
   const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
   const [confirmDelete,  setConfirmDelete]  = useState(false);
   const [deleting,       setDeleting]       = useState(false);
+  const [unlocking,      setUnlocking]      = useState<Set<number>>(new Set());
 
   const selectModeRef      = useRef(false);
   const longPressTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -417,10 +424,23 @@ export default function MessageGalleryGrid({
                             </div>
                           </div>
                         )}
-                        {item.isPPV && !item.isUnlocked && (
-                          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px", backgroundColor: "rgba(0,0,0,0.3)", zIndex: 4, pointerEvents: "none" }}>
-                            <Lock size={18} color="#FFFFFF" strokeWidth={1.8} />
-                            <span style={{ fontSize: "10px", color: "#FFFFFF", fontWeight: 600 }}>PPV</span>
+                        {item.isPPV && !item.isUnlocked && !item.isSender && (
+                          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "6px", background: "linear-gradient(to bottom, rgba(10,10,15,0.3) 0%, rgba(10,10,15,0.7) 100%)", zIndex: 4 }}>
+                            <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "rgba(139,92,246,0.15)", border: "1.5px solid rgba(139,92,246,0.6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 16px rgba(139,92,246,0.3)" }}>
+                              <Lock size={14} color="#A78BFA" strokeWidth={2} />
+                            </div>
+                            {item.price && item.price > 0 && (
+                              <span style={{ fontSize: "11px", fontWeight: 800, color: "#FFFFFF", fontFamily: "'Inter',sans-serif" }}>₦{(item.price / 100).toLocaleString("en-NG")}</span>
+                            )}
+                            {onUnlock && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); if (unlocking.has(item.id)) return; setUnlocking(prev => new Set(prev).add(item.id)); onUnlock(item).finally(() => setUnlocking(prev => { const n = new Set(prev); n.delete(item.id); return n; })); }}
+                                disabled={unlocking.has(item.id)}
+                                style={{ padding: "4px 10px", borderRadius: "12px", border: "none", backgroundColor: unlocking.has(item.id) ? "#4A4A6A" : "#8B5CF6", color: "#FFFFFF", fontSize: "10px", fontWeight: 700, cursor: unlocking.has(item.id) ? "default" : "pointer", fontFamily: "'Inter',sans-serif" }}
+                              >
+                                {unlocking.has(item.id) ? "…" : "Unlock"}
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
