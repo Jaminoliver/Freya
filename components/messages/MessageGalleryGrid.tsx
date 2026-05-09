@@ -27,14 +27,14 @@ interface Props {
 }
 
 function groupByMonth(items: MediaItem[]): { label: string; items: MediaItem[] }[] {
-  const map = new Map<string, MediaItem[]>();
-  for (const item of items) {
+  const map = new Map<string, MediaItem[]>(); const sorted = [...items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  for (const item of sorted) {
     const date  = new Date(item.createdAt);
     const label = date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
     if (!map.has(label)) map.set(label, []);
     map.get(label)!.push(item);
   }
-  return Array.from(map.entries()).map(([label, items]) => ({ label, items }));
+  return Array.from(map.entries()).map(([label, items]) => ({ label, items })).sort((a, b) => new Date(b.items[0].createdAt).getTime() - new Date(a.items[0].createdAt).getTime());
 }
 
 function VideoThumb({ src, blurred, precomputedThumb }: { src: string; blurred: boolean; precomputedThumb?: string | null }) {
