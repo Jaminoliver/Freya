@@ -51,7 +51,7 @@ function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string;
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <video ref={videoRef} src={`${src}#t=0.001`} muted playsInline preload="metadata" crossOrigin="anonymous" style={{ display: "none" }} />
       <canvas ref={canvasRef} style={{ ...shared, display: ready ? "block" : "none" }} />
-      {!ready && <video src={`${src}#t=0.001`} poster={precomputedThumb ?? undefined} muted playsInline preload="metadata" style={shared} />}
+      {!ready && <video src={src} autoPlay muted playsInline preload="auto" style={shared} />}
     </div>
   );
 }
