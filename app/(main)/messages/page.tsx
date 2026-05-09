@@ -568,7 +568,7 @@ function startGlobalRealtime() {
           if (isInvolved && (row.deleted_for_creator || row.deleted_for_fan)) return;
 
           console.log("[MSG UPDATE] is_ppv:", row.is_ppv, "thumbnail_url:", !!row.thumbnail_url, "old.thumbnail_url:", !!old.thumbnail_url, "is_unlocked:", row.is_unlocked);
-          if (row.is_ppv && row.thumbnail_url) {
+          if (row.is_ppv && row.thumbnail_url && !old.thumbnail_url) {
             const isReceiver = row.receiver_id === currentUserId;
             const isSender   = row.sender_id   === currentUserId;
             if (isSender || isReceiver) {
