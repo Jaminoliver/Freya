@@ -259,12 +259,17 @@ const scrollToMessage = useCallback((replyToId: number) => {
     const addedAtStart   = firstAddedIdx === 0 && lastAddedIdx < messages.length - 1 && totalExisting > 0;
     const addedAtEnd     = lastAddedIdx === messages.length - 1 && firstAddedIdx > 0;
 
+    console.log("[ANIM] added.size:", added.size, "addedAtStart:", addedAtStart, "addedAtEnd:", addedAtEnd, "firstAddedIdx:", firstAddedIdx, "lastAddedIdx:", lastAddedIdx, "totalExisting:", totalExisting);
     if (addedAtStart && added.size >= 1) {
+      console.log("[ANIM] triggering older animation for ids:", [...added]);
       setOlderAnimIds(added);
       setTimeout(() => setOlderAnimIds(new Set()), 500);
     } else if (addedAtEnd && added.size >= 1) {
+      console.log("[ANIM] triggering newer animation for ids:", [...added]);
       setNewerAnimIds(added);
       setTimeout(() => setNewerAnimIds(new Set()), 400);
+    } else {
+      console.log("[ANIM] no animation triggered");
     }
   }, [messages]);
 
@@ -281,9 +286,18 @@ const scrollToMessage = useCallback((replyToId: number) => {
       (document.activeElement as HTMLElement)?.blur?.();
     }
     lastScrollTopRef.current = curr;
-    if (!onLoadMore || !hasMore || loadingMore) return;
+    console.log("[SCROLL] scrollTop:", el.scrollTop, "scrollHeight:", el.scrollHeight, "clientHeight:", el.clientHeight);
+    console.log("[SCROLL] hasMore:", hasMore, "loadingMore:", loadingMore, "onLoadMore:", !!onLoadMore);
+    if (!onLoadMore || !hasMore || loadingMore) {
+      console.log("[SCROLL] skipping load — onLoadMore:", !!onLoadMore, "hasMore:", hasMore, "loadingMore:", loadingMore);
+      return;
+    }
     const distanceFromTop = el.scrollHeight + el.scrollTop - el.clientHeight;
-    if (distanceFromTop < 200) onLoadMore();
+    console.log("[SCROLL] distanceFromTop:", distanceFromTop);
+    if (distanceFromTop < 200) {
+      console.log("[SCROLL] triggering onLoadMore");
+      onLoadMore();
+    }
   }, [onLoadMore, hasMore, loadingMore, updateNearBottom]);
 
   // ── PPV unlock: route through CheckoutModal via parent callback ─────────
