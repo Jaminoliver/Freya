@@ -107,11 +107,9 @@ export async function GET(
   }
 
   const unlockedByCurrentUser  = new Set<number>();
-  const unlockedByFan          = new Set<number>();
   const unlockCountByMessageId = new Map<number, number>();
   for (const u of ppvResult.data ?? []) {
     if (u.fan_id === user.id) unlockedByCurrentUser.add(u.message_id);
-    if (u.fan_id === convo.fan_id) unlockedByFan.add(u.message_id);
     unlockCountByMessageId.set(u.message_id, (unlockCountByMessageId.get(u.message_id) ?? 0) + 1);
   }
 
@@ -205,7 +203,7 @@ export async function GET(
     if (row.is_ppv) {
       const isSender             = row.sender_id === user.id;
       const isUnlocked           = isSender || unlockedByCurrentUser.has(row.id);
-      const isUnlockedByReceiver = unlockedByFan.has(row.id);
+      const isUnlockedByReceiver = isSender ? (row.is_unlocked ?? false) : false;
       const unlockedCount        = unlockCountByMessageId.get(row.id) ?? 0;
       return {
         ...base,
