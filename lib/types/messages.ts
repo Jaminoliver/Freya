@@ -42,7 +42,7 @@ export interface Message {
   ppv?: {
     price:               number; // in kobo
     isUnlocked:          boolean;
-    isUnlockedByReceiver: boolean;
+    isUnlockedByReceiver?: boolean;
     unlockedCount:       number;
   };
   tip?: {
