@@ -189,7 +189,7 @@ export default function GalleryPage({ params }: { params: Promise<{ id: string }
           onClose={() => setCheckoutItem(null)}
           type="ppv"
           creator={creator}
-          postPrice={checkoutItem.price ?? 0}
+          postPrice={(checkoutItem.price ?? 0) / 100}
           conversationId={parseInt(id, 10)}
           messageId={checkoutItem.messageId}
           onChatPaymentSuccess={handleUnlockSuccess}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { Lock } from "lucide-react";
 import { MediaGrid } from "@/components/messages/MediaGrid";
 import { ReadTick } from "@/components/messages/ReadTick";
 import { MessageActionModal } from "@/components/messages/MessageActionModal";
@@ -167,9 +168,19 @@ export function MediaBubble({
 
           {msg.type === "ppv" && msg.ppv && isOwn && (
             <div style={{ padding: "4px 12px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "11px", color: "#4A4A6A" }}>
-                ₦{(msg.ppv.price / 100).toLocaleString()} · {msg.ppv.unlockedCount} unlocked
-              </span>
+              {msg.ppv.isUnlocked ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                    <path d="M2 7L5.5 10.5L12 3" stroke="#10B981" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span style={{ fontSize: "11px", color: "#10B981", fontWeight: 600, fontFamily: "'Inter',sans-serif" }}>Unlocked</span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <Lock size={11} color="#4A4A6A" strokeWidth={2} />
+                  <span style={{ fontSize: "11px", color: "#4A4A6A", fontFamily: "'Inter',sans-serif" }}>Awaiting unlock</span>
+                </div>
+              )}
               <ReadTick status={msg.status} isDelivered={msg.isDelivered} isRead={msg.isRead ?? false} />
             </div>
           )}
