@@ -5,7 +5,7 @@
 // blob URLs from URL.createObjectURL which are revoked when their owning
 // document goes away.
 
-const TARGET_MAX_EDGE = 240;
+const TARGET_MAX_EDGE = 640;
 const JPEG_QUALITY    = 0.7;
 const VIDEO_TIMEOUT_MS = 6000;
 

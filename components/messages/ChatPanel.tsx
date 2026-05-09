@@ -31,6 +31,7 @@ import type { GifItem } from "@/components/gif/GifComponents";
 import type { RecordResult } from "@/lib/hooks/useVoiceRecorder";
 import { remoteLog } from "@/lib/utils/remoteLog";
 import { compressPhotoIfNeeded } from "@/lib/utils/compressPhoto";
+import { fileToThumbnailDataURL } from "@/lib/utils/thumbnailFromFile";
 
 interface Props {
   conversation:           Conversation;
@@ -294,11 +295,15 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
       const tempId    = `temp_${Date.now()}_${Math.random()}`;
       const blobItems = mediaFiles.map((file) => ({ url: URL.createObjectURL(file), type: file.type.startsWith("video/") ? "video" as const : "image" as const }));
 
+      const firstVideoFile = mediaFiles.find((f) => f.type.startsWith("video/"));
+      const optimisticThumb = firstVideoFile ? await fileToThumbnailDataURL(firstVideoFile) : null;
+
       // Optimistic message — shows instantly while uploads run in background
       const optimistic: Message = {
         id: Date.now(), conversationId: conversation.id, senderId: currentUserId,
         type: ppvPrice ? "ppv" : "media", text: text.trim() || undefined,
         mediaUrls: blobItems.map((b) => b.type === "video" ? `${b.url}#video` : b.url),
+        thumbnailUrl: optimisticThumb ?? undefined,
         createdAt: new Date().toISOString(), isRead: false, status: "sending", uploadProgress: 0, tempId,
         ...(ppvPrice ? { ppv: { price: ppvPrice * 100, isUnlocked: true, unlockedCount: 0 } } : {}),
       };
