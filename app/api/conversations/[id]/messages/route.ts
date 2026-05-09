@@ -107,9 +107,11 @@ export async function GET(
   }
 
   const unlockedByCurrentUser  = new Set<number>();
+  const unlockedByFan          = new Set<number>();
   const unlockCountByMessageId = new Map<number, number>();
   for (const u of ppvResult.data ?? []) {
     if (u.fan_id === user.id) unlockedByCurrentUser.add(u.message_id);
+    if (u.fan_id === convo.fan_id) unlockedByFan.add(u.message_id);
     unlockCountByMessageId.set(u.message_id, (unlockCountByMessageId.get(u.message_id) ?? 0) + 1);
   }
 
@@ -201,16 +203,17 @@ export async function GET(
     const thumbUrl = mediaRows[0]?.thumbnail_url ?? refreshBunnyUrl(row.thumbnail_url) ?? null;
 
     if (row.is_ppv) {
-      const isSender      = row.sender_id === user.id;
-      const isUnlocked    = isSender || unlockedByCurrentUser.has(row.id);
-      const unlockedCount = unlockCountByMessageId.get(row.id) ?? 0;
+      const isSender             = row.sender_id === user.id;
+      const isUnlocked           = isSender || unlockedByCurrentUser.has(row.id);
+      const isUnlockedByReceiver = unlockedByFan.has(row.id);
+      const unlockedCount        = unlockCountByMessageId.get(row.id) ?? 0;
       return {
         ...base,
         type:         "ppv" as const,
         text:         row.content ?? undefined,
         mediaUrls:    isUnlocked ? mediaUrls : [],
         thumbnailUrl: thumbUrl,
-        ppv: { price: row.ppv_price ?? 0, isUnlocked, unlockedCount },
+        ppv: { price: row.ppv_price ?? 0, isUnlocked, isUnlockedByReceiver, unlockedCount },
       };
     }
 

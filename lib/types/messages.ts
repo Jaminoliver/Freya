@@ -40,9 +40,10 @@ export interface Message {
   mediaUrls?:     string[];
   thumbnailUrl?:  string | null;
   ppv?: {
-    price:         number; // in kobo
-    isUnlocked:    boolean;
-    unlockedCount: number;
+    price:               number; // in kobo
+    isUnlocked:          boolean;
+    isUnlockedByReceiver: boolean;
+    unlockedCount:       number;
   };
   tip?: {
     amount: number; // in kobo

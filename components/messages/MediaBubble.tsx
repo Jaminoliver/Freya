@@ -168,7 +168,7 @@ export function MediaBubble({
 
           {msg.type === "ppv" && msg.ppv && isOwn && (
             <div style={{ padding: "4px 12px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              {msg.ppv.isUnlocked ? (
+              {msg.ppv.isUnlockedByReceiver ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
                     <path d="M2 7L5.5 10.5L12 3" stroke="#10B981" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
