@@ -60,9 +60,7 @@ function videoToThumbnailDataURL(file: File): Promise<string | null> {
     video.crossOrigin = "anonymous";
 
     video.onloadedmetadata = () => {
-      // Seek to 0.5s or middle, whichever is smaller
-      const target = Math.min(0.5, (video.duration || 1) / 2);
-      try { video.currentTime = target; } catch { finish(null); }
+      try { video.currentTime = 0; } catch { finish(null); }
     };
     video.onseeked = () => {
       const vw = video.videoWidth, vh = video.videoHeight;
@@ -84,6 +82,15 @@ function videoToThumbnailDataURL(file: File): Promise<string | null> {
     video.src = url;
     setTimeout(() => finish(null), VIDEO_TIMEOUT_MS);
   });
+}
+
+export function dataURLToBlob(dataURL: string): Blob {
+  const [header, data] = dataURL.split(",");
+  const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
+  const bytes = atob(data);
+  const arr   = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mime });
 }
 
 function scaleToFit(w: number, h: number, max: number): { w: number; h: number } {

@@ -31,7 +31,7 @@ import type { GifItem } from "@/components/gif/GifComponents";
 import type { RecordResult } from "@/lib/hooks/useVoiceRecorder";
 import { remoteLog } from "@/lib/utils/remoteLog";
 import { compressPhotoIfNeeded } from "@/lib/utils/compressPhoto";
-import { fileToThumbnailDataURL } from "@/lib/utils/thumbnailFromFile";
+import { fileToThumbnailDataURL, dataURLToBlob } from "@/lib/utils/thumbnailFromFile";
 
 interface Props {
   conversation:           Conversation;
@@ -313,29 +313,8 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
         // Upload each file independently — videos direct to Bunny via TUS, photos via /api/upload/photo
         const mediaIds = await Promise.all(mediaFiles.map(async (file) => {
           if (file.type.startsWith("video/")) {
-            const thumbnailBlob = await new Promise<Blob | undefined>((res) => {
-              const video = document.createElement("video");
-              video.preload = "metadata";
-              video.muted = true;
-              video.playsInline = true;
-              const url = URL.createObjectURL(file);
-              video.src = `${url}#t=0.001`;
-video.load();
-              const cleanup = () => URL.revokeObjectURL(url);
-              const tryCapture = () => {
-                try {
-                  const canvas = document.createElement("canvas");
-                  canvas.width  = video.videoWidth  || 320;
-                  canvas.height = video.videoHeight || 320;
-                  canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-                  canvas.toBlob((blob) => { cleanup(); res(blob ?? undefined); }, "image/jpeg", 0.85);
-                } catch { cleanup(); res(undefined); }
-              };
-              video.addEventListener("seeked",     tryCapture, { once: true });
-              video.addEventListener("loadeddata", tryCapture, { once: true });
-              video.addEventListener("error", () => { cleanup(); res(undefined); }, { once: true });
-              setTimeout(() => { cleanup(); res(undefined); }, 5000);
-            });
+            const thumbDataUrl  = await fileToThumbnailDataURL(file);
+            const thumbnailBlob = thumbDataUrl ? dataURLToBlob(thumbDataUrl) : undefined;
             return new Promise<number>((resolve, reject) => {
               startVideoUpload({
                 file,
