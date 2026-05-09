@@ -29,6 +29,7 @@ import type { Conversation, Message } from "@/lib/types/messages";
 import type { User } from "@/lib/types/profile";
 import type { GifItem } from "@/components/gif/GifComponents";
 import type { RecordResult } from "@/lib/hooks/useVoiceRecorder";
+import { remoteLog } from "@/lib/utils/remoteLog";
 
 interface Props {
   conversation:           Conversation;
@@ -296,16 +297,17 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
       const firstFile = mediaFiles[0];
       let clientThumbnailUrl: string | null = null;
       if (firstFile.type.startsWith("video/")) {
+        remoteLog("video_send_start", { name: firstFile.name, size: firstFile.size, type: firstFile.type });
+        const t0 = Date.now();
         clientThumbnailUrl = await new Promise<string | null>((resolve) => {
           const video  = document.createElement("video");
           const objUrl = URL.createObjectURL(firstFile);
           video.preload = "metadata";
           video.muted   = true;
           video.src     = objUrl;
-          video.onloadeddata = () => {
-            video.currentTime = 0.5;
-          };
+          video.onloadeddata = () => { remoteLog("thumb_loadeddata", { ms: Date.now() - t0 }); video.currentTime = 0.5; };
           video.onseeked = () => {
+            remoteLog("thumb_seeked", { ms: Date.now() - t0 });
             const canvas  = document.createElement("canvas");
             canvas.width  = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -313,10 +315,10 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
             URL.revokeObjectURL(objUrl);
             resolve(canvas.toDataURL("image/jpeg", 0.7));
           };
-          video.onerror = () => { URL.revokeObjectURL(objUrl); resolve(null); };
-      setTimeout(() => { URL.revokeObjectURL(objUrl); resolve(null); }, 3000);
-      video.playsInline = true;
+          video.onerror = (e) => { remoteLog("thumb_error", { ms: Date.now() - t0, err: String(e) }); URL.revokeObjectURL(objUrl); resolve(null); };
+          setTimeout(() => { remoteLog("thumb_timeout", { ms: Date.now() - t0 }); URL.revokeObjectURL(objUrl); resolve(null); }, 5000);
         });
+        remoteLog("thumb_done", { ms: Date.now() - t0, hasThumb: !!clientThumbnailUrl });
       }
 
       const optimistic: Message = {

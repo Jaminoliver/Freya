@@ -4,6 +4,7 @@ import React, {
   createContext, useContext, useRef, useState, useCallback, useEffect,
 } from "react";
 import * as tus from "tus-js-client";
+import { remoteLog } from "@/lib/utils/remoteLog";
 import { compressPhotoIfNeeded } from "@/lib/utils/compressPhoto";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -729,6 +730,7 @@ if (!silent) {
 
         xhr.onload = () => {
           delete xhrInstances.current[uploadId];
+          remoteLog("xhr_onload", { status: xhr.status, body: xhr.responseText?.slice(0, 500) });
           try {
             const json = JSON.parse(xhr.responseText);
             if (xhr.status >= 200 && xhr.status < 300) resolve(json);
@@ -737,9 +739,9 @@ if (!silent) {
             reject(new Error(`Upload failed (${xhr.status})`));
           }
         };
-        xhr.onerror   = () => { delete xhrInstances.current[uploadId]; reject(new Error("Network error")); };
-        xhr.ontimeout = () => { delete xhrInstances.current[uploadId]; reject(new Error("Upload timed out")); };
-        xhr.onabort   = () => { delete xhrInstances.current[uploadId]; reject(new Error("Upload cancelled")); };
+        xhr.onerror   = () => { remoteLog("xhr_onerror",   { status: xhr.status }); delete xhrInstances.current[uploadId]; reject(new Error("Network error")); };
+        xhr.ontimeout = () => { remoteLog("xhr_ontimeout", {}); delete xhrInstances.current[uploadId]; reject(new Error("Upload timed out")); };
+        xhr.onabort   = () => { remoteLog("xhr_onabort",   {}); delete xhrInstances.current[uploadId]; reject(new Error("Upload cancelled")); };
         xhr.timeout   = 120_000;
         xhr.open("POST", endpoint);
         xhr.send(formData);
