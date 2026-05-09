@@ -140,6 +140,7 @@ export async function POST(
       type:           is_ppv ? "ppv" : "media",
       text:           message.content ?? undefined,
       mediaUrls:      orderedMedia.map((m) => m.file_url),
+      thumbnailUrl:   orderedMedia[0].thumbnail_url ?? null,
       createdAt:      message.created_at,
       isRead:         message.is_read ?? false,
       ...(is_ppv ? {

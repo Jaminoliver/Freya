@@ -37,12 +37,13 @@ function groupByMonth(items: MediaItem[]): { label: string; items: MediaItem[] }
   return Array.from(map.entries()).map(([label, items]) => ({ label, items }));
 }
 
-function VideoThumb({ src, blurred }: { src: string; blurred: boolean }) {
+function VideoThumb({ src, blurred, precomputedThumb }: { src: string; blurred: boolean; precomputedThumb?: string | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef  = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    if (precomputedThumb) return;
     const video  = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
@@ -66,9 +67,11 @@ function VideoThumb({ src, blurred }: { src: string; blurred: boolean }) {
     objectFit: "cover", filter: blurred ? "blur(8px) brightness(0.6)" : "none",
   };
 
+  if (precomputedThumb) return <img src={precomputedThumb} alt="" style={shared} />;
+
   return (
     <>
-      <video ref={videoRef} src={src} muted playsInline preload="metadata" crossOrigin="anonymous" style={{ display: "none" }} />
+      <video ref={videoRef} src={src} muted playsInline preload="metadata" style={{ display: "none" }} />
       <canvas ref={canvasRef} style={{ ...shared, display: ready ? "block" : "none" }} />
       {!ready && <video src={`${src}#t=0.001`} muted playsInline preload="metadata" style={shared} />}
     </>
@@ -77,8 +80,8 @@ function VideoThumb({ src, blurred }: { src: string; blurred: boolean }) {
 
 function MediaThumb({ item }: { item: MediaItem }) {
   const blurred = !item.isUnlocked;
-  if (item.mediaType === "image" || (item.mediaType === "video" && item.thumbnailUrl)) {
-    const src = item.thumbnailUrl ?? item.url;
+  if (item.mediaType === "image") {
+    const src = item.url;
     if (!src) return <div style={{ width: "100%", height: "100%", backgroundColor: "#1E1E2E" }} />;
     return (
       <img
@@ -90,7 +93,7 @@ function MediaThumb({ item }: { item: MediaItem }) {
       />
     );
   }
-  if (item.mediaType === "video" && item.url) return <VideoThumb src={item.url} blurred={blurred} />;
+  if (item.mediaType === "video" && item.url) return <VideoThumb src={item.url} blurred={blurred} precomputedThumb={item.thumbnailUrl ?? null} />;
   return <div style={{ width: "100%", height: "100%", backgroundColor: "#1E1E2E" }} />;
 }
 

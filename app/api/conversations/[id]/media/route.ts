@@ -148,11 +148,19 @@ export async function GET(
       const isUnlocked = !isPPV || isSender || unlockedByUser.has(r.message_id);
       const isVideo    = (r.media_type ?? "").startsWith("video") || r.media_type === "video";
 
+      const thumb = r.thumbnail_url?.includes("b-cdn.net") && !r.thumbnail_url.includes("freya-media-cdn")
+  ? r.thumbnail_url
+  : refreshBunnyUrl(r.thumbnail_url);
+      console.log("[GALLERY THUMB] raw:", r.thumbnail_url, "-> signed:", thumb);
       return {
         id:           r.id,
         messageId:    r.message_id,
-        url:          isUnlocked ? refreshBunnyUrl(r.url) : null,
-        thumbnailUrl: refreshBunnyUrl(r.thumbnail_url),
+        url:          isUnlocked ? (
+          r.url?.includes("vz-8bc100f4-3c0.b-cdn.net")
+            ? r.url
+            : refreshBunnyUrl(r.url)
+        ) : null,
+        thumbnailUrl: thumb,
         mediaType:    isVideo ? "video" : "image",
         isPPV,
         isUnlocked,

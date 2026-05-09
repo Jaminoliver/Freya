@@ -308,12 +308,34 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
         // Upload each file independently — videos direct to Bunny via TUS, photos via /api/upload/photo
         const mediaIds = await Promise.all(mediaFiles.map(async (file) => {
           if (file.type.startsWith("video/")) {
+            const thumbnailBlob = await new Promise<Blob | undefined>((res) => {
+              const video = document.createElement("video");
+              video.preload = "metadata";
+              video.muted = true;
+              video.playsInline = true;
+              const url = URL.createObjectURL(file);
+              video.src = url;
+              video.currentTime = 0.001;
+              const cleanup = () => URL.revokeObjectURL(url);
+              video.addEventListener("seeked", () => {
+                try {
+                  const canvas = document.createElement("canvas");
+                  canvas.width  = video.videoWidth  || 320;
+                  canvas.height = video.videoHeight || 320;
+                  canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+                  canvas.toBlob((blob) => { cleanup(); res(blob ?? undefined); }, "image/jpeg", 0.85);
+                } catch { cleanup(); res(undefined); }
+              }, { once: true });
+              video.addEventListener("error", () => { cleanup(); res(undefined); }, { once: true });
+              setTimeout(() => { cleanup(); res(undefined); }, 5000);
+            });
             return new Promise<number>((resolve, reject) => {
               startVideoUpload({
                 file,
-                title:     file.name,
-                silent:    true,
-                skipVault: true,
+                title:         file.name,
+                silent:        true,
+                skipVault:     true,
+                thumbnailBlob,
                 onMediaId: (mediaId) => resolve(mediaId),
                 onError:   (err)     => reject(new Error(err)),
               });
@@ -362,6 +384,9 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
         if (!res.ok || !data.message) throw new Error(data.error ?? "Send failed");
 
         blobItems.forEach((b) => URL.revokeObjectURL(b.url));
+        console.log("[THUMB DEBUG] optimistic mediaUrls:", optimistic.mediaUrls);
+        console.log("[THUMB DEBUG] server message:", JSON.stringify(data.message, null, 2));
+        console.log("[THUMB DEBUG] server thumbnailUrl:", data.message.thumbnailUrl);
         setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m));
         updateConversations((prev) => prev.map((c) => c.id === convId ? { ...c, lastMessage: text || (ppvPrice ? "🔒 PPV message" : "📷 Media"), lastMessageAt: new Date().toISOString() } : c));
       } catch (err) {

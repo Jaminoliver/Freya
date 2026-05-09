@@ -1,76 +1,55 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Lock, Play } from "lucide-react";
 
 interface MediaItem {
-  url:  string;
-  type: "image" | "video";
+  url:          string;
+  type:         "image" | "video";
+  thumbnailUrl?: string | null;
 }
 
 function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string; isSending: boolean; locked: boolean; precomputedThumb?: string | null }) {
-  const bunnyThumb = !precomputedThumb && src.includes("b-cdn.net") && (src.includes("play_720p.mp4") || src.includes("playlist.m3u8")) ? src.replace(/play_720p\.mp4|playlist\.m3u8/, "thumbnail.jpg").split("#")[0] : null;
-  const [thumbUrl, setThumbUrl] = useState<string | null>(precomputedThumb ?? null);
-  const [bunnyThumbFailed, setBunnyThumbFailed] = useState(false);
-  const isBlobUrl = src.startsWith("blob:") && !precomputedThumb && !bunnyThumb;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef  = useRef<HTMLVideoElement>(null);
+  const [ready, setReady] = useState(false);
+
+  const shared: React.CSSProperties = {
+    position: "absolute", inset: 0, width: "100%", height: "100%",
+    objectFit: "cover",
+    opacity: isSending ? 0.5 : 1,
+    filter: locked ? "blur(12px)" : "none",
+    transform: locked ? "scale(1.1)" : "scale(1)",
+  };
 
   useEffect(() => {
-    if (!isBlobUrl) return;
-    const video       = document.createElement("video");
-    video.src         = src.includes("#") ? src : `${src}#t=0.001`;
-    video.muted       = true;
-    video.playsInline = true;
-    video.preload     = "metadata";
-    const onLoaded = () => { video.currentTime = 0.001; };
-    const onSeeked = () => {
+    if (precomputedThumb) return;
+    const video  = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    const handleSeeked = () => {
       try {
-        const canvas  = document.createElement("canvas");
-        canvas.width  = video.videoWidth  || 280;
-        canvas.height = video.videoHeight || 200;
-        const ctx     = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          setThumbUrl(canvas.toDataURL("image/jpeg", 0.8));
-        }
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        canvas.width  = video.videoWidth  || 320;
+        canvas.height = video.videoHeight || 320;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setReady(true);
       } catch {}
-      video.removeEventListener("seeked",         onSeeked);
-      video.removeEventListener("loadedmetadata", onLoaded);
     };
-    video.addEventListener("loadedmetadata", onLoaded);
-    video.addEventListener("seeked",         onSeeked);
-    video.load();
-    return () => {
-      video.removeEventListener("loadedmetadata", onLoaded);
-      video.removeEventListener("seeked",         onSeeked);
-    };
-  }, [src, isBlobUrl]);
+    video.addEventListener("seeked", handleSeeked);
+    video.currentTime = 0.001;
+    return () => video.removeEventListener("seeked", handleSeeked);
+  }, [src, precomputedThumb]);
 
-  const videoSrc = !isBlobUrl && !src.includes("#") ? `${src}#t=0.001` : src;
+  if (precomputedThumb) return <img src={precomputedThumb} alt="" style={{ ...shared, position: "relative", inset: "unset" }} />;
 
-  if (precomputedThumb) {
-    return (
-      <img src={precomputedThumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, filter: locked ? "blur(12px)" : "none", transform: locked ? "scale(1.1)" : "scale(1)" }} />
-    );
-  }
-  if (isBlobUrl && thumbUrl) {
-    return (
-      <img src={thumbUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, filter: locked ? "blur(12px)" : "none", transform: locked ? "scale(1.1)" : "scale(1)", transition: "filter 0.3s ease" }} />
-    );
-  }
-  if (bunnyThumb && !bunnyThumbFailed) {
-    return (
-      <img src={bunnyThumb} alt="" onError={() => setBunnyThumbFailed(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, filter: locked ? "blur(12px)" : "none", transform: locked ? "scale(1.1)" : "scale(1)" }} />
-    );
-  }
-  if (isBlobUrl && !thumbUrl) {
-    return (
-      <div style={{ width: "100%", height: "100%", backgroundColor: "#2A2A3D", display: "flex", alignItems: "center", justifyContent: "center", opacity: isSending ? 0.5 : 1 }}>
-        <svg width="28" height="28" viewBox="0 0 20 20" fill="none"><polygon points="7,4 17,10 7,16" fill="rgba(255,255,255,0.3)" /></svg>
-      </div>
-    );
-  }
   return (
-    <video src={videoSrc} muted playsInline preload="metadata" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, filter: locked ? "blur(12px)" : "none", transform: locked ? "scale(1.1)" : "scale(1)", transition: "opacity 0.3s ease, filter 0.3s ease" }} />
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <video ref={videoRef} src={src} muted playsInline preload="metadata" crossOrigin="anonymous" style={{ display: "none" }} />
+      <canvas ref={canvasRef} style={{ ...shared, display: ready ? "block" : "none" }} />
+      {!ready && <video src={`${src}#t=0.001`} muted playsInline preload="metadata" style={shared} />}
+    </div>
   );
 }
 
@@ -202,7 +181,10 @@ export function MediaGrid({
             {!item.url ? (
               <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg, #1C1C2E 0%, #2A1F3D 50%, #1A1A2E 100%)" }} />
             ) : item.type === "video" ? (
-              <VideoThumb src={item.url} isSending={!!isSending} locked={false} precomputedThumb={thumbnailUrl ?? null} />
+              <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                {(() => { console.log("[THUMB DEBUG] MediaGrid item.url:", item.url, "item.thumbnailUrl:", item.thumbnailUrl, "fallback thumbnailUrl:", thumbnailUrl); return null; })()}
+                <VideoThumb src={item.url} isSending={!!isSending} locked={false} precomputedThumb={item.thumbnailUrl ?? thumbnailUrl ?? null} />
+              </div>
             ) : (
               <img src={item.url} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: isSending ? 0.5 : 1, transition: "opacity 0.3s ease", WebkitTouchCallout: "none" as any, userSelect: "none", WebkitUserSelect: "none" as any, pointerEvents: "none" }} />
             )}

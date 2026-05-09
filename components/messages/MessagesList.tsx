@@ -57,17 +57,27 @@ function formatMessageTime(raw: string): string {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-function getMediaItems(msg: Message, isOwn: boolean): { url: string; type: "image" | "video" }[] {
+const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
+function extractBunnyThumbnail(url: string): string | null {
+  try {
+    const match = url.match(/vz-[a-z0-9-]+\.b-cdn\.net\/([a-f0-9-]{36})\//);
+    if (match) return `https://${BUNNY_PULL_ZONE}/${match[1]}/thumbnail.jpg`;
+  } catch {}
+  return null;
+}
+
+function getMediaItems(msg: Message, isOwn: boolean): { url: string; type: "image" | "video"; thumbnailUrl: string | null }[] {
   const urls = msg.mediaUrls ?? [];
   if (msg.type === "ppv" && !isOwn && !msg.ppv?.isUnlocked) {
     const count = urls.length > 0 ? urls.length : 1;
-    return Array.from({ length: count }, () => ({ url: "", type: "image" as const }));
+    return Array.from({ length: count }, () => ({ url: "", type: "image" as const, thumbnailUrl: null }));
   }
-  return urls.filter(Boolean).map((url) => ({
+  return urls.filter(Boolean).map((url, i) => ({
     url: url.includes('b-cdn.net') && url.includes('playlist.m3u8')
       ? url.replace('playlist.m3u8', 'play_720p.mp4')
       : url,
-    type: url.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || url.includes('#video') || (url.includes('b-cdn.net') && url.includes('playlist.m3u8')) ? "video" : "image",
+    type: url.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || url.includes('#video') || (url.includes('b-cdn.net') && url.includes('playlist.m3u8')) ? "video" as const : "image" as const,
+    thumbnailUrl: extractBunnyThumbnail(url) ?? (i === 0 ? (msg.thumbnailUrl ?? null) : null),
   }));
 }
 
@@ -312,7 +322,7 @@ const scrollToMessage = useCallback((replyToId: number) => {
       if (!m.mediaUrls?.length) return [];
       if (m.type === "ppv" && !m.ppv?.isUnlocked && m.senderId !== currentUserId) return [];
       const isOwn = m.senderId === currentUserId;
-      return getMediaItems(m, isOwn).map((item) => ({ ...item, messageId: m.id }));
+      return getMediaItems(m, isOwn).map((item) => ({ url: item.url, type: item.type, messageId: m.id }));
     });
     const isOwn       = msg.senderId === currentUserId;
     const clickedUrl  = getMediaItems(msg, isOwn)[clickedIndex]?.url;
@@ -709,7 +719,7 @@ const scrollToMessage = useCallback((replyToId: number) => {
             const allGroupMedia = groupMsgs.flatMap((m) =>
               getMediaItems(m, isOwn).map((mi) => ({ ...mi, messageId: m.id }))
             );
-            const gridItems  = allGroupMedia.map((mi) => ({ url: mi.url, type: mi.type }));
+            const gridItems  = allGroupMedia.map((mi) => ({ url: mi.url, type: mi.type, thumbnailUrl: mi.thumbnailUrl ?? null }));
             console.log("[REPLY DEBUG] groupMsgs ids and urls:", groupMsgs.map((m) => ({ id: m.id, urls: m.mediaUrls })));
 const groupKey   = groupMsgs.map((m) => m.tempId ?? m.id).join("-");
             const firstKey   = String(groupMsgs[0].tempId ?? groupMsgs[0].id);
@@ -725,7 +735,7 @@ const groupKey   = groupMsgs.map((m) => m.tempId ?? m.id).join("-");
                 if (!m.mediaUrls?.length) return [];
                 if (m.type === "ppv" && !m.ppv?.isUnlocked && m.senderId !== currentUserId) return [];
                 const mIsOwn = m.senderId === currentUserId;
-                return getMediaItems(m, mIsOwn).map((mi) => ({ ...mi, messageId: m.id }));
+                return getMediaItems(m, mIsOwn).map((mi) => ({ url: mi.url, type: mi.type, messageId: m.id }));
               });
               const clickedUrl   = allGroupMedia[clickedIndex]?.url;
               const clickedMsgId = allGroupMedia[clickedIndex]?.messageId;

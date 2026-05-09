@@ -105,7 +105,7 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
         {/* Media */}
         <div
           onClick={(e) => e.stopPropagation()}
-          style={{ maxWidth: "90vw", maxHeight: "80vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}
+          style={{ width: "90vw", height: "80vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}
         >
           {loading && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -128,8 +128,8 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
               controls
               autoPlay
               playsInline
-              onCanPlay={() => setLoading(false)}
-              style={{ maxWidth: "90vw", maxHeight: "80vh", borderRadius: "8px", backgroundColor: "#000", opacity: loading ? 0 : 1, transition: "opacity 0.2s" }}
+              onCanPlay={(e) => { setLoading(false); (e.currentTarget as HTMLVideoElement).play().catch(() => {}); }}
+              style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "8px", backgroundColor: "#000", opacity: loading ? 0 : 1, transition: "opacity 0.2s" }}
             />
           )}
         </div>
