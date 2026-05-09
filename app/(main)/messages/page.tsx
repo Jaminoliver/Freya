@@ -495,6 +495,24 @@ function startGlobalRealtime() {
           }
 
           if (row.is_ppv) {
+            const store = useMessageStore.getState();
+            if (row.conversation_id === store.conversationId && row.receiver_id === currentUserId) {
+              store.appendMessage({
+                id:             row.id,
+                conversationId: row.conversation_id,
+                senderId:       row.sender_id,
+                type:           "ppv",
+                text:           row.content ?? undefined,
+                mediaUrls:      [],
+                thumbnailUrl:   row.thumbnail_url ?? null,
+                isRead:         false,
+                isDelivered:    true,
+                createdAt:      row.created_at,
+                replyToId:      row.reply_to_id ?? null,
+                ppv:            { price: row.ppv_price ?? 0, isUnlocked: false, unlockedCount: 0 },
+              });
+              fetch(`/api/conversations/${row.conversation_id}/read`, { method: "PATCH" }).catch(() => {});
+            }
             updateConversations((prev) =>
               prev.map((c) =>
                 c.id !== row.conversation_id ? c : {
