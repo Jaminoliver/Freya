@@ -76,8 +76,12 @@ export default function StoryVideoPlayer({
       : `https://${BUNNY_PULL_ZONE}/${mediaUrl}/playlist.m3u8`;
 
     // Native HLS (Safari / iOS)
+    const iosUrl = url.includes("b-cdn.net") && url.includes("playlist.m3u8")
+      ? url.replace(/playlist\.m3u8(#.*)?$/, "play_720p.mp4")
+      : url;
+
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = url;
+      video.src = iosUrl;
       video.load();
       video.addEventListener("loadedmetadata", tryPlay, { once: true });
       return;

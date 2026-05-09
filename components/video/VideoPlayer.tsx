@@ -537,7 +537,7 @@ export default function VideoPlayer({
     const hlsSrc = getBunnyHLS(bunnyVideoId);
 
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = hlsSrc;
+      video.src = getBunnyMP4(bunnyVideoId, "720");
       video.load();
       return;
     }

@@ -157,7 +157,7 @@ export async function GET(
         messageId:    r.message_id,
         url:          isUnlocked ? (
           r.url?.includes("vz-8bc100f4-3c0.b-cdn.net")
-            ? r.url
+            ? r.url.replace(/playlist\.m3u8(#.*)?$/, "play_720p.mp4")
             : refreshBunnyUrl(r.url)
         ) : null,
         thumbnailUrl: thumb,
