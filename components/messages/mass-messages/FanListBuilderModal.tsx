@@ -265,9 +265,16 @@ export function FanListBuilderModal({ onClose, onListCreated }: Props) {
 
                       {/* Spend */}
                       {fan.total_spend > 0 && (
-                        <span style={{ fontSize: "12px", fontWeight: 700, color: "#8B5CF6", flexShrink: 0 }}>
-                          {formatSpend(fan.total_spend)}
-                        </span>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ background: "rgba(34,197,94,0.1)", border: "0.5px solid rgba(34,197,94,0.25)", borderRadius: "6px", padding: "3px 8px" }}>
+                            <span style={{ fontSize: "12px", fontWeight: 700, color: "#4ade80" }}>
+                              {formatSpend(fan.total_spend)}
+                            </span>
+                          </div>
+                          <p style={{ margin: "3px 0 0", fontSize: "10px", color: "rgba(255,255,255,0.3)", textAlign: "right" }}>
+                            total spent
+                          </p>
+                        </div>
                       )}
                     </button>
                   );
