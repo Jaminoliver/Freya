@@ -12,8 +12,10 @@ import { MassMessageStyles }            from "@/components/messages/mass-message
 import { ToolbarBtn }                   from "@/components/messages/mass-messages/ToolbarBtn";
 import { PreviewBubble, type VaultItemWithPreview } from "@/components/messages/mass-messages/PreviewBubble";
 import { AudienceSheet, SEGMENT_LABEL } from "@/components/messages/mass-messages/AudienceSheet";
+import { FanListBuilderModal }           from "@/components/messages/mass-messages/FanListBuilderModal";
 import { ScheduleSheet }                from "@/components/messages/mass-messages/ScheduleSheet";
 import type { Segment }                 from "@/components/messages/mass-messages/AudienceSheet";
+import type { CustomAudienceFilter }    from "@/lib/mass-message/audienceResolver";
 
 
 
@@ -47,11 +49,17 @@ export default function MassMessageComposePage() {
   const [text,                  setText]                  = useState("");
   const [selected,              setSelected]              = useState<VaultItemWithPreview[]>([]);
   const [segment,               setSegment]               = useState<Segment>("active_subscribers");
-  const [excludeActiveChatters, setExcludeActiveChatters] = useState(true);
+  const [excludeActiveChatters, setExcludeActiveChatters] = useState(false);
   const [scheduledFor,          setScheduledFor]          = useState<Date | null>(null);
   const [isPPV,                 setIsPPV]                 = useState(false);
   const [ppvPrice,              setPpvPrice]              = useState("");
-  const [allCounts,             setAllCounts]             = useState<Partial<Record<Segment, number>>>({});
+  const [allCounts,             setAllCounts]             = useState<Partial<Record<Segment, { count: number; matched: number; excluded: number }>>>({});
+  const [customFilter,          setCustomFilter]          = useState<CustomAudienceFilter>({});
+  const [customCount,           setCustomCount]           = useState<{ count: number; matched: number; excluded: number } | null>(null);
+  const [customCountLoading,    setCustomCountLoading]    = useState(false);
+  const [listBuilderOpen,       setListBuilderOpen]       = useState(false);
+  const [fanListName,           setFanListName]           = useState<string | null>(null);
+  const [fanListCount,          setFanListCount]          = useState<number | null>(null);
 const [countsLoading,         setCountsLoading]         = useState(true);
   const [vaultOpen,             setVaultOpen]             = useState(false);
   const [audienceOpen,          setAudienceOpen]          = useState(false);
@@ -235,23 +243,68 @@ Promise.allSettled(ids.map(id => fetch(`/api/vault/${id}`, { method: "PATCH" }))
         fetch("/api/mass-messages/audience-count", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ audience_segment: seg, exclude_active_chatters: excludeActiveChatters }),
+          body:    JSON.stringify({ audience_segment: seg }),
         })
           .then((r) => r.json())
-          .then((data) => [seg, data.count ?? 0] as const)
-          .catch(() => [seg, 0] as const)
+          .then((data) => [seg, { count: data.count ?? 0, matched: data.matched ?? 0, excluded: data.excluded ?? 0 }] as const)
+          .catch(() => [seg, { count: 0, matched: 0, excluded: 0 }] as const)
       )
     ).then((entries) => {
       if (!cancelled) { setAllCounts(Object.fromEntries(entries)); setCountsLoading(false); }
     });
     return () => { cancelled = true; };
-  }, [excludeActiveChatters]);
+  }, []);
+
+  // ── Fan list count + name ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!segment.startsWith("fan_list:")) return;
+    let cancelled = false;
+    setFanListCount(null);
+    // Get name from lists
+    fetch("/api/fan-lists")
+      .then((r) => r.json())
+      .then((data) => {
+        const listId = parseInt(segment.replace("fan_list:", ""), 10);
+        const list = (data.lists ?? []).find((l: any) => l.id === listId);
+        if (list && !cancelled) setFanListName(list.name);
+      })
+      .catch(() => {});
+    // Get resolved count (respects excludeActiveChatters)
+    fetch("/api/mass-messages/audience-count", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ audience_segment: segment }),
+    })
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) setFanListCount(data.count ?? 0); })
+      .catch(() => { if (!cancelled) setFanListCount(0); });
+    return () => { cancelled = true; };
+  }, [segment, excludeActiveChatters]);
+
+  // ── Custom filter count ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (segment !== "custom") return;
+    let cancelled = false;
+    setCustomCountLoading(true);
+    fetch("/api/mass-messages/audience-count", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ audience_segment: "custom", custom_filter: customFilter }),
+    })
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) { setCustomCount({ count: data.count ?? 0, matched: data.matched ?? 0, excluded: data.excluded ?? 0 }); setCustomCountLoading(false); } })
+      .catch(() => { if (!cancelled) { setCustomCount({ count: 0, matched: 0, excluded: 0 }); setCustomCountLoading(false); } });
+    return () => { cancelled = true; };
+  }, [segment, customFilter, excludeActiveChatters]);
 
   // ── Validation ─────────────────────────────────────────────────────────────
   const totalMediaCount = selected.length + localFiles.length;
   const hasContent = text.trim().length > 0 || selected.length > 0 || localFiles.length > 0;
   const ppvValid   = !isPPV || ((selected.length > 0 || localFiles.length > 0) && Number(ppvPrice) >= 100);
-  const audienceCount = allCounts[segment] ?? null;
+  const isFanList        = segment.startsWith("fan_list:");
+  const audienceData     = segment === "custom" ? customCount : (!isFanList ? (allCounts[segment] ?? null) : null);
+  const audienceCount    = isFanList ? fanListCount : (audienceData?.count ?? null);
+  const audienceExcluded = audienceData?.excluded ?? 0;
   const canSend    = hasContent && ppvValid && (audienceCount ?? 0) > 0 && !sending && !uploading && !showSent;
 
   // ── Send — upload local files first, then dispatch ────────────────────────
@@ -362,6 +415,7 @@ const res = await fetch("/api/mass-messages", {
           exclude_active_chatters: excludeActiveChatters,
           scheduled_for:           scheduledFor ? scheduledFor.toISOString() : null,
           vault_item_ids:          allVaultItems.map((v) => Number(v.id)),
+          custom_filter:           segment === "custom" ? customFilter : undefined,
         }),
       });
       const data = await res.json();
@@ -537,17 +591,17 @@ const res = await fetch("/api/mass-messages", {
             }}
           >
             <Users size={13} strokeWidth={2} color="#8B5CF6" />
-            {SEGMENT_LABEL[segment]}
+            {segment === "custom" ? "Custom audience" : segment.startsWith("fan_list:") ? (fanListName ?? "Custom list") : SEGMENT_LABEL[segment as keyof typeof SEGMENT_LABEL]}
             <ChevronDown size={13} strokeWidth={2} color="#8A8AA0" />
           </button>
           <span style={{
             fontSize:   "12px",
             color:      (audienceCount ?? 0) > 0 ? "#8B5CF6" : "#EF4444",
             fontWeight: 600,
-            opacity:    countsLoading ? 0.5 : 1,
+            opacity:    (isFanList ? fanListCount === null : countsLoading) ? 0.5 : 1,
             transition: "opacity 0.15s ease",
           }}>
-            {countsLoading ? "…" : `${audienceCount ?? 0} ${(audienceCount ?? 0) === 1 ? "fan" : "fans"}`}
+            {(isFanList ? fanListCount === null : countsLoading) ? "…" : `${audienceCount ?? 0} ${(audienceCount ?? 0) === 1 ? "fan" : "fans"}${audienceExcluded > 0 ? ` · ${audienceExcluded} excluded` : ""}`}
           </span>
 
           {scheduledFor && (
@@ -575,6 +629,8 @@ const res = await fetch("/api/mass-messages", {
             </button>
           )}
         </div>
+
+       
 
         {/* ── Live preview ─────────────────────────────────────────────────── */}
         <div style={{ padding: "8px 16px 12px" }}>
@@ -761,12 +817,28 @@ const res = await fetch("/api/mass-messages", {
       {audienceOpen && (
         <AudienceSheet
           value={segment}
-          excludeActiveChatters={excludeActiveChatters}
           onChange={(seg) => setSegment(seg)}
-          onToggleExclude={() => setExcludeActiveChatters((v) => !v)}
           onClose={() => setAudienceOpen(false)}
-          counts={allCounts}
+          counts={Object.fromEntries(Object.entries(allCounts).filter(([, v]) => v != null).map(([k, v]) => [k, v!.count]))}
+          excluded={Object.fromEntries(Object.entries(allCounts).filter(([, v]) => v != null).map(([k, v]) => [k, v!.excluded]))}
           countsLoading={countsLoading}
+          customFilter={customFilter}
+          onCustomFilterChange={setCustomFilter}
+          customCount={customCount}
+          customCountLoading={customCountLoading}
+          onOpenListBuilder={() => { setAudienceOpen(false); setListBuilderOpen(true); }}
+        />
+      )}
+
+      {listBuilderOpen && (
+        <FanListBuilderModal
+          onClose={() => setListBuilderOpen(false)}
+          onListCreated={(list) => {
+            setSegment(`fan_list:${list.id}` as Segment);
+            setFanListName(list.name);
+            setFanListCount(list.member_count);
+            setListBuilderOpen(false);
+          }}
         />
       )}
 

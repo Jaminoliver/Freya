@@ -1,11 +1,11 @@
 // app/api/mass-messages/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
-import { resolveAudience, type AudienceSegment } from "@/lib/mass-message/audienceResolver";
+import { resolveAudience, type AudienceSegment, type CustomAudienceFilter } from "@/lib/mass-message/audienceResolver";
 
-const VALID_SEGMENTS: AudienceSegment[] = [
+const VALID_SEGMENTS = [
   "all_subscribers", "active_subscribers", "expired_subscribers",
-  "online_now", "top_spenders", "new_this_week", "followers",
+  "online_now", "top_spenders", "new_this_week", "followers", "custom",
 ];
 
 // ── GET — list creator's mass messages ───────────────────────────────────────
@@ -59,20 +59,22 @@ export async function POST(req: NextRequest) {
     text,
     ppv_price_kobo,
     audience_segment,
-    exclude_active_chatters = true,
+    exclude_active_chatters = false,
     scheduled_for,
     vault_item_ids = [],
+    custom_filter,
   }: {
     text?: string;
     ppv_price_kobo?: number;
     audience_segment: AudienceSegment;
-    exclude_active_chatters?: boolean;
+    exclude_active_chatters?: boolean; // kept for backwards compat, no longer used
     scheduled_for?: string;
     vault_item_ids?: number[];
+    custom_filter?: CustomAudienceFilter;
   } = body;
 
   // ── Validation ─────────────────────────────────────────────────────────────
-  if (!audience_segment || !VALID_SEGMENTS.includes(audience_segment)) {
+  if (!audience_segment || (!VALID_SEGMENTS.includes(audience_segment) && !audience_segment.startsWith("fan_list:"))) {
     return NextResponse.json({ error: "Invalid audience_segment" }, { status: 400 });
   }
   if (!text?.trim() && (!vault_item_ids || vault_item_ids.length === 0)) {
@@ -114,7 +116,7 @@ export async function POST(req: NextRequest) {
 
   // ── Resolve audience ───────────────────────────────────────────────────────
   const audience = await resolveAudience(service, user.id, audience_segment, {
-    excludeActiveChatters: exclude_active_chatters,
+    customFilter: custom_filter,
   });
 
   if (audience.count === 0) {

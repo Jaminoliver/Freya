@@ -1,11 +1,11 @@
 // app/api/mass-messages/audience-count/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
-import { resolveAudience, type AudienceSegment } from "@/lib/mass-message/audienceResolver";
+import { resolveAudience, type AudienceSegment, type CustomAudienceFilter } from "@/lib/mass-message/audienceResolver";
 
-const VALID_SEGMENTS: AudienceSegment[] = [
+const VALID_SEGMENTS = [
   "all_subscribers", "active_subscribers", "expired_subscribers",
-  "online_now", "top_spenders", "new_this_week", "followers",
+  "online_now", "top_spenders", "new_this_week", "followers", "custom",
 ];
 
 export async function POST(req: NextRequest) {
@@ -16,20 +16,20 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const {
     audience_segment,
-    exclude_active_chatters = true,
+    custom_filter,
   }: {
     audience_segment: AudienceSegment;
-    exclude_active_chatters?: boolean;
+    custom_filter?: CustomAudienceFilter;
   } = body;
 
-  if (!audience_segment || !VALID_SEGMENTS.includes(audience_segment)) {
+  if (!audience_segment || (!VALID_SEGMENTS.includes(audience_segment) && !audience_segment.startsWith("fan_list:"))) {
     return NextResponse.json({ error: "Invalid audience_segment" }, { status: 400 });
   }
 
   const service = createServiceSupabaseClient();
   const result  = await resolveAudience(service, user.id, audience_segment, {
-    excludeActiveChatters: exclude_active_chatters,
+    customFilter: custom_filter,
   });
 
-  return NextResponse.json({ count: result.count });
+  return NextResponse.json({ count: result.count, matched: result.matched, excluded: result.excluded });
 }

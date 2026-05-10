@@ -120,7 +120,7 @@ export function MediaBubble({
         )}
         {!isOwn && isSameGroup && <div style={{ width: "36px", flexShrink: 0 }} />}
 
-        <div ref={bubbleRef} style={{ backgroundColor: "#1E1E2E", borderRadius: "12px", overflow: "hidden", width: "280px" }}>
+        <div ref={bubbleRef} style={{ backgroundColor: isOwn ? "#8B5CF6" : "#1E1E2E", borderRadius: isOwn ? "18px 18px 4px 18px" : "12px", overflow: "hidden", width: "280px" }}>
           <MediaGrid
             mediaItems={mediaItems}
             isPPV={msg.type === "ppv"}
@@ -136,7 +136,7 @@ export function MediaBubble({
 
           {msg.text && (
             <div style={{ padding: "8px 12px 4px" }}>
-              <p style={{ margin: 0, fontSize: "13px", color: "#A3A3C2", lineHeight: 1.4 }}>{msg.text}</p>
+              <p style={{ margin: 0, fontSize: "13px", color: isOwn ? "rgba(255,255,255,0.9)" : "#A3A3C2", lineHeight: 1.4 }}>{msg.text}</p>
             </div>
           )}
 

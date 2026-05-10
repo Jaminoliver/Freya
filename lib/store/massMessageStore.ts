@@ -8,7 +8,9 @@ export type MassSegment =
   | "online_now"
   | "top_spenders"
   | "new_this_week"
-  | "followers";
+  | "followers"
+  | "custom"
+  | `fan_list:${number}`;
 
 export interface StoredVaultItem {
   id:               number;
