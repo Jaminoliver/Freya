@@ -51,8 +51,8 @@ export default function MassMessageComposePage() {
   const [scheduledFor,          setScheduledFor]          = useState<Date | null>(null);
   const [isPPV,                 setIsPPV]                 = useState(false);
   const [ppvPrice,              setPpvPrice]              = useState("");
-  const [audienceCount,         setAudienceCount]         = useState<number | null>(null);
-  const [countLoading,          setCountLoading]          = useState(false);
+  const [allCounts,             setAllCounts]             = useState<Partial<Record<Segment, number>>>({});
+const [countsLoading,         setCountsLoading]         = useState(true);
   const [vaultOpen,             setVaultOpen]             = useState(false);
   const [audienceOpen,          setAudienceOpen]          = useState(false);
   const [scheduleOpen,          setScheduleOpen]          = useState(false);
@@ -225,26 +225,33 @@ Promise.allSettled(ids.map(id => fetch(`/api/vault/${id}`, { method: "PATCH" }))
     });
   }, [text, segment, excludeActiveChatters, isPPV, ppvPrice, scheduledFor, selected]);
 
-  // ── Live audience count ────────────────────────────────────────────────────
+  // ── Pre-fetch ALL segment counts in parallel ───────────────────────────────
+  const ALL_SEGMENT_IDS: Segment[] = ["active_subscribers","all_subscribers","expired_subscribers","online_now","top_spenders","new_this_week","followers"];
   useEffect(() => {
     let cancelled = false;
-    setCountLoading(true);
-    fetch("/api/mass-messages/audience-count", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ audience_segment: segment, exclude_active_chatters: excludeActiveChatters }),
-    })
-      .then((r) => r.json())
-      .then((data) => { if (!cancelled) setAudienceCount(data.count ?? 0); })
-      .catch(() => { if (!cancelled) setAudienceCount(0); })
-      .finally(() => { if (!cancelled) setCountLoading(false); });
+    setCountsLoading(true);
+    Promise.all(
+      ALL_SEGMENT_IDS.map((seg) =>
+        fetch("/api/mass-messages/audience-count", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ audience_segment: seg, exclude_active_chatters: excludeActiveChatters }),
+        })
+          .then((r) => r.json())
+          .then((data) => [seg, data.count ?? 0] as const)
+          .catch(() => [seg, 0] as const)
+      )
+    ).then((entries) => {
+      if (!cancelled) { setAllCounts(Object.fromEntries(entries)); setCountsLoading(false); }
+    });
     return () => { cancelled = true; };
-  }, [segment, excludeActiveChatters]);
+  }, [excludeActiveChatters]);
 
   // ── Validation ─────────────────────────────────────────────────────────────
   const totalMediaCount = selected.length + localFiles.length;
   const hasContent = text.trim().length > 0 || selected.length > 0 || localFiles.length > 0;
   const ppvValid   = !isPPV || ((selected.length > 0 || localFiles.length > 0) && Number(ppvPrice) >= 100);
+  const audienceCount = allCounts[segment] ?? null;
   const canSend    = hasContent && ppvValid && (audienceCount ?? 0) > 0 && !sending && !uploading && !showSent;
 
   // ── Send — upload local files first, then dispatch ────────────────────────
@@ -537,10 +544,10 @@ const res = await fetch("/api/mass-messages", {
             fontSize:   "12px",
             color:      (audienceCount ?? 0) > 0 ? "#8B5CF6" : "#EF4444",
             fontWeight: 600,
-            opacity:    countLoading ? 0.5 : 1,
+            opacity:    countsLoading ? 0.5 : 1,
             transition: "opacity 0.15s ease",
           }}>
-            {countLoading ? "…" : `${audienceCount ?? 0} ${(audienceCount ?? 0) === 1 ? "fan" : "fans"}`}
+            {countsLoading ? "…" : `${audienceCount ?? 0} ${(audienceCount ?? 0) === 1 ? "fan" : "fans"}`}
           </span>
 
           {scheduledFor && (
@@ -758,6 +765,8 @@ const res = await fetch("/api/mass-messages", {
           onChange={(seg) => setSegment(seg)}
           onToggleExclude={() => setExcludeActiveChatters((v) => !v)}
           onClose={() => setAudienceOpen(false)}
+          counts={allCounts}
+          countsLoading={countsLoading}
         />
       )}
 

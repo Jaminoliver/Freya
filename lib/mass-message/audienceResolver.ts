@@ -114,9 +114,9 @@ export async function resolveAudience(
           .select("fan_id, amount_paid")
           .eq("creator_id", creator_id),
         supabase
-          .from("ppv_message_unlocks")
-          .select("fan_id, amount_paid, messages!inner(sender_id)")
-          .eq("messages.sender_id", creator_id),
+          .from("messages")
+          .select("ppv_message_unlocks!inner(fan_id, amount_paid)")
+          .eq("sender_id", creator_id),
       ]);
 
       const totals = new Map<string, number>();
@@ -126,8 +126,10 @@ export async function resolveAudience(
       for (const p of (ppvPostRes.data ?? []) as { fan_id: string; amount_paid: number }[]) {
         totals.set(p.fan_id, (totals.get(p.fan_id) ?? 0) + (p.amount_paid ?? 0));
       }
-      for (const p of (ppvMsgRes.data ?? []) as { fan_id: string; amount_paid: number }[]) {
-        totals.set(p.fan_id, (totals.get(p.fan_id) ?? 0) + (p.amount_paid ?? 0));
+      for (const m of (ppvMsgRes.data ?? []) as { ppv_message_unlocks: { fan_id: string; amount_paid: number }[] }[]) {
+        for (const p of (m.ppv_message_unlocks ?? [])) {
+          totals.set(p.fan_id, (totals.get(p.fan_id) ?? 0) + (p.amount_paid ?? 0));
+        }
       }
 
       fanIds = Array.from(totals.entries())

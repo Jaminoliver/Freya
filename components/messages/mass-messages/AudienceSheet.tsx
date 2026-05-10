@@ -38,6 +38,8 @@ interface AudienceSheetProps {
   onChange:             (seg: Segment) => void;
   onToggleExclude:      () => void;
   onClose:              () => void;
+  counts?:              Partial<Record<Segment, number>>;
+  countsLoading?:       boolean;
 }
 
 export function AudienceSheet({
@@ -46,6 +48,8 @@ export function AudienceSheet({
   onChange,
   onToggleExclude,
   onClose,
+  counts = {},
+  countsLoading = false,
 }: AudienceSheetProps) {
   return (
     <>
@@ -105,6 +109,9 @@ export function AudienceSheet({
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: "14px", color: "#FFF", fontWeight: 600 }}>{label}</div>
                   <div style={{ fontSize: "12px", color: "#6B6B8A", marginTop: "2px" }}>{sub}</div>
+                </div>
+                <div style={{ fontSize: "12px", fontWeight: 700, color: countsLoading ? "#4A4A6A" : (counts[id] ?? 0) > 0 ? "#8B5CF6" : "#4A4A6A", minWidth: "28px", textAlign: "right", flexShrink: 0 }}>
+                  {countsLoading ? "…" : (counts[id] ?? 0).toLocaleString()}
                 </div>
               </button>
             );
