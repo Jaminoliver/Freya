@@ -537,7 +537,7 @@ export default function VideoPlayer({
     const hlsSrc = getBunnyHLS(bunnyVideoId);
 
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = getBunnyMP4(bunnyVideoId, "720");
+      video.src = getBunnyHLS(bunnyVideoId)  // playlist.m3u8;
       video.load();
       return;
     }
@@ -545,17 +545,31 @@ export default function VideoPlayer({
     try {
       const Hls = (await import("hls.js")).default;
       if (Hls.isSupported()) {
+        const savedBw = Number(localStorage.getItem("hls_bw")) || 8_000_000;
         const hls = new Hls({
           startLevel:             -1,
+          testBandwidth:          false,
           capLevelToPlayerSize:   false,
           lowLatencyMode:         false,
-          abrEwmaDefaultEstimate: 8_000_000,
+          abrEwmaDefaultEstimate: savedBw,
           abrEwmaFastVoD:         3,
           abrEwmaSlowVoD:         9,
         });
         hlsRef.current = hls;
+        hls.on(Hls.Events.FRAG_LOADED, () => {
+          localStorage.setItem("hls_bw", String(hls.bandwidthEstimate));
+        });
+        hls.on(Hls.Events.LEVEL_SWITCHED, (_evt: any, data: any) => {
+          const level = hls.levels[data.level];
+          console.log(`%c[VideoPlayer] 🎬 QUALITY → ${level.height}p (${Math.round(level.bitrate / 1000)}kbps)`, "color: #10B981; font-weight: bold");
+        });
         hls.on(Hls.Events.MANIFEST_PARSED, (_evt: any, data: any) => {
+          const levels = data.levels.map((l: any, i: number) => `${i}: ${l.height}p @ ${Math.round(l.bitrate/1000)}kbps`);
+          console.log(`%c[VideoPlayer] 📋 LEVELS`, "color: #F59E0B; font-weight: bold", levels);
+          console.log(`%c[VideoPlayer] 💾 savedBw`, "color: #F59E0B; font-weight: bold", Number(localStorage.getItem("hls_bw")));
+          hls.startLevel = data.levels.length - 1;
           hls.currentLevel = data.levels.length - 1;
+          console.log(`%c[VideoPlayer] 🎯 startLevel set to`, "color: #F59E0B; font-weight: bold", hls.startLevel, hls.currentLevel);
         });
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
           if (!data?.fatal) return;
