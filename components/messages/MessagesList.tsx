@@ -219,7 +219,10 @@ const scrollToMessage = useCallback((replyToId: number) => {
     isNearBottomRef.current = Math.abs(el.scrollTop) < 150;
   }, []);
 
-  const prevFirstIdRef = useRef<string | null>(null);
+  const prevFirstIdRef     = useRef<string | null>(
+    messages.length > 0 ? String(messages[0]?.tempId ?? messages[0]?.id ?? "") : null
+  );
+  const prevScrollHeightRef = useRef<number>(0);
 
   useEffect(() => {
     const prevCount = prevCountRef.current;
@@ -228,9 +231,15 @@ const scrollToMessage = useCallback((replyToId: number) => {
 
     const firstId = String(messages[0]?.tempId ?? messages[0]?.id ?? "");
     const wasPrepended = prevFirstIdRef.current !== null && prevFirstIdRef.current !== firstId;
+    console.log("[COUNT] prevCount:", prevCount, "newCount:", messages.length, "firstId:", firstId, "prevFirstId:", prevFirstIdRef.current, "wasPrepended:", wasPrepended);
     prevFirstIdRef.current = firstId;
 
-    if (wasPrepended) return;
+    if (wasPrepended) {
+      console.log("[PREPEND] detected — prevFirstId:", prevFirstIdRef.current, "newFirstId:", firstId, "messages.length:", messages.length, "scrollTop:", scrollRef.current?.scrollTop, "scrollHeight:", scrollRef.current?.scrollHeight);
+      loadMoreFiredRef.current = false;
+      console.log("[PREPEND] done — scrollTop after:", scrollRef.current?.scrollTop);
+      return;
+    }
 
     const lastMsg      = messages[messages.length - 1];
     const isOwnMessage = lastMsg && lastMsg.senderId === currentUserId;
@@ -273,7 +282,8 @@ const scrollToMessage = useCallback((replyToId: number) => {
     }
   }, [messages]);
 
-  const lastScrollTopRef = useRef(0);
+  const lastScrollTopRef  = useRef(0);
+  const loadMoreFiredRef  = useRef(false);
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -294,11 +304,19 @@ const scrollToMessage = useCallback((replyToId: number) => {
     }
     const distanceFromTop = el.scrollHeight + el.scrollTop - el.clientHeight;
     console.log("[SCROLL] distanceFromTop:", distanceFromTop);
-    if (distanceFromTop < 200) {
+    if (distanceFromTop < 200 && !loadMoreFiredRef.current) {
       console.log("[SCROLL] triggering onLoadMore");
+      loadMoreFiredRef.current = true;
+      prevScrollHeightRef.current = el.scrollHeight;
       onLoadMore();
     }
   }, [onLoadMore, hasMore, loadingMore, updateNearBottom]);
+
+  useEffect(() => {
+    if (loadingMore) {
+      prevScrollHeightRef.current = scrollRef.current?.scrollHeight ?? 0;
+    }
+  }, [loadingMore]);
 
   // ── PPV unlock: route through CheckoutModal via parent callback ─────────
   const handleUnlock = useCallback(async (msg: Message) => {
