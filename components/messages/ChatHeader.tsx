@@ -228,7 +228,7 @@ const avatarWrapRef = useRef<HTMLDivElement>(null);
         style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "0 16px", height: "56px", flexShrink: 0,
-          backgroundColor: "var(--background)",
+          backgroundColor: "#0D0D1A",
           fontFamily: "'Inter', sans-serif",
           position: "fixed", top: 0, left: 0, right: 0,
           zIndex: 101,
@@ -256,7 +256,7 @@ const avatarWrapRef = useRef<HTMLDivElement>(null);
               onClick={handleAvatarClick}
             />
             {participant.isOnline && (
-              <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid var(--background)", zIndex: 10 }} />
+              <div style={{ position: "absolute", bottom: "1px", right: "1px", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#10B981", border: "2px solid #0D0D1A", zIndex: 10 }} />
             )}
           </div>
 
