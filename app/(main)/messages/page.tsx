@@ -634,8 +634,9 @@ function startGlobalRealtime() {
           console.log("[MSG UPDATE] receiver check:", row.receiver_id, "===", currentUserId, "->", row.receiver_id === currentUserId);
           console.log("[MSG UPDATE] media_type:", row.media_type, "media_url:", row.media_url, "old.media_url:", old.media_url);
           if (row.receiver_id !== currentUserId) return;
-          if (!row.media_type || !row.media_url) return;
-          if (old.media_url) return;
+console.log("[MSG UPDATE RECEIVER] id:", row.id, "old.media_url:", !!old.media_url, "old.thumbnail_url:", old.thumbnail_url, "new.thumbnail_url:", row.thumbnail_url);
+if (!row.media_type || !row.media_url) return;
+if (old.media_url) return;
           console.log("[MSG UPDATE] appending media message to store");
 
           const mediaMessage: Message = {
