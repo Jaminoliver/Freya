@@ -210,7 +210,7 @@ export default function SubscriptionTiersTab({ username }: { username: string })
 
       {/* ── Monthly price ── */}
       <div style={{ marginBottom: "20px" }}>
-        <p style={{ fontSize: "12px", fontWeight: 600, color: "#C4C4D4", margin: "0 0 8px" }}>
+        <p style={{ fontSize: "12px", fontWeight: 600, color: "#8B5CF6", margin: "0 0 8px" }}>
           Monthly price
         </p>
         <div style={{
@@ -266,7 +266,7 @@ export default function SubscriptionTiersTab({ username }: { username: string })
 
       {/* ── Bundle discounts ── */}
       <div style={{ marginBottom: "20px" }}>
-        <p style={{ fontSize: "12px", fontWeight: 600, color: "#C4C4D4", margin: "0 0 4px" }}>
+        <p style={{ fontSize: "12px", fontWeight: 600, color: "#8B5CF6", margin: "0 0 4px" }}>
           Bundle discounts
         </p>
         <p style={{ fontSize: "12px", color: "#6B6B8A", margin: "0 0 16px" }}>

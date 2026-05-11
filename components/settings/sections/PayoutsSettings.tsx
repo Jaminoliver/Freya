@@ -231,14 +231,14 @@ function RequestTab({ savedBanks, onAddBank, loading }: { savedBanks: BankAccoun
         <span style={{ fontSize: "16px", fontWeight: 700, color: "#10B981", fontFamily: "'Inter', sans-serif" }}>{fmt(available ?? 0)}</span>
       </div>
       <div>
-        <p style={{ fontSize: "12px", fontWeight: 600, color: "#94A3B8", margin: "0 0 8px", fontFamily: "'Inter', sans-serif" }}>Amount</p>
+        <p style={{ fontSize: "12px", fontWeight: 600, color: "#8B5CF6", margin: "0 0 8px", fontFamily: "'Inter', sans-serif" }}>Amount</p>
         <input type="number" placeholder="Enter amount (min ₦5,000)" value={amount} onChange={(e) => { setAmount(e.target.value); setSubmitError(""); }}
           style={{ width: "100%", borderRadius: "10px", padding: "12px 14px", fontSize: "14px", outline: "none", backgroundColor: "#141420", border: "1.5px solid #2A2A3D", color: "#F1F5F9", boxSizing: "border-box", fontFamily: "'Inter', sans-serif" }}
           onFocus={(e) => (e.currentTarget.style.borderColor = "#8B5CF6")} onBlur={(e) => (e.currentTarget.style.borderColor = "#2A2A3D")} />
         <p style={{ fontSize: "11px", color: "#6B6B8A", margin: "6px 0 0", fontFamily: "'Inter', sans-serif" }}>Minimum withdrawal: ₦5,000</p>
       </div>
       <div>
-        <p style={{ fontSize: "12px", fontWeight: 600, color: "#94A3B8", margin: "0 0 8px", fontFamily: "'Inter', sans-serif" }}>Payout to</p>
+        <p style={{ fontSize: "12px", fontWeight: 600, color: "#8B5CF6", margin: "0 0 8px", fontFamily: "'Inter', sans-serif" }}>Payout to</p>
         {hasBankAccount ? (
           <div style={{ display: "flex", alignItems: "center", gap: "12px", backgroundColor: "#1C1C2E", border: "1.5px solid #2A2A3D", borderRadius: "10px", padding: "12px 14px" }}>
             <div style={{ width: "32px", height: "32px", borderRadius: "8px", backgroundColor: "#8B5CF620", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

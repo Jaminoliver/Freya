@@ -274,7 +274,7 @@ paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
               <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#F1F5F9" }}>
                 {viewer.display_name || viewer.username}
               </p>
-              <p style={{ margin: 0, fontSize: "12px", color: "#6B6B8A" }}>@{viewer.username}</p>
+              <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A" }}>@{viewer.username}</p>
             </div>
           </div>
         ) : (
@@ -353,7 +353,7 @@ paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
           >
             <ArrowLeft size={22} strokeWidth={2} />
           </button>
-          <span style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF" }}>
+          <span style={{ fontSize: "17px", fontWeight: 700, color: "#8B5CF6" }}>
             {activeTabData?.label ?? "Settings"}
           </span>
           {activeTab === "profile" && (
@@ -373,7 +373,7 @@ paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
         </div>
 
         <div className="settings-content-inner" style={{ padding: "20px 16px calc(100px + env(safe-area-inset-bottom))", maxWidth: "640px", width: "100%" }}>
-  <h2 className="settings-desktop-title" style={{ fontSize: "20px", fontWeight: 800, color: "#F1F5F9", margin: "0 0 20px", letterSpacing: "-0.3px" }}>{activeTabData?.label}</h2>
+  <h2 className="settings-desktop-title" style={{ fontSize: "20px", fontWeight: 800, color: "#8B5CF6", margin: "0 0 20px", letterSpacing: "-0.3px" }}>{activeTabData?.label}</h2>
           {loading
             ? <SettingsSkeleton />
             : (
