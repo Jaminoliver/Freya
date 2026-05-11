@@ -87,7 +87,7 @@ export async function POST(
       is_unlocked:     !is_ppv,
       media_type:      firstMediaType,
       media_url:       orderedMedia[0].file_url,
-      thumbnail_url:   is_ppv ? thumbnailUrl : null,
+      thumbnail_url:   thumbnailUrl,
     })
     .select("id, conversation_id, sender_id, content, created_at, is_read")
     .single();
