@@ -57,7 +57,8 @@ export function ManageBottomSheet({
 
       <div
         style={{
-          position: "fixed", bottom: 0, left: 0, right: 0,
+          position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
+        width: "min(480px, 100%)",
           backgroundColor: "#0F0F1A",
           borderTopLeftRadius: "20px", borderTopRightRadius: "20px",
           border: "1px solid #1E1E2E", borderBottom: "none",
