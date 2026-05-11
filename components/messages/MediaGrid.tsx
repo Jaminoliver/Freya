@@ -45,7 +45,7 @@ function VideoThumb({ src, isSending, locked, precomputedThumb }: { src: string;
     };
   }, [src, precomputedThumb]);
 
-  if (precomputedThumb) return <img src={precomputedThumb} alt="" style={{ ...shared, position: "relative", inset: "unset" }} />;
+  if (precomputedThumb) return <img src={precomputedThumb} alt="" style={{ ...shared, position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />;
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>

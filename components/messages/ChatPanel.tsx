@@ -372,7 +372,13 @@ const [replyToMediaIndex, setReplyToMediaIndex] = useState<number>(0);
         console.log("[THUMB DEBUG] optimistic mediaUrls:", optimistic.mediaUrls);
         console.log("[THUMB DEBUG] server message:", JSON.stringify(data.message, null, 2));
         console.log("[THUMB DEBUG] server thumbnailUrl:", data.message.thumbnailUrl);
-        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId } : m));
+console.log("[THUMB DEBUG] optimistic thumbnailUrl:", optimistic.thumbnailUrl);
+const finalThumb = optimistic.thumbnailUrl ?? data.message.thumbnailUrl;
+console.log("[THUMB DEBUG] final thumbnailUrl used:", finalThumb);
+console.log("[THUMB DEBUG] thumbnails match:", finalThumb === data.message.thumbnailUrl ? "USING SERVER" : "USING LOCAL (different from server)");
+console.log("[THUMB DEBUG] local URL:", optimistic.thumbnailUrl?.substring(0, 60));
+console.log("[THUMB DEBUG] server URL:", data.message.thumbnailUrl?.substring(0, 60));
+        setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...data.message, status: "sent" as const, tempId, thumbnailUrl: data.message.thumbnailUrl ?? optimistic.thumbnailUrl } : m));
         updateConversations((prev) => prev.map((c) => c.id === convId ? { ...c, lastMessage: text || (ppvPrice ? "🔒 PPV message" : "📷 Media"), lastMessageAt: new Date().toISOString() } : c));
       } catch (err) {
         console.error("[handleSend] media error:", err);
