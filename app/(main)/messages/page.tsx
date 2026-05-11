@@ -841,7 +841,7 @@ export default function MessagesPage() {
     };
   }, []);
 
-  return <div style={{ width: "100%", height: "100%", display: "flex" }}><EmptyState /></div>;
+  return <EmptyState />;
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────

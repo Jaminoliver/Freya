@@ -133,7 +133,7 @@ const counts: Record<string, number> = {
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: "8px", overflowX: "auto", scrollbarWidth: "none", padding: "0 0 12px", marginBottom: "20px", position: "sticky", top: 0, zIndex: 10, backgroundColor: "var(--background)" }}>
+      <div style={{ display: "flex", gap: "8px", overflowX: "auto", scrollbarWidth: "none", padding: "12px 0 12px", marginBottom: "20px", position: "sticky", top: 0, zIndex: 10, backgroundColor: "var(--background)" }}>
         {filters.map((f) => (
   <button
     key={f.key}

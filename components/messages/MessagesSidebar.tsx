@@ -242,7 +242,14 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           display:         "flex",
           flexDirection:   "column",
           boxSizing:       "border-box",
+          overflowY:       "auto",
+          overflowX:       "hidden",
+          scrollbarWidth:  "none",
+          overscrollBehavior: "contain",
+          paddingBottom:   "calc(64px + env(safe-area-inset-bottom))",
         }}
+        onScroll={(e) => console.log("[MessagesSidebar] outer scrollTop:", e.currentTarget.scrollTop)}
+        ref={(el) => { if (el) console.log("[MessagesSidebar] outer height:", el.offsetHeight, "scrollHeight:", el.scrollHeight); }}
       >
         {newMessageOpen && (
           <NewMessagePanel
@@ -254,7 +261,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
           />
         )}
 
-        <div style={{ flex: 1, overflowY: "auto", minHeight: 0, overscrollBehavior: "contain", scrollbarWidth: "none", paddingBottom: "calc(64px + env(safe-area-inset-bottom) + 36px)" }}>
+        <>
 
           <MessagesHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} onNewMessage={() => setNewMessageOpen(true)} />
 
@@ -363,7 +370,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
             />
           )}
 
-        </div>
+        </>
       </div>
     </>
   );

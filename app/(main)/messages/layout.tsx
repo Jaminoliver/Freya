@@ -35,13 +35,14 @@ function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
     <div
       style={{
   display:         "flex",
-  height:          "100%",
+  height:          "100vh",
   backgroundColor: "#0A0A0F",
   overflow:        "hidden",
   width:           "100%",
   fontFamily:      "'Inter', sans-serif",
   boxSizing:       "border-box",
   touchAction:     "pan-y",
+  minHeight:       0,
 }}
     >
       <style>{`
@@ -51,14 +52,17 @@ function MessagesLayoutInner({ children }: { children: React.ReactNode }) {
           width: 380px;
           flex-shrink: 0;
           height: 100%;
+          touch-action: pan-y;
         }
         .msg-chat-wrap {
           display: flex;
           flex: 1;
           flex-direction: column;
           overflow-y: ${pathname.includes("mass-message") ? "auto" : "hidden"};
+          overflow-x: hidden;
           height: 100%;
           min-height: 0;
+          touch-action: pan-y;
         }
         @media (max-width: 767px) {
           .msg-sidebar-wrap {

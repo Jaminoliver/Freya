@@ -68,6 +68,12 @@ function SettingsLayoutInner() {
   const [revealed,   setRevealed]   = useState(!!viewer?.username);
   const [headerSaveState, setHeaderSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
   const profileSaveRef = useRef<(() => void) | null>(null);
+  const contentPanelRef = useRef<HTMLDivElement>(null);
+  const sidebarPanelRef = useRef<HTMLDivElement>(null);
+  const [sidebarHeaderVisible, setSidebarHeaderVisible] = useState(true);
+  const lastSidebarScrollY = useRef(0);
+  const [mobileHeaderVisible, setMobileHeaderVisible] = useState(true);
+  const lastScrollY = useRef(0);
 
   useEffect(() => {
     const onPop = () => {
@@ -75,6 +81,36 @@ function SettingsLayoutInner() {
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
+  }, [mobileView]);
+
+  useEffect(() => {
+    const el = sidebarPanelRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const current = el.scrollTop;
+      const diff = current - lastSidebarScrollY.current;
+      if (current === 0) setSidebarHeaderVisible(true);
+      else if (diff > 4) setSidebarHeaderVisible(false);
+      else if (diff < -4) setSidebarHeaderVisible(true);
+      lastSidebarScrollY.current = current;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [mobileView]);
+
+  useEffect(() => {
+    const el = contentPanelRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const current = el.scrollTop;
+      const diff = current - lastScrollY.current;
+      if (current === 0) setMobileHeaderVisible(true);
+      else if (diff > 4) setMobileHeaderVisible(false);
+      else if (diff < -4) setMobileHeaderVisible(true);
+      lastScrollY.current = current;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
   }, [mobileView]);
 
   const isCreator = viewer?.role === "creator";
@@ -152,7 +188,7 @@ function SettingsLayoutInner() {
 
   return (
     <div style={{
-      display: "flex", minHeight: "100vh",
+      display: "flex", height: "100%",
       backgroundColor: "var(--background)",
       fontFamily: "'Inter', sans-serif",
       overflow: "hidden",
@@ -165,9 +201,10 @@ function SettingsLayoutInner() {
         @media (min-width: 768px) {
           .settings-sidebar-panel  { display: flex !important; width: 280px !important; flex-shrink: 0 !important; }
           .settings-content-panel  { display: flex !important; }
-          .settings-mobile-back    { display: none !important; }
+          .settings-mobile-back    { display: none !important; visibility: hidden !important; }
           .settings-mobile-chevron { display: none !important; }
-          .settings-content-inner  { padding: 32px 28px 60px !important; }
+          .settings-content-inner  { padding: 32px 40px 60px !important; }
+          .settings-desktop-title { display: block !important; }
         }
 
         .settings-tab-btn {
@@ -183,12 +220,14 @@ function SettingsLayoutInner() {
           transition: background-color 0.15s ease;
           font-family: 'Inter', sans-serif;
         }
+        .settings-desktop-title { display: none; }
         .settings-tab-btn:hover { background-color: var(--surface); }
         .settings-tab-btn.active { background-color: rgba(167,139,250,0.08); }
       `}</style>
 
       {/* ── SIDEBAR ── */}
       <div
+        ref={sidebarPanelRef}
         className="settings-sidebar-panel"
         style={{
           display: mobileView === "menu" ? "flex" : "none",
@@ -198,17 +237,20 @@ function SettingsLayoutInner() {
           backgroundColor: "var(--background)",
           position: "sticky",
           top: 0,
-          height: "100vh",
-          overflowY: "auto",
-          scrollbarWidth: "none",
-          flexShrink: 0,
+          height: "100%",
+overflowY: "auto",
+scrollbarWidth: "none",
+flexShrink: 0,
+paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
           animation: "slideInLeft 0.2s ease forwards",
         }}
       >
         {/* Header */}
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "12px",
-          
+          display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "12px", padding: "32px 20px 12px",
+          position: "sticky", top: 0, zIndex: 20, backgroundColor: "var(--background)",
+          transform: sidebarHeaderVisible ? "translateY(0)" : "translateY(-110%)",
+          transition: "transform 0.25s ease",
         }}>
           <button
             onClick={() => router.back()}
@@ -279,15 +321,17 @@ function SettingsLayoutInner() {
 
       {/* ── CONTENT ── */}
       <div
+        ref={contentPanelRef}
         className="settings-content-panel"
         style={{
           display: mobileView === "content" ? "flex" : "none",
           flex: 1, minWidth: 0, flexDirection: "column",
           overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none",
           overscrollBehavior: "contain",
-          height: "100vh", width: "100%",
-          backgroundColor: "var(--background)",
-          animation: "slideInRight 0.2s ease forwards",
+          height: "100%", width: "100%",
+backgroundColor: "var(--background)",
+animation: "slideInRight 0.2s ease forwards",
+paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
         }}
       >
         {/* Mobile content header */}
@@ -298,7 +342,9 @@ function SettingsLayoutInner() {
             padding: "14px 16px",
             borderBottom: "1px solid var(--border)",
             backgroundColor: "var(--background)",
-            position: "sticky", top: 0, zIndex: 10,
+            position: "sticky", top: 0, zIndex: 20,
+            transform: mobileHeaderVisible ? "translateY(0)" : "translateY(-110%)",
+            transition: "transform 0.25s ease",
           }}
         >
           <button
@@ -326,7 +372,8 @@ function SettingsLayoutInner() {
           )}
         </div>
 
-        <div className="settings-content-inner" style={{ padding: "20px 16px 100px", maxWidth: "640px", width: "100%" }}>
+        <div className="settings-content-inner" style={{ padding: "20px 16px calc(100px + env(safe-area-inset-bottom))", maxWidth: "640px", width: "100%" }}>
+  <h2 className="settings-desktop-title" style={{ fontSize: "20px", fontWeight: 800, color: "#F1F5F9", margin: "0 0 20px", letterSpacing: "-0.3px" }}>{activeTabData?.label}</h2>
           {loading
             ? <SettingsSkeleton />
             : (
