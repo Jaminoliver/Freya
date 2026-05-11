@@ -10,17 +10,21 @@ import StoryViewer from "@/components/story/StoryViewer";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import { ManageBottomSheet } from "./ManageBottomSheet";
 import { useSubscriptionActions } from "@/lib/hooks/useSubscriptionActions";
-import { STATUS_COLOR, STATUS_LABEL, type Subscription } from "@/lib/types/subscription";
+import { STATUS_COLOR, STATUS_LABEL, type Subscription, type SubscriptionStatus } from "@/lib/types/subscription";
 import type { User } from "@/lib/types/profile";
 import { startConversation } from "@/app/(main)/messages/page";
 export function SubscriptionCardDetailed({
   subscription: s,
   onRefresh,
+  onFavouriteChange,
+  onStatusChange,
   onTip,
 }: {
-  subscription: Subscription;
-  onRefresh?:   () => void;
-  onTip?:       (creatorId: string) => void;
+  subscription:       Subscription;
+  onRefresh?:         () => void;
+  onFavouriteChange?: (id: number, next: boolean) => void;
+  onStatusChange?:    (id: number, status: SubscriptionStatus) => void;
+  onTip?:             (creatorId: string) => void;
 }) {
   const { navigate } = useNav();
 
@@ -34,7 +38,7 @@ export function SubscriptionCardDetailed({
   const {
     isFavourite, autoRenew, starBusy, autoBusy, cancelBusy, freeResubBusy,
     toggleFavourite, toggleAutoRenew, freeResubscribe, cancelSubscription,
-  } = useSubscriptionActions(s, onRefresh);
+  } = useSubscriptionActions(s, onRefresh, onFavouriteChange, onStatusChange);
 
   const handleStar = (e: React.MouseEvent) => {
     e.preventDefault();

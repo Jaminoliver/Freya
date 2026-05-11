@@ -9,7 +9,7 @@ import { SubscriptionFilterTabs } from "@/components/subscription/SubscriptionFi
 import { SubscriptionSearchBar } from "@/components/subscription/SubscriptionSearchBar";
 import { FavouritesRail } from "@/components/subscription/FavouritesRail";
 import { SubscriptionsSkeleton } from "@/components/loadscreen/SubscriptionsSkeleton";
-import type { CardView, Subscription } from "@/lib/types/subscription";
+import type { CardView, Subscription, SubscriptionStatus } from "@/lib/types/subscription";
 import type { User } from "@/lib/types/profile";
 
 const CheckoutModal = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
@@ -31,6 +31,18 @@ export default function SubscriptionsPage() {
   const [filter,        setFilter]        = useState<FilterKey>("all");
   const [query,         setQuery]         = useState("");
   const [view,          setView]          = useState<CardView>("detailed");
+
+  const handleFavouriteChange = useCallback((id: number, next: boolean) => {
+    setSubscriptions((prev) =>
+      prev.map((s) => s.id === id ? { ...s, isFavourite: next } : s)
+    );
+  }, []);
+
+  const handleStatusChange = useCallback((id: number, status: SubscriptionStatus) => {
+    setSubscriptions((prev) =>
+      prev.map((s) => s.id === id ? { ...s, status } : s)
+    );
+  }, []);
 
   const [tipOpen,    setTipOpen]    = useState(false);
   const [tipCreator, setTipCreator] = useState<User | null>(null);
@@ -235,6 +247,8 @@ export default function SubscriptionsPage() {
                   subscriptions={filtered}
                   view={view}
                   onRefresh={fetchSubscriptions}
+                  onFavouriteChange={handleFavouriteChange}
+                  onStatusChange={handleStatusChange}
                   onTip={handleTip}
                 />
               </div>

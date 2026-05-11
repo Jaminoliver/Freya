@@ -2,20 +2,24 @@
 
 import { SubscriptionCardCompact } from "./SubscriptionCardCompact";
 import { SubscriptionCardDetailed } from "./SubscriptionCardDetailed";
-import type { CardView, Subscription } from "@/lib/types/subscription";
+import type { CardView, Subscription, SubscriptionStatus } from "@/lib/types/subscription";
 
 interface Props {
-  subscriptions:   Subscription[];
-  view:            CardView;
-  onRefresh?:      () => void;
-  onTip?:          (creatorId: string) => void;
-  hideEmptyState?: boolean;
+  subscriptions:      Subscription[];
+  view:               CardView;
+  onRefresh?:         () => void;
+  onFavouriteChange?: (id: number, next: boolean) => void;
+  onStatusChange?:    (id: number, status: SubscriptionStatus) => void;
+  onTip?:             (creatorId: string) => void;
+  hideEmptyState?:    boolean;
 }
 
 export function SubscriptionList({
   subscriptions,
   view,
   onRefresh,
+  onFavouriteChange,
+  onStatusChange,
   onTip,
   hideEmptyState = false,
 }: Props) {
@@ -44,7 +48,7 @@ export function SubscriptionList({
       {subscriptions.map((s) =>
         view === "compact"
           ? <SubscriptionCardCompact key={s.id} subscription={s} onRefresh={onRefresh} />
-          : <SubscriptionCardDetailed key={s.id} subscription={s} onRefresh={onRefresh} onTip={onTip} />
+          : <SubscriptionCardDetailed key={s.id} subscription={s} onRefresh={onRefresh} onFavouriteChange={onFavouriteChange} onStatusChange={onStatusChange} onTip={onTip} />
       )}
     </div>
   );

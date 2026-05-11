@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Subscription } from "@/lib/types/subscription";
+import type { Subscription, SubscriptionStatus } from "@/lib/types/subscription";
 
-export function useSubscriptionActions(s: Subscription, onRefresh?: () => void) {
+export function useSubscriptionActions(s: Subscription, onRefresh?: () => void, onFavouriteChange?: (id: number, next: boolean) => void, onStatusChange?: (id: number, status: SubscriptionStatus) => void) {
   const [isFavourite,   setIsFavourite]   = useState(s.isFavourite);
   const [autoRenew,     setAutoRenew]     = useState(s.autoRenew);
   const [starBusy,      setStarBusy]      = useState(false);
@@ -26,14 +26,16 @@ export function useSubscriptionActions(s: Subscription, onRefresh?: () => void) 
       const data = await res.json();
       if (!res.ok || typeof data.is_favourite !== "boolean") {
         setIsFavourite(!next);
+        onFavouriteChange?.(s.id, !next);
       } else {
         setIsFavourite(data.is_favourite);
+        onFavouriteChange?.(s.id, data.is_favourite);
       }
     } catch {
       setIsFavourite(!next);
+      onFavouriteChange?.(s.id, !next);
     } finally {
       setStarBusy(false);
-      onRefresh?.();
     }
   };
 
@@ -80,7 +82,7 @@ export function useSubscriptionActions(s: Subscription, onRefresh?: () => void) 
       if (!res.ok) {
         alert(data.message ?? "Could not resubscribe");
       } else {
-        onRefresh?.();
+        onStatusChange?.(s.id, "active");
       }
     } catch {
       alert("Something went wrong");
@@ -97,7 +99,7 @@ export function useSubscriptionActions(s: Subscription, onRefresh?: () => void) 
       const res  = await fetch(`/api/subscriptions/${s.id}/cancel`, { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        onRefresh?.();
+        onStatusChange?.(s.id, "expired");
         return true;
       }
       alert(data.error ?? "Failed to cancel");
