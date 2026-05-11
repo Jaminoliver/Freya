@@ -433,6 +433,7 @@ interface VideoPlayerProps {
   blurHash?:          string | null;
   objectFit?:         "contain" | "cover";
   autoplayOnVisible?: boolean;
+  autoPlay?:         boolean;
 }
 
 export default function VideoPlayer({
@@ -446,6 +447,7 @@ export default function VideoPlayer({
   blurHash,
   objectFit = "contain",
   autoplayOnVisible = false,
+  autoPlay          = false,
 }: VideoPlayerProps) {
   const videoRef       = React.useRef<HTMLVideoElement | null>(null);
   const containerRef   = React.useRef<HTMLDivElement | null>(null);
@@ -676,6 +678,11 @@ export default function VideoPlayer({
     setIsMuted(next);
     saveMute(next);
   }, [isMuted]);
+
+  React.useEffect(() => {
+    if (!autoPlay) return;
+    handlePosterPlay();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const containerStyle: React.CSSProperties = fillParent ? {
     width:          "100%",

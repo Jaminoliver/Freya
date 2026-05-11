@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import VideoPlayer from "@/components/video/VideoPlayer";
 
 interface MediaItem {
   url:       string;
@@ -16,76 +17,13 @@ interface Props {
   onClose:      () => void;
 }
 
-function LightboxVideo({ url, onReady, loading }: { url: string; onReady: () => void; loading: boolean }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef   = useRef<any>(null);
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const isHLS = url.includes(".m3u8");
-
-    if (!isHLS) {
-      // plain MP4 — just set src directly
-      if (videoRef.current) {
-        videoRef.current.src = url;
-        videoRef.current.load();
-        videoRef.current.play().catch(() => {});
-      }
-      return;
-    }
-
-    import("hls.js").then(({ default: Hls }) => {
-      if (Hls.isSupported()) {
-        const savedBw = Number(localStorage.getItem("hls_bw")) || 8_000_000;
-        const hls = new Hls({
-          startLevel:             -1,
-          testBandwidth:          false,
-          capLevelToPlayerSize:   false,
-          lowLatencyMode:         false,
-          abrEwmaDefaultEstimate: savedBw,
-        });
-        hls.on(Hls.Events.FRAG_LOADED, () => {
-          localStorage.setItem("hls_bw", String(hls.bandwidthEstimate));
-        });
-        hls.on(Hls.Events.MANIFEST_PARSED, (_: any, data: any) => {
-          hls.startLevel   = data.levels.length - 1;
-          hls.currentLevel = data.levels.length - 1;
-          video.play().catch(() => {});
-        });
-        hls.loadSource(url);
-        hls.attachMedia(video);
-        hlsRef.current = hls;
-      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        // Safari fallback
-        video.src = url;
-        video.load();
-        video.play().catch(() => {});
-      }
-    }).catch(() => {
-      video.src = url;
-      video.load();
-    });
-
-    return () => { hlsRef.current?.destroy(); hlsRef.current = null; };
-  }, [url]);
-
-  return (
-    <video
-      ref={videoRef}
-      controls
-      playsInline
-      onCanPlay={onReady}
-      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "8px", backgroundColor: "#000", opacity: loading ? 0 : 1, transition: "opacity 0.2s" }}
-    />
-  );
-}
 
 export function MediaLightbox({ items, initialIndex, onClose }: Props) {
   const [index,   setIndex]   = useState(initialIndex);
   const [loading, setLoading] = useState(true);
-  const touchStartX = useRef<number | null>(null);
+  const touchStartX   = useRef<number | null>(null);
+  const thumbScrolled = useRef(false);
   const current     = items[index];
 
   const prev = useCallback(() => {
@@ -174,7 +112,7 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
           onClick={(e) => e.stopPropagation()}
           style={{ width: "90vw", height: "80vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}
         >
-          {loading && (
+          {loading && current.type === "image" && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <div style={{ width: "56px", height: "56px", animation: "vp-ring-pulse 1.4s ease-in-out infinite", filter: "drop-shadow(0 0 12px rgba(139,92,246,0.5)) drop-shadow(0 0 20px rgba(236,72,153,0.3))" }}>
   <svg width="56" height="56" viewBox="0 0 56 56" style={{ animation: "vp-ring-rotate 1s linear infinite", display: "block" }}>
@@ -200,11 +138,13 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
               style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain", borderRadius: "8px", opacity: loading ? 0 : 1, transition: "opacity 0.2s" }}
             />
           ) : (
-            <LightboxVideo
+            <VideoPlayer
               key={current.url}
-              url={current.url}
-              onReady={() => setLoading(false)}
-              loading={loading}
+              bunnyVideoId={current.url.match(/b-cdn\.net\/([^/]+)\//)?.[1] ?? null}
+              fillParent
+              objectFit="contain"
+              hideInternalBlur
+              autoPlay
             />
           )}
         </div>
@@ -224,11 +164,16 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
 
       {/* Thumbnail strip */}
       {items.length > 1 && (
-        <div style={{ display: "flex", gap: "6px", padding: "12px 16px", overflowX: "auto", flexShrink: 0, scrollbarWidth: "none", justifyContent: "center" }}>
+        <div
+          onScroll={() => { thumbScrolled.current = true; }}
+          onTouchStart={(e) => { e.stopPropagation(); thumbScrolled.current = false; }}
+          onTouchEnd={(e) => { e.stopPropagation(); }}
+          style={{ display: "flex", gap: "6px", padding: "12px 16px", overflowX: "auto", flexShrink: 0, scrollbarWidth: "none", justifyContent: "center" }}
+        >
           {items.map((item, i) => (
             <button
               key={i}
-              onClick={() => { setLoading(true); setIndex(i); }}
+              onClick={() => { if (thumbScrolled.current) { thumbScrolled.current = false; return; } setLoading(true); setIndex(i); }}
               style={{
                 flexShrink:    0,
                 width:         "52px",
