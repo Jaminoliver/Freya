@@ -51,7 +51,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const [visible,       setVisible]       = React.useState(false);
   const [animateIn,     setAnimateIn]     = React.useState(false);
   const [mounted,       setMounted]       = React.useState(false);
-  const [sheetHeight, setSheetHeight] = React.useState<"45vh" | "88vh" | "65vh">("45vh");
+  const [sheetHeight, setSheetHeight] = React.useState<"60vh" | "88vh" | "65vh">("60vh");
 
   // Reply state
   const [replyingTo, setReplyingTo] = React.useState<ApiComment | null>(null);
@@ -67,7 +67,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   React.useEffect(() => {
     setMounted(true);
-    setSheetHeight(window.innerWidth >= 768 ? "65vh" : "45vh");
+    setSheetHeight(window.innerWidth >= 768 ? "65vh" : "60vh");
   }, []);
   React.useEffect(() => { setLocalComments(propComments); }, [propComments]);
 
@@ -82,8 +82,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
       return () => clearTimeout(t);
     } else {
       setAnimateIn(false);
-      setSheetHeight(typeof window !== "undefined" && window.innerWidth >= 768 ? "65vh" : "45vh");
-      document.body.style.overflow = "";
+      setSheetHeight(typeof window !== "undefined" && window.innerWidth >= 768 ? "65vh" : "60vh");      document.body.style.overflow = "";
       const t = setTimeout(() => setVisible(false), 320);
       return () => clearTimeout(t);
     }
@@ -118,8 +117,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     isDragging.current = false;
     const delta = dragDeltaY.current;
     if (sheetRef.current) sheetRef.current.style.transform = "translateY(0)";
-    const defaultHeight = window.innerWidth >= 768 ? "65vh" : "45vh";
-    if (delta < -60 && sheetHeight !== "88vh") setSheetHeight("88vh");
+    const defaultHeight = window.innerWidth >= 768 ? "65vh" : "60vh";    if (delta < -60 && sheetHeight !== "88vh") setSheetHeight("88vh");
     else if (delta > 80 && sheetHeight === "88vh") setSheetHeight(defaultHeight);
     else if (delta > 120 && sheetHeight !== "88vh") handleClose();
     dragDeltaY.current = 0;
