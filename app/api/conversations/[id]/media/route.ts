@@ -64,12 +64,12 @@ export async function GET(
     .eq(deleteField, false)
     .eq("is_deleted_for_everyone", false)
     .not("media_type", "is", null)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })  // newest first
     .limit(limit);
 
   if (filter === "images") msgsQuery = msgsQuery.eq("media_type", "photo");
   if (filter === "videos") msgsQuery = msgsQuery.ilike("media_type", "video%");
-  if (cursor)              msgsQuery = msgsQuery.gt("created_at", cursor);
+  if (cursor)              msgsQuery = msgsQuery.lt("created_at", cursor);  // lt = older than cursor
   if (deletedBefore)       msgsQuery = msgsQuery.gt("created_at", deletedBefore);
 
   const { data: msgRows, error: msgsError } = await msgsQuery;
@@ -157,7 +157,7 @@ export async function GET(
         messageId:    r.message_id,
         url:          isUnlocked ? (
           r.url?.includes("vz-8bc100f4-3c0.b-cdn.net")
-            ? r.url.replace(/playlist\.m3u8(#.*)?$/, "play_720p.mp4")
+            ? r.url  // keep as HLS playlist — LightboxVideo handles quality via hls.js
             : refreshBunnyUrl(r.url)
         ) : null,
         thumbnailUrl: thumb,
