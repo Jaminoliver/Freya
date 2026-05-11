@@ -16,6 +16,60 @@ interface Props {
   onClose:      () => void;
 }
 
+function LightboxVideo({ url, onReady }: { url: string; onReady: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef   = useRef<any>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    import("hls.js").then(({ default: Hls }) => {
+      if (Hls.isSupported()) {
+        const savedBw = Number(localStorage.getItem("hls_bw")) || 8_000_000;
+        const hls = new Hls({
+          startLevel:             -1,
+          testBandwidth:          false,
+          capLevelToPlayerSize:   false,
+          lowLatencyMode:         false,
+          abrEwmaDefaultEstimate: savedBw,
+        });
+        hls.on(Hls.Events.FRAG_LOADED, () => {
+          localStorage.setItem("hls_bw", String(hls.bandwidthEstimate));
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, (_: any, data: any) => {
+          hls.startLevel   = data.levels.length - 1;
+          hls.currentLevel = data.levels.length - 1;
+          video.play().catch(() => {});
+        });
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hlsRef.current = hls;
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Safari fallback
+        video.src = url;
+        video.load();
+        video.play().catch(() => {});
+      }
+    }).catch(() => {
+      video.src = url;
+      video.load();
+    });
+
+    return () => { hlsRef.current?.destroy(); hlsRef.current = null; };
+  }, [url]);
+
+  return (
+    <video
+      ref={videoRef}
+      controls
+      playsInline
+      onCanPlay={onReady}
+      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "8px", backgroundColor: "#000" }}
+    />
+  );
+}
+
 export function MediaLightbox({ items, initialIndex, onClose }: Props) {
   const [index,   setIndex]   = useState(initialIndex);
   const [loading, setLoading] = useState(true);
@@ -123,14 +177,10 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
               style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain", borderRadius: "8px", opacity: loading ? 0 : 1, transition: "opacity 0.2s" }}
             />
           ) : (
-            <video
+            <LightboxVideo
               key={current.url}
-              src={current.url}
-              controls
-              autoPlay
-              playsInline
-              onCanPlay={(e) => { setLoading(false); (e.currentTarget as HTMLVideoElement).play().catch(() => {}); }}
-              style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "8px", backgroundColor: "#000", opacity: loading ? 0 : 1, transition: "opacity 0.2s" }}
+              url={current.url}
+              onReady={() => setLoading(false)}
             />
           )}
         </div>

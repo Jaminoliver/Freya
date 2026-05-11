@@ -75,54 +75,49 @@ export default function StoryVideoPlayer({
       ? mediaUrl
       : `https://${BUNNY_PULL_ZONE}/${mediaUrl}/playlist.m3u8`;
 
-    // Native HLS (Safari / iOS)
-    const iosUrl = url.includes("b-cdn.net") && url.includes("playlist.m3u8")
-      ? url.replace(/playlist\.m3u8(#.*)?$/, "play_720p.mp4")
-      : url;
+   
 
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = iosUrl;
-      video.load();
-      video.addEventListener("loadedmetadata", tryPlay, { once: true });
-      return;
-    }
-
-    // hls.js path
+    // hls.js first — gives full quality control on Chrome/Firefox
     import("hls.js").then(({ default: Hls }) => {
-      if (!Hls.isSupported()) {
+      if (Hls.isSupported()) {
+        const savedBw = Number(localStorage.getItem("hls_bw")) || 8_000_000;
+        const hls = new Hls({
+          startLevel:             -1,
+          testBandwidth:          false,
+          capLevelToPlayerSize:   false,
+          lowLatencyMode:         false,
+          abrEwmaDefaultEstimate: savedBw,
+          abrEwmaFastVoD:         3,
+          abrEwmaSlowVoD:         9,
+        });
+
+        hls.on(Hls.Events.FRAG_LOADED, () => {
+          localStorage.setItem("hls_bw", String(hls.bandwidthEstimate));
+        });
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (_: any, data: any) => {
+          hls.startLevel   = data.levels.length - 1;
+          hls.currentLevel = data.levels.length - 1;
+          tryPlay();
+        });
+
+      hls.loadSource(url);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.ERROR, (_: any, data: any) => {
+          if (!data.fatal) return;
+          if      (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+          else if (data.type === Hls.ErrorTypes.MEDIA_ERROR)   hls.recoverMediaError();
+          else { hls.destroy(); hlsRef.current = null; video.src = url; video.load(); }
+        });
+
+        hlsRef.current = hls;
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Safari only — native HLS fallback
         video.src = url;
         video.load();
         video.addEventListener("loadedmetadata", tryPlay, { once: true });
-        return;
       }
-
-      const hls = new Hls({
-        capLevelToPlayerSize:   false,
-        lowLatencyMode:         false,
-        abrEwmaDefaultEstimate: 50_000_000,
-        abrBandWidthFactor:     1,
-        abrBandWidthUpFactor:   1,
-        maxLoadingDelay:        2,
-      });
-
-      hls.on(Hls.Events.MANIFEST_PARSED, (_: any, data: any) => {
-        const highest = data.levels.length - 1;
-        hls.currentLevel = highest;
-        hls.loadLevel    = highest;
-        tryPlay();
-      });
-
-      hls.loadSource(url);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.ERROR, (_: any, data: any) => {
-        if (!data.fatal) return;
-        if      (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR)   hls.recoverMediaError();
-        else { hls.destroy(); hlsRef.current = null; video.src = url; video.load(); }
-      });
-
-      hlsRef.current = hls;
     }).catch(() => {
       video.src = url;
       video.load();

@@ -536,12 +536,6 @@ export default function VideoPlayer({
 
     const hlsSrc = getBunnyHLS(bunnyVideoId);
 
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = getBunnyHLS(bunnyVideoId)  // playlist.m3u8;
-      video.load();
-      return;
-    }
-
     try {
       const Hls = (await import("hls.js")).default;
       if (Hls.isSupported()) {
@@ -582,6 +576,10 @@ export default function VideoPlayer({
         });
         hls.loadSource(hlsSrc);
         hls.attachMedia(video);
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Safari only — native HLS, no HLS.js control available
+        video.src = getBunnyHLS(bunnyVideoId);
+        video.load();
       }
     } catch {
       video.src = hlsSrc;
