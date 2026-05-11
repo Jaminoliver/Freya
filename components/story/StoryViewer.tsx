@@ -238,6 +238,9 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
       prev.map((g) => ({ ...g, items: g.items.map((s) => s.id === id ? { ...s, viewed: true } : s) }))
     );
     fetch(`/api/stories/${id}/view`, { method: "POST" }).catch(() => {});
+    setLocalGroups((prev) =>
+      prev.map((g) => ({ ...g, items: g.items.map((s) => s.id === id ? { ...s, viewCount: (s.viewCount ?? 0) + 1 } : s) }))
+    );
   }, []);
 
   // ── Story transition ─────────────────────────────────────────────────────

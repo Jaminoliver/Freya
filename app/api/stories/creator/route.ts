@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
     const { data: stories, error: storiesErr } = await supabase
       .from("stories")
-      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, created_at, expires_at, is_processing, cta_type, cta_message, cta_position_y, text_content, text_background, display_order, is_muted")
+      .select("id, creator_id, media_type, media_url, thumbnail_url, caption, created_at, expires_at, is_processing, cta_type, cta_message, cta_position_y, text_content, text_background, display_order, is_muted, view_count")
       .eq("creator_id", creatorId)
       .eq("is_expired", false)
       .eq("is_processing", false)
@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
       expiresAt:    s.expires_at,
       viewed:          viewedSet.has(s.id),
       isProcessing:    false,
+      viewCount:       s.view_count ?? 0,
       ctaType:         s.cta_type       ?? null,
       ctaMessage:      s.cta_message    ?? null,
       ctaPositionY:    s.cta_position_y ?? 0.75,

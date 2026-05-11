@@ -154,7 +154,7 @@ export default function CheckoutModal({
     if (autoCloseOnSuccess) {
       autoCloseTimerRef.current = setTimeout(() => {
         handleClose();
-      }, 3200);
+      }, 1800);
 
     }
   };
@@ -470,8 +470,8 @@ export default function CheckoutModal({
                 <style>{`
                   @keyframes shackle {
                     0%   { transform: rotate(0deg) translateY(0px); opacity: 1; }
-                    40%  { transform: rotate(-25deg) translateY(-5px); opacity: 1; }
-                    100% { transform: rotate(15deg) translateY(8px); opacity: 0; }
+                    60%  { transform: rotate(-30deg) translateY(-8px); opacity: 1; }
+                    100% { transform: rotate(-30deg) translateY(-8px); opacity: 1; }
                   }
                   @keyframes lockGlow {
                     0%   { box-shadow: 0 0 0 0 rgba(139,92,246,0.6); }
@@ -493,6 +493,7 @@ export default function CheckoutModal({
                       stroke="#FFFFFF" strokeWidth="2.2"
                       style={{ animation: "shackle 0.7s ease-out 0.4s forwards", transformOrigin: "7px 11px", display: "inline" }}
                     />
+                    <rect x="3" y="11" width="18" height="11" rx="2" fill="rgba(255,255,255,0.2)" stroke="#FFFFFF" strokeWidth="2.2" />
                   </svg>
                 </div>
                 <span style={{

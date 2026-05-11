@@ -3,6 +3,7 @@
 
 import * as React from "react";
 import { postSyncStore } from "@/lib/store/postSyncStore";
+import { useAppStore } from "@/lib/store/appStore";
 
 interface UsePostEngagementOptions {
   postId:               string;
@@ -34,6 +35,7 @@ export function usePostEngagement({
   const [commentsFetched, setCommentsFetched] = React.useState(false);
   const [savedPost,       setSavedPost]       = React.useState(initialSavedPost);
   const [savedCreator,    setSavedCreator]    = React.useState(initialSavedCreator);
+  const { updateFeedPost, clearProfile } = useAppStore();
 
   // ── Refs for stable access in callbacks (fixes stale closures) ─────────
   const isLiking     = React.useRef(false);
@@ -195,30 +197,35 @@ export function usePostEngagement({
   const handleSavePost = React.useCallback(async () => {
     const next = !savedPost;
     setSavedPost(next);
+    updateFeedPost(postId, { saved: next });
     try {
-      await fetch("/api/saved/posts", {
+      const res = await fetch("/api/saved/posts", {
         method:  next ? "POST" : "DELETE",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ post_id: postId }),
       });
+      if (!res.ok) { setSavedPost(!next); updateFeedPost(postId, { saved: !next }); }
     } catch {
       setSavedPost(!next);
+      updateFeedPost(postId, { saved: !next });
     }
-  }, [savedPost, postId]);
+  }, [savedPost, postId, updateFeedPost]);
 
   const handleSaveCreator = React.useCallback(async () => {
     const next = !savedCreator;
     setSavedCreator(next);
+    clearProfile(creatorId);
     try {
-      await fetch("/api/saved/creators", {
+      const res = await fetch("/api/saved/creators", {
         method:  next ? "POST" : "DELETE",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ creator_id: creatorId }),
       });
+      if (!res.ok) { setSavedCreator(!next); }
     } catch {
       setSavedCreator(!next);
     }
-  }, [savedCreator, creatorId]);
+  }, [savedCreator, creatorId, clearProfile]);
 
   return {
     // state

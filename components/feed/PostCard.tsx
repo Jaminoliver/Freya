@@ -457,7 +457,6 @@ export const PostCard = memo(PostCardInner, (prev, next) => {
   if (prev.initialSlide         !== next.initialSlide)         return false;
   if (prev.isSubscribedExternal !== next.isSubscribedExternal) return false;
   if (prev.initialSavedPost     !== next.initialSavedPost)     return false;
-  if (prev.initialSavedCreator  !== next.initialSavedCreator)  return false;
   if (prev.is_renewal           !== next.is_renewal)           return false;
   if (prev.eager                !== next.eager)                return false;
   if (prev.autoplayOnVisible    !== next.autoplayOnVisible)    return false;
