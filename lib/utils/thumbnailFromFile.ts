@@ -60,9 +60,16 @@ function videoToThumbnailDataURL(file: File): Promise<string | null> {
     video.crossOrigin = "anonymous";
 
     video.onloadedmetadata = () => {
-      try { video.currentTime = 0; } catch { finish(null); }
+      try {
+        video.currentTime = 0.1;
+        if ('requestVideoFrameCallback' in video) {
+          (video as any).requestVideoFrameCallback(captureFrame);
+        } else {
+          (video as HTMLVideoElement).onseeked = () => setTimeout(captureFrame, 200);
+        }
+      } catch { finish(null); }
     };
-    video.onseeked = () => {
+    const captureFrame = () => {
       const vw = video.videoWidth, vh = video.videoHeight;
       if (!vw || !vh) { finish(null); return; }
       const { w, h } = scaleToFit(vw, vh, TARGET_MAX_EDGE);
