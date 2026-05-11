@@ -24,6 +24,18 @@ function LightboxVideo({ url, onReady }: { url: string; onReady: () => void }) {
     const video = videoRef.current;
     if (!video) return;
 
+    const isHLS = url.includes(".m3u8");
+
+    if (!isHLS) {
+      // plain MP4 — just set src directly
+      if (videoRef.current) {
+        videoRef.current.src = url;
+        videoRef.current.load();
+        videoRef.current.play().catch(() => {});
+      }
+      return;
+    }
+
     import("hls.js").then(({ default: Hls }) => {
       if (Hls.isSupported()) {
         const savedBw = Number(localStorage.getItem("hls_bw")) || 8_000_000;

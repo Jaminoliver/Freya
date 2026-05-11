@@ -74,7 +74,7 @@ function getMediaItems(msg: Message, isOwn: boolean): { url: string; type: "imag
   }
   return urls.filter(Boolean).map((url, i) => ({
     url: url.includes('b-cdn.net') && url.includes('playlist.m3u8')
-      ? url.replace('playlist.m3u8', 'play_720p.mp4')
+      ? url  // keep as HLS — LightboxVideo handles quality via hls.js
       : url,
     type: url.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || url.includes('#video') || (url.includes('b-cdn.net') && url.includes('playlist.m3u8')) ? "video" as const : "image" as const,
     thumbnailUrl: extractBunnyThumbnail(url) ?? (i === 0 ? (msg.thumbnailUrl ?? null) : null),
