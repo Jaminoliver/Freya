@@ -28,7 +28,7 @@ export async function POST(
     // Check story exists and is not still processing
     const { data: story } = await supabase
       .from("stories")
-      .select("id, is_processing")
+      .select("id, creator_id, is_processing")
       .eq("id", storyId)
       .single();
 
@@ -36,6 +36,9 @@ export async function POST(
 
     // Silent skip — story is still being processed by Bunny
     if (story.is_processing) return NextResponse.json({ success: true });
+
+    // Silent skip — owner viewing their own story should never count
+    if (story.creator_id === user.id) return NextResponse.json({ success: true });
 
     // Check if this user has already viewed this story BEFORE upserting
     const { data: existingView } = await supabase

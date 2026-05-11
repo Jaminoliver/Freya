@@ -9,7 +9,7 @@ const IMAGE_DURATION_MS = 5000;
 
 const ICON_BTN: React.CSSProperties = {
   background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%",
-  width: 34, height: 34, display: "flex", alignItems: "center",
+  width: 40, height: 40, display: "flex", alignItems: "center",
   justifyContent: "center", cursor: "pointer", color: "#fff", flexShrink: 0,
 };
 
@@ -133,21 +133,21 @@ export default forwardRef<StoryTopBarRef, Props>(function StoryTopBar(
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 12 }}>
           <a href={`/${group.username}`} onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flex: 1, minWidth: 0 }}>
-            <Avatar src={group.avatarUrl} name={group.displayName} size={36} />
+            <Avatar src={group.avatarUrl} name={group.displayName} size={50} />
             <div style={{ minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: "Inter,sans-serif", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{group.displayName}</p>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: "Inter,sans-serif", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{isOwner ? "You" : group.displayName}</p>
               <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.6)", fontFamily: "Inter,sans-serif" }}>{timeAgo(story.createdAt)}</p>
             </div>
           </a>
           {(() => { console.log("[TopBar] id:", story.id, "isMuted:", story.isMuted); return null; })()}
           {isVideo && !story.isMuted && (
             <button {...stop} onClick={(e) => { e.stopPropagation(); onMuteToggle(); }} style={ICON_BTN}>
-              {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+              {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
           )}
           {!isOwner && onTip && (
             <button {...stop} onClick={(e) => { e.stopPropagation(); onTip(); }} style={ICON_BTN} title="Send a tip">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/>
                 <line x1="12" y1="22" x2="12" y2="7"/>
                 <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
@@ -158,15 +158,15 @@ export default forwardRef<StoryTopBarRef, Props>(function StoryTopBar(
           {isOwner && (
             <button {...stop} onClick={(e) => { e.stopPropagation(); router.push("/create-story"); }} style={ICON_BTN} title="Add to story">
               <span style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Camera size={15} />
-                <Plus size={9} style={{ position: "absolute", bottom: -3, right: -3, background: "#8B5CF6", borderRadius: "50%" }} />
+                <Camera size={18} />
+                <Plus size={10} style={{ position: "absolute", bottom: -3, right: -3, background: "#8B5CF6", borderRadius: "50%" }} />
               </span>
             </button>
           )}
           {isOwner && (
             <div style={{ position: "relative" }}>
               <button {...stop} onClick={(e) => { e.stopPropagation(); onMenuToggle(); }} style={ICON_BTN}>
-                <MoreVertical size={15} />
+                <MoreVertical size={18} />
               </button>
               {menuOpen && (
                 <div onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}
@@ -180,7 +180,7 @@ export default forwardRef<StoryTopBarRef, Props>(function StoryTopBar(
             </div>
           )}
           <button {...stop} onClick={(e) => { e.stopPropagation(); onClose(); }} style={ICON_BTN}>
-            <X size={15} />
+            <X size={18} />
           </button>
         </div>
       </div>
