@@ -10,16 +10,20 @@ import StoryViewer from "@/components/story/StoryViewer";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import { ManageBottomSheet } from "./ManageBottomSheet";
 import { useSubscriptionActions } from "@/lib/hooks/useSubscriptionActions";
-import { STATUS_COLOR, STATUS_LABEL, type Subscription } from "@/lib/types/subscription";
+import { STATUS_COLOR, STATUS_LABEL, type Subscription, type SubscriptionStatus } from "@/lib/types/subscription";
 import type { User } from "@/lib/types/profile";
 import { startConversation } from "@/app/(main)/messages/page";
 
 export function SubscriptionCardCompact({
   subscription: s,
   onRefresh,
+  onFavouriteChange,
+  onStatusChange,
 }: {
-  subscription: Subscription;
-  onRefresh?:   () => void;
+  subscription:       Subscription;
+  onRefresh?:         () => void;
+  onFavouriteChange?: (id: number, next: boolean) => void;
+  onStatusChange?:    (id: number, status: SubscriptionStatus) => void;
 }) {
   const { navigate } = useNav();
 
@@ -33,7 +37,7 @@ export function SubscriptionCardCompact({
   const {
     isFavourite, autoRenew, starBusy, autoBusy, cancelBusy, freeResubBusy,
     toggleFavourite, toggleAutoRenew, freeResubscribe, cancelSubscription,
-  } = useSubscriptionActions(s, onRefresh);
+  } = useSubscriptionActions(s, onRefresh, onFavouriteChange, onStatusChange);
 
   const handleStar = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -166,7 +170,7 @@ export function SubscriptionCardCompact({
           threeMonthPrice={s.threeMonthPrice ?? undefined}
           sixMonthPrice={s.sixMonthPrice ?? undefined}
           autoCloseOnSuccess
-          onSubscriptionSuccess={() => onRefresh?.()}
+          onSubscriptionSuccess={() => onStatusChange?.(s.id, "active") ?? onRefresh?.()}
         />
       )}
 

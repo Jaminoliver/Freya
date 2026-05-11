@@ -47,7 +47,7 @@ export function SubscriptionList({
     <div style={{ display: "grid", gridTemplateColumns: gridCols, gap }}>
       {subscriptions.map((s) =>
         view === "compact"
-          ? <SubscriptionCardCompact key={s.id} subscription={s} onRefresh={onRefresh} />
+          ? <SubscriptionCardCompact key={s.id} subscription={s} onRefresh={onRefresh} onFavouriteChange={onFavouriteChange} onStatusChange={onStatusChange} />
           : <SubscriptionCardDetailed key={s.id} subscription={s} onRefresh={onRefresh} onFavouriteChange={onFavouriteChange} onStatusChange={onStatusChange} onTip={onTip} />
       )}
     </div>
