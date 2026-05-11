@@ -77,7 +77,7 @@ function getMediaItems(msg: Message, isOwn: boolean): { url: string; type: "imag
       ? url  // keep as HLS — LightboxVideo handles quality via hls.js
       : url,
     type: url.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/i) || url.includes('#video') || (url.includes('b-cdn.net') && url.includes('playlist.m3u8')) ? "video" as const : "image" as const,
-    thumbnailUrl: (i === 0 ? (msg.thumbnailUrl ?? null) : null) ?? extractBunnyThumbnail(url),
+    thumbnailUrl: (i === 0 && msg.thumbnailUrl != null) ? msg.thumbnailUrl : extractBunnyThumbnail(url),
   }));
 }
 
