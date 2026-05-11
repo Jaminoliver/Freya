@@ -125,6 +125,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const [groupIdx,    setGroupIdx]    = useState(startGroupIndex);
   const [storyIdx,    setStoryIdx]    = useState(() => resolveStartStory(groups[startGroupIndex]));
   const [refreshKey,  setRefreshKey]  = useState(0);
+  const isRestartRef  = useRef(false);
   const [paused,      setPaused]      = useState(false);
   const [muted,       setMuted]       = useState(true);
   const [showSpinner, setShowSpinner] = useState(false);
@@ -228,6 +229,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     const gs = localGroupsRef.current, gi = groupIdxRef.current, si = storyIdxRef.current;
     if      (si > 0) updateStoryIdx(si - 1);
     else if (gi > 0) { updateGroupIdx(gi - 1); updateStoryIdx(gs[gi - 1].items.length - 1); }
+    else { isRestartRef.current = true; setRefreshKey((k) => k + 1); }
   }, [updateGroupIdx, updateStoryIdx]);
 
   useEffect(() => { goNextRef.current = goNext; }, [goNext]);
@@ -270,6 +272,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
     if (s.mediaType !== "video") {
       return;
     }
+    if (isRestartRef.current) { isRestartRef.current = false; return; }
     spinnerTimerRef.current = setTimeout(() => {
       if (storyKeyRef.current === key && mountedRef.current) setShowSpinner(true);
     }, SPINNER_DELAY_MS);
@@ -510,6 +513,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (replyOpenRef.current || viewersOpenRef.current) return;
+    mouseRef.current.intercepted = true;
     if (menuOpen) { setMenuOpen(false); touchRef.current.holding = true; return; }
     const t = e.touches[0];
     touchRef.current = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false, holding: false, draggingDown: false };
@@ -551,6 +555,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   }, [closeWithGroups, resetDrag]);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
+    if (mouseRef.current.intercepted) return;
     if (replyOpenRef.current || viewersOpenRef.current) return;
     if ((e.target as HTMLElement).closest("button, input")) return;
     if (menuOpenRef.current) { setMenuOpen(false); mouseRef.current.intercepted = true; return; }
