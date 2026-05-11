@@ -133,7 +133,7 @@ export default forwardRef<StoryTopBarRef, Props>(function StoryTopBar(
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 12 }}>
           <a href={`/${group.username}`} onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flex: 1, minWidth: 0 }}>
-            <Avatar src={group.avatarUrl} name={group.displayName} size={50} />
+            <Avatar src={group.avatarUrl} name={group.displayName} size={60} />
             <div style={{ minWidth: 0 }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#fff", fontFamily: "Inter,sans-serif", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{isOwner ? "You" : group.displayName}</p>
               <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.6)", fontFamily: "Inter,sans-serif" }}>{timeAgo(story.createdAt)}</p>
