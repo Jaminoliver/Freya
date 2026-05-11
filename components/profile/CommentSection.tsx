@@ -25,6 +25,7 @@ export interface ApiComment {
     username: string;
     display_name: string | null;
     avatar_url: string | null;
+    role?: string | null;
   };
 }
 
@@ -50,6 +51,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const [visible,       setVisible]       = React.useState(false);
   const [animateIn,     setAnimateIn]     = React.useState(false);
   const [mounted,       setMounted]       = React.useState(false);
+  const [sheetHeight, setSheetHeight] = React.useState<"45vh" | "88vh" | "65vh">("45vh");
 
   // Reply state
   const [replyingTo, setReplyingTo] = React.useState<ApiComment | null>(null);
@@ -63,7 +65,10 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const dragDeltaY   = React.useRef(0);
   const isDragging   = React.useRef(false);
 
-  React.useEffect(() => { setMounted(true); }, []);
+  React.useEffect(() => {
+    setMounted(true);
+    setSheetHeight(window.innerWidth >= 768 ? "65vh" : "45vh");
+  }, []);
   React.useEffect(() => { setLocalComments(propComments); }, [propComments]);
 
   React.useEffect(() => {
@@ -77,6 +82,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
       return () => clearTimeout(t);
     } else {
       setAnimateIn(false);
+      setSheetHeight(typeof window !== "undefined" && window.innerWidth >= 768 ? "65vh" : "45vh");
       document.body.style.overflow = "";
       const t = setTimeout(() => setVisible(false), 320);
       return () => clearTimeout(t);
@@ -106,11 +112,16 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     const delta = e.touches[0].clientY - dragStartY.current;
     dragDeltaY.current = delta;
     if (delta > 0) sheetRef.current.style.transform = `translateY(${delta}px)`;
+    else if (delta < -30 && sheetHeight !== "88vh") sheetRef.current.style.transform = `translateY(${delta}px)`;
   };
   const onTouchEnd = () => {
     isDragging.current = false;
-    if (dragDeltaY.current > 120) handleClose();
-    else if (sheetRef.current) sheetRef.current.style.transform = "translateY(0)";
+    const delta = dragDeltaY.current;
+    if (sheetRef.current) sheetRef.current.style.transform = "translateY(0)";
+    const defaultHeight = window.innerWidth >= 768 ? "65vh" : "45vh";
+    if (delta < -60 && sheetHeight !== "88vh") setSheetHeight("88vh");
+    else if (delta > 80 && sheetHeight === "88vh") setSheetHeight(defaultHeight);
+    else if (delta > 120 && sheetHeight !== "88vh") handleClose();
     dragDeltaY.current = 0;
   };
 
@@ -210,7 +221,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", pointerEvents: "none" }}>
-      <div ref={sheetRef} style={{ position: "relative", width: "100%", maxWidth: "680px", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", maxHeight: "80vh", display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)", pointerEvents: "auto" }}>
+      <div ref={sheetRef} style={{ position: "relative", width: "100%", maxWidth: "680px", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", height: sheetHeight, maxHeight: sheetHeight, display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), height 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)", pointerEvents: "auto" }}>
 
         <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ padding: "12px 16px 0", userSelect: "none", touchAction: "none" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", margin: "0 auto 14px" }} />
@@ -220,7 +231,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
           </div>
         </div>
 
-        <div ref={commentsRef} style={{ flex: 1, overflowY: "auto", padding: "0 16px", scrollbarWidth: "none" }}>
+        <div ref={commentsRef} style={{ flex: 1, overflowY: "auto", padding: "0 16px", scrollbarWidth: "none", overscrollBehavior: "contain" }}>
           <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
           {isLoading
             ? [0,1,2].map((i) => <CommentSkeleton key={i} />)

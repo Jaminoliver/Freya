@@ -128,10 +128,15 @@ export function usePostEngagement({
     isLiking.current = false;
   }, [postId, liked, likeCount, commentCount, onLikeSuccess]);
 
-  const handleToggleComment = React.useCallback(() => {
-    const willOpen = !commentOpen;
-    setCommentOpen(willOpen);
-    if (willOpen && !commentsFetched) {
+  const prefetchRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (commentsFetched) return;
+    const el = prefetchRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      observer.disconnect();
       setCommentsLoading(true);
       setCommentsFetched(true);
       fetch(`/api/posts/${postId}/comments`)
@@ -139,8 +144,14 @@ export function usePostEngagement({
         .then((d) => { if (d.comments) setComments(d.comments); })
         .catch(() => {})
         .finally(() => setCommentsLoading(false));
-    }
-  }, [commentOpen, commentsFetched, postId]);
+    }, { rootMargin: "200px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [postId, commentsFetched]);
+
+  const handleToggleComment = React.useCallback(() => {
+    setCommentOpen((o) => !o);
+  }, []);
 
   const closeCommentSection = React.useCallback(() => setCommentOpen(false), []);
 
@@ -216,6 +227,7 @@ export function usePostEngagement({
     // setters consumers may still need
     setComments, setSavedPost,
     // handlers
+    prefetchRef,
     handleLike, handleDoubleTapLike,
     handleToggleComment, closeCommentSection,
     handleAddComment, handleDeleteComment,

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Heart, Trash2, MoreHorizontal } from "lucide-react";
 import { getRelativeTime } from "@/lib/utils/profile";
 import { postSyncStore } from "@/lib/store/postSyncStore";
@@ -17,9 +18,11 @@ export function ReplyRow({ reply, postId, viewerUserId, onDeleted, onReply }: {
   const [deleting,  setDeleting]  = React.useState(false);
   const [menuOpen,  setMenuOpen]  = React.useState(false);
   const [gifSheetOpen, setGifSheetOpen] = React.useState(false);
+  const router      = useRouter();
   const menuRef     = React.useRef<HTMLDivElement>(null);
   const displayName = reply.profiles?.username || "user";
   const isOwner     = viewerUserId && reply.user_id === viewerUserId;
+  const isCreator   = reply.profiles?.role === "creator";
 
   React.useEffect(() => {
     return postSyncStore.subscribeCommentLike((event) => {
@@ -74,12 +77,24 @@ export function ReplyRow({ reply, postId, viewerUserId, onDeleted, onReply }: {
   return (
     <div style={{ display: "flex", gap: "8px", padding: "8px 0", borderBottom: "1px solid #0F0F1A" }}>
       {/* smaller avatar for replies */}
-      <Avatar src={reply.profiles?.avatar_url} name={displayName} size={28} />
+      <div
+        onClick={() => !isOwner && isCreator && router.push(`/${reply.profiles?.username}`)}
+        style={{ cursor: !isOwner && isCreator ? "pointer" : "default", flexShrink: 0 }}
+      >
+        <Avatar src={reply.profiles?.avatar_url} name={displayName} size={28} />
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "12px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>@{displayName}</span>
+              <span
+                onClick={() => !isOwner && isCreator && router.push(`/${reply.profiles?.username}`)}
+                style={{ fontSize: "12px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif", cursor: !isOwner && isCreator ? "pointer" : "default" }}              >{isOwner ? "You" : `@${displayName}`}</span>
+              {!isOwner && isCreator && (
+                <span style={{ fontSize: "10px", fontWeight: 700, color: "#8B5CF6", backgroundColor: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.35)", borderRadius: "999px", padding: "1px 7px", fontFamily: "'Inter', sans-serif", letterSpacing: "0.02em" }}>
+                  Creator
+                </span>
+              )}
               {reply.reply_to_username && (
                 <span style={{ fontSize: "11px", color: "#6B6B8A", fontFamily: "'Inter', sans-serif", display: "flex", alignItems: "center", gap: "3px" }}>
                   <span style={{ color: "#4A4A6A" }}>▶</span>

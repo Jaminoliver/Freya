@@ -303,7 +303,7 @@ function PostCardInner({
   const freeSuffix = undefined;
 
   return (
-    <div style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
+    <div ref={engagement.prefetchRef} style={{ borderBottom: "1px solid #1A1A2E", fontFamily: "'Inter', sans-serif" }}>
 
       {storyViewerOpen && storyGroup && (
         <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={handleStoryViewerClose} />

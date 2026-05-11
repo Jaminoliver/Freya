@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Heart, Trash2, MoreHorizontal, ChevronDown, ChevronUp } from "lucide-react";
 import { getRelativeTime } from "@/lib/utils/profile";
 import { postSyncStore } from "@/lib/store/postSyncStore";
@@ -24,15 +25,16 @@ export function CommentRow({ comment, postId, viewerUserId, onDeleted, onReply }
   // Replies state
   const [repliesOpen,   setRepliesOpen]   = React.useState(false);
   const [replies,       setReplies]       = React.useState<ApiComment[]>([]);
-  const [loadingReplies, setLoadingReplies] = React.useState(false);
   const [repliesFetched, setRepliesFetched] = React.useState(false);
   const [replyCount,    setReplyCount]    = React.useState(comment.reply_count ?? 0);
 
   React.useEffect(() => { setReplyCount(comment.reply_count ?? 0); }, [comment.reply_count]);
 
+  const router      = useRouter();
   const menuRef     = React.useRef<HTMLDivElement>(null);
   const displayName = comment.profiles?.username || "user";
   const isOwner     = viewerUserId && comment.user_id === viewerUserId;
+  const isCreator   = comment.profiles?.role === "creator";
 
   React.useEffect(() => {
     return postSyncStore.subscribeCommentLike((event) => {
@@ -85,21 +87,7 @@ export function CommentRow({ comment, postId, viewerUserId, onDeleted, onReply }
   };
 
   // Lazy fetch — only fires when user taps "View replies"
-  const handleToggleReplies = async () => {
-    if (!repliesFetched) {
-      setLoadingReplies(true);
-      try {
-        const res  = await fetch(`/api/posts/${postId}/comments/${comment.id}/replies`);
-        const data = await res.json();
-        if (res.ok) {
-          setReplies(data.replies ?? []);
-          setReplyCount(data.replies?.length ?? replyCount);
-        }
-      } catch (err) { console.error("Fetch replies error:", err); }
-      finally { setLoadingReplies(false); setRepliesFetched(true); }
-    }
-    setRepliesOpen((o) => !o);
-  };
+  const handleToggleReplies = () => setRepliesOpen((o) => !o);
 
   const handleReplyDeleted = (id: string | number) => {
     setReplies((prev) => prev.filter((r) => r.id !== id));
@@ -147,14 +135,46 @@ export function CommentRow({ comment, postId, viewerUserId, onDeleted, onReply }
     (comment as any)._refetchReplies = refetchReplies;
   }, [comment, refetchReplies]);
 
+  const rowRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!replyCount || repliesFetched) return;
+    const el = rowRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      observer.disconnect();
+      fetch(`/api/posts/${postId}/comments/${comment.id}/replies`)
+        .then((r) => r.json())
+        .then((d) => { if (d.replies) { setReplies(d.replies); setRepliesFetched(true); setReplyCount(d.replies.length); } })
+        .catch(() => {});
+    }, { rootMargin: "200px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [postId, comment.id, replyCount, repliesFetched]);
+
   return (
-    <div style={{ padding: "12px 0", borderBottom: "1px solid #13131F" }}>
+    <div ref={rowRef} style={{ padding: "12px 0", borderBottom: "1px solid #13131F" }}>
       <div style={{ display: "flex", gap: "10px" }}>
-        <Avatar src={comment.profiles?.avatar_url} name={displayName} size={36} />
+        <div
+          onClick={() => !isOwner && isCreator && router.push(`/${comment.profiles?.username}`)}
+          style={{ cursor: !isOwner && isCreator ? "pointer" : "default", flexShrink: 0 }}
+        >
+          <Avatar src={comment.profiles?.avatar_url} name={displayName} size={36} />
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: "13px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>@{displayName}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+       
+                <span
+                  onClick={() => !isOwner && isCreator && router.push(`/${comment.profiles?.username}`)}
+                  style={{ fontSize: "13px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif", cursor: !isOwner && isCreator ? "pointer" : "default" }}                >{isOwner ? "You" : `@${displayName}`}</span>
+                {!isOwner && isCreator && (
+                  <span style={{ fontSize: "10px", fontWeight: 700, color: "#8B5CF6", backgroundColor: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.35)", borderRadius: "999px", padding: "1px 7px", fontFamily: "'Inter', sans-serif", letterSpacing: "0.02em" }}>
+                    Creator
+                  </span>
+                )}
+              </div>
               {comment.content && (
                 <p style={{ margin: "3px 0 0", fontSize: "13px", color: "#C4C4D4", lineHeight: 1.5, fontFamily: "'Inter', sans-serif", wordBreak: "break-word" }}>{comment.content}</p>
               )}
@@ -218,13 +238,10 @@ export function CommentRow({ comment, postId, viewerUserId, onDeleted, onReply }
           onClick={handleToggleReplies}
           style={{ marginLeft: "46px", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#8B5CF6", fontSize: "12px", fontWeight: 700, fontFamily: "'Inter', sans-serif" }}
         >
-          {loadingReplies
-            ? <span style={{ color: "#4A4A6A" }}>Loading…</span>
-            : <>
-                {repliesOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                {repliesOpen ? "Hide replies" : `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
-              </>
-          }
+          <>
+            {repliesOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {repliesOpen ? "Hide replies" : `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`}
+          </>
         </button>
       )}
 

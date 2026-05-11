@@ -29,7 +29,8 @@ export async function GET(
         profiles!user_id (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          role
         )
       `)
       .eq("post_id", postId)
@@ -132,7 +133,8 @@ export async function POST(
         profiles!user_id (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          role
         )
       `)
       .single();
