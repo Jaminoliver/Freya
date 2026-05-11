@@ -131,6 +131,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const [imgLoaded,   setImgLoaded]   = useState(false);
   const [imgError,    setImgError]    = useState(false);
   const [menuOpen,    setMenuOpen]    = useState(false);
+  const menuOpenRef   = useRef(false);
   const [deleting,    setDeleting]    = useState(false);
   const [deleteErr,   setDeleteErr]   = useState<string | null>(null);
   const [liked,       setLiked]       = useState(false);
@@ -169,12 +170,14 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const viewersPanelRef = useRef<HTMLDivElement>(null);
   const viewersOpenRef  = useRef(false);
   const viewersDragRef  = useRef({ active: false, startY: 0 });
+  const mouseRef        = useRef({ x: 0, time: 0, intercepted: false });
 
   useEffect(() => { localGroupsRef.current = localGroups; }, [localGroups]);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => { imgLoadedRef.current = imgLoaded; }, [imgLoaded]);
   useEffect(() => { setLocalGroups(groups); }, [groups]);
   useEffect(() => { replyOpenRef.current  = replyOpen;  }, [replyOpen]);
+  useEffect(() => { menuOpenRef.current   = menuOpen;   }, [menuOpen]);
   useEffect(() => { viewersOpenRef.current = viewersOpen; }, [viewersOpen]);
 
   const updateGroupIdx = useCallback((v: number) => { groupIdxRef.current = v; setGroupIdx(v); }, []);
@@ -507,12 +510,12 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (replyOpenRef.current || viewersOpenRef.current) return;
-    if (menuOpen) { setMenuOpen(false); return; }
+    if (menuOpen) { setMenuOpen(false); touchRef.current.holding = true; return; }
     const t = e.touches[0];
     touchRef.current = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false, holding: false, draggingDown: false };
     dragRef.current = { active: false, startY: t.clientY };
     holdTimerRef.current = setTimeout(() => { touchRef.current.holding = true; setPaused(true); }, HOLD_THRESHOLD_MS);
-  }, []);
+  }, [menuOpen]);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     if (replyOpenRef.current) return;
@@ -550,13 +553,19 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (replyOpenRef.current || viewersOpenRef.current) return;
     if ((e.target as HTMLElement).closest("button, input")) return;
-    if (menuOpen) { setMenuOpen(false); return; }
+    if (menuOpenRef.current) { setMenuOpen(false); mouseRef.current.intercepted = true; return; }
+    mouseRef.current = { x: e.clientX, time: Date.now(), intercepted: false };
     holdTimerRef.current = setTimeout(() => { touchRef.current.holding = true; setPaused(true); }, HOLD_THRESHOLD_MS);
   }, []);
 
-  const onMouseUp = useCallback(() => {
+  const onMouseUp = useCallback((e: React.MouseEvent) => {
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-    if (touchRef.current.holding) { touchRef.current.holding = false; if (!replyOpenRef.current) setPaused(false); }
+    if (touchRef.current.holding) { touchRef.current.holding = false; if (!replyOpenRef.current) setPaused(false); return; }
+    if (mouseRef.current.intercepted) { mouseRef.current.intercepted = false; return; }
+    if (replyOpenRef.current || viewersOpenRef.current) return;
+    if ((e.target as HTMLElement).closest("button, input, a")) return;
+    const dt = Date.now() - mouseRef.current.time;
+    if (dt < TAP_MAX_MS) mouseRef.current.x < window.innerWidth * 0.35 ? goPrevRef.current() : goNextRef.current();
   }, []);
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -601,7 +610,7 @@ export default function StoryViewer({ groups, startGroupIndex, startStoryId, onC
         onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
         style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", overscrollBehavior: "none" }}>
 
-        <div ref={containerRef} style={{ position: "relative", width: "100%", maxWidth: 480, height: "100dvh", overflow: "hidden", background: "#000", willChange: "transform, opacity" }}>
+        <div ref={containerRef} style={{ position: "relative", width: "100%", maxWidth: 480, height: "100dvh", overflow: "hidden", background: "#000", willChange: "transform, opacity", cursor: "pointer" }}>
 
           {/* Background */}
           {!isVideo && thumbSrc && <img src={thumbSrc} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", filter: "blur(20px)", transform: "scale(1.08)" }} />}

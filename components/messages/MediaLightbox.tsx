@@ -16,7 +16,7 @@ interface Props {
   onClose:      () => void;
 }
 
-function LightboxVideo({ url, onReady }: { url: string; onReady: () => void }) {
+function LightboxVideo({ url, onReady, loading }: { url: string; onReady: () => void; loading: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef   = useRef<any>(null);
 
@@ -77,7 +77,7 @@ function LightboxVideo({ url, onReady }: { url: string; onReady: () => void }) {
       controls
       playsInline
       onCanPlay={onReady}
-      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "8px", backgroundColor: "#000" }}
+      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "8px", backgroundColor: "#000", opacity: loading ? 0 : 1, transition: "opacity 0.2s" }}
     />
   );
 }
@@ -176,7 +176,18 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
         >
           {loading && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid #2A2A3D", borderTopColor: "#8B5CF6", animation: "lbSpin 0.7s linear infinite" }} />
+              <div style={{ width: "56px", height: "56px", animation: "vp-ring-pulse 1.4s ease-in-out infinite", filter: "drop-shadow(0 0 12px rgba(139,92,246,0.5)) drop-shadow(0 0 20px rgba(236,72,153,0.3))" }}>
+  <svg width="56" height="56" viewBox="0 0 56 56" style={{ animation: "vp-ring-rotate 1s linear infinite", display: "block" }}>
+    <defs>
+      <linearGradient id="lb-ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#8B5CF6" />
+        <stop offset="100%" stopColor="#EC4899" />
+      </linearGradient>
+    </defs>
+    <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3.5" />
+    <circle cx="28" cy="28" r="22" fill="none" stroke="url(#lb-ring-grad)" strokeWidth="3.5" strokeLinecap="round" strokeDasharray="55 138" />
+  </svg>
+</div>
             </div>
           )}
 
@@ -193,6 +204,7 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
               key={current.url}
               url={current.url}
               onReady={() => setLoading(false)}
+              loading={loading}
             />
           )}
         </div>
@@ -246,6 +258,8 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
 
       <style>{`
         @keyframes lbSpin { to { transform: rotate(360deg); } }
+        @keyframes vp-ring-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes vp-ring-pulse  { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.06); opacity: 1; } }
       `}</style>
     </div>,
     document.body

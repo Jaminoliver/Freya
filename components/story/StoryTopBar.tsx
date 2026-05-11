@@ -1,7 +1,8 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useRef, useCallback, useEffect } from "react";
-import { X, MoreVertical, Trash2, Volume2, VolumeX } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { X, MoreVertical, Trash2, Volume2, VolumeX, Camera, Plus } from "lucide-react";
 import type { CreatorStoryGroup, StoryItem } from "@/components/story/StoryBar";
 
 const IMAGE_DURATION_MS = 5000;
@@ -68,6 +69,7 @@ export default forwardRef<StoryTopBarRef, Props>(function StoryTopBar(
   { group, story, storyIdx, isOwner, isVideo, muted, deleting, menuOpen, onMuteToggle, onMenuToggle, onDelete, onClose, onBarComplete, onTip },
   ref,
 ) {
+  const router = useRouter();
   const barsRef = useRef<HTMLDivElement>(null);
 
   const getFill = useCallback(
@@ -151,6 +153,14 @@ export default forwardRef<StoryTopBarRef, Props>(function StoryTopBar(
                 <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
                 <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
               </svg>
+            </button>
+          )}
+          {isOwner && (
+            <button {...stop} onClick={(e) => { e.stopPropagation(); router.push("/create-story"); }} style={ICON_BTN} title="Add to story">
+              <span style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Camera size={15} />
+                <Plus size={9} style={{ position: "absolute", bottom: -3, right: -3, background: "#8B5CF6", borderRadius: "50%" }} />
+              </span>
             </button>
           )}
           {isOwner && (
