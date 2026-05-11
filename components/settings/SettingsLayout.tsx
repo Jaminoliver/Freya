@@ -255,7 +255,7 @@ paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
           <button
             onClick={() => router.back()}
             className="settings-mobile-back"
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", padding: "4px", WebkitTapHighlightColor: "transparent", touchAction: "manipulation" }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", padding: "4px" }}
           >
             <ArrowLeft size={22} strokeWidth={2} />
           </button>
@@ -349,7 +349,7 @@ paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
         >
           <button
             onClick={handleBack}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", padding: "4px", WebkitTapHighlightColor: "transparent", touchAction: "manipulation" }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", padding: "4px" }}
           >
             <ArrowLeft size={22} strokeWidth={2} />
           </button>
