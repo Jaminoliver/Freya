@@ -305,7 +305,7 @@ paddingBottom: "calc(64px + env(safe-area-inset-bottom))",
                   <Icon size={18} color={active ? "#A78BFA" : "#A3A3C2"} strokeWidth={active ? 2.2 : 1.8} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: active ? "#F1F5F9" : "#F1F5F9", lineHeight: 1.3 }}>
+                  <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: active ? "#F1F5F9" : "#F1F5F9", lineHeight: 1.3 }}>
                     {label}
                   </p>
                   <p style={{ margin: 0, fontSize: "13px", color: "#6B6B8A", marginTop: "2px" }}>
