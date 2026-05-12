@@ -137,14 +137,12 @@ export default function CommentInputBar({
         right: 0,
         bottom: 0,
         zIndex: 1100,
-        backgroundColor: "#0F0F1A",
+        backgroundColor: "#0D0D1A",
         borderTop: "1px solid #1C1C2E",
         transform: `translateY(-${keyboardTranslateY}px)`,
         transition: "transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)",
-        maxWidth: "680px",
-        margin: "0 auto",
         width: "100%",
-        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
     >
       {/* GIF Picker — floats above bar */}
