@@ -143,8 +143,8 @@ export default function CommentInputBar({
         transition: "transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)",
         maxWidth: "680px",
         margin: "0 auto",
-        // Stretch to edges on mobile
         width: "100%",
+        paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
       {/* GIF Picker — floats above bar */}
