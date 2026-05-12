@@ -390,7 +390,6 @@ params.set("hotOffset",   String(cursors.hotOffset));
   <div key={post.id} style={{
     margin: "10px 12px",
     borderRadius: "14px",
-    border: "1px solid #1E1E2E",
     overflow: "hidden",
   }}>
     <PostCard

@@ -337,7 +337,7 @@ export default function ContentFeed({
   
 
   const renderPostRow = (post: ApiPost) => (
-    <div key={post.id} style={{ borderBottom: "1px solid #1E1E2E" }}>
+    <div key={post.id} style={{ margin: "10px 12px", borderRadius: "14px", overflow: "hidden" }}>
       <PostRow
         post={post} isOwnProfile={isOwnProfile} isSubscribed={isSubscribed}
         viewer={viewer} onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}

@@ -52,7 +52,7 @@ export default function PostActions({
   });
 
   return (
-    <div style={{ padding: "8px 0 20px", fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ padding: "8px 0 0", fontFamily: "'Inter', sans-serif" }}>
 
       <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
 
@@ -134,6 +134,14 @@ export default function PostActions({
 
       {/* Tips earned — creator + subscribers only, when > 0 */}
       
+    <div style={{
+        marginTop: "12px",
+        height: "1px",
+        background: "#1A1A2E",
+        borderRadius: "0 0 12px 12px",
+        marginLeft: "-16px",
+        marginRight: "-16px",
+      }} />
     </div>
   );
 }

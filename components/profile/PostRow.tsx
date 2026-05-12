@@ -238,7 +238,7 @@ export default function PostRow({
   );
 
   return (
-    <div id={`post-${post.id}`} ref={engagement.prefetchRef} style={{ borderBottom: "1px solid #2A2A3D" }}>
+    <div id={`post-${post.id}`} ref={engagement.prefetchRef}>
 
       {storyViewerOpen && storyGroup && (
         <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refresh(); }} />

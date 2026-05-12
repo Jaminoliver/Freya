@@ -114,8 +114,8 @@ export function FeedSuggestions() {
       <div style={{
         margin: "8px 0",
         backgroundColor: "#0A0A0F",
-        borderTop: "1px solid #1F1F2A",
-        borderBottom: "1px solid #1F1F2A",
+        borderTop: "none",
+        borderBottom: "none",
         padding: "14px 0 16px",
       }}>
         {/* Header */}
