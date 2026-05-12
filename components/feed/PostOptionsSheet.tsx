@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bookmark, UserPlus, ThumbsDown, Flag, Ban, ShieldOff } from "lucide-react";
+import { Bookmark, UserPlus, ThumbsDown, Flag, Ban, ShieldOff, MessageCircle } from "lucide-react";
 import { createPortal } from "react-dom";
 
 interface PostOptionsSheetProps {
@@ -15,6 +15,9 @@ interface PostOptionsSheetProps {
   onUnblockCreator?:    () => void;
   onRestrictCreator?:   () => void;
   onUnrestrictCreator?: () => void;
+  onMessage?:           () => void;
+  onSubscribe?:         () => void;
+  isSubscribed?:        boolean;
   savedPost?:           boolean;
   savedCreator?:        boolean;
   isBlocked?:           boolean;
@@ -36,6 +39,9 @@ export default function PostOptionsSheet({
   savedCreator = false,
   isBlocked    = false,
   isRestricted = false,
+  isSubscribed = false,
+  onMessage,
+  onSubscribe,
 }: PostOptionsSheetProps) {
   const sheetRef  = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,12 +96,17 @@ export default function PostOptionsSheet({
         onSaveCreator();
       },
     },
-    {
+    ...(isSubscribed ? [{
+      icon:   <MessageCircle size={26} strokeWidth={1.6} />,
+      label:  "Message",
+      color:  "#FFFFFF",
+      action: () => { onMessage?.(); },
+    }] : [{
       icon:   <ThumbsDown size={26} strokeWidth={1.6} />,
       label:  "Not interested",
       color:  "#FFFFFF",
       action: () => { onNotInterested(); onClose(); },
-    },
+    }]),
   ];
 
   const group1 = [
@@ -252,7 +263,7 @@ export default function PostOptionsSheet({
                   borderRadius:   "14px",
                   backgroundColor:"rgba(255,255,255,0.07)",
                   color:          item.color,
-                  fontSize:       "13px",
+                  fontSize:       "12px",
                   fontFamily:     "'Inter', sans-serif",
                   fontWeight:     500,
                   cursor:         "pointer",
@@ -283,6 +294,43 @@ export default function PostOptionsSheet({
             ))}
           </div>
 
+          {/* Subscribe to message — only when not subscribed */}
+          {!isSubscribed && (
+            <>
+              <style>{`
+                @keyframes _subMsgPulse {
+                  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
+                  50%       { transform: scale(1.03); box-shadow: 0 0 14px 4px rgba(139,92,246,0.35); }
+                }
+              `}</style>
+              <button
+                onClick={() => { onClose(); onSubscribe?.(); }}
+                style={{
+                  width:           "100%",
+                  display:         "flex",
+                  alignItems:      "center",
+                  justifyContent:  "center",
+                  gap:             "10px",
+                  padding:         "16px 20px",
+                  marginBottom:    "10px",
+                  border:          "none",
+                  borderRadius:    "14px",
+                  background:      "linear-gradient(135deg, #8B5CF6, #EC4899)",
+                  color:           "#FFFFFF",
+                  fontSize:        "15px",
+                  fontFamily:      "'Inter', sans-serif",
+                  fontWeight:      600,
+                  cursor:          "pointer",
+                  letterSpacing:   "0.01em",
+                  animation:       "_subMsgPulse 2.2s ease-in-out infinite",
+                }}
+              >
+                <MessageCircle size={20} strokeWidth={1.8} />
+                Subscribe to Message
+              </button>
+            </>
+          )}
+
           {/* Group 2 — danger */}
           <div style={cardStyle}>
             {group2.map((item, i) => (
@@ -311,7 +359,7 @@ export default function PostOptionsSheet({
               borderRadius:   "14px",
               backgroundColor:"rgba(255,255,255,0.07)",
               color:          "rgba(255,255,255,0.5)",
-              fontSize:       "16px",
+              fontSize:       "15px",
               fontWeight:     500,
               fontFamily:     "'Inter', sans-serif",
               cursor:         "pointer",

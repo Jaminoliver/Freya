@@ -18,13 +18,15 @@ import EditPPVModal from "@/components/profile/EditPPVModal";
 import { PollDisplay } from "@/components/feed/PollDisplay";
 
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import { createClient } from "@/lib/supabase/client";
 import { useRelativeTimestamp } from "@/lib/hooks/useRelativeTimestamp";
 import { usePostEngagement } from "@/lib/hooks/usePostEngagement";
 
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import type { PollData } from "@/components/feed/PollDisplay";
 
-const StoryViewer = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
+const StoryViewer    = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
+const CheckoutModal  = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
 
 export interface ApiPost {
   id:              number;
@@ -108,6 +110,8 @@ export default function PostRow({
   });
 
   const [sheetOpen,        setSheetOpen]        = React.useState(false);
+  const [subToMsgOpen,     setSubToMsgOpen]     = React.useState(false);
+  const [subToMsgMonthly,  setSubToMsgMonthly]  = React.useState(0);
   const [creatorSheetOpen, setCreatorSheetOpen] = React.useState(false);
   const [pollData,         setPollData]         = React.useState<PollData | null>(post.poll ?? null);
   const [caption,          setCaption]          = React.useState<string | null>(post.caption);
@@ -124,6 +128,23 @@ export default function PostRow({
   }, [post.poll, post.caption]);
 
   const handleOpenFanSheet = React.useCallback(() => { setSheetOpen(true); }, []);
+
+  const handleSubscribeToMessage = React.useCallback(async () => {
+    try {
+      const supabase = createClient();
+      const { data: profile } = await supabase.from("profiles")
+        .select("subscription_price")
+        .eq("id", post.profiles.id).single();
+      setSubToMsgMonthly(profile?.subscription_price ?? 0);
+    } catch {}
+    setSubToMsgOpen(true);
+  }, [post.profiles.id]);
+
+  const handleMessage = React.useCallback(async () => {
+    const { startConversation } = await import("@/app/(main)/messages/page");
+    const conversationId = await startConversation(post.profiles.id);
+    if (conversationId) router.push(`/messages/${conversationId}`);
+  }, [post.profiles.id, router]);
 
   const firstMedia = post.media?.[0];
   const isFreePost = post.audience === "everyone";
@@ -230,6 +251,22 @@ export default function PostRow({
       {editOpen && <EditCaptionModal caption={caption ?? ""} onSave={handleSaveCaption} onClose={() => setEditOpen(false)} />}
       {ppvEditOpen && <EditPPVModal currentPrice={ppvPrice != null ? ppvPrice / 100 : null} onSave={handleSavePPV} onRemove={isPPV ? handleRemovePPV : undefined} onClose={() => setPpvEditOpen(false)} />}
 
+      {!isOwnProfile && subToMsgOpen && (
+        <CheckoutModal
+          isOpen={subToMsgOpen}
+          onClose={() => setSubToMsgOpen(false)}
+          type="subscription"
+          creator={{ id: post.profiles.id, username: post.profiles.username, display_name: post.profiles.display_name, avatar_url: post.profiles.avatar_url, role: "creator" } as any}
+          monthlyPrice={subToMsgMonthly}
+          autoCloseOnSuccess
+          onSubscriptionSuccess={async () => {
+            const { startConversation } = await import("@/app/(main)/messages/page");
+            const conversationId = await startConversation(post.profiles.id);
+            if (conversationId) router.push(`/messages/${conversationId}`);
+          }}
+        />
+      )}
+
       {!isOwnProfile && (
         <PostOptionsSheet
           isOpen={sheetOpen}
@@ -241,6 +278,9 @@ export default function PostRow({
           onBlockCreator={() => console.log("block creator")}
           savedPost={engagement.savedPost}
           savedCreator={engagement.savedCreator}
+          isSubscribed={isSubscribed}
+          onMessage={handleMessage}
+          onSubscribe={handleSubscribeToMessage}
         />
       )}
 

@@ -1,7 +1,7 @@
 // components/feed/PostCard.tsx
 "use client";
 
-import { useState, useEffect, useCallback, memo } from "react";
+import { useState, useEffect, useCallback, memo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, MoreHorizontal } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -153,6 +153,8 @@ function PostCardInner({
   const [subMonthly,        setSubMonthly]        = useState(0);
   const [subThreeMonth,     setSubThreeMonth]     = useState<number | undefined>(undefined);
   const [subSixMonth,       setSubSixMonth]       = useState<number | undefined>(undefined);
+  const [subToMsgOpen,      setSubToMsgOpen]      = useState(false);
+  const [subToMsgMonthly,   setSubToMsgMonthly]   = useState(0);
   const [lightboxOpen,      setLightboxOpen]      = useState(false);
   const [lightboxMediaIdx,  setLightboxMediaIdx]  = useState(0);
   const [reportOpen,        setReportOpen]        = useState(false);
@@ -164,6 +166,33 @@ function PostCardInner({
   const [pollData, setPollData] = useState<PollData | null>(post.poll ?? null);
 
   const { isBlocked, isRestricted, block, unblock, restrict, unrestrict, fetchStatus } = useBlockRestrict({ userId: post.creator.id });
+
+  const handleSubscribeToMessage = useCallback(async () => {
+    try {
+      const supabase = createClient();
+      const { data: profile } = await supabase.from("profiles")
+        .select("subscription_price")
+        .eq("id", post.creator.id).single();
+      setSubToMsgMonthly(profile?.subscription_price ?? 0);
+    } catch {}
+    setSubToMsgOpen(true);
+  }, [post.creator.id]);
+
+  const conversationIdRef = useRef<string | number | null>(null);
+
+  const prefetchConversation = useCallback(async () => {
+    if (conversationIdRef.current) return;
+    const { startConversation } = await import("@/app/(main)/messages/page");
+    const id = await startConversation(post.creator.id);
+    if (id) conversationIdRef.current = id;
+  }, [post.creator.id]);
+
+  const handleMessage = useCallback(async () => {
+    if (conversationIdRef.current) { router.push(`/messages/${conversationIdRef.current}`); return; }
+    const { startConversation } = await import("@/app/(main)/messages/page");
+    const id = await startConversation(post.creator.id);
+    if (id) router.push(`/messages/${id}`);
+  }, [post.creator.id, router]);
 
   const isFree    = (subscriptionPrice ?? 0) === 0;
   const isLoading = subLoading || freeSubbing;
@@ -178,10 +207,11 @@ function PostCardInner({
 
   const handleOpenSheet = useCallback(async () => {
     setSheetOpen(true);
+    prefetchConversation();
     if (sheetDataFetched) return;
     setSheetDataFetched(true);
     await fetchStatus();
-  }, [sheetDataFetched, fetchStatus]);
+  }, [sheetDataFetched, fetchStatus, prefetchConversation]);
 
   const handleAvatarClick = useCallback(() => {
     if (hasUnviewed && storyGroup) setStoryViewerOpen(true);
@@ -312,6 +342,20 @@ function PostCardInner({
       <CheckoutModal isOpen={tipOpen} onClose={() => setTipOpen(false)} type="tips" creator={creatorAsUser} postId={Number(post.id)} autoCloseOnSuccess />
 
       <CheckoutModal
+        isOpen={subToMsgOpen}
+        onClose={() => setSubToMsgOpen(false)}
+        type="subscription"
+        creator={creatorAsUser}
+        monthlyPrice={subToMsgMonthly}
+        autoCloseOnSuccess
+        onSubscriptionSuccess={async () => {
+          setSubscribed(true);
+          const conversationId = await (await import("@/app/(main)/messages/page")).startConversation(post.creator.id);
+          if (conversationId) router.push(`/messages/${conversationId}`);
+        }}
+      />
+
+      <CheckoutModal
         isOpen={subOpen}
         onClose={() => setSubOpen(false)}
         type="subscription"
@@ -350,6 +394,8 @@ function PostCardInner({
         onUnrestrictCreator={() => { setSheetOpen(false); setUnrestrictConfirm(true); }}
         savedPost={engagement.savedPost} savedCreator={engagement.savedCreator}
         isBlocked={isBlocked} isRestricted={isRestricted}
+        isSubscribed={subscribed} onMessage={handleMessage}
+        onSubscribe={handleSubscribeToMessage}
       />
 
       {/* Header */}

@@ -106,6 +106,8 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
   const [lightboxOpen,     setLightboxOpen]     = useState(false);
   const [lightboxMediaIdx, setLightboxMediaIdx] = useState(0);
   const [sheetOpen,        setSheetOpen]        = useState(false);
+  const [subToMsgOpen,     setSubToMsgOpen]     = useState(false);
+  const [subToMsgMonthly,  setSubToMsgMonthly]  = useState(0);
   const [creatorSheetOpen, setCreatorSheetOpen] = useState(false);
   const [editCaptionOpen,  setEditCaptionOpen]  = useState(false);
   const [editPPVOpen,      setEditPPVOpen]      = useState(false);
@@ -326,6 +328,22 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
     } catch { setSavedPost(!next); }
   }, [savedPost, post, sourceIsMessage]);
 
+  const handleSubscribeToMessage = useCallback(async () => {
+    if (!post) return;
+    try {
+      const res  = await fetch(`/api/profiles/${post.profiles.username}`);
+      const data = await res.json();
+      setSubToMsgMonthly(data.profile?.subscription_price ?? 0);
+    } catch {}
+    setSubToMsgOpen(true);
+  }, [post]);
+
+  const handleMessage = useCallback(async () => {
+    const { startConversation } = await import("@/app/(main)/messages/page");
+    const conversationId = await startConversation(post!.creator_id);
+    if (conversationId) router.push(`/messages/${conversationId}`);
+  }, [post, router]);
+
   const openTip    = () => { setCheckoutType("tips"); setCheckoutOpen(true); };
   const openUnlock = () => { setCheckoutType(post?.is_ppv ? "ppv" : "subscription"); setCheckoutOpen(true); };
 
@@ -487,6 +505,22 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
         </div>
       )}
 
+      {!sourceIsMessage && subToMsgOpen && post && (
+        <CheckoutModal
+          isOpen={subToMsgOpen}
+          onClose={() => setSubToMsgOpen(false)}
+          type="subscription"
+          creator={{ id: post.creator_id, username: post.profiles.username, display_name: post.profiles.display_name, avatar_url: post.profiles.avatar_url, role: "creator" } as any}
+          monthlyPrice={subToMsgMonthly}
+          autoCloseOnSuccess
+          onSubscriptionSuccess={async () => {
+            const { startConversation } = await import("@/app/(main)/messages/page");
+            const conversationId = await startConversation(post.creator_id);
+            if (conversationId) router.push(`/messages/${conversationId}`);
+          }}
+        />
+      )}
+
       {!sourceIsMessage && (
         <PostOptionsSheet
           isOpen={sheetOpen}
@@ -497,6 +531,9 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
           onReport={() => {}}
           onBlockCreator={() => {}}
           savedPost={savedPost}
+          isSubscribed={post.can_access}
+          onMessage={handleMessage}
+          onSubscribe={handleSubscribeToMessage}
         />
       )}
 

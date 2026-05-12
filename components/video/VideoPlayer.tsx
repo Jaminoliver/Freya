@@ -388,7 +388,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
 
         {/* Bottom row: play + time + fullscreen */}
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <button style={btnStyle} onClick={handlePlayPause} onTouchEnd={handlePlayPause} aria-label={playing ? "Pause" : "Play"}>
+          <button style={btnStyle} onClick={handlePlayPause} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handlePlayPause(e); }} aria-label={playing ? "Pause" : "Play"}>
             {playing ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
             ) : (
@@ -402,7 +402,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
 
           <div style={{ flex: 1 }} />
 
-          <button style={btnStyle} onClick={handleFullscreen} onTouchEnd={handleFullscreen} aria-label="Fullscreen">
+          <button style={btnStyle} onClick={handleFullscreen} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }} aria-label="Fullscreen">
             {isFullscreen ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>

@@ -403,7 +403,7 @@ params.set("hotOffset",   String(cursors.hotOffset));
       is_renewal={post.is_renewal}
       onSubscribed={showBanner ? handleSubscribed : undefined}
       subscriptionPrice={showBanner ? subPrice : undefined}
-      isSubscribedExternal={subscribedCreatorIds.has(post.creator_id)}
+      isSubscribedExternal={post.is_subscribed || subscribedCreatorIds.has(post.creator_id)}
       initialSavedPost={post.saved_post ?? false}
       initialSavedCreator={post.saved_creator ?? false}
       eager={index < 2}
