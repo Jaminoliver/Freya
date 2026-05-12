@@ -55,6 +55,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const sheetRef    = React.useRef<HTMLDivElement>(null);
   const commentsRef = React.useRef<HTMLDivElement>(null);
   const INPUT_BAR_HEIGHT = 72;
+  const lockedScrollY = React.useRef<number>(0);
   const dragStartY   = React.useRef(0);
   const dragDeltaY   = React.useRef(0);
   const isDragging   = React.useRef(false);
@@ -67,11 +68,15 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   React.useEffect(() => {
     if (isOpen) {
+      lockedScrollY.current = window.scrollY;
+      const lockScroll = () => window.scrollTo(0, lockedScrollY.current);
+      window.addEventListener("scroll", lockScroll, { passive: true });
       setVisible(true);
-      const t = setTimeout(() => {
-        setAnimateIn(true);
-      }, 16);
-      return () => clearTimeout(t);
+      const t = setTimeout(() => setAnimateIn(true), 16);
+      return () => {
+        window.removeEventListener("scroll", lockScroll);
+        clearTimeout(t);
+      };
     } else {
       setAnimateIn(false);
       setSheetHeight(typeof window !== "undefined" && window.innerWidth >= 768 ? "65vh" : "60vh");
