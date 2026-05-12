@@ -54,8 +54,6 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   const sheetRef    = React.useRef<HTMLDivElement>(null);
   const commentsRef = React.useRef<HTMLDivElement>(null);
-  const INPUT_BAR_HEIGHT = 72;
-  const lockedScrollY = React.useRef<number>(0);
   const dragStartY   = React.useRef(0);
   const dragDeltaY   = React.useRef(0);
   const isDragging   = React.useRef(false);
@@ -68,16 +66,9 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   React.useEffect(() => {
     if (isOpen) {
-      lockedScrollY.current = window.scrollY;
-      const lockScroll = (e: Event) => {
-        e.preventDefault();
-        window.scrollTo(0, lockedScrollY.current);
-      };
-      window.addEventListener("scroll", lockScroll, { passive: false });
       setVisible(true);
       const t = setTimeout(() => setAnimateIn(true), 16);
       return () => {
-        window.removeEventListener("scroll", lockScroll);
         clearTimeout(t);
       };
     } else {
@@ -194,10 +185,10 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   if (!mounted || !visible) return null;
 
   return createPortal(
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", pointerEvents: "none" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", pointerEvents: "auto" }} onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div ref={sheetRef} style={{ position: "relative", width: "100%", maxWidth: "680px", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", height: sheetHeight, maxHeight: sheetHeight, display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), height 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)", pointerEvents: "auto", overscrollBehavior: "contain" }}>
 
-        <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ padding: "12px 16px 0", userSelect: "none", touchAction: "none" }}>
+        <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ padding: "12px 16px 0", userSelect: "none", touchAction: "none", cursor: "grab" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", margin: "0 auto 14px" }} />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
             <span style={{ fontSize: "15px", fontWeight: 700, color: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>Comments {(totalCommentCount ?? localComments.length) > 0 ? `· ${totalCommentCount ?? localComments.length}` : ""}</span>
@@ -205,7 +196,56 @@ export default function CommentSection({ postId, comments: propComments, viewer,
           </div>
         </div>
 
-        <div ref={commentsRef} style={{ flex: 1, overflowY: "auto", padding: "0 16px 80px", scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+        <div
+          ref={commentsRef}
+          onTouchStart={(e) => {
+            const el = commentsRef.current;
+            if (!el) return;
+            dragStartY.current = e.touches[0].clientY;
+            dragDeltaY.current = 0;
+            isDragging.current = false;
+          }}
+          onTouchMove={(e) => {
+            const el = commentsRef.current;
+            if (!el) return;
+            const touchY = e.touches[0].clientY;
+            const delta = touchY - dragStartY.current;
+            const atTop = el.scrollTop <= 0;
+            const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+
+            if (delta > 0 && atTop) {
+              // pulling down at top — drag sheet
+              isDragging.current = true;
+              dragDeltaY.current = delta;
+              e.preventDefault();
+              if (sheetRef.current) sheetRef.current.style.transform = `translateY(${delta}px)`;
+            } else if (delta < 0 && atBottom) {
+              // pulling up at bottom — stop, don't scroll page
+              e.preventDefault();
+            } else if (isDragging.current) {
+              // already dragging sheet
+              dragDeltaY.current = delta;
+              e.preventDefault();
+              if (sheetRef.current) sheetRef.current.style.transform = `translateY(${Math.max(0, delta)}px)`;
+            }
+          }}
+          onTouchEnd={() => {
+            if (!isDragging.current) return;
+            isDragging.current = false;
+            const delta = dragDeltaY.current;
+            if (sheetRef.current) {
+              if (delta > 120) {
+                handleClose();
+              } else {
+                sheetRef.current.style.transition = "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1)";
+                sheetRef.current.style.transform = "translateY(0)";
+                setTimeout(() => { if (sheetRef.current) sheetRef.current.style.transition = ""; }, 320);
+              }
+            }
+            dragDeltaY.current = 0;
+          }}
+          style={{ flex: 1, overflowY: "auto", padding: "0 16px 80px", scrollbarWidth: "none", overscrollBehavior: "none", touchAction: "none" }}
+        >
           <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
           {isLoading
             ? [0,1,2].map((i) => <CommentSkeleton key={i} />)
