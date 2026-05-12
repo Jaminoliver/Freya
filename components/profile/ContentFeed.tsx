@@ -336,8 +336,15 @@ export default function ContentFeed({
 
   
 
-  const renderPostRow = (post: ApiPost) => (
+  const renderPostRow = (post: ApiPost, index?: number) => (
     <div key={post.id} style={{ margin: "10px 12px", borderRadius: "14px", overflow: "hidden" }}>
+      {index === 0 && (
+        <div style={{
+          height: "1px",
+          background: "#1A1A2E",
+          borderRadius: "12px 12px 0 0",
+        }} />
+      )}
       <PostRow
         post={post} isOwnProfile={isOwnProfile} isSubscribed={isSubscribed}
         viewer={viewer} onLike={onLike} onComment={onComment} onTip={onTip} onUnlock={onUnlock}
@@ -440,7 +447,7 @@ export default function ContentFeed({
           {(isSubscribed || isOwnProfile) && (
             isPostsGridView
               ? <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px", padding: "0 16px" }}>{filteredPosts.map(renderGridPost)}</div>
-              : filteredPosts.map(renderPostRow)
+              : filteredPosts.map((p, i) => renderPostRow(p, i))
           )}
 
           {!isSubscribed && !isOwnProfile && (
@@ -453,7 +460,7 @@ export default function ContentFeed({
                 </>
               ) : (
                 <>
-                  {freePosts.map(renderPostRow)}
+                  {freePosts.map((p, i) => renderPostRow(p, i))}
                   {lockedPosts.length > 0 && (<><SubscribeDivider onSubscribe={onSubscribe} />{lockedPosts.map(renderPostRow)}</>)}
                   {lockedPosts.length === 0 && freePosts.length > 0 && <SubscribeDivider onSubscribe={onSubscribe} />}
                 </>

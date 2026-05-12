@@ -392,6 +392,14 @@ params.set("hotOffset",   String(cursors.hotOffset));
     borderRadius: "14px",
     overflow: "hidden",
   }}>
+    {index === 0 && (
+      <div style={{
+        height: "1px",
+        background: "#1A1A2E",
+        borderRadius: "12px 12px 0 0",
+        marginBottom: "0",
+      }} />
+    )}
     <PostCard
       post={adaptPost(post)}
       onLike={() => {}}
