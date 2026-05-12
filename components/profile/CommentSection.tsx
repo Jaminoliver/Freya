@@ -66,9 +66,23 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   React.useEffect(() => {
     if (isOpen) {
+      const savedY = window.scrollY;
+      const vv = window.visualViewport;
+      let keyboardOpen = false;
+      const onVVResize = () => {
+        const kh = Math.max(0, window.innerHeight - (vv?.height ?? window.innerHeight));
+        if (kh > 100) {
+          keyboardOpen = true;
+        } else if (keyboardOpen) {
+          keyboardOpen = false;
+          window.scrollTo({ top: savedY, behavior: "instant" as ScrollBehavior });
+        }
+      };
+      vv?.addEventListener("resize", onVVResize);
       setVisible(true);
       const t = setTimeout(() => setAnimateIn(true), 16);
       return () => {
+        vv?.removeEventListener("resize", onVVResize);
         clearTimeout(t);
       };
     } else {
