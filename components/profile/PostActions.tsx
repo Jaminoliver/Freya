@@ -139,8 +139,8 @@ export default function PostActions({
         height: "1px",
         background: "#1A1A2E",
         borderRadius: "0 0 12px 12px",
-        marginLeft: "-16px",
-        marginRight: "-16px",
+        marginLeft: "-20px",
+        marginRight: "-20px",
       }} />
     </div>
   );
