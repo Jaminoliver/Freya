@@ -330,11 +330,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
 
   const handleSubscribeToMessage = useCallback(async () => {
     if (!post) return;
-    try {
-      const res  = await fetch(`/api/profiles/${post.profiles.username}`);
-      const data = await res.json();
-      setSubToMsgMonthly(data.profile?.subscription_price ?? 0);
-    } catch {}
+    setSubToMsgMonthly(post.profiles?.subscription_price ?? 0);
     setSubToMsgOpen(true);
   }, [post]);
 
@@ -532,6 +528,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
           onBlockCreator={() => {}}
           savedPost={savedPost}
           isSubscribed={post.can_access}
+          isFreeCreator={(post.profiles?.subscription_price ?? 0) === 0}
           onMessage={handleMessage}
           onSubscribe={handleSubscribeToMessage}
         />

@@ -167,16 +167,12 @@ function PostCardInner({
 
   const { isBlocked, isRestricted, block, unblock, restrict, unrestrict, fetchStatus } = useBlockRestrict({ userId: post.creator.id });
 
+  const isFree    = (subscriptionPrice ?? 0) === 0;
+
   const handleSubscribeToMessage = useCallback(async () => {
-    try {
-      const supabase = createClient();
-      const { data: profile } = await supabase.from("profiles")
-        .select("subscription_price")
-        .eq("id", post.creator.id).single();
-      setSubToMsgMonthly(profile?.subscription_price ?? 0);
-    } catch {}
+    setSubToMsgMonthly(isFree ? 0 : (subscriptionPrice ?? 0));
     setSubToMsgOpen(true);
-  }, [post.creator.id]);
+  }, [isFree, subscriptionPrice]);
 
   const conversationIdRef = useRef<string | number | null>(null);
 
@@ -194,7 +190,6 @@ function PostCardInner({
     if (id) router.push(`/messages/${id}`);
   }, [post.creator.id, router]);
 
-  const isFree    = (subscriptionPrice ?? 0) === 0;
   const isLoading = subLoading || freeSubbing;
 
   useEffect(() => {
@@ -394,8 +389,8 @@ function PostCardInner({
         onUnrestrictCreator={() => { setSheetOpen(false); setUnrestrictConfirm(true); }}
         savedPost={engagement.savedPost} savedCreator={engagement.savedCreator}
         isBlocked={isBlocked} isRestricted={isRestricted}
-        isSubscribed={subscribed} onMessage={handleMessage}
-        onSubscribe={handleSubscribeToMessage}
+        isSubscribed={subscribed} isFreeCreator={isFree}
+        onMessage={handleMessage} onSubscribe={handleSubscribeToMessage}
       />
 
       {/* Header */}

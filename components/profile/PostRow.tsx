@@ -129,16 +129,12 @@ export default function PostRow({
 
   const handleOpenFanSheet = React.useCallback(() => { setSheetOpen(true); }, []);
 
+  const isFreeCreator = (post.profiles.subscription_price ?? 0) === 0;
+
   const handleSubscribeToMessage = React.useCallback(async () => {
-    try {
-      const supabase = createClient();
-      const { data: profile } = await supabase.from("profiles")
-        .select("subscription_price")
-        .eq("id", post.profiles.id).single();
-      setSubToMsgMonthly(profile?.subscription_price ?? 0);
-    } catch {}
+    setSubToMsgMonthly(post.profiles.subscription_price ?? 0);
     setSubToMsgOpen(true);
-  }, [post.profiles.id]);
+  }, [post.profiles.subscription_price]);
 
   const handleMessage = React.useCallback(async () => {
     const { startConversation } = await import("@/app/(main)/messages/page");
@@ -279,6 +275,7 @@ export default function PostRow({
           savedPost={engagement.savedPost}
           savedCreator={engagement.savedCreator}
           isSubscribed={isSubscribed}
+          isFreeCreator={isFreeCreator}
           onMessage={handleMessage}
           onSubscribe={handleSubscribeToMessage}
         />

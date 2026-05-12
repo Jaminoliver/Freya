@@ -18,6 +18,7 @@ interface PostOptionsSheetProps {
   onMessage?:           () => void;
   onSubscribe?:         () => void;
   isSubscribed?:        boolean;
+  isFreeCreator?:       boolean;
   savedPost?:           boolean;
   savedCreator?:        boolean;
   isBlocked?:           boolean;
@@ -39,7 +40,8 @@ export default function PostOptionsSheet({
   savedCreator = false,
   isBlocked    = false,
   isRestricted = false,
-  isSubscribed = false,
+  isSubscribed  = false,
+  isFreeCreator = false,
   onMessage,
   onSubscribe,
 }: PostOptionsSheetProps) {
@@ -77,7 +79,7 @@ export default function PostOptionsSheet({
 
   const quickItems = [
     {
-      icon:   <Bookmark size={26} strokeWidth={1.6} fill={localSavedPost ? "currentColor" : "none"} />,
+      icon:   <Bookmark size={22} strokeWidth={1.6} fill={localSavedPost ? "currentColor" : "none"} />,
       label:  localSavedPost ? "Unsave" : "Save",
       color:  localSavedPost ? "#8B5CF6" : "#FFFFFF",
       action: () => {
@@ -87,7 +89,7 @@ export default function PostOptionsSheet({
       },
     },
     {
-      icon:   <UserPlus size={26} strokeWidth={1.6} fill={localSavedCreator ? "currentColor" : "none"} />,
+      icon:   <UserPlus size={22} strokeWidth={1.6} fill={localSavedCreator ? "currentColor" : "none"} />,
       label:  localSavedCreator ? "Unsave creator" : "Save creator",
       color:  localSavedCreator ? "#8B5CF6" : "#FFFFFF",
       action: () => {
@@ -97,12 +99,12 @@ export default function PostOptionsSheet({
       },
     },
     ...(isSubscribed ? [{
-      icon:   <MessageCircle size={26} strokeWidth={1.6} />,
+      icon:   <MessageCircle size={22} strokeWidth={1.6} />,
       label:  "Message",
       color:  "#FFFFFF",
       action: () => { onMessage?.(); },
     }] : [{
-      icon:   <ThumbsDown size={26} strokeWidth={1.6} />,
+      icon:   <ThumbsDown size={22} strokeWidth={1.6} />,
       label:  "Not interested",
       color:  "#FFFFFF",
       action: () => { onNotInterested(); onClose(); },
@@ -111,7 +113,7 @@ export default function PostOptionsSheet({
 
   const group1 = [
     {
-      icon:    <ShieldOff size={22} strokeWidth={1.6} />,
+      icon:    <ShieldOff size={18} strokeWidth={1.6} />,
       label:   isRestricted ? "Unrestrict creator" : "Restrict creator",
       action:  restrictDormant ? undefined : isRestricted ? onUnrestrictCreator : onRestrictCreator,
       color:   restrictDormant ? "rgba(255,255,255,0.2)" : isRestricted ? "#10B981" : "#F59E0B",
@@ -121,13 +123,13 @@ export default function PostOptionsSheet({
 
   const group2 = [
     {
-      icon:   <Flag size={22} strokeWidth={1.6} />,
+      icon:   <Flag size={18} strokeWidth={1.6} />,
       label:  "Report",
       action: onReport,
       color:  "#EF4444",
     },
     {
-      icon:   <Ban size={22} strokeWidth={1.6} />,
+      icon:   <Ban size={18} strokeWidth={1.6} />,
       label:  isBlocked ? "Unblock creator" : "Block creator",
       action: isBlocked ? onUnblockCreator : onBlockCreator,
       color:  isBlocked ? "#10B981" : "#EF4444",
@@ -146,10 +148,10 @@ export default function PostOptionsSheet({
     display:        "flex",
     alignItems:     "center",
     gap:            "16px",
-    padding:        "17px 20px",
+    padding:        "13px 16px",
     border:         "none",
     backgroundColor:"transparent",
-    fontSize:       "16px",
+    fontSize:       "14px",
     fontFamily:     "'Inter', sans-serif",
     fontWeight:     400,
     textAlign:      "left",
@@ -214,7 +216,7 @@ export default function PostOptionsSheet({
       {/* Backdrop */}
       {isOpen && <div
         onClick={onClose}
-        style={{ position: "fixed", inset: 0, zIndex: 999, backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
+        style={{ position: "fixed", inset: 0, zIndex: 999, backgroundColor: "rgba(0,0,0,0.5)" }}
       />}
 
       {/* Sheet */}
@@ -257,8 +259,8 @@ export default function PostOptionsSheet({
                   flexDirection:  "column",
                   alignItems:     "center",
                   justifyContent: "center",
-                  gap:            "10px",
-                  padding:        "20px 8px",
+                  gap:            "7px",
+                  padding:        "14px 8px",
                   border:         "none",
                   borderRadius:   "14px",
                   backgroundColor:"rgba(255,255,255,0.07)",
@@ -299,34 +301,25 @@ export default function PostOptionsSheet({
             <>
               <style>{`
                 @keyframes _subMsgPulse {
-                  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
-                  50%       { transform: scale(1.03); box-shadow: 0 0 14px 4px rgba(139,92,246,0.35); }
+                  0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
+                  50%       { box-shadow: 0 0 14px 4px rgba(139,92,246,0.35); }
                 }
               `}</style>
               <button
                 onClick={() => { onClose(); onSubscribe?.(); }}
                 style={{
-                  width:           "100%",
-                  display:         "flex",
-                  alignItems:      "center",
-                  justifyContent:  "center",
-                  gap:             "10px",
-                  padding:         "16px 20px",
-                  marginBottom:    "10px",
-                  border:          "none",
-                  borderRadius:    "14px",
-                  background:      "linear-gradient(135deg, #8B5CF6, #EC4899)",
-                  color:           "#FFFFFF",
-                  fontSize:        "15px",
-                  fontFamily:      "'Inter', sans-serif",
-                  fontWeight:      600,
-                  cursor:          "pointer",
-                  letterSpacing:   "0.01em",
-                  animation:       "_subMsgPulse 2.2s ease-in-out infinite",
+                  ...listBtnBase,
+                  width:         "100%",
+                  marginBottom:  "10px",
+                  borderRadius:  "14px",
+                  background:    "linear-gradient(135deg, #8B5CF6, #EC4899)",
+                  color:         "#FFFFFF",
+                  fontWeight:    600,
+                  animation:     "_subMsgPulse 2.2s ease-in-out infinite",
                 }}
               >
-                <MessageCircle size={20} strokeWidth={1.8} />
-                Subscribe to Message
+                <span style={{ display: "flex", flexShrink: 0 }}><MessageCircle size={18} strokeWidth={1.6} /></span>
+                {isFreeCreator ? "Subscribe for Free to Message" : "Subscribe to Message"}
               </button>
             </>
           )}
@@ -354,12 +347,12 @@ export default function PostOptionsSheet({
             onClick={onClose}
             style={{
               width:          "100%",
-              padding:        "17px",
+              padding:        "13px",
               border:         "none",
               borderRadius:   "14px",
               backgroundColor:"rgba(255,255,255,0.07)",
               color:          "rgba(255,255,255,0.5)",
-              fontSize:       "15px",
+              fontSize:       "14px",
               fontWeight:     500,
               fontFamily:     "'Inter', sans-serif",
               cursor:         "pointer",
