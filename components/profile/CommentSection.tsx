@@ -68,20 +68,18 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   React.useEffect(() => {
     if (isOpen) {
       setVisible(true);
-      document.body.style.overflow = "hidden";
       const t = setTimeout(() => {
         setAnimateIn(true);
       }, 16);
       return () => clearTimeout(t);
     } else {
       setAnimateIn(false);
-      setSheetHeight(typeof window !== "undefined" && window.innerWidth >= 768 ? "65vh" : "60vh");      document.body.style.overflow = "";
+      setSheetHeight(typeof window !== "undefined" && window.innerWidth >= 768 ? "65vh" : "60vh");
       const t = setTimeout(() => setVisible(false), 320);
       return () => clearTimeout(t);
     }
   }, [isOpen]);
 
-  React.useEffect(() => { return () => { document.body.style.overflow = ""; }; }, []);
 
   
 
@@ -190,7 +188,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", pointerEvents: "none" }}>
-      <div ref={sheetRef} style={{ position: "relative", width: "100%", maxWidth: "680px", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", height: sheetHeight, maxHeight: sheetHeight, display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), height 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)", pointerEvents: "auto" }}>
+      <div ref={sheetRef} style={{ position: "relative", width: "100%", maxWidth: "680px", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", height: sheetHeight, maxHeight: sheetHeight, display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), height 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)", pointerEvents: "auto", overscrollBehavior: "contain" }}>
 
         <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ padding: "12px 16px 0", userSelect: "none", touchAction: "none" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", margin: "0 auto 14px" }} />

@@ -36,7 +36,7 @@ export default function CommentInputBar({
   const [selectedGif, setSelectedGif] = React.useState<GifItem | null>(null);
   const [gifPickerOpen, setGifPickerOpen] = React.useState(false);
   const [isFocused, setIsFocused] = React.useState(false);
-  const [keyboardOffset, setKeyboardOffset] = React.useState(0);
+  const [keyboardTranslateY, setKeyboardTranslateY] = React.useState(0);
   const [mounted, setMounted] = React.useState(false);
   const [emojiVisible, setEmojiVisible] = React.useState(false);
 
@@ -52,9 +52,15 @@ export default function CommentInputBar({
 
     const vv = window.visualViewport;
 
+    let pending = false;
     const update = () => {
-      const offset = window.innerHeight - (vv.height ?? window.innerHeight) - (vv.offsetTop ?? 0);
-      setKeyboardOffset(Math.max(0, offset));
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        const translateY = Math.max(0, window.innerHeight - (vv.height ?? window.innerHeight) - (vv.offsetTop ?? 0));
+        setKeyboardTranslateY(translateY);
+      });
     };
 
     vv.addEventListener("resize", update);
@@ -129,11 +135,12 @@ export default function CommentInputBar({
         position: "fixed",
         left: 0,
         right: 0,
-        bottom: keyboardOffset,
+        bottom: 0,
         zIndex: 1100,
         backgroundColor: "#0F0F1A",
         borderTop: "1px solid #1C1C2E",
-        transition: "bottom 0.22s cubic-bezier(0.32, 0.72, 0, 1)",
+        transform: `translateY(-${keyboardTranslateY}px)`,
+        transition: "transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)",
         maxWidth: "680px",
         margin: "0 auto",
         // Stretch to edges on mobile
