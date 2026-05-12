@@ -46,7 +46,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const [visible,       setVisible]       = React.useState(false);
   const [animateIn,     setAnimateIn]     = React.useState(false);
   const [mounted,       setMounted]       = React.useState(false);
-  const [sheetHeight,   setSheetHeight]   = React.useState<"60vh" | "88vh" | "65vh">("60vh");
+  const [sheetHeight,   setSheetHeight]   = React.useState<"75vh" | "88vh" | "80vh">("75vh");
 
   // Reply state
   const [replyingTo,   setReplyingTo]   = React.useState<ReplyingTo | null>(null);
@@ -56,23 +56,13 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const commentsRef = React.useRef<HTMLDivElement>(null);
   const INPUT_BAR_HEIGHT = 72;
   const lockedScrollY = React.useRef<number>(0);
-  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const dragStartY   = React.useRef(0);
   const dragDeltaY   = React.useRef(0);
   const isDragging   = React.useRef(false);
 
   React.useEffect(() => {
     setMounted(true);
-    setSheetHeight(window.innerWidth >= 768 ? "65vh" : "60vh");
-
-    if (!window.visualViewport) return;
-    const vv = window.visualViewport;
-    const onVVResize = () => {
-      const kh = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop ?? 0));
-      setKeyboardHeight(kh);
-    };
-    vv.addEventListener("resize", onVVResize);
-    return () => vv.removeEventListener("resize", onVVResize);
+    setSheetHeight(window.innerWidth >= 768 ? "80vh" : "75vh");
   }, []);
   React.useEffect(() => { setLocalComments(propComments); }, [propComments]);
 
@@ -92,7 +82,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
       };
     } else {
       setAnimateIn(false);
-      setSheetHeight(typeof window !== "undefined" && window.innerWidth >= 768 ? "65vh" : "60vh");
+      setSheetHeight(typeof window !== "undefined" && window.innerWidth >= 768 ? "80vh" : "75vh");
       const t = setTimeout(() => setVisible(false), 320);
       return () => clearTimeout(t);
     }
@@ -118,7 +108,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     isDragging.current = false;
     const delta = dragDeltaY.current;
     if (sheetRef.current) sheetRef.current.style.transform = "translateY(0)";
-    const defaultHeight = window.innerWidth >= 768 ? "65vh" : "60vh";    if (delta < -60 && sheetHeight !== "88vh") setSheetHeight("88vh");
+    const defaultHeight = window.innerWidth >= 768 ? "80vh" : "75vh";    if (delta < -60 && sheetHeight !== "88vh") setSheetHeight("88vh");
     else if (delta > 80 && sheetHeight === "88vh") setSheetHeight(defaultHeight);
     else if (delta > 120 && sheetHeight !== "88vh") handleClose();
     dragDeltaY.current = 0;
@@ -215,7 +205,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
           </div>
         </div>
 
-        <div ref={commentsRef} style={{ flex: 1, overflowY: "auto", padding: `0 16px ${80 + keyboardHeight}px`, scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+        <div ref={commentsRef} style={{ flex: 1, overflowY: "auto", padding: "0 16px 80px", scrollbarWidth: "none", overscrollBehavior: "contain" }}>
           <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
           {isLoading
             ? [0,1,2].map((i) => <CommentSkeleton key={i} />)
