@@ -74,12 +74,12 @@ border: "none",
     navigate("/dashboard");
   }
 }} style={btn(pathname === "/dashboard")}>
-  <House size={22} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
+  <House size={25} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
 </button>
 
        <button onClick={() => navigate("/messages")} style={{ ...btn(pathname === "/messages"), position: "relative" }}>
   <div style={{ position: "relative", display: "inline-flex" }}>
-    <Mail size={22} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
+    <Mail size={25} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
     {unreadCount > 0 && (
       <span style={{
         position: "absolute", top: "-6px", right: "-10px",
@@ -96,11 +96,11 @@ border: "none",
 </button>
 
 <button onClick={() => navigate("/explore")} style={btn(pathname === "/explore")}>
-  <Compass size={22} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
+  <Compass size={25} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
 </button>
 
 <button onClick={() => navigate("/subscriptions")} style={btn(pathname === "/subscriptions")}>
-  <CreditCard size={22} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
+  <CreditCard size={25} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
 </button>
 
 <button onClick={() => setMoreOpen(true)} style={btn(moreOpen)}>
@@ -114,7 +114,7 @@ border: "none",
       }}
     />
   ) : (
-    <AlignJustify size={22} strokeWidth={1.8} />
+    <AlignJustify size={25} strokeWidth={1.8} />
   )}
 </button>
       </nav>
