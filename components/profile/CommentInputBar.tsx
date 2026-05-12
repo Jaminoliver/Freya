@@ -333,7 +333,17 @@ export default function CommentInputBar({
           from { opacity: 0; transform: translateY(-4px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        .comment-input-safe-cover {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: env(safe-area-inset-bottom, 20px);
+          background-color: #0D0D1A;
+          z-index: 1099;
+        }
       `}</style>
+      <div className="comment-input-safe-cover" />
     </div>,
     document.body
   );
