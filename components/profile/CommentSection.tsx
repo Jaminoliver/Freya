@@ -3,12 +3,10 @@
 import * as React from "react";
 import { CommentSkeleton } from "@/components/loadscreen/CommentSkeleton";
 import { CommentRow } from "@/components/profile/CommentRow";
-import { Avatar } from "@/components/profile/CommentAvatar";
 import { createPortal } from "react-dom";
-import { Send, X } from "lucide-react";
-import { GifItem, GifPicker } from "@/components/gif/GifComponents";
-
-const QUICK_EMOJIS = ["😊", "😄", "🤣", "😜", "😆", "😝", "😂", "😁", "🥰", "🤩", "💋"];
+import { X } from "lucide-react";
+import CommentInputBar from "@/components/profile/CommentInputBar";
+import type { ReplyingTo } from "@/components/profile/CommentInputBar";
 
 export interface ApiComment {
   id: string | number;
@@ -44,23 +42,19 @@ interface CommentSectionProps {
 
 
 export default function CommentSection({ postId, comments: propComments, viewer, viewerUserId, onAddComment, onDeleteComment, isOpen = false, onClose, isLoading = false, totalCommentCount }: CommentSectionProps) {
-  const [text,          setText]          = React.useState("");
-  const [selectedGif,   setSelectedGif]   = React.useState<GifItem | null>(null);
-  const [gifPickerOpen, setGifPickerOpen] = React.useState(false);
   const [localComments, setLocalComments] = React.useState<ApiComment[]>(propComments);
   const [visible,       setVisible]       = React.useState(false);
   const [animateIn,     setAnimateIn]     = React.useState(false);
   const [mounted,       setMounted]       = React.useState(false);
-  const [sheetHeight, setSheetHeight] = React.useState<"60vh" | "88vh" | "65vh">("60vh");
+  const [sheetHeight,   setSheetHeight]   = React.useState<"60vh" | "88vh" | "65vh">("60vh");
 
   // Reply state
-  const [replyingTo, setReplyingTo] = React.useState<ApiComment | null>(null);
+  const [replyingTo,   setReplyingTo]   = React.useState<ReplyingTo | null>(null);
   const [replyParentId, setReplyParentId] = React.useState<string | number | null>(null);
 
-  const inputRef     = React.useRef<HTMLInputElement>(null);
-  const sheetRef     = React.useRef<HTMLDivElement>(null);
-  const inputAreaRef = React.useRef<HTMLDivElement>(null);
-  const commentsRef  = React.useRef<HTMLDivElement>(null);
+  const sheetRef    = React.useRef<HTMLDivElement>(null);
+  const commentsRef = React.useRef<HTMLDivElement>(null);
+  const INPUT_BAR_HEIGHT = 72;
   const dragStartY   = React.useRef(0);
   const dragDeltaY   = React.useRef(0);
   const isDragging   = React.useRef(false);
@@ -77,7 +71,6 @@ export default function CommentSection({ postId, comments: propComments, viewer,
       document.body.style.overflow = "hidden";
       const t = setTimeout(() => {
         setAnimateIn(true);
-        setTimeout(() => inputRef.current?.focus(), 350);
       }, 16);
       return () => clearTimeout(t);
     } else {
@@ -90,14 +83,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   React.useEffect(() => { return () => { document.body.style.overflow = ""; }; }, []);
 
-  React.useEffect(() => {
-    if (!gifPickerOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (inputAreaRef.current && !inputAreaRef.current.contains(e.target as Node)) setGifPickerOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [gifPickerOpen]);
+  
 
   const handleClose = React.useCallback(() => {
     setAnimateIn(false);
@@ -129,37 +115,35 @@ export default function CommentSection({ postId, comments: propComments, viewer,
     onDeleteComment?.();
   };
 
-  const handleGifSelect = (gif: GifItem) => { setSelectedGif(gif); setGifPickerOpen(false); setText(""); };
-
   const handleReply = (comment: ApiComment) => {
-    setReplyingTo(comment);
+    setReplyingTo({
+      id: comment.id,
+      username: comment.profiles?.username || "user",
+      reply_to_username: comment.reply_to_username,
+      reply_to_id: comment.reply_to_id,
+    });
     setReplyParentId(comment.id);
-    setText("");
-    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const cancelReply = () => {
     setReplyingTo(null);
     setReplyParentId(null);
-    setText("");
-    setSelectedGif(null);
   };
 
-  const handleSend = async () => {
-    const trimmed = text.trim();
-    if (!trimmed && !selectedGif) return;
+  const handleSend = async (text: string, gif_url?: string) => {
+    if (!text && !gif_url) return;
     if (!viewer) return;
 
-    const isReply = replyingTo !== null;
+    const trimmed = text.trim();
 
-    if (isReply && replyParentId !== null) {
-      const replyToUsername = replyingTo!.reply_to_username ?? replyingTo!.profiles?.username ?? null;
-      const replyToId = replyingTo!.reply_to_id ?? null;
+    if (replyingTo && replyParentId !== null) {
+      const replyToUsername = replyingTo.reply_to_username ?? replyingTo.username ?? null;
+      const replyToId = replyingTo.reply_to_id ?? null;
 
       const optimisticReply: ApiComment = {
         id:               `local-reply-${Date.now()}`,
         content:          trimmed,
-        gif_url:          selectedGif?.url ?? null,
+        gif_url:          gif_url ?? null,
         created_at:       new Date().toISOString(),
         like_count:       0,
         user_id:          viewerUserId || "",
@@ -174,14 +158,11 @@ export default function CommentSection({ postId, comments: propComments, viewer,
         (parentComment as any)._addReply(optimisticReply);
       }
 
-      const gifUrl = selectedGif?.url;
       const capturedParentId = replyParentId;
-      setText("");
-      setSelectedGif(null);
       setReplyingTo(null);
       setReplyParentId(null);
 
-      await onAddComment?.(postId, trimmed, gifUrl, capturedParentId, replyToUsername, replyToId);
+      await onAddComment?.(postId, trimmed, gif_url, capturedParentId, replyToUsername, replyToId);
 
       if (parentComment && typeof (parentComment as any)._refetchReplies === "function") {
         (parentComment as any)._refetchReplies();
@@ -191,7 +172,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
       const optimistic: ApiComment = {
         id:               `local-${Date.now()}`,
         content:          trimmed,
-        gif_url:          selectedGif?.url ?? null,
+        gif_url:          gif_url ?? null,
         created_at:       new Date().toISOString(),
         like_count:       0,
         user_id:          viewerUserId || "",
@@ -201,25 +182,15 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
       setLocalComments((prev) => [optimistic, ...prev]);
       commentsRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-      const gifUrl = selectedGif?.url;
-      setText("");
-      setSelectedGif(null);
-      await onAddComment?.(postId, trimmed, gifUrl);
+      await onAddComment?.(postId, trimmed, gif_url);
     }
   };
-
-  const handleKey = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
-  const canSend   = text.trim().length > 0 || selectedGif !== null;
-
-  const replyTargetName = replyingTo
-    ? (replyingTo.reply_to_username || replyingTo.profiles?.username || "user")
-    : null;
 
   if (!mounted || !visible) return null;
 
   return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", pointerEvents: "none" }}>
-      <div ref={sheetRef} style={{ position: "relative", width: "100%", maxWidth: "680px", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", height: sheetHeight, maxHeight: sheetHeight, display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), height 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)", pointerEvents: "auto" }}>
+      <div ref={sheetRef} style={{ position: "relative", width: "100%", maxWidth: "680px", backgroundColor: "#0F0F1A", borderRadius: "20px 20px 0 0", height: sheetHeight, maxHeight: sheetHeight, display: "flex", flexDirection: "column", transform: animateIn ? "translateY(0)" : "translateY(100%)", transition: "transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), height 0.32s cubic-bezier(0.32, 0.72, 0, 1)", boxShadow: "0 -4px 40px rgba(0,0,0,0.6)", pointerEvents: "auto", paddingBottom: `${INPUT_BAR_HEIGHT}px` }}>
 
         <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ padding: "12px 16px 0", userSelect: "none", touchAction: "none" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D", margin: "0 auto 14px" }} />
@@ -249,64 +220,15 @@ export default function CommentSection({ postId, comments: propComments, viewer,
           ))}
         </div>
 
-        <div ref={inputAreaRef} style={{ padding: "12px 16px 20px", borderTop: "1px solid #13131F", backgroundColor: "#0F0F1A", position: "relative" }}>
-          {gifPickerOpen && (
-            <GifPicker onSelect={handleGifSelect} onClose={() => setGifPickerOpen(false)} viewerUserId={viewerUserId} />
-          )}
-
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", overflowX: "auto", scrollbarWidth: "none" }}>
-            <button
-              onClick={() => setGifPickerOpen((o) => !o)}
-              style={{ padding: "5px 10px", borderRadius: "8px", border: `1px solid ${gifPickerOpen ? "#8B5CF6" : "#2A2A3D"}`, backgroundColor: gifPickerOpen ? "#2D1F4E" : "#1C1C2E", color: gifPickerOpen ? "#8B5CF6" : "#8A8AA0", fontSize: "12px", fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "'Inter', sans-serif", transition: "all 0.15s" }}
-            >GIF</button>
-            {QUICK_EMOJIS.map((emoji) => (
-              <button key={emoji} onClick={() => { setText((p) => p + emoji); }}
-                style={{ fontSize: "22px", background: "none", border: "none", cursor: "pointer", flexShrink: 0, lineHeight: 1, padding: "2px", borderRadius: "6px", transition: "transform 0.1s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.25)")}
-                onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              >{emoji}</button>
-            ))}
-          </div>
-
-          {selectedGif && (
-            <div style={{ position: "relative", display: "inline-block", marginBottom: "8px" }}>
-              <img src={selectedGif.preview_url || selectedGif.url} alt="Selected GIF" style={{ height: "80px", borderRadius: "8px", display: "block" }} />
-              <button onClick={() => setSelectedGif(null)} style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", border: "none", backgroundColor: "rgba(0,0,0,0.7)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-                <X size={11} />
-              </button>
-            </div>
-          )}
-
-          {replyingTo && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", padding: "6px 10px", backgroundColor: "#1C1C2E", borderRadius: "8px", borderLeft: "2px solid #8B5CF6" }}>
-              <span style={{ fontSize: "12px", color: "#8B5CF6", fontFamily: "'Inter', sans-serif" }}>
-                Replying to <strong>@{replyTargetName}</strong>
-              </span>
-              <button onClick={cancelReply} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex", alignItems: "center" }}>
-                <X size={13} />
-              </button>
-            </div>
-          )}
-
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <Avatar src={viewer?.avatar_url} name={viewer?.display_name || "You"} size={34} />
-            <div style={{ flex: 1, display: "flex", alignItems: "center", backgroundColor: "#13131F", border: "1px solid #2A2A3D", borderRadius: "24px", padding: "10px 14px", gap: "8px" }}>
-              <input
-                ref={inputRef} type="text" value={text}
-                onChange={(e) => { setText(e.target.value); }}
-                onKeyDown={handleKey}
-                placeholder={replyingTo ? `Replying to @${replyTargetName}…` : selectedGif ? "Add a caption… (optional)" : "Add a comment…"}
-                style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: "13px", color: "#E2E8F0", fontFamily: "'Inter', sans-serif", caretColor: "#8B5CF6" }}
-              />
-              <button onClick={handleSend} disabled={!canSend}
-                style={{ background: "none", border: "none", cursor: canSend ? "pointer" : "default", color: canSend ? "#8B5CF6" : "#3A3A4D", display: "flex", alignItems: "center", justifyContent: "center", padding: "2px", transition: "color 0.15s" }}
-              >
-                <Send size={17} strokeWidth={2} />
-              </button>
-            </div>
-          </div>
         </div>
-      </div>
+      <CommentInputBar
+        viewer={viewer}
+        viewerUserId={viewerUserId}
+        replyingTo={replyingTo}
+        onCancelReply={cancelReply}
+        onSend={handleSend}
+        isOpen={isOpen}
+      />
     </div>,
     document.body
   );
