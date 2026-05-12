@@ -342,7 +342,7 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
         style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
           backgroundColor: "#13131F", borderBottom: "1px solid #1F1F2A",
-          height: "56px", fontFamily: "'Inter', sans-serif",
+          height: "44px", fontFamily: "'Inter', sans-serif",
           transform: headerVisible ? "translateY(0)" : "translateY(-100%)",
           transition: "transform 0.25s ease",
         }}
@@ -352,7 +352,7 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
   {isCreator ? (
     <div style={{ position: "relative" }}>
       <button onClick={() => setPlusOpen((o) => !o)} aria-label="Create" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
-        <Plus size={30} strokeWidth={1.8} />
+        <Plus size={22} strokeWidth={1.8} />
       </button>
       {plusOpen && (
         <>
@@ -378,14 +378,14 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
     </div>
   ) : <div style={{ width: "46px" }} />}
   <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none" }}>
-    <img src="/freya_logo.png" alt="Fréya" style={{ height: "110px", width: "auto", marginTop: "12px" }} />
+    <img src="/freya_logo.png" alt="Fréya" style={{ height: "85px", width: "auto", marginTop: "12px" }} />
   </div>
   <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
     <button onClick={() => setSearchOpen(true)} aria-label="Search" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
-      <Search size={30} strokeWidth={1.8} />
+      <Search size={22} strokeWidth={1.8} />
     </button>
     <button onClick={() => navigate("/notifications")} aria-label="Notifications" style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
-      <Bell size={30} strokeWidth={1.8} />
+      <Bell size={22} strokeWidth={1.8} />
       {unreadNotificationCount > 0 && (
         <span style={{ position: "absolute", top: "4px", right: "4px", minWidth: "18px", height: "18px", borderRadius: "9px", backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "11px", fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", boxShadow: "0 0 0 2px #13131F" }}>
           {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
@@ -420,7 +420,7 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
 
       {/* SEARCH OVERLAY */}
       {searchOpen && (
-        <div className="md:hidden" style={{ position: "fixed", top: "56px", left: 0, right: 0, bottom: 0, backgroundColor: "#0A0A0F", zIndex: 99, display: "flex", flexDirection: "column", animation: "fadeIn 0.2s ease", fontFamily: "'Inter', sans-serif" }}>
+        <div className="md:hidden" style={{ position: "fixed", top: "44px", left: 0, right: 0, bottom: 0, backgroundColor: "#0A0A0F", zIndex: 99, display: "flex", flexDirection: "column", animation: "fadeIn 0.2s ease", fontFamily: "'Inter', sans-serif" }}>
   <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
 
           {/* Discover grid — when no query */}

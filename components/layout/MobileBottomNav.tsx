@@ -22,7 +22,7 @@ const inactiveColor = "#A3A3C2";
 
   const btn = (active: boolean): React.CSSProperties => ({
     display: "flex", flexDirection: "column", alignItems: "center",
-    justifyContent: "center", gap: "4px", height: "68px", minWidth: "52px",
+    justifyContent: "center", gap: "4px", height: "52px", minWidth: "44px",
     color: active ? activeColor : inactiveColor,
     background: "none", border: "none", cursor: "pointer",
     fontFamily: "'Inter', sans-serif", padding: 0,
@@ -37,7 +37,7 @@ const inactiveColor = "#A3A3C2";
         body.story-modal-open .mobile-bottom-nav { display: none !important; }
 body.search-open .mobile-bottom-nav { display: none !important; }
         .mobile-bottom-nav {
-          height: calc(64px + env(safe-area-inset-bottom));
+          height: calc(52px + env(safe-area-inset-bottom));
           padding-bottom: env(safe-area-inset-bottom);
         }
         .mobile-bottom-nav a,
@@ -58,7 +58,7 @@ body.search-open .mobile-bottom-nav { display: none !important; }
           position: "fixed", bottom: "0", left: "0", right: "0",
           backgroundColor: "#13131F",
 border: "none",
-          borderRadius: "20px 20px 0 0",
+          borderRadius: "12px 12px 0 0",
           zIndex: 200,
           fontFamily: "'Inter', sans-serif",
           alignItems: "center",
@@ -74,12 +74,12 @@ border: "none",
     navigate("/dashboard");
   }
 }} style={btn(pathname === "/dashboard")}>
-  <House size={30} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
+  <House size={22} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
 </button>
 
        <button onClick={() => navigate("/messages")} style={{ ...btn(pathname === "/messages"), position: "relative" }}>
   <div style={{ position: "relative", display: "inline-flex" }}>
-    <Mail size={30} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
+    <Mail size={22} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
     {unreadCount > 0 && (
       <span style={{
         position: "absolute", top: "-6px", right: "-10px",
@@ -96,11 +96,11 @@ border: "none",
 </button>
 
 <button onClick={() => navigate("/explore")} style={btn(pathname === "/explore")}>
-  <Compass size={30} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
+  <Compass size={22} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
 </button>
 
 <button onClick={() => navigate("/subscriptions")} style={btn(pathname === "/subscriptions")}>
-  <CreditCard size={30} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
+  <CreditCard size={22} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
 </button>
 
 <button onClick={() => setMoreOpen(true)} style={btn(moreOpen)}>
@@ -109,12 +109,12 @@ border: "none",
       src={viewer.avatar_url}
       alt="profile"
       style={{
-        width: "36px", height: "36px",borderRadius: "50%", objectFit: "cover",
+        width: "26px", height: "26px", borderRadius: "50%", objectFit: "cover",
         border: moreOpen ? "2px solid #A78BFA" : "2px solid #8888AA",
       }}
     />
   ) : (
-    <AlignJustify size={30} strokeWidth={1.8} />
+    <AlignJustify size={22} strokeWidth={1.8} />
   )}
 </button>
       </nav>
