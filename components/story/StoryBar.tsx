@@ -107,6 +107,8 @@ function allProcessing(group: CreatorStoryGroup): boolean {
 
 export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft,  setCanScrollLeft]  = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   const { viewer: globalViewer } = useAppStore();
 
@@ -270,6 +272,25 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     startUpload(job);
   }, [startUpload]);
 
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener("scroll", checkScroll, { passive: true });
+    window.addEventListener("resize", checkScroll);
+    return () => {
+      el.removeEventListener("scroll", checkScroll);
+      window.removeEventListener("resize", checkScroll);
+    };
+  }, [checkScroll, loading]);
+
   const scroll = (dir: "left" | "right") => {
     scrollRef.current?.scrollBy({ left: dir === "right" ? 260 : -260, behavior: "smooth" });
   };
@@ -369,7 +390,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         <button
           className="sb-arrow"
           onClick={() => scroll("left")}
-          style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", zIndex:2, width:28, height:28, borderRadius:"50%", border:"1px solid #2A2A3D", backgroundColor:"rgba(13,13,24,0.9)", backdropFilter:"blur(8px)", color:"#A3A3C2", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"all 0.15s" }}
+          style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", zIndex:2, width:28, height:28, borderRadius:"50%", border:"1px solid #2A2A3D", backgroundColor:"rgba(13,13,24,0.9)", backdropFilter:"blur(8px)", color:"#A3A3C2", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"all 0.15s", display: canScrollLeft ? "flex" : "none" }}
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor="#1C1C2E"; e.currentTarget.style.color="#fff"; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor="rgba(13,13,24,0.9)"; e.currentTarget.style.color="#A3A3C2"; }}
         >
@@ -529,7 +550,7 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
         <button
           className="sb-arrow"
           onClick={() => scroll("right")}
-          style={{ position:"absolute", right:0, top:"50%", transform:"translateY(-50%)", zIndex:2, width:28, height:28, borderRadius:"50%", border:"1px solid #2A2A3D", backgroundColor:"rgba(13,13,24,0.9)", backdropFilter:"blur(8px)", color:"#A3A3C2", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"all 0.15s" }}
+          style={{ position:"absolute", right:0, top:"50%", transform:"translateY(-50%)", zIndex:2, width:28, height:28, borderRadius:"50%", border:"1px solid #2A2A3D", backgroundColor:"rgba(13,13,24,0.9)", backdropFilter:"blur(8px)", color:"#A3A3C2", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"all 0.15s", display: canScrollRight ? "flex" : "none" }}
           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor="#1C1C2E"; e.currentTarget.style.color="#fff"; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor="rgba(13,13,24,0.9)"; e.currentTarget.style.color="#A3A3C2"; }}
         >

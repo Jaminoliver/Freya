@@ -21,7 +21,7 @@ export default function SubscribeBannerPill({
   const background = isSubscribed
     ? "#22C55E"
     : isRenewal
-      ? "linear-gradient(135deg, #F97316, #EF4444)"
+      ? "linear-gradient(135deg, #F97316, #D946EF)"
       : "linear-gradient(135deg, #8B5CF6, #EC4899)";
 
   const label = isSubscribed
@@ -48,6 +48,7 @@ export default function SubscribeBannerPill({
       <style>{`
         @keyframes freyaSubPulse  { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
         @keyframes freyaSubbedPop { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+        @keyframes freyaGlow { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
       `}</style>
       <button
         onClick={handleClick}
@@ -59,11 +60,21 @@ export default function SubscribeBannerPill({
           fontFamily: "'Inter', sans-serif",
           cursor: isSubscribed ? "default" : loading ? "wait" : "pointer",
           whiteSpace: "nowrap", flexShrink: 0,
-          animation,
+          animation: isSubscribed ? "freyaSubbedPop 0.4s ease-out" : loading ? undefined : "freyaSubPulse 1.3s ease-in-out infinite",
           opacity: loading ? 0.8 : 1,
           transition: "background 0.3s ease, opacity 0.15s",
+          position: "relative", overflow: "hidden",
         }}
       >
+        {!isSubscribed && !loading && (
+          <span style={{
+            position: "absolute", top: 0, left: 0,
+            width: "300%", height: "100%", pointerEvents: "none",
+            background: "linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.5) 50%, transparent 75%)",
+            backgroundSize: "200% 100%",
+            animation: "freyaGlow 1.6s linear infinite",
+          }} />
+        )}
         {isSubscribed && (
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
