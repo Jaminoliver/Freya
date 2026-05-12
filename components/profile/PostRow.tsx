@@ -300,14 +300,9 @@ export default function PostRow({
         hasStory={!isOwnProfile && hasStory}
         hasUnviewedStory={!isOwnProfile && hasUnviewed}
         onAvatarClick={handleAvatarClick}
+        caption={!isTextPost ? caption ?? undefined : undefined}
         rightSlot={rightSlot}
       />
-
-      {caption && !isTextPost && (
-        <p style={{ fontSize: "16px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
-          {caption}
-        </p>
-      )}
 
       {isTextPost && caption && (
         <PostTextViewer caption={caption} textBackground={post.text_background} />

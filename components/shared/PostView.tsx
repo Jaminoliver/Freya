@@ -440,6 +440,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
         hasUnviewedStory={hasUnviewed}
         onAvatarClick={() => { if (hasStory && storyGroup) setStoryViewerOpen(true); else router.push(`/${post.profiles?.username}`); }}
         onNameClick={() => router.push(`/${post.profiles?.username}`)}
+        caption={!isTextPost ? post.caption ?? undefined : undefined}
         rightSlot={
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             {!sourceIsMessage && isOwnPost && post.is_ppv && post.ppv_price ? (
@@ -473,9 +474,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
         </div>
       )}
 
-      {post.caption && !isTextPost && (
-        <p style={{ margin: "0", fontSize: "14px", color: "#FFFFFF", lineHeight: 1.7, padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>{post.caption}</p>
-      )}
+      
 
       {isTextPost && post.caption && (
         <div style={{ margin: "12px 0 0" }}>

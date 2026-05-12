@@ -17,6 +17,7 @@ interface PostHeaderProps {
   onNameClick?:      () => void;
   /** Optional inline suffix rendered after the timestamp (e.g. "· Free"). */
   suffix?:           React.ReactNode;
+  caption?:          string;
   /** Right-side content (Subscribe pill, ••• menu, PPV badge, etc). */
   rightSlot?:        React.ReactNode;
 }
@@ -33,8 +34,10 @@ export default function PostHeader({
   onNameClick,
   suffix,
   rightSlot,
+  caption,
 }: PostHeaderProps) {
   return (
+    <>
     <div style={{
       padding: "16px 16px 10px",
       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -81,5 +84,11 @@ export default function PostHeader({
         )}
       </div>
     </div>
+    {caption && (
+      <p style={{ fontSize: "14px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
+        {caption}
+      </p>
+    )}
+    </>
   );
 }

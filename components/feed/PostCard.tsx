@@ -404,16 +404,12 @@ function PostCardInner({
         hasUnviewedStory={hasUnviewed}
         onAvatarClick={handleAvatarClick}
         onNameClick={() => navigate(`/${post.creator.username}`)}
+        caption={!isTextPost ? post.caption : undefined}
         suffix={freeSuffix}
         rightSlot={rightSlot}
       />
 
-      {/* Caption */}
-      {post.caption && !isTextPost && (
-        <p style={{ fontSize: "16px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
-          {post.caption}
-        </p>
-      )}
+      
 
       {isTextPost && post.caption && (
         <PostTextViewer caption={post.caption} textBackground={post.text_background} />
