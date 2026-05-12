@@ -56,6 +56,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   const commentsRef = React.useRef<HTMLDivElement>(null);
   const INPUT_BAR_HEIGHT = 72;
   const lockedScrollY = React.useRef<number>(0);
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const dragStartY   = React.useRef(0);
   const dragDeltaY   = React.useRef(0);
   const isDragging   = React.useRef(false);
@@ -63,14 +64,26 @@ export default function CommentSection({ postId, comments: propComments, viewer,
   React.useEffect(() => {
     setMounted(true);
     setSheetHeight(window.innerWidth >= 768 ? "65vh" : "60vh");
+
+    if (!window.visualViewport) return;
+    const vv = window.visualViewport;
+    const onVVResize = () => {
+      const kh = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop ?? 0));
+      setKeyboardHeight(kh);
+    };
+    vv.addEventListener("resize", onVVResize);
+    return () => vv.removeEventListener("resize", onVVResize);
   }, []);
   React.useEffect(() => { setLocalComments(propComments); }, [propComments]);
 
   React.useEffect(() => {
     if (isOpen) {
       lockedScrollY.current = window.scrollY;
-      const lockScroll = () => window.scrollTo(0, lockedScrollY.current);
-      window.addEventListener("scroll", lockScroll, { passive: true });
+      const lockScroll = (e: Event) => {
+        e.preventDefault();
+        window.scrollTo(0, lockedScrollY.current);
+      };
+      window.addEventListener("scroll", lockScroll, { passive: false });
       setVisible(true);
       const t = setTimeout(() => setAnimateIn(true), 16);
       return () => {
@@ -202,7 +215,7 @@ export default function CommentSection({ postId, comments: propComments, viewer,
           </div>
         </div>
 
-        <div ref={commentsRef} style={{ flex: 1, overflowY: "auto", padding: "0 16px 80px", scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+        <div ref={commentsRef} style={{ flex: 1, overflowY: "auto", padding: `0 16px ${80 + keyboardHeight}px`, scrollbarWidth: "none", overscrollBehavior: "contain" }}>
           <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
           {isLoading
             ? [0,1,2].map((i) => <CommentSkeleton key={i} />)
