@@ -85,7 +85,6 @@ export default function CommentSection({ postId, comments: propComments, viewer,
 
   const handleClose = React.useCallback(() => {
     setAnimateIn(false);
-    document.body.style.overflow = "";
     setTimeout(() => { setVisible(false); onClose?.(); }, 320);
   }, [onClose]);
 
