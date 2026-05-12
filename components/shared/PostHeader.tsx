@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import twemoji from "twemoji";
 import { BadgeCheck } from "lucide-react";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
 
@@ -32,7 +33,12 @@ function CaptionText({ text }: { text: string }) {
       /(https?:\/\/[^\s]+)/g,
       '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#1D9BF0;text-decoration:none;word-break:break-all;">$1</a>'
     );
-    return linked;
+    return twemoji.parse(linked, {
+      folder: "svg",
+      ext: ".svg",
+      base: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/",
+      className: "twemoji",
+    });
   }, [text]);
 
   return (
@@ -60,6 +66,7 @@ export default function PostHeader({
 
   return (
     <>
+    <style>{`.twemoji { width: 1.2em; height: 1.2em; vertical-align: -0.2em; display: inline; }`}</style>
     <div style={{
       padding: "16px 16px 10px",
       display: "flex", alignItems: "center", justifyContent: "space-between",
