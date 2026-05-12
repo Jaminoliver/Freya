@@ -22,6 +22,27 @@ interface PostHeaderProps {
   rightSlot?:        React.ReactNode;
 }
 
+function CaptionText({ text }: { text: string }) {
+  const html = React.useMemo(() => {
+    const escaped = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    const linked = escaped.replace(
+      /(https?:\/\/[^\s]+)/g,
+      '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#1D9BF0;text-decoration:none;word-break:break-all;">$1</a>'
+    );
+    return linked;
+  }, [text]);
+
+  return (
+    <p
+      dangerouslySetInnerHTML={{ __html: html }}
+      style={{ fontSize: "14px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}
+    />
+  );
+}
+
 export default function PostHeader({
   avatarUrl,
   displayName,
@@ -36,6 +57,7 @@ export default function PostHeader({
   rightSlot,
   caption,
 }: PostHeaderProps) {
+
   return (
     <>
     <div style={{
@@ -84,11 +106,7 @@ export default function PostHeader({
         )}
       </div>
     </div>
-    {caption && (
-      <p style={{ fontSize: "14px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>
-        {caption}
-      </p>
-    )}
+    {caption && <CaptionText text={caption} />}
     </>
   );
 }
