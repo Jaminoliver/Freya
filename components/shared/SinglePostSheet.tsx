@@ -85,7 +85,6 @@ export default function SinglePostSheet({ postId, sourceIsMessage, onClose }: Si
           postId={postId}
           sourceIsMessage={sourceIsMessage}
           onBack={onClose}
-          scrollRef={scrollRef}
         />
       </div>
     </>
