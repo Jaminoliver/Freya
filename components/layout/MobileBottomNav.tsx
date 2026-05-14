@@ -5,7 +5,7 @@ import { useState } from "react";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useNav } from "@/lib/hooks/useNav";
 import { useUnreadConversationCount } from "@/app/(main)/messages/page";
-import { House, MessageCircle, Search, Crown, User, AlignJustify } from "lucide-react";
+import { House, MessagesSquare, Search, Crown, User, AlignJustify } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 export function MobileBottomNav() {
   const pathname     = usePathname();
@@ -79,7 +79,7 @@ border: "none",
 
        <button onClick={() => navigate("/messages")} style={{ ...btn(pathname === "/messages"), position: "relative" }}>
   <div style={{ position: "relative", display: "inline-flex" }}>
-    <MessageCircle size={25} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
+    <MessagesSquare size={25} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
     {unreadCount > 0 && (
       <span style={{
         position: "absolute", top: "-6px", right: "-10px",
