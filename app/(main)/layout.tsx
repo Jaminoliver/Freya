@@ -141,7 +141,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
           paddingBottom: isMessageChat || isNotifications || isSettings || isMessages ? "0" : "72px",
           scrollbarWidth: "none",
           msOverflowStyle: "none",
-          WebkitOverflowScrolling: "touch",
+          WebkitOverflowScrolling: isWindowScrollPage ? "auto" : "touch",
         } as React.CSSProperties}
       >
         <style>{`
