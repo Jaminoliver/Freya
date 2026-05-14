@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { UserPlus, UserCheck, MessagesSquare } from "lucide-react";
 
@@ -34,8 +35,24 @@ export default function ProfileActions({
     onEditProfile?.();
   };
 
-  const spinKeyframes = (
-    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  const followBtnRef = useRef<HTMLButtonElement>(null);
+
+const handleFollowClick = () => {
+  const btn = followBtnRef.current;
+  if (btn) {
+    btn.style.animation = "none";
+    void btn.offsetHeight;
+    btn.style.animation = "bounceFollow 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards";
+  }
+  setTimeout(() => { onFollow?.(); }, 220);
+};
+
+const spinKeyframes = (
+    <style>{`
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes bounceFollow { 0%{transform:scale(1)} 30%{transform:scale(0.88)} 65%{transform:scale(1.08)} 100%{transform:scale(1)} }
+  @keyframes iconSwapIn { 0%{opacity:0;transform:scale(0.5) rotate(-15deg)} 100%{opacity:1;transform:scale(1) rotate(0deg)} }
+`}</style>
   );
 
   if (viewContext === "ownFan" || viewContext === "ownCreator") {
@@ -96,23 +113,24 @@ export default function ProfileActions({
       <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "6px" }}>
         {/* Following/Follow pill */}
         <button
-          onClick={onFollow}
+          ref={followBtnRef}
+          onClick={handleFollowClick}
           style={{
             display: "flex", alignItems: "center", gap: "5px",
             padding: "7px 14px", borderRadius: "999px",
-            background: "transparent",
+            background: isFollowing ? "#8B5CF6" : "transparent",
             border: `1px solid ${isFollowing ? "#8B5CF6" : "#3A3A4D"}`,
             cursor: "pointer", fontFamily: "'Inter', sans-serif",
-            transition: "all 0.15s",
+            transition: "background 0.22s ease, border-color 0.22s ease",
           }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = isFollowing ? "#8B5CF6" : "#3A3A4D"; }}
         >
           {isFollowing
-            ? <UserCheck size={16} strokeWidth={1.8} color="#8B5CF6" />
-            : <UserPlus  size={16} strokeWidth={1.8} color="#C4C4D4" />
+            ? <span key="check" style={{ display:"flex", animation:"iconSwapIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }}><UserCheck size={16} strokeWidth={1.8} color="#FFFFFF" /></span>
+            : <span key="plus"  style={{ display:"flex", animation:"iconSwapIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards" }}><UserPlus  size={16} strokeWidth={1.8} color="#C4C4D4" /></span>
           }
-          <span style={{ fontSize: "12px", fontWeight: 600, color: isFollowing ? "#8B5CF6" : "#C4C4D4" }}>
+          <span style={{ fontSize: "12px", fontWeight: 600, color: isFollowing ? "#FFFFFF" : "#C4C4D4" }}>
             {isFollowing ? "Following" : "Follow"}
           </span>
         </button>

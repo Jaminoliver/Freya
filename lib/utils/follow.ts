@@ -7,7 +7,7 @@ export async function followCreator(followedId: string): Promise<void> {
 
   const { error } = await supabase
     .from("follows")
-    .insert({ follower_id: user.id, followed_id: followedId });
+    .upsert({ follower_id: user.id, followed_id: followedId }, { onConflict: "follower_id,followed_id", ignoreDuplicates: true });
 
   if (error) throw new Error(error.message);
 }
