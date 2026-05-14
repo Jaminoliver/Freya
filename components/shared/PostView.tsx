@@ -82,10 +82,9 @@ interface PostViewProps {
   postId:          string;
   sourceIsMessage: boolean;
   onBack:          () => void;
-  scrollRef?:      React.RefObject<HTMLDivElement | null>;
 }
 
-export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }: PostViewProps) {
+export default function PostView({ postId, sourceIsMessage, onBack }: PostViewProps) {
   const router = useRouter();
 
   const [post,            setPost]            = useState<PostData | null>(null);
@@ -114,27 +113,16 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
   const { group: storyGroup, hasStory, hasUnviewed, refresh: refreshStory } = useCreatorStory(post?.creator_id);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const isLiking    = useRef(false);
-  const lastScrollY = useRef(0);
-  const [headerHidden, setHeaderHidden] = useState(false);
+  
   const commentRef = useRef<HTMLDivElement>(null);
   const postRef    = useRef<PostData | null>(null);
   useEffect(() => { postRef.current = post; }, [post]);
 
   useEffect(() => {
-    const el = scrollRef?.current ?? document.querySelector("main");
-    if (el) el.scrollTop = 0;
+    window.scrollTo(0, 0);
   }, []);
 
-  useEffect(() => {
-    const el = scrollRef?.current ?? window;
-    const onScroll = () => {
-      const y = el === window ? window.scrollY : (el as HTMLElement).scrollTop;
-      setHeaderHidden(y > lastScrollY.current && y > 60);
-      lastScrollY.current = y;
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [scrollRef]);
+  
 
   useEffect(() => {
     if (!globalViewer) return;
@@ -402,7 +390,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
       )}
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", paddingTop: "env(safe-area-inset-top)", height: "56px", borderBottom: "1px solid #1E1E2E", position: "fixed", top: 0, left: 0, right: 0, backgroundColor: "#0A0A0F", zIndex: 50, boxSizing: "border-box", transform: headerHidden ? "translateY(-100%)" : "translateY(0)", transition: "transform 0.3s ease" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", paddingTop: "env(safe-area-inset-top)", height: "56px", borderBottom: "1px solid #1E1E2E", position: "fixed", top: 0, left: 0, right: 0, backgroundColor: "#0A0A0F", zIndex: 50, boxSizing: "border-box", }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <button onClick={() => { console.log("[PostView] back button clicked, calling onBack"); onBack(); }} style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
             <ArrowLeft size={20} strokeWidth={1.8} />
