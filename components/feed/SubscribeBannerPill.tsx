@@ -5,7 +5,6 @@ import * as React from "react";
 
 interface SubscribeBannerPillProps {
   isSubscribed: boolean;
-  isRenewal?:   boolean;
   isFree?:      boolean;
   loading?:     boolean;
   onClick?:     () => void;
@@ -13,24 +12,21 @@ interface SubscribeBannerPillProps {
 
 export default function SubscribeBannerPill({
   isSubscribed,
-  isRenewal = false,
   isFree    = false,
   loading   = false,
   onClick,
 }: SubscribeBannerPillProps) {
   const background = isSubscribed
     ? "#22C55E"
-    : isRenewal
-      ? "linear-gradient(135deg, #F97316, #D946EF)"
-      : "linear-gradient(135deg, #8B5CF6, #EC4899)";
+    : "linear-gradient(135deg, #8B5CF6, #EC4899)";
 
   const label = isSubscribed
     ? "Subscribed"
     : loading
-      ? (isRenewal ? "Resubscribing..." : "Subscribing...")
-      : isRenewal
-        ? (isFree ? "Resubscribe for Free" : "Resubscribe")
-        : (isFree ? "Subscribe for Free" : "Subscribe");
+      ? "Subscribing..."
+      : isFree
+        ? "Subscribe for Free"
+        : "Subscribe";
 
   const animation = isSubscribed
     ? "freyaSubbedPop 0.4s ease-out"

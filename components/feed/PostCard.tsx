@@ -315,7 +315,6 @@ function PostCardInner({
     <>
       <SubscribeBannerPill
         isSubscribed={subscribed}
-        isRenewal={is_renewal}
         isFree={isFree}
         loading={isLoading}
         onClick={handleSubscribeBannerClick}

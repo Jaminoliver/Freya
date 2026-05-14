@@ -46,11 +46,9 @@ export function IdentityCard({ data }: { data: IdentityCardData }) {
           overflow: hidden;
           cursor: pointer;
           background-color: #1A1A2E;
-          border: 1px solid #2A2A3D;
-          transition: border-color 0.15s ease, transform 0.15s ease;
+          transition: transform 0.15s ease;
         }
         .identity-card:hover {
-          border-color: #8B5CF6;
           transform: translateY(-2px);
         }
       `}</style>

@@ -91,12 +91,10 @@ function CreatorCardInner({
           cursor: pointer;
           position: relative;
           scroll-snap-align: start;
-          border: 1px solid #2A2A3D;
-          transition: border-color 0.15s ease, transform 0.15s ease;
+          transition: transform 0.15s ease;
           background-color: #1A1A2E;
         }
         .cc-strip:hover {
-          border-color: #8B5CF6;
           transform: translateY(-2px);
         }
         @media (max-width: 480px) {
@@ -110,11 +108,9 @@ function CreatorCardInner({
           overflow: hidden;
           cursor: pointer;
           background-color: #1A1A2E;
-          border: 1px solid #2A2A3D;
-          transition: border-color 0.15s ease, transform 0.15s ease;
+          transition: transform 0.15s ease;
         }
         .cc-grid:hover {
-          border-color: #8B5CF6;
           transform: translateY(-2px);
         }
       `}</style>

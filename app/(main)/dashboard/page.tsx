@@ -384,7 +384,7 @@ params.set("hotOffset",   String(cursors.hotOffset));
   const feedItems = useMemo(() => {
     const items: React.ReactNode[] = [];
     posts.forEach((post, index) => {
-      const showBanner   = !post.is_subscribed || post.is_renewal;
+      const showBanner   = !post.is_subscribed && !post.is_renewal;
       const subPrice     = post.profiles?.subscription_price ?? undefined;
       items.push(
   <div key={post.id} style={{

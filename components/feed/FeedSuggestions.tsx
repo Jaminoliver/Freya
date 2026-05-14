@@ -77,12 +77,24 @@ export function FeedSuggestions() {
           cursor: pointer;
           position: relative;
           scroll-snap-align: start;
-          border: 1px solid #2A2A3D;
           background-color: #1A1A2E;
-          transition: border-color 0.15s ease, transform 0.15s ease;
+          transition: transform 0.15s ease;
+       .feed-creator-card {
+          flex-shrink: 0;
+          width: 200px;
+          height: 270px;
+          border-radius: 14px;
+          overflow: hidden;
+          cursor: pointer;
+          position: relative;
+          scroll-snap-align: start;
+          background-color: #1A1A2E;
+          transition: transform 0.15s ease;
         }
         .feed-creator-card:hover {
-          border-color: #8B5CF6;
+          transform: translateY(-2px);
+        } }
+        .feed-creator-card:hover {
           transform: translateY(-2px);
         }
         @media (max-width: 480px) {
