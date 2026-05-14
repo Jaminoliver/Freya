@@ -68,7 +68,7 @@ export default function SubscribeBannerPill({
             width: "300%", height: "100%", pointerEvents: "none",
             background: "linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.5) 50%, transparent 75%)",
             backgroundSize: "200% 100%",
-            animation: "freyaGlow 1.6s linear infinite",
+            animation: "freyaGlow 3.5s linear infinite",
           }} />
         )}
         {isSubscribed && (

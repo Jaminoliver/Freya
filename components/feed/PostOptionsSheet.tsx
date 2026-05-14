@@ -281,21 +281,6 @@ export default function PostOptionsSheet({
             ))}
           </div>
 
-          {/* Group 1 — restrict */}
-          <div style={cardStyle}>
-            {group1.map((item, i) => (
-              <button
-                key={i}
-                className="post-opts-list-btn"
-                onClick={() => { if (item.dormant || !item.action) return; item.action(); onClose(); }}
-                style={{ ...listBtnBase, color: item.color, cursor: item.dormant ? "default" : "pointer", opacity: item.dormant ? 0.3 : 1 }}
-              >
-                <span style={{ display: "flex", flexShrink: 0 }}>{item.icon}</span>
-                {item.label}
-              </button>
-            ))}
-          </div>
-
           {/* Subscribe to message — only when not subscribed */}
           {!isSubscribed && (
             <>
@@ -323,6 +308,21 @@ export default function PostOptionsSheet({
               </button>
             </>
           )}
+
+          {/* Group 1 — restrict */}
+          <div style={cardStyle}>
+            {group1.map((item, i) => (
+              <button
+                key={i}
+                className="post-opts-list-btn"
+                onClick={() => { if (item.dormant || !item.action) return; item.action(); onClose(); }}
+                style={{ ...listBtnBase, color: item.color, cursor: item.dormant ? "default" : "pointer", opacity: item.dormant ? 0.3 : 1 }}
+              >
+                <span style={{ display: "flex", flexShrink: 0 }}>{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
 
           {/* Group 2 — danger */}
           <div style={cardStyle}>
