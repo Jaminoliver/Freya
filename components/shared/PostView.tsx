@@ -374,7 +374,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
   } as unknown as User;
 
   return (
-    <div style={{ width: "100%", fontFamily: "'Inter', sans-serif", minHeight: "100%" }}>
+    <div style={{ width: "100%", fontFamily: "'Inter', sans-serif", minHeight: "100%", paddingTop: "calc(56px + env(safe-area-inset-top))" }}>
 
       {storyViewerOpen && storyGroup && (
         <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refreshStory(); }} />
@@ -402,7 +402,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
       )}
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", paddingTop: "env(safe-area-inset-top)", height: "56px", borderBottom: "1px solid #1E1E2E", position: "sticky", top: 0, backgroundColor: "#0A0A0F", zIndex: 50, boxSizing: "content-box", transform: headerHidden ? "translateY(-100%)" : "translateY(0)", transition: "transform 0.3s ease" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", paddingTop: "env(safe-area-inset-top)", height: "56px", borderBottom: "1px solid #1E1E2E", position: "fixed", top: 0, left: 0, right: 0, backgroundColor: "#0A0A0F", zIndex: 50, boxSizing: "border-box", transform: headerHidden ? "translateY(-100%)" : "translateY(0)", transition: "transform 0.3s ease" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <button onClick={() => { console.log("[PostView] back button clicked, calling onBack"); onBack(); }} style={{ background: "none", border: "none", color: "#A3A3C2", cursor: "pointer", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }} onMouseEnter={(e) => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={(e) => (e.currentTarget.style.color = "#A3A3C2")}>
             <ArrowLeft size={20} strokeWidth={1.8} />
