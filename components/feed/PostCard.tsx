@@ -441,6 +441,7 @@ function PostCardInner({
               ) : null
             }
           >
+            <div style={{ marginTop: "12px", margin: "10px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
             <PostMediaViewer
               media={normalizedMedia} isLocked={post.isLocked} price={post.price}
               isPPV={post.is_ppv} isUnlockedPPV={post.is_ppv && !post.isLocked}
@@ -451,6 +452,7 @@ function PostCardInner({
               onSlideChange={(index) => onSlideChange?.(post.id, index)}
               autoplayOnVisible={autoplayOnVisible}
             />
+            </div>
           </VisibilityGate>
         );
       })()}

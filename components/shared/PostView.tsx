@@ -106,8 +106,6 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
   const [lightboxOpen,     setLightboxOpen]     = useState(false);
   const [lightboxMediaIdx, setLightboxMediaIdx] = useState(0);
   const [sheetOpen,        setSheetOpen]        = useState(false);
-  const [subToMsgOpen,     setSubToMsgOpen]     = useState(false);
-  const [subToMsgMonthly,  setSubToMsgMonthly]  = useState(0);
   const [creatorSheetOpen, setCreatorSheetOpen] = useState(false);
   const [editCaptionOpen,  setEditCaptionOpen]  = useState(false);
   const [editPPVOpen,      setEditPPVOpen]      = useState(false);
@@ -328,18 +326,6 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
     } catch { setSavedPost(!next); }
   }, [savedPost, post, sourceIsMessage]);
 
-  const handleSubscribeToMessage = useCallback(async () => {
-    if (!post) return;
-    setSubToMsgMonthly(post.profiles?.subscription_price ?? 0);
-    setSubToMsgOpen(true);
-  }, [post]);
-
-  const handleMessage = useCallback(async () => {
-    const { startConversation } = await import("@/app/(main)/messages/page");
-    const conversationId = await startConversation(post!.creator_id);
-    if (conversationId) router.push(`/messages/${conversationId}`);
-  }, [post, router]);
-
   const openTip    = () => { setCheckoutType("tips"); setCheckoutOpen(true); };
   const openUnlock = () => { setCheckoutType(post?.is_ppv ? "ppv" : "subscription"); setCheckoutOpen(true); };
 
@@ -440,7 +426,6 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
         hasUnviewedStory={hasUnviewed}
         onAvatarClick={() => { if (hasStory && storyGroup) setStoryViewerOpen(true); else router.push(`/${post.profiles?.username}`); }}
         onNameClick={() => router.push(`/${post.profiles?.username}`)}
-        caption={!isTextPost ? post.caption ?? undefined : undefined}
         rightSlot={
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             {!sourceIsMessage && isOwnPost && post.is_ppv && post.ppv_price ? (
@@ -474,7 +459,9 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
         </div>
       )}
 
-      
+      {post.caption && !isTextPost && (
+        <p style={{ margin: "0", fontSize: "14px", color: "#FFFFFF", lineHeight: 1.7, padding: "0 16px 10px", whiteSpace: "pre-wrap" }}>{post.caption}</p>
+      )}
 
       {isTextPost && post.caption && (
         <div style={{ margin: "12px 0 0" }}>
@@ -500,22 +487,6 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
         </div>
       )}
 
-      {!sourceIsMessage && subToMsgOpen && post && (
-        <CheckoutModal
-          isOpen={subToMsgOpen}
-          onClose={() => setSubToMsgOpen(false)}
-          type="subscription"
-          creator={{ id: post.creator_id, username: post.profiles.username, display_name: post.profiles.display_name, avatar_url: post.profiles.avatar_url, role: "creator" } as any}
-          monthlyPrice={subToMsgMonthly}
-          autoCloseOnSuccess
-          onSubscriptionSuccess={async () => {
-            const { startConversation } = await import("@/app/(main)/messages/page");
-            const conversationId = await startConversation(post.creator_id);
-            if (conversationId) router.push(`/messages/${conversationId}`);
-          }}
-        />
-      )}
-
       {!sourceIsMessage && (
         <PostOptionsSheet
           isOpen={sheetOpen}
@@ -526,10 +497,6 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
           onReport={() => {}}
           onBlockCreator={() => {}}
           savedPost={savedPost}
-          isSubscribed={post.can_access}
-          isFreeCreator={(post.profiles?.subscription_price ?? 0) === 0}
-          onMessage={handleMessage}
-          onSubscribe={handleSubscribeToMessage}
         />
       )}
 

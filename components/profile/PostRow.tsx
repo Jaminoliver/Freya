@@ -313,6 +313,7 @@ export default function PostRow({
       )}
 
       {viewerMedia.length > 0 && (
+        <div style={{ marginTop: "12px", margin: "10px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
         <PostMediaViewer
           media={viewerMedia}
           isLocked={post.locked && !isOwnProfile}
@@ -324,6 +325,7 @@ export default function PostRow({
           onSingleTap={handleSingleTap}
           onUnlock={() => onUnlock?.(String(post.id))}
         />
+        </div>
       )}
 
       {(!post.locked || (isSubscribed && !post.is_ppv) || isOwnProfile) && (

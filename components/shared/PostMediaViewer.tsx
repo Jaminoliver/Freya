@@ -437,6 +437,8 @@ export default function PostMediaViewer({
   }
 
   // ── Video ────────────────────────────────────────────────────────────────
+  const isMobileView = typeof window !== "undefined" && window.innerWidth < 430;
+
   if (isVideo) {
     const videoRatio = (() => {
       if (first?.aspectRatio != null && first.aspectRatio > 0) {
@@ -456,7 +458,8 @@ export default function PostMediaViewer({
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
         <div
           style={{
-            width:                "100%",
+            width:       
+                     "100%",
             position:             "relative",
             overflow:             "hidden",
             aspectRatio:          String(videoRatio),
@@ -467,7 +470,7 @@ export default function PostMediaViewer({
             backgroundPosition:   "center",
           }}
         >
-          {blurSrc && (
+          {!isMobileView && blurSrc && (
             <div style={{
               position:             "absolute",
               inset:                0,
@@ -487,7 +490,7 @@ export default function PostMediaViewer({
               fillParent={true}
               hideInternalBlur={true}
               blurHash={first.blurHash}
-              objectFit="contain"
+              objectFit={isMobileView ? "cover" : "contain"}
               autoplayOnVisible={autoplayOnVisible}
             />
           </div>
@@ -577,7 +580,7 @@ export default function PostMediaViewer({
           src={first.url}
           blurHash={first.blurHash}
           eager
-          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+          style={{ width: "100%", height: "100%", objectFit: isMobileView ? "cover" : "contain", display: "block" }}
         />
 
         {isUnlockedPPV && <UnlockedPPVBadge />}
