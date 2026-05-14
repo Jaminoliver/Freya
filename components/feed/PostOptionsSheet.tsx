@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bookmark, UserPlus, ThumbsDown, Flag, Ban, ShieldOff, MessageCircle } from "lucide-react";
+import { Bookmark, UserPlus, ThumbsDown, Flag, Ban, ShieldOff, MessagesSquare } from "lucide-react";
 import { createPortal } from "react-dom";
 
 interface PostOptionsSheetProps {
@@ -99,7 +99,7 @@ export default function PostOptionsSheet({
       },
     },
     ...(isSubscribed ? [{
-      icon:   <MessageCircle size={22} strokeWidth={1.6} />,
+      icon:   <MessagesSquare size={22} strokeWidth={1.6} />,
       label:  "Message",
       color:  "#FFFFFF",
       action: () => { onMessage?.(); },
@@ -285,10 +285,8 @@ export default function PostOptionsSheet({
           {!isSubscribed && (
             <>
               <style>{`
-                @keyframes _subMsgPulse {
-                  0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
-                  50%       { box-shadow: 0 0 14px 4px rgba(139,92,246,0.35); }
-                }
+                <span style=@keyframes _subMsgPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+                @keyframes _subMsgGlow  { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }{{ display: "flex", flexShrink: 0 }}><MessagesSquare size={18} strokeWidth={1.6} /></span>
               `}</style>
               <button
                 onClick={() => { onClose(); onSubscribe?.(); }}
@@ -300,10 +298,13 @@ export default function PostOptionsSheet({
                   background:    "linear-gradient(135deg, #8B5CF6, #EC4899)",
                   color:         "#FFFFFF",
                   fontWeight:    600,
-                  animation:     "_subMsgPulse 2.2s ease-in-out infinite",
+                  animation:     "_subMsgPulse 1.3s ease-in-out infinite",
+                  position:      "relative",
+                  overflow:      "hidden",
                 }}
               >
-                <span style={{ display: "flex", flexShrink: 0 }}><MessageCircle size={18} strokeWidth={1.6} /></span>
+                <span style={{ position: "absolute", top: 0, left: 0, width: "300%", height: "100%", pointerEvents: "none", background: "linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.5) 50%, transparent 75%)", backgroundSize: "200% 100%", animation: "_subMsgGlow 3.5s linear infinite" }} />
+                <span style={{ display: "flex", flexShrink: 0 }}><MessagesSquare size={18} strokeWidth={1.6} /></span>
                 {isFreeCreator ? "Subscribe for Free to Message" : "Subscribe to Message"}
               </button>
             </>
