@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UserPlus, UserCheck, MessagesSquare } from "lucide-react";
 
@@ -35,22 +35,21 @@ export default function ProfileActions({
     onEditProfile?.();
   };
 
-  const followBtnRef = useRef<HTMLButtonElement>(null);
+  const followingRef = useRef(false);
+const [followAnim, setFollowAnim] = useState(false);
 
 const handleFollowClick = () => {
-  const btn = followBtnRef.current;
-  if (btn) {
-    btn.style.animation = "none";
-    void btn.offsetHeight;
-    btn.style.animation = "bounceFollow 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards";
-  }
-  setTimeout(() => { onFollow?.(); }, 220);
+  if (followingRef.current) return;
+  followingRef.current = true;
+  setFollowAnim(true);
+  setTimeout(() => { onFollow?.(); }, 125);
+  setTimeout(() => { setFollowAnim(false); followingRef.current = false; }, 250);
 };
 
 const spinKeyframes = (
     <style>{`
   @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes bounceFollow { 0%{transform:scale(1)} 30%{transform:scale(0.88)} 65%{transform:scale(1.08)} 100%{transform:scale(1)} }
+  @keyframes followPop { 0%{transform:scale(1)} 50%{transform:scale(0.92)} 100%{transform:scale(1)} }
   @keyframes iconSwapIn { 0%{opacity:0;transform:scale(0.5) rotate(-15deg)} 100%{opacity:1;transform:scale(1) rotate(0deg)} }
 `}</style>
   );
@@ -113,7 +112,6 @@ const spinKeyframes = (
       <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "6px" }}>
         {/* Following/Follow pill */}
         <button
-          ref={followBtnRef}
           onClick={handleFollowClick}
           style={{
             display: "flex", alignItems: "center", gap: "5px",
@@ -122,6 +120,7 @@ const spinKeyframes = (
             border: `1px solid ${isFollowing ? "#8B5CF6" : "#3A3A4D"}`,
             cursor: "pointer", fontFamily: "'Inter', sans-serif",
             transition: "background 0.22s ease, border-color 0.22s ease",
+            animation: followAnim ? "followPop 0.25s ease forwards" : "none",
           }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = isFollowing ? "#8B5CF6" : "#3A3A4D"; }}
