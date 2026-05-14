@@ -126,7 +126,7 @@ export default function PostView({ postId, sourceIsMessage, onBack, scrollRef }:
   }, []);
 
   useEffect(() => {
-    const el = scrollRef?.current ?? document.querySelector("main") ?? window;
+    const el = scrollRef?.current ?? window;
     const onScroll = () => {
       const y = el === window ? window.scrollY : (el as HTMLElement).scrollTop;
       setHeaderHidden(y > lastScrollY.current && y > 60);
