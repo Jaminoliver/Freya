@@ -341,7 +341,7 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
         className="md:hidden"
         style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-          backgroundColor: "#0A0A0F", borderBottom: "1px solid #2A2A3D",
+          backgroundColor: "#0A0A0F",
           height: "44px", fontFamily: "'Inter', sans-serif",
           transform: headerVisible ? "translateY(0)" : "translateY(-100%)",
           transition: "transform 0.25s ease",
