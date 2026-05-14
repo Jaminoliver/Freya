@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, Star } from "lucide-react";
+import { BadgeCheck, Star, MessagesSquare } from "lucide-react";
 import Image from "next/image";
 import { useNav } from "@/lib/hooks/useNav";
 import { AvatarWithStoryRing } from "@/components/ui/AvatarWithStoryRing";
@@ -120,9 +120,7 @@ export function SubscriptionCardCompact({
             {messageLoading ? (
               <div style={{ width: "14px", height: "14px", borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent", animation: "spin 0.6s linear infinite" }} />
             ) : (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
+              <MessagesSquare size={22} strokeWidth={1.8} />
             )}
           </button>
         </div>
