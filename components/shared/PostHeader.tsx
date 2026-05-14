@@ -80,7 +80,7 @@ export default function PostHeader({
         >
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             <span style={{
-              fontSize: "16px", fontWeight: 700, color: "#FFFFFF",
+              fontSize: "15px", fontWeight: 700, color: "#FFFFFF",
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }}>
               {displayName}
@@ -89,7 +89,7 @@ export default function PostHeader({
           </div>
           <div style={{
             display: "flex", alignItems: "center", gap: "5px",
-            fontSize: "13px", color: "#6B6B8A",
+            fontSize: "12px", color: "#6B6B8A",
           }}>
             <span>@{username}</span>
             {suffix}
