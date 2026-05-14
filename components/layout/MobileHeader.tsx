@@ -352,7 +352,7 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
   {isCreator ? (
     <div style={{ position: "relative" }}>
       <button onClick={() => setPlusOpen((o) => !o)} aria-label="Create" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
-        <Plus size={22} strokeWidth={1.8} />
+        <Plus size={23} strokeWidth={1.8} />
       </button>
       {plusOpen && (
         <>
@@ -382,12 +382,12 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
   </div>
   <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
     <button onClick={() => setSearchOpen(true)} aria-label="Search" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
-      <Search size={22} strokeWidth={1.8} />
+      <Search size={23} strokeWidth={1.8} />
     </button>
     <button onClick={() => navigate("/notifications")} aria-label="Notifications" style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
-      <Bell size={22} strokeWidth={1.8} />
+      <Bell size={23} strokeWidth={1.8} />
       {unreadNotificationCount > 0 && (
-        <span style={{ position: "absolute", top: "4px", right: "4px", minWidth: "18px", height: "18px", borderRadius: "9px", backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "11px", fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", boxShadow: "0 0 0 2px #13131F" }}>
+        <span style={{ position: "absolute", top: "6px", right: "6px", minWidth: "14px", height: "14px", borderRadius: "7px", backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "9px", fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", boxShadow: "0 0 0 1.5px #13131F" }}>
           {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
         </span>
       )}
