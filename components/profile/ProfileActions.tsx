@@ -80,9 +80,7 @@ export default function ProfileActions({
           {messageLoading ? (
             <div style={{ width: "16px", height: "16px", borderRadius: "50%", border: "2px solid #C4C4D4", borderTopColor: "transparent", animation: "spin 0.6s linear infinite" }} />
           ) : (
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
+            <MessagesSquare size={22} strokeWidth={1.8} color="#C4C4D4" />
           )}
           <span style={{ fontSize: "13px", fontWeight: 600, color: "#C4C4D4" }}>Message</span>
         </button>
