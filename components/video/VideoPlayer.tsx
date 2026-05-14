@@ -56,9 +56,10 @@ interface ControlsProps {
   videoRef:     React.RefObject<HTMLVideoElement | null>;
   isMuted:      boolean;
   onToggleMute: () => void;
+  onFirstPlay?: () => void;
 }
 
-function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
+function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay }: ControlsProps) {
   const [playing,      setPlaying]      = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash,  setCenterFlash]  = React.useState<"play"|"pause"|null>(null);
   const [currentTime,  setCurrentTime]  = React.useState(0);
@@ -90,7 +91,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
     const video = videoRef.current;
     if (!video) return;
 
-    const onPlay     = () => { setPlaying(true);  showControls(); };
+    const onPlay     = () => { setPlaying(true); showControls(); onFirstPlay?.(); };
     const onPause    = () => { setPlaying(false); setVisible(true); if (hideTimer.current) clearTimeout(hideTimer.current); };
     const onTime     = () => {
       setCurrentTime(video.currentTime);
