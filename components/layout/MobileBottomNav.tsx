@@ -56,7 +56,7 @@ body.search-open .mobile-bottom-nav { display: none !important; }
         className="mobile-bottom-nav"
         style={{
           position: "fixed", bottom: "0", left: "0", right: "0",
-          backgroundColor: "#13131F",
+          backgroundColor: "#0A0A0F",
 border: "none",
           borderRadius: "12px 12px 0 0",
           zIndex: 200,
