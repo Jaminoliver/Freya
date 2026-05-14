@@ -75,6 +75,7 @@ export default function SinglePostSheet({ postId, sourceIsMessage, onClose }: Si
           backgroundColor: "#0A0A0F",
           overflowY:       "auto",
           overflowX:       "hidden",
+          paddingBottom:   "env(safe-area-inset-bottom)",
           scrollbarWidth:  "none",
           WebkitOverflowScrolling: "touch",
           animation:       "sheetSlideIn 0.28s cubic-bezier(0.32, 0.72, 0, 1) forwards",
