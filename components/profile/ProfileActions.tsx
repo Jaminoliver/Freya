@@ -61,7 +61,7 @@ export default function ProfileActions({
     return (
       <>
       {spinKeyframes}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "6px" }}>
         <button
           onClick={() => onMessage?.()}
           disabled={messageLoading}
@@ -93,7 +93,7 @@ export default function ProfileActions({
     return (
       <>
       {spinKeyframes}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "6px" }}>
         {/* Following/Follow pill */}
         <button
           onClick={onFollow}
@@ -124,14 +124,11 @@ export default function ProfileActions({
             disabled={messageLoading}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
-              width: "44px", height: "44px", borderRadius: "999px",
-              background: "transparent", border: "1px solid #3A3A4D",
+              background: "transparent", border: "none",
               cursor: messageLoading ? "default" : "pointer",
-              transition: "border-color 0.15s",
               opacity: messageLoading ? 0.6 : 1,
+              padding: 0,
             }}
-            onMouseEnter={(e) => { if (!messageLoading) e.currentTarget.style.borderColor = "#8B5CF6"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
           >
             {messageLoading ? (
               <div style={{ width: "18px", height: "18px", borderRadius: "50%", border: "2px solid #C4C4D4", borderTopColor: "transparent", animation: "spin 0.6s linear infinite" }} />
@@ -146,12 +143,9 @@ export default function ProfileActions({
           onClick={() => onTip?.(undefined)}
           style={{
             display: "flex", alignItems: "center",
-            background: "none", border: "1px solid #3A3A4D",
-            padding: "9px 16px", borderRadius: "999px",
-            cursor: "pointer", transition: "border-color 0.15s",
+            background: "none", border: "none",
+            padding: 0, cursor: "pointer",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8B5CF6"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#3A3A4D"; }}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4C4D4" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 12 20 22 4 22 4 12"/>

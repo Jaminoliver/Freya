@@ -112,7 +112,7 @@ export default function ProfileInfo({
               <p
                 ref={bioRef}
                 style={{
-                  fontSize: "16px",
+                  fontSize: "14px",
                 lineHeight: `${LINE_HEIGHT_PX}px`,
                 color: "#E2E8F0",
                   margin: 0,
@@ -135,7 +135,7 @@ export default function ProfileInfo({
               {!expanded && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                style={{ background: "none", border: "none", color: "#8B5CF6", fontSize: "13px", fontWeight: 500, cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif" }}
+                style={{ background: "none", border: "none", color: "#8B5CF6", fontSize: "12px", fontWeight: 500, cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif" }}
               >
                 More info
               </button>
@@ -147,7 +147,7 @@ export default function ProfileInfo({
                       style={{ display: "flex", alignItems: "center", color: "#3B82F6", textDecoration: "none" }}
                       onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                      <Globe size={20} strokeWidth={1.8} />
+                      <Globe size={16} strokeWidth={1.8} />
                     </a>
                   )}
                   {twitterUrl && (
@@ -155,7 +155,7 @@ export default function ProfileInfo({
                       style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
                       onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="#FFFFFF">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF">
                         <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.26 5.632L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
                       </svg>
                     </a>
@@ -165,7 +165,7 @@ export default function ProfileInfo({
                       style={{ display: "flex", alignItems: "center", color: "#E1306C", textDecoration: "none" }}
                       onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                      <Instagram size={20} strokeWidth={1.8} />
+                      <Instagram size={16} strokeWidth={1.8} />
                     </a>
                   )}
                   {facebookUrl && (
@@ -173,7 +173,7 @@ export default function ProfileInfo({
                       style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
                       onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="#1877F2">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#1877F2">
                         <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                       </svg>
                     </a>
@@ -183,12 +183,12 @@ export default function ProfileInfo({
                       style={{ display: "flex", alignItems: "center", color: "#26A5E4", textDecoration: "none" }}
                       onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                      <Send size={20} strokeWidth={1.8} />
+                      <Send size={16} strokeWidth={1.8} />
                     </a>
                   )}
                   {location && (
                     <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <MapPin size={20} color="#8B5CF6" strokeWidth={1.8} />
+                      <MapPin size={14} color="#8B5CF6" strokeWidth={1.8} />
                       <span style={{ fontSize: "12px", color: "#A3A3C2" }}>{location}</span>
                     </div>
                   )}
@@ -201,9 +201,9 @@ export default function ProfileInfo({
             <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
               {websiteUrl && (
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Globe size={20} color="#3B82F6" strokeWidth={1.8} />
+                  <Globe size={16} color="#3B82F6" strokeWidth={1.8} />
                   <a href={websiteUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: "13px", color: "#3B82F6", textDecoration: "none" }}
+                    style={{ fontSize: "12px", color: "#3B82F6", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
                   >
@@ -214,8 +214,8 @@ export default function ProfileInfo({
               <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
                 {location && (
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <MapPin size={20} color="#8B5CF6" strokeWidth={1.8} />
-                    <span style={{ fontSize: "13px", color: "#A3A3C2" }}>{location}</span>
+                    <MapPin size={14} color="#8B5CF6" strokeWidth={1.8} />
+                    <span style={{ fontSize: "12px", color: "#A3A3C2" }}>{location}</span>
                   </div>
                 )}
                 {twitterUrl && (
@@ -223,7 +223,7 @@ export default function ProfileInfo({
                     style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#FFFFFF">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#FFFFFF">
                       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.26 5.632L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
                     </svg>
                   </a>
@@ -233,7 +233,7 @@ export default function ProfileInfo({
                     style={{ display: "flex", alignItems: "center", color: "#E1306C", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                    <Instagram size={20} strokeWidth={1.8} />
+                    <Instagram size={16} strokeWidth={1.8} />
                   </a>
                 )}
                 {facebookUrl && (
@@ -241,7 +241,7 @@ export default function ProfileInfo({
                     style={{ display: "flex", alignItems: "center", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#1877F2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#1877F2">
                       <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                     </svg>
                   </a>
@@ -251,7 +251,7 @@ export default function ProfileInfo({
                     style={{ display: "flex", alignItems: "center", color: "#26A5E4", textDecoration: "none" }}
                     onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-                    <Send size={20} strokeWidth={1.8} />
+                    <Send size={16} strokeWidth={1.8} />
                   </a>
                 )}
               </div>
@@ -263,7 +263,7 @@ export default function ProfileInfo({
       {isOverflowing && expanded && (
         <button
           onClick={() => setExpanded(false)}
-          style={{ background: "none", border: "none", color: "#8B5CF6", fontSize: "13px", fontWeight: 500, cursor: "pointer", padding: "8px 0 0", fontFamily: "'Inter', sans-serif", display: "block" }}
+          style={{ background: "none", border: "none", color: "#8B5CF6", fontSize: "12px", fontWeight: 500, cursor: "pointer", padding: "8px 0 0", fontFamily: "'Inter', sans-serif", display: "block" }}
         >
           Less info
         </button>
