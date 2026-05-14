@@ -44,6 +44,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
     pathname === "/dashboard" ||
     pathname === "/subscriptions" ||
     pathname === "/notifications" ||
+    isPostPage ||
     (pathname.split("/").length === 2 &&
      pathname !== "/" &&
      !["/messages", "/settings", "/wallet", "/create", "/posts"].some(p => pathname.startsWith(p)));
