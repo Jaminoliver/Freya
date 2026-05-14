@@ -66,8 +66,8 @@ export default function ProfileActions({
           onClick={() => onMessage?.()}
           disabled={messageLoading}
           style={{
-            display: "flex", alignItems: "center", gap: "7px",
-            padding: "9px 18px", borderRadius: "999px",
+            display: "flex", alignItems: "center", gap: "5px",
+            padding: "6px 12px", borderRadius: "999px",
             background: "transparent", border: "1px solid #3A3A4D",
             cursor: messageLoading ? "default" : "pointer",
             fontFamily: "'Inter', sans-serif",
@@ -99,7 +99,7 @@ export default function ProfileActions({
           onClick={onFollow}
           style={{
             display: "flex", alignItems: "center", gap: "7px",
-            padding: "9px 18px", borderRadius: "999px",
+            padding: "6px 12px", borderRadius: "999px",
             background: "transparent",
             border: `1px solid ${isFollowing ? "#8B5CF6" : "#3A3A4D"}`,
             cursor: "pointer", fontFamily: "'Inter', sans-serif",
@@ -109,10 +109,10 @@ export default function ProfileActions({
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = isFollowing ? "#8B5CF6" : "#3A3A4D"; }}
         >
           {isFollowing
-            ? <UserCheck size={22} strokeWidth={1.8} color="#8B5CF6" />
-            : <UserPlus  size={22} strokeWidth={1.8} color="#C4C4D4" />
+            ? <UserCheck size={16} strokeWidth={1.8} color="#8B5CF6" />
+            : <UserPlus  size={16} strokeWidth={1.8} color="#C4C4D4" />
           }
-          <span style={{ fontSize: "13px", fontWeight: 600, color: isFollowing ? "#8B5CF6" : "#C4C4D4" }}>
+          <span style={{ fontSize: "11px", fontWeight: 600, color: isFollowing ? "#8B5CF6" : "#C4C4D4" }}>
             {isFollowing ? "Following" : "Follow"}
           </span>
         </button>
