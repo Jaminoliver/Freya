@@ -5,7 +5,7 @@ import { useState } from "react";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useNav } from "@/lib/hooks/useNav";
 import { useUnreadConversationCount } from "@/app/(main)/messages/page";
-import { House, Mail, Compass, CreditCard, User, AlignJustify } from "lucide-react";
+import { House, MessageCircle, Search, Crown, User, AlignJustify } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 export function MobileBottomNav() {
   const pathname     = usePathname();
@@ -79,7 +79,7 @@ border: "none",
 
        <button onClick={() => navigate("/messages")} style={{ ...btn(pathname === "/messages"), position: "relative" }}>
   <div style={{ position: "relative", display: "inline-flex" }}>
-    <Mail size={25} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
+    <MessageCircle size={25} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
     {unreadCount > 0 && (
       <span style={{
         position: "absolute", top: "-6px", right: "-10px",
@@ -96,11 +96,12 @@ border: "none",
 </button>
 
 <button onClick={() => navigate("/explore")} style={btn(pathname === "/explore")}>
-  <Compass size={25} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
+  <Search size={25} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
+
 </button>
 
 <button onClick={() => navigate("/subscriptions")} style={btn(pathname === "/subscriptions")}>
-  <CreditCard size={25} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
+  <Crown size={25} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
 </button>
 
 <button onClick={() => setMoreOpen(true)} style={btn(moreOpen)}>

@@ -59,10 +59,10 @@ interface ControlsProps {
 }
 
 function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
-  const [playing,      setPlaying]      = React.useState(false);
+  const [playing,      setPlaying]      = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash,  setCenterFlash]  = React.useState<"play"|"pause"|null>(null);
   const [currentTime,  setCurrentTime]  = React.useState(0);
-  const [duration,     setDuration]     = React.useState(0);
+  const [duration,     setDuration]     = React.useState(() => videoRef.current?.duration || 0);
   const [buffered,     setBuffered]     = React.useState(0);
   const [visible,      setVisible]      = React.useState(true);
   const [seeking,      setSeeking]      = React.useState(false);
@@ -339,16 +339,10 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
         )}
       </button>
 
-      {/* Center play/pause flash (Instagram-style) */}
-      {centerFlash && (
-        <div className="vp-center-flash" style={{ position: "absolute", top: "50%", left: "50%", zIndex: 20, pointerEvents: "none" }}>
-          <div style={{ width: "64px", height: "64px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
-            {centerFlash === "pause" ? (
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-            ) : (
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg>
-            )}
-          </div>
+      {/* Play indicator — shows when paused, hides when playing */}
+      {!playing && (
+        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 8, pointerEvents: "none" }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><polygon points="5,3 19,12 5,21"/></svg>
         </div>
       )}
 
@@ -376,7 +370,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute }: ControlsProps) {
           onMouseUp={handleSeekMouseUp}
           onTouchStart={handleSeekTouchStart}
           onTouchEnd={handleSeekTouchEnd}
-          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none" }}
+          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 11 }}
         >
           <div style={{ position: "relative", width: "100%", height: "4px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.25)", overflow: "visible" }}>
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.35)", borderRadius: "2px" }} />
@@ -454,6 +448,7 @@ export default function VideoPlayer({
   const hlsRef         = React.useRef<any>(null);
   const hasInitialized = React.useRef(false);
   const bufferTimer    = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingTimer   = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showPoster,   setShowPoster]   = React.useState(true);
   const [posterLoaded, setPosterLoaded] = React.useState(false);
@@ -462,6 +457,7 @@ export default function VideoPlayer({
   const [hasError,     setHasError]     = React.useState(false);
   const [hasStarted,   setHasStarted]   = React.useState(false);
   const [showSlowDots, setShowSlowDots] = React.useState(false);
+  const [isLoading,    setIsLoading]    = React.useState(false);
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
   const [isMuted,      setIsMuted]      = React.useState(() => getSavedMute());
   const [isMobile,     setIsMobile]     = React.useState(false);
@@ -598,6 +594,7 @@ export default function VideoPlayer({
   React.useEffect(() => {
     return () => {
       if (bufferTimer.current) clearTimeout(bufferTimer.current);
+      if (loadingTimer.current) clearTimeout(loadingTimer.current);
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
@@ -660,8 +657,8 @@ export default function VideoPlayer({
   }, [fillParent, externalRatio]);
 
   const handlePosterPlay = React.useCallback(async () => {
-    setShowPoster(false);
-    setIsBuffering(true);
+    if (loadingTimer.current) clearTimeout(loadingTimer.current);
+    loadingTimer.current = setTimeout(() => setIsLoading(true), 300);
     const video = videoRef.current;
     if (!hasInitialized.current) await initVideo();
     const savedMute = getSavedMute();
@@ -741,7 +738,7 @@ export default function VideoPlayer({
             src={posterSrc}
             alt=""
             aria-hidden
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.45)", transform: "scale(1.1)", zIndex: 0, pointerEvents: "none" }}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.45)", transform: "scale(1.1)", zIndex: 0, pointerEvents: "none", opacity: showPoster ? 0 : 1, transition: "opacity 0.2s ease" }}
           />
         )}
 
@@ -750,10 +747,10 @@ export default function VideoPlayer({
         )}
 
         {/* Poster + play button */}
-        {showPoster && (
+        {(showPoster || isLoading) && (
           <div
-            onClick={handlePosterPlay}
-            style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+            onClick={showPoster ? handlePosterPlay : undefined}
+            style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: showPoster ? "pointer" : "default", opacity: showPoster ? 1 : 0, transition: "opacity 0.25s ease", pointerEvents: showPoster ? "auto" : "none" }}
           >
             <img
               src={posterSrc}
@@ -763,9 +760,7 @@ export default function VideoPlayer({
               onError={() => setPosterError(true)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
             />
-            <div style={{ position: "relative", zIndex: 2, width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.55)", border: "2px solid rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
-              <div style={{ width: 0, height: 0, borderTop: "10px solid transparent", borderBottom: "10px solid transparent", borderLeft: "18px solid rgba(255,255,255,0.95)", marginLeft: "4px" }} />
-            </div>
+            {!isLoading && <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}><polygon points="5,3 19,12 5,21"/></svg>}
           </div>
         )}
 
@@ -776,7 +771,6 @@ export default function VideoPlayer({
           preload="none"
           loop
           muted={isMuted}
-          poster={posterSrc}
           onLoadedMetadata={handleLoadedMetadata}
           onPlay={() => {
             // Don't clear isBuffering here — onPlay fires before frames paint.
@@ -789,22 +783,24 @@ export default function VideoPlayer({
           onPlaying={() => {
             if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
             if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
+            if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
             setIsBuffering(false);
             setHasStarted(true);
             setShowSlowDots(false);
-            setShowPoster(false);  // hide poster only when video actually paints
+            setIsLoading(false);
+            setShowPoster(false);
           }}
           onCanPlay={() => {
             // Don't clear isBuffering here either — wait for actual playback.
           }}
           onError={() => { setHasError(true); setIsBuffering(false); }}
-          style={{ ...videoStyle, visibility: showPoster ? "hidden" : "visible", animation: !showPoster ? "fadeIn 0.2s ease" : undefined }}
+          style={{ ...videoStyle, opacity: showPoster ? 0 : 1, transition: "opacity 0.25s ease" }}
         />
 
         {/* Loading — pulsing gradient ring (SVG, reliable everywhere).
             Shows during entire load window: poster dismissed → first frame paints,
             plus any mid-playback stall. */}
-        {!showPoster && !hasError && (isBuffering || !hasStarted) && (
+        {(isLoading || (!showPoster && !hasError && isBuffering)) && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <style>{`
               @keyframes vp-ring-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

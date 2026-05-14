@@ -63,13 +63,13 @@ export default function PostActions({
           style={{
   display: "flex", alignItems: "center", gap: "6px",
   background: "none", border: "none", padding: 0,
-  color: "#C4C4D4", fontSize: "14px", fontWeight: 500,
+  color: "#C4C4D4", fontSize: "14px", fontWeight: 300,
   fontFamily: "'Inter', sans-serif",
   cursor: "pointer",
   transition: "color 0.15s",
 }}
         >
-          <Heart size={22} fill={liked ? "#EC4899" : "none"} strokeWidth={1.8} />
+          <Heart size={22} fill={liked ? "#EC4899" : "none"} strokeWidth={1.0} />
           <span>{likes.toLocaleString()}</span>
         </button>
 
@@ -80,13 +80,13 @@ export default function PostActions({
             display: "flex", alignItems: "center", gap: "6px",
             background: "none", border: "none", padding: 0,
             color: "#C4C4D4",
-            fontSize: "14px", fontWeight: 500,
+            fontSize: "14px", fontWeight: 300,
             fontFamily: "'Inter', sans-serif",
             cursor: "pointer",
             transition: "color 0.15s",
           }}
         >
-          <MessageCircle size={22} strokeWidth={1.8} />
+          <MessageCircle size={22} strokeWidth={1.0} />
           <span>{comments.toLocaleString()}</span>
         </button>
 
@@ -97,12 +97,12 @@ export default function PostActions({
             style={{
               display: "flex", alignItems: "center", gap: "6px",
               background: "none", border: "none", padding: 0,
-              color: "#C4C4D4", fontSize: "14px", fontWeight: 500,
+              color: "#C4C4D4", fontSize: "14px", fontWeight: 300,
               fontFamily: "'Inter', sans-serif",
               cursor: "pointer", transition: "color 0.15s",
             }}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.0" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 12 20 22 4 22 4 12"/>
               <rect x="2" y="7" width="20" height="5"/>
               <line x1="12" y1="22" x2="12" y2="7"/>
@@ -128,7 +128,7 @@ export default function PostActions({
             transition: "color 0.15s",
           }}
         >
-          <Bookmark size={22} fill={bookmarked ? "#8B5CF6" : "none"} strokeWidth={1.8} />
+          <Bookmark size={22} fill={bookmarked ? "#8B5CF6" : "none"} strokeWidth={1.0} />
         </button>
       </div>
 
