@@ -51,17 +51,28 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-// ── Custom Controls Overlay ───────────────────────────────────────────────────
-interface ControlsProps {
-  videoRef:     React.RefObject<HTMLVideoElement | null>;
-  isMuted:      boolean;
-  onToggleMute: () => void;
-  onFirstPlay?: () => void;
-  isMobile?:    boolean;
-  isPortrait?:  boolean;
+// ── Get actual painted video height inside object-fit:contain container ───────
+function getRenderedVideoHeight(video: HTMLVideoElement): number {
+  const { videoWidth, videoHeight, offsetWidth, offsetHeight } = video;
+  if (!videoWidth || !videoHeight) return offsetHeight;
+  const videoRatio   = videoWidth / videoHeight;
+  const elementRatio = offsetWidth / offsetHeight;
+  if (elementRatio > videoRatio) return offsetHeight; // pillarboxed — full height used
+  return offsetWidth / videoRatio;                    // letterboxed — height is constrained
 }
 
-function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait }: ControlsProps) {
+// ── Custom Controls Overlay ───────────────────────────────────────────────────
+interface ControlsProps {
+  videoRef:      React.RefObject<HTMLVideoElement | null>;
+  isMuted:       boolean;
+  onToggleMute:  () => void;
+  onFirstPlay?:  () => void;
+  isMobile?:     boolean;
+  isPortrait?:   boolean;
+  bottomOffset?: number;
+}
+
+function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait, bottomOffset = 0 }: ControlsProps) {
   const [playing,      setPlaying]      = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash,  setCenterFlash]  = React.useState<"play"|"pause"|null>(null);
   const [currentTime,  setCurrentTime]  = React.useState(0);
@@ -354,7 +365,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
         className="vp-controls-bar"
         style={{
           position:      "absolute",
-          bottom:        isMobile && isPortrait ? 36 : 0, left: 0, right: 0,
+          bottom:        bottomOffset > 0 ? bottomOffset : (isMobile && isPortrait ? 36 : 0), left: 0, right: 0,
           zIndex:        10,
           opacity:       visible ? 1 : 0,
           pointerEvents: visible ? "auto" : "none",
@@ -473,6 +484,40 @@ export default function VideoPlayer({
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  const [bottomOffset, setBottomOffset] = React.useState(0);
+
+  // Mobile-only: watch container size and recompute how far controls must shift up
+  // so they sit at the bottom of the actual painted video, not the container edge.
+  React.useEffect(() => {
+    if (!isMobile) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const update = () => {
+      const video = videoRef.current;
+      if (!video) return;
+      const renderedH  = getRenderedVideoHeight(video);
+      const containerH = container.offsetHeight;
+      const bars       = Math.max(0, (containerH - renderedH) / 2);
+      setBottomOffset(bars > 4 ? Math.round(bars) : 0);
+    };
+
+    // Watch container size changes
+    const ro = new ResizeObserver(update);
+    ro.observe(container);
+
+    // Also re-run whenever the video element fires loadedmetadata
+    // (videoWidth/videoHeight aren't available until then)
+    const onMeta = () => update();
+    container.addEventListener("loadedmetadata", onMeta, true); // capture so it catches child video events
+
+    update();
+    return () => {
+      ro.disconnect();
+      container.removeEventListener("loadedmetadata", onMeta, true);
+    };
+  }, [isMobile, videoRef]);
 
   const aspectRatio = fillParent ? null : (externalRatio ?? internalRatio);
   const isPortrait  = (() => {
@@ -861,6 +906,7 @@ export default function VideoPlayer({
             onToggleMute={handleToggleMute}
             isMobile={isMobile}
             isPortrait={isPortrait}
+            bottomOffset={bottomOffset}
           />
         )}
 
