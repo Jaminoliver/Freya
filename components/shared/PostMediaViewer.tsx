@@ -458,10 +458,8 @@ export default function PostMediaViewer({
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
         <div
           style={{
-            width:       
-                     "100%",
+            width:                "100%",
             position:             "relative",
-            overflow:             "hidden",
             aspectRatio:          String(videoRatio),
             maxHeight:            "85svh",
             backgroundColor:      "#000",
