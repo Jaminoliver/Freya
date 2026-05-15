@@ -278,6 +278,7 @@ function PostCardInner({
   const lightboxPost = toLightboxPost(post);
   const isTextPost   = post.content_type === "text";
   const isPollPost   = post.content_type === "poll";
+  const isMobileView = typeof window !== "undefined" && window.innerWidth < 430;
 
   const handleSingleTap = useCallback((index: number) => {
     const isMobileDevice = window.matchMedia("(hover: none), (pointer: coarse)").matches;
@@ -440,7 +441,7 @@ function PostCardInner({
               ) : null
             }
           >
-            <div style={{ marginTop: "12px", margin: "10px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
+            <div style={{ marginTop: "12px", margin: isMobileView ? "10px 4px" : "10px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
             <PostMediaViewer
               media={normalizedMedia} isLocked={post.isLocked} price={post.price}
               isPPV={post.is_ppv} isUnlockedPPV={post.is_ppv && !post.isLocked}
