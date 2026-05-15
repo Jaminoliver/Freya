@@ -202,8 +202,9 @@ export default function PostRow({
     else handleOpenFanSheet();
   };
 
-  const isTextPost = post.content_type === "text";
-  const isPollPost = post.content_type === "poll";
+  const isTextPost   = post.content_type === "text";
+  const isPollPost   = post.content_type === "poll";
+  const isMobileView = typeof window !== "undefined" && window.innerWidth < 430;
 
   // ── Header right slot: PPV badge (own profile only) + more button ──────
   const rightSlot = (
@@ -313,7 +314,7 @@ export default function PostRow({
       )}
 
       {viewerMedia.length > 0 && (
-        <div style={{ marginTop: "12px", margin: "10px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
+        <div style={{ marginTop: "12px", margin: isMobileView ? "10px 4px" : "10px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
         <PostMediaViewer
           media={viewerMedia}
           isLocked={post.locked && !isOwnProfile}
