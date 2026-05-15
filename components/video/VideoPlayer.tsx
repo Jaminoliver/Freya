@@ -462,8 +462,9 @@ export default function VideoPlayer({
   const [showSlowDots, setShowSlowDots] = React.useState(false);
   const [isLoading,    setIsLoading]    = React.useState(false);
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
-  const [isMuted,      setIsMuted]      = React.useState(() => getSavedMute());
-  const [isMobile,     setIsMobile]     = React.useState(false);
+  const [isMuted,         setIsMuted]         = React.useState(() => getSavedMute());
+  const [isMobile,        setIsMobile]        = React.useState(false);
+  const [isPortraitVideo, setIsPortraitVideo] = React.useState(false);
 
   const slowTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -475,7 +476,7 @@ export default function VideoPlayer({
   }, []);
 
   const aspectRatio = fillParent ? null : (externalRatio ?? internalRatio);
-  const isPortrait  = (() => {
+  const isPortrait = fillParent ? isPortraitVideo : (() => {
     if (!aspectRatio) return false;
     if (aspectRatio.includes("/")) {
       const parts = aspectRatio.split("/");
@@ -651,10 +652,11 @@ export default function VideoPlayer({
   }, [teardown, autoplayOnVisible, isMobile, showPoster, hasError, initVideo]);
 
   const handleLoadedMetadata = React.useCallback(() => {
-    if (fillParent || externalRatio) return;
     const video = videoRef.current;
     if (!video) return;
     const { videoWidth: w, videoHeight: h } = video;
+    if (w && h) setIsPortraitVideo(h > w);
+    if (fillParent || externalRatio) return;
     if (!w || !h) return;
     setInternalRatio(`${w}/${h}`);
   }, [fillParent, externalRatio]);
