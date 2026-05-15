@@ -57,9 +57,10 @@ interface ControlsProps {
   isMuted:      boolean;
   onToggleMute: () => void;
   onFirstPlay?: () => void;
+  isMobile?:    boolean;
 }
 
-function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay }: ControlsProps) {
+function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile }: ControlsProps) {
   const [playing,      setPlaying]      = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash,  setCenterFlash]  = React.useState<"play"|"pause"|null>(null);
   const [currentTime,  setCurrentTime]  = React.useState(0);
@@ -352,7 +353,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay }: Control
         className="vp-controls-bar"
         style={{
           position:      "absolute",
-          bottom:        0, left: 0, right: 0,
+          bottom:        isMobile ? 16 : 0, left: 0, right: 0,
           zIndex:        10,
           opacity:       visible ? 1 : 0,
           pointerEvents: visible ? "auto" : "none",
@@ -857,6 +858,7 @@ export default function VideoPlayer({
             videoRef={videoRef}
             isMuted={isMuted}
             onToggleMute={handleToggleMute}
+            isMobile={isMobile}
           />
         )}
 
