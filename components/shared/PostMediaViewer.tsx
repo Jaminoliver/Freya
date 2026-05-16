@@ -470,11 +470,13 @@ export default function PostMediaViewer({
         >
           {!isMobileView && blurSrc && (
             <div style={{
-              position:        "absolute",
-              inset:           0,
-              backgroundColor: "rgba(0,0,0,0.35)",
-              zIndex:          0,
-              pointerEvents:   "none",
+              position:             "absolute",
+              inset:                0,
+              backdropFilter:       "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              backgroundColor:      "rgba(0,0,0,0.35)",
+              zIndex:               0,
+              pointerEvents:        "none",
             }} />
           )}
           <div style={{ position: "relative", zIndex: 2, width: "100%", height: "100%" }}>

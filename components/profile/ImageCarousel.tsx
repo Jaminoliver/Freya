@@ -113,6 +113,7 @@ export default function ImageCarousel({
   const [activeIndex, setActiveIndex]         = React.useState(initialIndex);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
   const [isDesktop, setIsDesktop]             = React.useState(false);
+  const [isMobile, setIsMobile]               = React.useState(false);
 
   // ── All drag state in refs — no state updates during drag ──
   const stripRef          = React.useRef<HTMLDivElement>(null);
@@ -130,7 +131,10 @@ export default function ImageCarousel({
   React.useEffect(() => { isTransitioningRef.current = isTransitioning; }, [isTransitioning]);
 
   React.useEffect(() => {
-    const check = () => setIsDesktop(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+    const check = () => {
+      setIsDesktop(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+      setIsMobile(window.innerWidth < 430);
+    };
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
@@ -369,7 +373,7 @@ export default function ImageCarousel({
                         src={item.file_url}
                         blurHash={item.blur_hash}
                         eager={isActive}
-                        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", pointerEvents: "none" }}
+                        style={{ width: "100%", height: "100%", objectFit: isMobile ? "cover" : "contain", display: "block", pointerEvents: "none" }}
                       />
                     </div>
                   </>
