@@ -91,6 +91,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
   const originalParent        = React.useRef<Element | null>(null);
   const originalNextSibling   = React.useRef<ChildNode | null>(null);
   const origRadiusRef         = React.useRef<string>("");
+  const originalSizeRef       = React.useRef<{ width: string; height: string }>({ width: "", height: "" });
 
   // ── Auto-hide controls ────────────────────────────────────────────────
   const showControls = React.useCallback(() => {
@@ -249,8 +250,8 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
     (container.style as any).webkitBackfaceVisibility = "hidden";
     container.style.transformOrigin = "top left";
 
-    // Teleport back, reset size
-    Object.assign(container.style, { width: "", height: "", transition: "none", transform: "translateZ(0)" });
+    // Teleport back, restore original size exactly so FLIP measures correctly
+    Object.assign(container.style, { width: originalSizeRef.current.width, height: originalSizeRef.current.height, transition: "none", transform: "translateZ(0)" });
     if (parent) {
       if (sibling) parent.insertBefore(container, sibling);
       else parent.appendChild(container);
@@ -310,7 +311,8 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         // FLIP: First — snapshot position before any DOM change
         const first       = container.getBoundingClientRect();
         const origRadius  = getComputedStyle(container).borderRadius;
-        origRadiusRef.current = origRadius;
+        origRadiusRef.current   = origRadius;
+        originalSizeRef.current = { width: container.style.width, height: container.style.height };
 
         // GPU-promote before teleport to avoid paint flash
         container.style.willChange = "transform";
