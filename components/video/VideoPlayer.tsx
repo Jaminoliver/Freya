@@ -64,6 +64,7 @@ function getRenderedVideoHeight(video: HTMLVideoElement): number {
 // ── Custom Controls Overlay ───────────────────────────────────────────────────
 interface ControlsProps {
   videoRef:      React.RefObject<HTMLVideoElement | null>;
+  containerRef:  React.RefObject<HTMLDivElement | null>;
   isMuted:       boolean;
   onToggleMute:  () => void;
   onFirstPlay?:  () => void;
@@ -73,7 +74,7 @@ interface ControlsProps {
   isPlaying?:    boolean;
 }
 
-function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait, bottomOffset = 0, isPlaying: isPlayingProp = false }: ControlsProps) {
+function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait, bottomOffset = 0, isPlaying: isPlayingProp = false }: ControlsProps) {
   const [playing,      setPlaying]      = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash,  setCenterFlash]  = React.useState<"play"|"pause"|null>(null);
   const [currentTime,  setCurrentTime]  = React.useState(0);
@@ -81,7 +82,8 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
   const [buffered,     setBuffered]     = React.useState(0);
   const [visible,      setVisible]      = React.useState(true);
   const [seeking,      setSeeking]      = React.useState(false);
-  const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [isFullscreen,     setIsFullscreen]     = React.useState(false);
+  const [isFakeFullscreen, setIsFakeFullscreen] = React.useState(false);
 
   const hideTimer   = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressRef = React.useRef<HTMLDivElement>(null);
@@ -230,27 +232,30 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
   // ── Fullscreen ────────────────────────────────────────────────────────
   const handleFullscreen = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
-    const video = videoRef.current;
-    if (!video) return;
+    const video     = videoRef.current;
+    const container = containerRef.current;
+    if (!video || !container) return;
 
-    // iOS Safari: standard fullscreen API doesn't work on arbitrary elements.
-    // Use the video's own webkitEnterFullscreen instead.
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-    if (isIOS && typeof (video as any).webkitEnterFullscreen === "function") {
-      try { (video as any).webkitEnterFullscreen(); } catch {}
+    if (isIOS) {
+      if (!isFakeFullscreen) {
+        setIsFakeFullscreen(true);
+        Object.assign(container.style, { position: "fixed", inset: "0", zIndex: "9999", width: "100%", height: "100%", backgroundColor: "#000" });
+      } else {
+        setIsFakeFullscreen(false);
+        Object.assign(container.style, { position: "", inset: "", zIndex: "", width: "", height: "", backgroundColor: "" });
+      }
       showControls();
       return;
     }
 
-    const container = (video.closest("[data-videoplayer]") as HTMLElement) ?? video.parentElement;
-    if (!container) return;
     if (!document.fullscreenElement) {
       container.requestFullscreen?.().catch(() => {});
     } else {
       document.exitFullscreen?.().catch(() => {});
     }
     showControls();
-  }, [videoRef, showControls]);
+  }, [videoRef, containerRef, isFakeFullscreen, showControls]);
 
   // ── Tap zone mouse move handler (no duplicate) ────────────────────────
   const handleTapZoneMouseMove = React.useCallback((e: React.MouseEvent) => {
@@ -446,12 +451,12 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
 
       {/* Fullscreen — always visible */}
       <button
-        style={{ ...btnStyle, position: "absolute", bottom: (isMobile && isPortrait ? 24 : 0) + 10, right: 8, zIndex: 15, background: "rgba(0,0,0,0.45)", borderRadius: "6px", backdropFilter: "blur(6px)" }}
+        style={{ ...btnStyle, position: "absolute", bottom: (isMobile && isPortrait ? 24 : 0) + 10, right: 8, zIndex: 15 }}
         onClick={handleFullscreen}
         onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }}
         aria-label="Fullscreen"
       >
-        {isFullscreen ? (
+        {(isFullscreen || isFakeFullscreen) ? (
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
             <path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
@@ -957,6 +962,7 @@ export default function VideoPlayer({
             {console.log('[VP] controls', { isMobile, bottomOffset, isPortrait, objectFit })}
             <VideoControls
               videoRef={videoRef}
+              containerRef={containerRef}
               isMuted={isMuted}
               onToggleMute={handleToggleMute}
               onFirstPlay={() => setHasStarted(true)}
