@@ -365,7 +365,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
         className="vp-controls-bar"
         style={{
           position:      "absolute",
-          bottom:        (isMobile && isPortrait) ? 40 : 0, left: 0, right: 0,
+          bottom:        (isMobile && isPortrait) ? 24 : 0, left: 0, right: 0,
           zIndex:        10,
           opacity:       1,
           pointerEvents: "auto",
