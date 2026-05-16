@@ -104,7 +104,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
     const video = videoRef.current;
     if (!video) return;
 
-    const onPlay     = () => { setPlaying(true); onFirstPlay?.(); showControls(); };
+    const onPlay     = () => { setPlaying(true); onFirstPlay?.(); hideTimer.current = setTimeout(() => setVisible(false), 1500); };
     const onPause    = () => { setPlaying(false); setVisible(true); if (hideTimer.current) clearTimeout(hideTimer.current); };
     const onTime     = () => {
       setCurrentTime(video.currentTime);
