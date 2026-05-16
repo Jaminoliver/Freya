@@ -258,6 +258,29 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         document.body.appendChild(portal);
         portalRef.current = portal;
 
+        let swipeStartY = 0;
+        portal.addEventListener("touchstart", (e) => { swipeStartY = e.touches[0].clientY; }, { passive: true });
+        portal.addEventListener("touchend", (e) => {
+          const delta = e.changedTouches[0].clientY - swipeStartY;
+          if (delta > 80) {
+            const container2 = containerRef.current;
+            const parent  = originalParent.current;
+            const sibling = originalNextSibling.current;
+            if (!container2) return;
+            container2.style.animation = "vp-fs-out 280ms cubic-bezier(0.4,0,0.2,1) forwards";
+            setTimeout(() => {
+              if (parent) {
+                if (sibling) parent.insertBefore(container2, sibling);
+                else parent.appendChild(container2);
+              }
+              portalRef.current?.remove();
+              portalRef.current = null;
+              Object.assign(container2.style, { width: "", height: "", animation: "" });
+              setIsFakeFullscreen(false);
+            }, 280);
+          }
+        }, { passive: true });
+
         Object.assign(container.style, { position: "", inset: "", width: "100%", height: "100%", animation: "none" });
         portal.appendChild(container);
 
@@ -406,6 +429,20 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         onMouseUp={handleSeekMouseUp}
       />
 
+      {/* X button — only visible in fake fullscreen */}
+      {isFakeFullscreen && (
+        <button
+          style={{ position: "absolute", top: 12, left: 12, zIndex: 15, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
+          onClick={handleFullscreen}
+          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }}
+          aria-label="Exit fullscreen"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      )}
+
       {/* Top-right mute button — always visible */}
       <button
         className="vp-mute-btn"
@@ -445,7 +482,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           opacity:       visible ? 1 : 0,
           pointerEvents: visible ? "auto" : "none",
           transition:    "opacity 0.25s ease",
-          background:    "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 70%, transparent 100%)",
+          background:    isFakeFullscreen ? "none" : "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 70%, transparent 100%)",
           padding:       "24px 12px 10px",
           display:       "flex",
           flexDirection: "column",
