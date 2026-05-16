@@ -85,8 +85,11 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
   const [isFullscreen,     setIsFullscreen]     = React.useState(false);
   const [isFakeFullscreen, setIsFakeFullscreen] = React.useState(false);
 
-  const hideTimer   = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const progressRef = React.useRef<HTMLDivElement>(null);
+  const hideTimer             = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressRef           = React.useRef<HTMLDivElement>(null);
+  const portalRef             = React.useRef<HTMLDivElement | null>(null);
+  const originalParent        = React.useRef<Element | null>(null);
+  const originalNextSibling   = React.useRef<ChildNode | null>(null);
 
   // ── Auto-hide controls ────────────────────────────────────────────────
   const showControls = React.useCallback(() => {
@@ -239,23 +242,44 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
     if (isIOS) {
       if (!isFakeFullscreen) {
-        setIsFakeFullscreen(true);
-        Object.assign(container.style, {
+        originalParent.current      = container.parentElement;
+        originalNextSibling.current = container.nextSibling;
+
+        const portal = document.createElement("div");
+        Object.assign(portal.style, {
           position:        "fixed",
           inset:           "0",
           zIndex:          "9999",
-          width:           "100%",
-          height:          "100%",
           backgroundColor: "#000",
-          animation:       "vp-fs-in 280ms cubic-bezier(0.4,0,0.2,1) forwards",
+          display:         "flex",
+          alignItems:      "center",
+          justifyContent:  "center",
+        });
+        document.body.appendChild(portal);
+        portalRef.current = portal;
+
+        Object.assign(container.style, { position: "", inset: "", width: "100%", height: "100%", animation: "none" });
+        portal.appendChild(container);
+
+        setIsFakeFullscreen(true);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            container.style.animation = "vp-fs-in 280ms cubic-bezier(0.4,0,0.2,1) forwards";
+          });
         });
       } else {
-        Object.assign(container.style, {
-          animation: "vp-fs-out 280ms cubic-bezier(0.4,0,0.2,1) forwards",
-        });
+        container.style.animation = "vp-fs-out 280ms cubic-bezier(0.4,0,0.2,1) forwards";
         setTimeout(() => {
+          const parent  = originalParent.current;
+          const sibling = originalNextSibling.current;
+          if (parent) {
+            if (sibling) parent.insertBefore(container, sibling);
+            else parent.appendChild(container);
+          }
+          portalRef.current?.remove();
+          portalRef.current = null;
+          Object.assign(container.style, { width: "", height: "", animation: "" });
           setIsFakeFullscreen(false);
-          Object.assign(container.style, { position: "", inset: "", zIndex: "", width: "", height: "", backgroundColor: "", animation: "" });
         }, 280);
       }
       showControls();
