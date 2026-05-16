@@ -365,7 +365,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
         className="vp-controls-bar"
         style={{
           position:      "absolute",
-          bottom:        (isMobile && isPortrait) ? 26 : 0, left: 0, right: 0,
+          bottom:        (isMobile && isPortrait) ? bottomOffset : 0, left: 0, right: 0,
           zIndex:        10,
           opacity:       visible ? 1 : 0,
           pointerEvents: visible ? "auto" : "none",
@@ -904,6 +904,7 @@ export default function VideoPlayer({
             videoRef={videoRef}
             isMuted={isMuted}
             onToggleMute={handleToggleMute}
+            onFirstPlay={() => setHasStarted(true)}
             isMobile={isMobile}
             isPortrait={isPortrait || objectFit === "cover"}
             bottomOffset={bottomOffset}
