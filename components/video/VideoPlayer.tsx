@@ -619,44 +619,18 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           </span>
 
           <div style={{ flex: 1 }} />
-          {fullscreenTopLeft && (
-            <button style={{ ...btnStyle }} onClick={handleFullscreen} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }} aria-label={isFakeFullscreen || isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+          <button style={{ ...btnStyle }} onClick={handleFullscreen} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }} aria-label={isFakeFullscreen || isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
               {(isFullscreen || isFakeFullscreen) ? (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
               ) : (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
               )}
             </button>
-          )}
         </div>
       </div>
 
       {/* Fullscreen — always visible */}
-      {!fullscreenTopLeft && <button
-        style={{
-          position: "absolute", bottom: (isMobile && isPortrait ? 24 : 0) + 10, right: 8, zIndex: 15,
-          ...(isFakeFullscreen || isFullscreen ? {
-            background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%",
-            width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent",
-          } : { ...btnStyle }),
-        }}
-        onClick={handleFullscreen}
-        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }}
-        aria-label={isFakeFullscreen || isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-      >
-        {(isFullscreen || isFakeFullscreen) ? (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
-            <path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
-          </svg>
-        ) : (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
-            <path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
-          </svg>
-        )}
-      </button>}
+      
     </>
   );
 }
