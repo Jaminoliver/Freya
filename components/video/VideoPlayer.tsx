@@ -494,7 +494,7 @@ export default function VideoPlayer({
   // Mobile-only: watch container size and recompute how far controls must shift up
   // so they sit at the bottom of the actual painted video, not the container edge.
   React.useEffect(() => {
-    if (!isMobile) return;
+    // if (!isMobile) return; // temp: test in emulator
     const container = containerRef.current;
     if (!container) return;
 
@@ -510,6 +510,7 @@ export default function VideoPlayer({
       const elemRatio  = containerW / containerH;
       const renderedH  = elemRatio > videoRatio ? containerH : containerW / videoRatio;
       const bars       = Math.max(0, (containerH - renderedH) / 2);
+      console.log('[VP] update', { vw, vh, containerW, containerH, videoRatio, elemRatio, renderedH, bars, bottomOffset: bars > 4 ? Math.round(bars) : 0 });
       setBottomOffset(bars > 4 ? Math.round(bars) : 0);
     };
 
@@ -910,15 +911,18 @@ export default function VideoPlayer({
 
         {/* Custom controls — only shown after poster is dismissed */}
         {!showPoster && !hasError && (
-          <VideoControls
-            videoRef={videoRef}
-            isMuted={isMuted}
-            onToggleMute={handleToggleMute}
-            onFirstPlay={() => setHasStarted(true)}
-            isMobile={isMobile}
-            isPortrait={isPortrait || objectFit === "cover"}
-            bottomOffset={bottomOffset}
-          />
+          <>
+            {console.log('[VP] controls', { isMobile, bottomOffset, isPortrait, objectFit })}
+            <VideoControls
+              videoRef={videoRef}
+              isMuted={isMuted}
+              onToggleMute={handleToggleMute}
+              onFirstPlay={() => setHasStarted(true)}
+              isMobile={isMobile}
+              isPortrait={isPortrait || objectFit === "cover"}
+              bottomOffset={bottomOffset}
+            />
+          </>
         )}
 
         {/* Error overlay with retry */}
