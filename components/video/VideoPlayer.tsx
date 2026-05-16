@@ -92,7 +92,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
     hideTimer.current = setTimeout(() => {
       const video = videoRef.current;
       if (video && !video.paused) setVisible(false);
-    }, 3000);
+    }, 1500);
   }, [videoRef]);
 
   React.useEffect(() => {
@@ -104,7 +104,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
     const video = videoRef.current;
     if (!video) return;
 
-    const onPlay     = () => { setPlaying(true); showControls(); onFirstPlay?.(); };
+    const onPlay     = () => { setPlaying(true); onFirstPlay?.(); showControls(); };
     const onPause    = () => { setPlaying(false); setVisible(true); if (hideTimer.current) clearTimeout(hideTimer.current); };
     const onTime     = () => {
       setCurrentTime(video.currentTime);
@@ -367,8 +367,8 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
           position:      "absolute",
           bottom:        (isMobile && isPortrait) ? bottomOffset : 0, left: 0, right: 0,
           zIndex:        10,
-          opacity:       visible ? 1 : 0,
-          pointerEvents: visible ? "auto" : "none",
+          opacity:       1,
+          pointerEvents: "auto",
           background:    "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 70%, transparent 100%)",
           padding:       "24px 12px 10px",
           display:       "flex",
@@ -384,7 +384,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
           onMouseUp={handleSeekMouseUp}
           onTouchStart={handleSeekTouchStart}
           onTouchEnd={handleSeekTouchEnd}
-          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 11 }}
+          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 11, opacity: visible ? 1 : 0, pointerEvents: visible ? "auto" : "none", transition: "opacity 0.25s ease" }}
         >
           <div style={{ position: "relative", width: "100%", height: "4px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.25)", overflow: "visible" }}>
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.35)", borderRadius: "2px" }} />
@@ -396,7 +396,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
 
         {/* Bottom row: play + time + fullscreen */}
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <button style={btnStyle} onClick={handlePlayPause} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handlePlayPause(e); }} aria-label={playing ? "Pause" : "Play"}>
+          <button style={{ ...btnStyle, opacity: visible ? 1 : 0, pointerEvents: visible ? "auto" : "none", transition: "opacity 0.25s ease" }} onClick={handlePlayPause} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handlePlayPause(e); }} aria-label={playing ? "Pause" : "Play"}>
             {playing ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
             ) : (
@@ -404,13 +404,13 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
             )}
           </button>
 
-          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: "0.02em", minWidth: "80px" }}>
+          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: "0.02em", minWidth: "80px", opacity: visible ? 1 : 0, transition: "opacity 0.25s ease" }}>
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
 
           <div style={{ flex: 1 }} />
 
-          <button style={btnStyle} onClick={handleFullscreen} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }} aria-label="Fullscreen">
+          <button style={{ ...btnStyle, opacity: 1, pointerEvents: "auto" }} onClick={handleFullscreen} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }} aria-label="Fullscreen">
             {isFullscreen ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
