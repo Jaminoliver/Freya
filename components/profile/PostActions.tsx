@@ -52,7 +52,7 @@ export default function PostActions({
   });
 
   return (
-    <div style={{ padding: "4px 0 0", fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ padding: "0", fontFamily: "'Inter', sans-serif" }}>
 
       <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
 

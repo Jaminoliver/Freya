@@ -38,7 +38,7 @@ function CaptionText({ text }: { text: string }) {
   return (
     <p
       dangerouslySetInnerHTML={{ __html: html }}
-      style={{ fontSize: "14px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 4px", whiteSpace: "pre-wrap" }}
+      style={{ fontSize: "14px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 2px", whiteSpace: "pre-wrap" }}
     />
   );
 }
