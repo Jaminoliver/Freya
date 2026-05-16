@@ -488,7 +488,7 @@ export default function PostMediaViewer({
               fillParent={true}
               hideInternalBlur={true}
               blurHash={first.blurHash}
-              objectFit={isMobileView && videoRatio < 1 ? "cover" : "contain"}
+              objectFit={isMobileView && videoRatio < 0.6 ? "cover" : "contain"}
               autoplayOnVisible={autoplayOnVisible}
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}
