@@ -466,7 +466,6 @@ export default function PostMediaViewer({
             backgroundImage:      blurSrc ? `url(${blurSrc})` : undefined,
             backgroundSize:       "cover",
             backgroundPosition:   "center",
-            paddingBottom:        isMobileView ? "48px" : 0,
           }}
         >
           {!isMobileView && blurSrc && (
