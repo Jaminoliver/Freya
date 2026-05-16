@@ -441,7 +441,9 @@ interface VideoPlayerProps {
   blurHash?:          string | null;
   objectFit?:         "contain" | "cover";
   autoplayOnVisible?: boolean;
-  autoPlay?:         boolean;
+  autoPlay?:          boolean;
+  knownWidth?:        number | null;
+  knownHeight?:       number | null;
 }
 
 export default function VideoPlayer({
@@ -456,6 +458,8 @@ export default function VideoPlayer({
   objectFit = "contain",
   autoplayOnVisible = false,
   autoPlay          = false,
+  knownWidth        = null,
+  knownHeight       = null,
 }: VideoPlayerProps) {
   const videoRef       = React.useRef<HTMLVideoElement | null>(null);
   const containerRef   = React.useRef<HTMLDivElement | null>(null);
@@ -497,8 +501,14 @@ export default function VideoPlayer({
     const update = () => {
       const video = videoRef.current;
       if (!video) return;
-      const renderedH  = getRenderedVideoHeight(video);
+      const vw = knownWidth  || video.videoWidth;
+      const vh = knownHeight || video.videoHeight;
+      if (!vw || !vh) return;
+      const containerW = container.offsetWidth;
       const containerH = container.offsetHeight;
+      const videoRatio = vw / vh;
+      const elemRatio  = containerW / containerH;
+      const renderedH  = elemRatio > videoRatio ? containerH : containerW / videoRatio;
       const bars       = Math.max(0, (containerH - renderedH) / 2);
       setBottomOffset(bars > 4 ? Math.round(bars) : 0);
     };

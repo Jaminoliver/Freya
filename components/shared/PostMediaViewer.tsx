@@ -490,6 +490,8 @@ export default function PostMediaViewer({
               blurHash={first.blurHash}
               objectFit={isMobileView && videoRatio < 1 ? "cover" : "contain"}
               autoplayOnVisible={autoplayOnVisible}
+              knownWidth={first.width ?? null}
+              knownHeight={first.height ?? null}
             />
           </div>
           {isUnlockedPPV && <UnlockedPPVBadge />}
