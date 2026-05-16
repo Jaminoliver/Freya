@@ -905,7 +905,7 @@ export default function VideoPlayer({
             isMuted={isMuted}
             onToggleMute={handleToggleMute}
             isMobile={isMobile}
-            isPortrait={isPortrait}
+            isPortrait={isPortrait || objectFit === "cover"}
             bottomOffset={bottomOffset}
           />
         )}
