@@ -90,6 +90,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
   const portalRef             = React.useRef<HTMLDivElement | null>(null);
   const originalParent        = React.useRef<Element | null>(null);
   const originalNextSibling   = React.useRef<ChildNode | null>(null);
+  const origRadiusRef         = React.useRef<string>("");
 
   // ── Auto-hide controls ────────────────────────────────────────────────
   const showControls = React.useCallback(() => {
@@ -277,7 +278,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
       requestAnimationFrame(() => {
         container.style.transition   = "transform 280ms cubic-bezier(0.4,0,0.2,1), border-radius 280ms cubic-bezier(0.4,0,0.2,1)";
         container.style.transform    = "none";
-        container.style.borderRadius = "";
+        container.style.borderRadius = origRadiusRef.current || "";
       });
     });
 
@@ -302,15 +303,14 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
     const container = containerRef.current;
     if (!video || !container) return;
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-    if (isIOS) {
-      if (!isFakeFullscreen) {
+    if (!isFakeFullscreen) {
         originalParent.current      = container.parentElement;
         originalNextSibling.current = container.nextSibling;
 
         // FLIP: First — snapshot position before any DOM change
         const first       = container.getBoundingClientRect();
         const origRadius  = getComputedStyle(container).borderRadius;
+        origRadiusRef.current = origRadius;
 
         // GPU-promote before teleport to avoid paint flash
         container.style.willChange = "transform";
@@ -365,11 +365,44 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         };
         container.addEventListener("transitionend", onDone);
 
-        // Swipe-down gesture to exit
+        // Lock desktop scroll
+        portal.addEventListener("wheel", (ev) => { ev.preventDefault(); }, { passive: false });
+
+        // Swipe-down to exit — live drag animation, scroll-up ignored
         let swipeStartY = 0;
-        portal.addEventListener("touchstart", (ev) => { swipeStartY = ev.touches[0].clientY; }, { passive: true });
-        portal.addEventListener("touchend",   (ev) => {
-          if (ev.changedTouches[0].clientY - swipeStartY > 80) exitFakeFullscreen();
+
+        portal.addEventListener("touchstart", (ev) => {
+          swipeStartY = ev.touches[0].clientY;
+          container.style.transition = "none";
+        }, { passive: true });
+
+        portal.addEventListener("touchmove", (ev) => {
+          const delta = ev.touches[0].clientY - swipeStartY;
+          if (delta <= 0) return; // scroll-up does nothing
+          ev.preventDefault();   // lock page scroll behind portal
+
+          const progress  = Math.min(delta / 320, 1);
+          const translateY = delta * 0.55;
+          const scale      = 1 - progress * 0.07;
+          const radius     = progress * 20;
+
+          container.style.transform    = `translateY(${translateY}px) scale(${scale})`;
+          container.style.borderRadius = `${radius}px`;
+          portal.style.backgroundColor = `rgba(0,0,0,${Math.max(0, 1 - progress * 0.65)})`;
+        }, { passive: false });
+
+        portal.addEventListener("touchend", (ev) => {
+          const delta = ev.changedTouches[0].clientY - swipeStartY;
+          if (delta > 120) {
+            exitFakeFullscreen();
+          } else {
+            // Spring back
+            container.style.transition   = "transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 280ms ease";
+            container.style.transform    = "none";
+            container.style.borderRadius = "0px";
+            portal.style.transition      = "background-color 280ms ease";
+            portal.style.backgroundColor = "rgba(0,0,0,1)";
+          }
         }, { passive: true });
 
         setIsFakeFullscreen(true);
@@ -377,15 +410,6 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         exitFakeFullscreen();
       }
       showControls();
-      return;
-    }
-
-    if (!document.fullscreenElement) {
-      container.requestFullscreen?.().catch(() => {});
-    } else {
-      document.exitFullscreen?.().catch(() => {});
-    }
-    showControls();
   }, [videoRef, containerRef, isFakeFullscreen, showControls, exitFakeFullscreen]);
 
   // ── Tap zone mouse move handler (no duplicate) ────────────────────────
