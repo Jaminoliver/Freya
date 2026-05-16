@@ -386,6 +386,18 @@ function CreatePostContent() {
             <textarea
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = e.clipboardData.getData("text");
+                const el = e.currentTarget;
+                const start = el.selectionStart ?? 0;
+                const end = el.selectionEnd ?? 0;
+                const next = caption.slice(0, start) + pasted + caption.slice(end);
+                setCaption(next);
+                requestAnimationFrame(() => {
+                  el.selectionStart = el.selectionEnd = start + pasted.length;
+                });
+              }}
               placeholder={hasPoll ? "Ask a question…" : "Add caption…"}
               rows={3}
               style={{
