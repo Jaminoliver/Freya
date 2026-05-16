@@ -32,7 +32,8 @@ function CaptionText({ text }: { text: string }) {
     return escaped.replace(
       /(https?:\/\/[^\s]+)/g,
       '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#1D9BF0;text-decoration:none;word-break:break-all;">$1</a>'
-    );
+    )
+    ;
   }, [text]);
 
   return (
@@ -61,7 +62,7 @@ export default function PostHeader({
   return (
     <>
     <div style={{
-      padding: "16px 16px 10px",
+      padding: "16px 16px 2px",
       display: "flex", alignItems: "center", justifyContent: "space-between",
       gap: "10px",
     }}>
