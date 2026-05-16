@@ -233,6 +233,69 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
   }, [seeking, seekTo]);
 
   // ── Fullscreen ────────────────────────────────────────────────────────
+  const exitFakeFullscreen = React.useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // FLIP: First — record fullscreen position
+    const first = container.getBoundingClientRect();
+
+    const parent  = originalParent.current;
+    const sibling = originalNextSibling.current;
+
+    // GPU-promote before DOM move
+    container.style.willChange = "transform";
+    (container.style as any).webkitBackfaceVisibility = "hidden";
+    container.style.transformOrigin = "top left";
+
+    // Teleport back, reset size
+    Object.assign(container.style, { width: "", height: "", transition: "none", transform: "translateZ(0)" });
+    if (parent) {
+      if (sibling) parent.insertBefore(container, sibling);
+      else parent.appendChild(container);
+    }
+
+    // FLIP: Last — record original position
+    const last = container.getBoundingClientRect();
+
+    // FLIP: Invert — snap element visually back to fullscreen coords
+    const dx     = first.left - last.left;
+    const dy     = first.top  - last.top;
+    const scaleX = first.width  / last.width;
+    const scaleY = first.height / last.height;
+    container.style.transform    = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`;
+    container.style.borderRadius = "0px";
+
+    // Fade out backdrop
+    if (portalRef.current) {
+      portalRef.current.style.transition      = "background-color 280ms cubic-bezier(0.4,0,0.2,1)";
+      portalRef.current.style.backgroundColor = "rgba(0,0,0,0)";
+    }
+
+    // FLIP: Play — double rAF so browser paints the inverted frame first
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        container.style.transition   = "transform 280ms cubic-bezier(0.4,0,0.2,1), border-radius 280ms cubic-bezier(0.4,0,0.2,1)";
+        container.style.transform    = "none";
+        container.style.borderRadius = "";
+      });
+    });
+
+    // Cleanup after exit animation settles
+    const onDone = (ev: TransitionEvent) => {
+      if (ev.propertyName !== "transform") return;
+      container.style.willChange       = "";
+      container.style.transformOrigin  = "";
+      container.style.transition       = "";
+      (container.style as any).webkitBackfaceVisibility = "";
+      portalRef.current?.remove();
+      portalRef.current = null;
+      container.removeEventListener("transitionend", onDone);
+      setIsFakeFullscreen(false);
+    };
+    container.addEventListener("transitionend", onDone);
+  }, [containerRef]);
+
   const handleFullscreen = React.useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     const video     = videoRef.current;
@@ -245,65 +308,73 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         originalParent.current      = container.parentElement;
         originalNextSibling.current = container.nextSibling;
 
+        // FLIP: First — snapshot position before any DOM change
+        const first       = container.getBoundingClientRect();
+        const origRadius  = getComputedStyle(container).borderRadius;
+
+        // GPU-promote before teleport to avoid paint flash
+        container.style.willChange = "transform";
+        (container.style as any).webkitBackfaceVisibility = "hidden";
+        container.style.transformOrigin = "top left";
+
+        // Portal starts fully transparent — no black flash
         const portal = document.createElement("div");
         Object.assign(portal.style, {
           position:        "fixed",
           inset:           "0",
           zIndex:          "9999",
-          backgroundColor: "#000",
+          backgroundColor: "rgba(0,0,0,0)",
           display:         "flex",
           alignItems:      "center",
           justifyContent:  "center",
+          transition:      "background-color 340ms cubic-bezier(0.4,0,0.2,1)",
         });
         document.body.appendChild(portal);
         portalRef.current = portal;
 
-        let swipeStartY = 0;
-        portal.addEventListener("touchstart", (e) => { swipeStartY = e.touches[0].clientY; }, { passive: true });
-        portal.addEventListener("touchend", (e) => {
-          const delta = e.changedTouches[0].clientY - swipeStartY;
-          if (delta > 80) {
-            const container2 = containerRef.current;
-            const parent  = originalParent.current;
-            const sibling = originalNextSibling.current;
-            if (!container2) return;
-            container2.style.animation = "vp-fs-out 280ms cubic-bezier(0.4,0,0.2,1) forwards";
-            setTimeout(() => {
-              if (parent) {
-                if (sibling) parent.insertBefore(container2, sibling);
-                else parent.appendChild(container2);
-              }
-              portalRef.current?.remove();
-              portalRef.current = null;
-              Object.assign(container2.style, { width: "", height: "", animation: "" });
-              setIsFakeFullscreen(false);
-            }, 280);
-          }
-        }, { passive: true });
-
-        Object.assign(container.style, { position: "", inset: "", width: "100%", height: "100%", animation: "none" });
+        // Teleport
+        Object.assign(container.style, { width: "100%", height: "100%", transition: "none" });
         portal.appendChild(container);
 
-        setIsFakeFullscreen(true);
+        // FLIP: Last — measure fullscreen position
+        const last   = container.getBoundingClientRect();
+        const dx     = first.left - last.left;
+        const dy     = first.top  - last.top;
+        const scaleX = first.width  / last.width;
+        const scaleY = first.height / last.height;
+
+        // FLIP: Invert — snap visually back to original spot
+        container.style.transform    = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`;
+        container.style.borderRadius = origRadius;
+
+        // FLIP: Play — double rAF ensures browser paints the inverted frame
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            container.style.animation = "vp-fs-in 280ms cubic-bezier(0.4,0,0.2,1) forwards";
+            container.style.transition   = "transform 340ms cubic-bezier(0.4,0,0.2,1), border-radius 340ms cubic-bezier(0.4,0,0.2,1)";
+            container.style.transform    = "none";
+            container.style.borderRadius = "0px";
+            portal.style.backgroundColor = "rgba(0,0,0,1)";
           });
         });
+
+        // Cleanup will-change after animation settles
+        const onDone = (ev: TransitionEvent) => {
+          if (ev.propertyName !== "transform") return;
+          container.style.willChange = "";
+          container.removeEventListener("transitionend", onDone);
+        };
+        container.addEventListener("transitionend", onDone);
+
+        // Swipe-down gesture to exit
+        let swipeStartY = 0;
+        portal.addEventListener("touchstart", (ev) => { swipeStartY = ev.touches[0].clientY; }, { passive: true });
+        portal.addEventListener("touchend",   (ev) => {
+          if (ev.changedTouches[0].clientY - swipeStartY > 80) exitFakeFullscreen();
+        }, { passive: true });
+
+        setIsFakeFullscreen(true);
       } else {
-        container.style.animation = "vp-fs-out 280ms cubic-bezier(0.4,0,0.2,1) forwards";
-        setTimeout(() => {
-          const parent  = originalParent.current;
-          const sibling = originalNextSibling.current;
-          if (parent) {
-            if (sibling) parent.insertBefore(container, sibling);
-            else parent.appendChild(container);
-          }
-          portalRef.current?.remove();
-          portalRef.current = null;
-          Object.assign(container.style, { width: "", height: "", animation: "" });
-          setIsFakeFullscreen(false);
-        }, 280);
+        exitFakeFullscreen();
       }
       showControls();
       return;
@@ -315,7 +386,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
       document.exitFullscreen?.().catch(() => {});
     }
     showControls();
-  }, [videoRef, containerRef, isFakeFullscreen, showControls]);
+  }, [videoRef, containerRef, isFakeFullscreen, showControls, exitFakeFullscreen]);
 
   // ── Tap zone mouse move handler (no duplicate) ────────────────────────
   const handleTapZoneMouseMove = React.useCallback((e: React.MouseEvent) => {
@@ -341,8 +412,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
       <style>{`
         @keyframes vp-fadein  { from { opacity: 0; } to { opacity: 1; } }
         @keyframes vp-fadeout { from { opacity: 1; } to { opacity: 0; } }
-        @keyframes vp-fs-in   { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
-        @keyframes vp-fs-out  { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.96); } }
+        
         @keyframes vp-pop     { 0% { transform: translate(-50%,-50%) scale(0.6); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; } }
         .vp-controls-bar { transition: opacity 0.25s ease; }
         .vp-seek-thumb {
@@ -527,10 +597,17 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
 
       {/* Fullscreen — always visible */}
       <button
-        style={{ ...btnStyle, position: "absolute", bottom: (isMobile && isPortrait ? 24 : 0) + 10, right: 8, zIndex: 15 }}
+        style={{
+          position: "absolute", bottom: (isMobile && isPortrait ? 24 : 0) + 10, right: 8, zIndex: 15,
+          ...(isFakeFullscreen || isFullscreen ? {
+            background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%",
+            width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent",
+          } : { ...btnStyle }),
+        }}
         onClick={handleFullscreen}
         onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }}
-        aria-label="Fullscreen"
+        aria-label={isFakeFullscreen || isFullscreen ? "Exit fullscreen" : "Fullscreen"}
       >
         {(isFullscreen || isFakeFullscreen) ? (
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
