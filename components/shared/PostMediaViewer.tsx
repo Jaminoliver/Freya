@@ -35,6 +35,7 @@ interface PostMediaViewerProps {
   onSlideChange?:       (index: number) => void;
   maxHeight?:           string;
   autoplayOnVisible?:   boolean;
+  fullscreenTopLeft?:   boolean;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -276,6 +277,7 @@ export default function PostMediaViewer({
   onSlideChange,
   maxHeight = "85svh",
   autoplayOnVisible = false,
+  fullscreenTopLeft = false,
 }: PostMediaViewerProps) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
@@ -490,6 +492,7 @@ export default function PostMediaViewer({
               blurHash={first.blurHash}
               objectFit={isMobileView && videoRatio < 0.6 ? "cover" : "contain"}
               autoplayOnVisible={autoplayOnVisible}
+              fullscreenTopLeft={fullscreenTopLeft}
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}
             />
