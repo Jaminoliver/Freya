@@ -240,10 +240,23 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
     if (isIOS) {
       if (!isFakeFullscreen) {
         setIsFakeFullscreen(true);
-        Object.assign(container.style, { position: "fixed", inset: "0", zIndex: "9999", width: "100%", height: "100%", backgroundColor: "#000" });
+        Object.assign(container.style, {
+          position:        "fixed",
+          inset:           "0",
+          zIndex:          "9999",
+          width:           "100%",
+          height:          "100%",
+          backgroundColor: "#000",
+          animation:       "vp-fs-in 280ms cubic-bezier(0.4,0,0.2,1) forwards",
+        });
       } else {
-        setIsFakeFullscreen(false);
-        Object.assign(container.style, { position: "", inset: "", zIndex: "", width: "", height: "", backgroundColor: "" });
+        Object.assign(container.style, {
+          animation: "vp-fs-out 280ms cubic-bezier(0.4,0,0.2,1) forwards",
+        });
+        setTimeout(() => {
+          setIsFakeFullscreen(false);
+          Object.assign(container.style, { position: "", inset: "", zIndex: "", width: "", height: "", backgroundColor: "", animation: "" });
+        }, 280);
       }
       showControls();
       return;
@@ -281,6 +294,8 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
       <style>{`
         @keyframes vp-fadein  { from { opacity: 0; } to { opacity: 1; } }
         @keyframes vp-fadeout { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes vp-fs-in   { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+        @keyframes vp-fs-out  { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.96); } }
         @keyframes vp-pop     { 0% { transform: translate(-50%,-50%) scale(0.6); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; } }
         .vp-controls-bar { transition: opacity 0.25s ease; }
         .vp-seek-thumb {
