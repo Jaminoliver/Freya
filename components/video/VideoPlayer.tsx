@@ -446,7 +446,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
 
       {/* Fullscreen — always visible */}
       <button
-        style={{ ...btnStyle, position: "absolute", bottom: 10, right: 8, zIndex: 15, background: "rgba(0,0,0,0.45)", borderRadius: "6px", backdropFilter: "blur(6px)" }}
+        style={{ ...btnStyle, position: "absolute", bottom: (isMobile && isPortrait ? 24 : 0) + 10, right: 8, zIndex: 15, background: "rgba(0,0,0,0.45)", borderRadius: "6px", backdropFilter: "blur(6px)" }}
         onClick={handleFullscreen}
         onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }}
         aria-label="Fullscreen"
