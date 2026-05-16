@@ -466,6 +466,7 @@ export default function PostMediaViewer({
             backgroundImage:      blurSrc ? `url(${blurSrc})` : undefined,
             backgroundSize:       "cover",
             backgroundPosition:   "center",
+            paddingBottom:        isMobileView ? "48px" : 0,
           }}
         >
           {!isMobileView && blurSrc && (
@@ -488,7 +489,7 @@ export default function PostMediaViewer({
               fillParent={true}
               hideInternalBlur={true}
               blurHash={first.blurHash}
-              objectFit="contain"
+              objectFit={isMobileView && videoRatio < 1 ? "cover" : "contain"}
               autoplayOnVisible={autoplayOnVisible}
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}
