@@ -168,11 +168,29 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
     setCurrentTime(fraction * duration);
   }, [videoRef, duration]);
 
+  const seekingRef = React.useRef(false);
+
   const handleSeekMouseDown = React.useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
+    seekingRef.current = true;
     setSeeking(true);
     seekTo(e.clientX);
     showControls();
+
+    const onMove = (ev: MouseEvent) => {
+      if (!seekingRef.current) return;
+      seekTo(ev.clientX);
+      showControls();
+    };
+    const onUp = () => {
+      seekingRef.current = false;
+      setSeeking(false);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
   }, [seekTo, showControls]);
 
   const handleSeekMouseMove = React.useCallback((e: React.MouseEvent) => {
@@ -380,8 +398,9 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
           position:      "absolute",
           bottom:        (isMobile && isPortrait) ? 24 : 0, left: 0, right: 0,
           zIndex:        10,
-          opacity:       1,
-          pointerEvents: "auto",
+          opacity:       visible ? 1 : 0,
+          pointerEvents: visible ? "auto" : "none",
+          transition:    "opacity 0.25s ease",
           background:    "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 70%, transparent 100%)",
           padding:       "24px 12px 10px",
           display:       "flex",
@@ -397,7 +416,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
           onMouseUp={handleSeekMouseUp}
           onTouchStart={handleSeekTouchStart}
           onTouchEnd={handleSeekTouchEnd}
-          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 11, opacity: visible ? 1 : 0, pointerEvents: visible ? "auto" : "none", transition: "opacity 0.25s ease" }}
+          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 11 }}
         >
           <div style={{ position: "relative", width: "100%", height: "4px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.25)", overflow: "visible" }}>
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.35)", borderRadius: "2px" }} />
@@ -409,7 +428,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
 
         {/* Bottom row: play + time + fullscreen */}
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <button style={{ ...btnStyle, opacity: visible ? 1 : 0, pointerEvents: visible ? "auto" : "none", transition: "opacity 0.25s ease" }} onClick={handlePlayPause} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handlePlayPause(e); }} aria-label={playing ? "Pause" : "Play"}>
+          <button style={{ ...btnStyle }} onClick={handlePlayPause} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handlePlayPause(e); }} aria-label={playing ? "Pause" : "Play"}>
             {playing ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
             ) : (
@@ -417,7 +436,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
             )}
           </button>
 
-          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: "0.02em", minWidth: "80px", opacity: visible ? 1 : 0, transition: "opacity 0.25s ease" }}>
+          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: "0.02em", minWidth: "80px" }}>
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
 
