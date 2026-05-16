@@ -71,10 +71,11 @@ interface ControlsProps {
   isMobile?:     boolean;
   isPortrait?:   boolean;
   bottomOffset?: number;
-  isPlaying?:    boolean;
+  isPlaying?:         boolean;
+  fullscreenTopLeft?: boolean;
 }
 
-function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait, bottomOffset = 0, isPlaying: isPlayingProp = false }: ControlsProps) {
+function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait, bottomOffset = 0, isPlaying: isPlayingProp = false, fullscreenTopLeft = false }: ControlsProps) {
   const [playing,      setPlaying]      = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash,  setCenterFlash]  = React.useState<"play"|"pause"|null>(null);
   const [currentTime,  setCurrentTime]  = React.useState(0);
@@ -573,7 +574,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         className="vp-controls-bar"
         style={{
           position:      "absolute",
-          bottom:        (isMobile && isPortrait) ? 24 : 0, left: 0, right: 0,
+          bottom:        (isMobile && isPortrait) ? (fullscreenTopLeft ? bottomOffset + 48 : bottomOffset + 24) : bottomOffset, left: 0, right: 0,
           zIndex:        10,
           opacity:       visible ? 1 : 0,
           pointerEvents: visible ? "auto" : "none",
@@ -618,11 +619,20 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           </span>
 
           <div style={{ flex: 1 }} />
+          {fullscreenTopLeft && (
+            <button style={{ ...btnStyle }} onClick={handleFullscreen} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }} aria-label={isFakeFullscreen || isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+              {(isFullscreen || isFakeFullscreen) ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Fullscreen — always visible */}
-      <button
+      {!fullscreenTopLeft && <button
         style={{
           position: "absolute", bottom: (isMobile && isPortrait ? 24 : 0) + 10, right: 8, zIndex: 15,
           ...(isFakeFullscreen || isFullscreen ? {
@@ -646,7 +656,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
             <path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
           </svg>
         )}
-      </button>
+      </button>}
     </>
   );
 }
@@ -664,6 +674,7 @@ interface VideoPlayerProps {
   objectFit?:         "contain" | "cover";
   autoplayOnVisible?: boolean;
   autoPlay?:          boolean;
+  fullscreenTopLeft?: boolean;
   knownWidth?:        number | null;
   knownHeight?:       number | null;
 }
@@ -680,6 +691,7 @@ export default function VideoPlayer({
   objectFit = "contain",
   autoplayOnVisible = false,
   autoPlay          = false,
+  fullscreenTopLeft = false,
   knownWidth        = null,
   knownHeight       = null,
 }: VideoPlayerProps) {
@@ -1149,6 +1161,7 @@ export default function VideoPlayer({
               isPortrait={isPortrait || objectFit === "cover"}
               bottomOffset={bottomOffset}
               isPlaying={isPlaying}
+              fullscreenTopLeft={fullscreenTopLeft}
             />
           </>
         )}
