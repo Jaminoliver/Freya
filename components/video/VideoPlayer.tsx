@@ -70,9 +70,10 @@ interface ControlsProps {
   isMobile?:     boolean;
   isPortrait?:   boolean;
   bottomOffset?: number;
+  isPlaying?:    boolean;
 }
 
-function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait, bottomOffset = 0 }: ControlsProps) {
+function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait, bottomOffset = 0, isPlaying: isPlayingProp = false }: ControlsProps) {
   const [playing,      setPlaying]      = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash,  setCenterFlash]  = React.useState<"play"|"pause"|null>(null);
   const [currentTime,  setCurrentTime]  = React.useState(0);
@@ -89,9 +90,12 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
   const showControls = React.useCallback(() => {
     setVisible(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
+    console.log('[VPC] showControls — arming timer t:', Date.now());
     hideTimer.current = setTimeout(() => {
       const video = videoRef.current;
+      console.log('[VPC] timer fired — paused:', video?.paused, 't:', Date.now());
       if (video && !video.paused) setVisible(false);
+      else console.log('[VPC] timer fired but paused — skip hide');
     }, 1500);
   }, [videoRef]);
 
@@ -99,13 +103,18 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
     return () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
   }, []);
 
+  // When parent signals playback started, arm the hide timer
+  React.useEffect(() => {
+    if (isPlayingProp) showControls();
+  }, [isPlayingProp, showControls]);
+
   // ── Sync with video element ───────────────────────────────────────────
   React.useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const onPlay     = () => { setPlaying(true); onFirstPlay?.(); hideTimer.current = setTimeout(() => setVisible(false), 1500); };
-    const onPause    = () => { setPlaying(false); setVisible(true); if (hideTimer.current) clearTimeout(hideTimer.current); };
+    const onPlay     = () => { console.log('[VPC] onPlay event t:', Date.now()); setPlaying(true); onFirstPlay?.(); showControls(); };
+    const onPause    = () => { console.log('[VPC] onPause event t:', Date.now()); setPlaying(false); setVisible(true); if (hideTimer.current) clearTimeout(hideTimer.current); };
     const onTime     = () => {
       setCurrentTime(video.currentTime);
       if (video.buffered.length > 0) {
@@ -292,6 +301,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
           const v = videoRef.current;
           if (!v) return;
           const wasPlaying = !v.paused;
+          console.log('[VPC] touchStart — wasPlaying:', wasPlaying, 't:', Date.now());
           (e.currentTarget as HTMLDivElement).dataset.touchStart  = String(Date.now());
           (e.currentTarget as HTMLDivElement).dataset.wasPlaying  = String(wasPlaying);
           if (wasPlaying) v.pause();   // press-and-hold pause
@@ -307,6 +317,7 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
           if (!v) return;
 
           if (held < 200) {
+            console.log('[VPC] quickTap — wasPlaying:', wasPlaying, 'held:', held, 't:', Date.now());
             // Quick tap — toggle from the original state
             if (wasPlaying) {
               flashCenter("pause");        // we already paused on touchstart
@@ -315,9 +326,11 @@ function VideoControls({ videoRef, isMuted, onToggleMute, onFirstPlay, isMobile,
               flashCenter("play");
             }
           } else {
+            console.log('[VPC] longPress release — wasPlaying:', wasPlaying, 'held:', held, 't:', Date.now());
             // Long press release — resume if it was playing before
             if (wasPlaying) v.play().catch(() => {});
           }
+          console.log('[VPC] calling showControls at t:', Date.now());
           showControls();
         }}
         onTouchCancel={(e) => {
@@ -479,6 +492,7 @@ export default function VideoPlayer({
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
   const [isMuted,      setIsMuted]      = React.useState(() => getSavedMute());
   const [isMobile,     setIsMobile]     = React.useState(false);
+  const [isPlaying,    setIsPlaying]    = React.useState(false);
 
   const slowTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -835,6 +849,8 @@ export default function VideoPlayer({
             // Don't clear isBuffering here — onPlay fires before frames paint.
             // Only onPlaying truly means "video is now showing frames."
           }}
+          onPause={() => { setIsPlaying(false); }}
+          onEnded={() => { setIsPlaying(false); }}
           onWaiting={() => {
             if (bufferTimer.current) clearTimeout(bufferTimer.current);
             bufferTimer.current = setTimeout(() => setIsBuffering(true), 300);
@@ -845,6 +861,7 @@ export default function VideoPlayer({
             if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
             setIsBuffering(false);
             setHasStarted(true);
+            setIsPlaying(true);
             setShowSlowDots(false);
             setIsLoading(false);
             setShowPoster(false);
@@ -921,6 +938,7 @@ export default function VideoPlayer({
               isMobile={isMobile}
               isPortrait={isPortrait || objectFit === "cover"}
               bottomOffset={bottomOffset}
+              isPlaying={isPlaying}
             />
           </>
         )}
