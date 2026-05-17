@@ -62,15 +62,28 @@ export async function GET(
     const subscribedSet = new Set((subs ?? []).map((s: any) => s.fan_id));
     const totalKobo = tips.reduce((sum: number, t: any) => sum + (t.amount ?? 0), 0);
 
-    const tippers = tips.map((t: any) => ({
-      id:            t.tipper_id,
-      username:      t.profiles?.username      ?? "",
-      display_name:  t.profiles?.display_name  || t.profiles?.username || "",
-      avatar_url:    t.profiles?.avatar_url    ?? null,
-      amount:        t.amount,
-      tipped_at:     t.created_at,
-      is_subscribed: subscribedSet.has(t.tipper_id),
-    }));
+    const grouped = new Map<string, { amount: number; tipped_at: string; profile: any }>();
+    for (const t of tips as any[]) {
+      const existing = grouped.get(t.tipper_id);
+      if (existing) {
+        existing.amount  += t.amount ?? 0;
+        if (t.created_at > existing.tipped_at) existing.tipped_at = t.created_at;
+      } else {
+        grouped.set(t.tipper_id, { amount: t.amount ?? 0, tipped_at: t.created_at, profile: t.profiles });
+      }
+    }
+
+    const tippers = [...grouped.entries()]
+      .sort((a, b) => b[1].tipped_at.localeCompare(a[1].tipped_at))
+      .map(([tipperId, g]) => ({
+        id:            tipperId,
+        username:      g.profile?.username      ?? "",
+        display_name:  g.profile?.display_name  || g.profile?.username || "",
+        avatar_url:    g.profile?.avatar_url    ?? null,
+        amount:        g.amount,
+        tipped_at:     g.tipped_at,
+        is_subscribed: subscribedSet.has(tipperId),
+      }));
 
     return NextResponse.json({ tippers, total_kobo: totalKobo });
   } catch (err) {
