@@ -2,6 +2,9 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { MessagesSquare } from "lucide-react";
+import { useNav } from "@/lib/hooks/useNav";
+import { startConversation } from "@/app/(main)/messages/page";
 
 interface Tipper {
   id:            string;
@@ -71,9 +74,20 @@ export default function TipDetailsSheet({ postId, open, onClose }: Props) {
   const [totalKobo, setTotalKobo] = useState(0);
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState<string | null>(null);
+  const [msgLoading, setMsgLoading] = useState<Record<string, boolean>>({});
 
   const panelRef = useRef<HTMLDivElement>(null);
   const dragRef  = useRef({ active: false, startY: 0 });
+
+  const { navigate } = useNav();
+
+  const handleMessage = async (tipperId: string) => {
+    if (msgLoading[tipperId]) return;
+    setMsgLoading((prev) => ({ ...prev, [tipperId]: true }));
+    const conversationId = await startConversation(tipperId);
+    if (conversationId) navigate(`/messages/${conversationId}`);
+    else setMsgLoading((prev) => ({ ...prev, [tipperId]: false }));
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -97,6 +111,20 @@ export default function TipDetailsSheet({ postId, open, onClose }: Props) {
     return load();
   }, [open, load]);
 
+  useEffect(() => {
+    if (!open) return;
+    const y = window.scrollY;
+    document.body.style.position = "fixed";
+    document.body.style.top      = `-${y}px`;
+    document.body.style.width    = "100%";
+    return () => {
+      document.body.style.position = "";
+      document.body.style.top      = "";
+      document.body.style.width    = "";
+      window.scrollTo(0, y);
+    };
+  }, [open]);
+
   
 
   if (!open) return null;
@@ -109,7 +137,7 @@ export default function TipDetailsSheet({ postId, open, onClose }: Props) {
   return createPortal(
     <>
       <style>{STYLES}</style>
-      <div style={{ position: "fixed", top: 0, left: overlayLeft, width: overlayWidth, height: "100%", zIndex: 100 }}>
+      <div style={{ position: "fixed", top: 0, left: overlayLeft, width: overlayWidth, height: "100%", zIndex: 300 }}>
 
         <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)" }} />
 
@@ -268,6 +296,17 @@ export default function TipDetailsSheet({ postId, open, onClose }: Props) {
                     {relative(t.tipped_at)}
                   </span>
                 </div>
+
+                {/* Message */}
+                <button
+                  onClick={() => handleMessage(t.id)}
+                  disabled={!!msgLoading[t.id]}
+                  style={{ width: 34, height: 34, borderRadius: 8, border: "1px solid #2A2A3D", backgroundColor: "transparent", color: "#C4C4D4", cursor: msgLoading[t.id] ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: msgLoading[t.id] ? 0.6 : 1 }}
+                >
+                  {msgLoading[t.id]
+                    ? <div style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid currentColor", borderTopColor: "transparent", animation: "td-shimmer 0.6s linear infinite" }} />
+                    : <MessagesSquare size={16} strokeWidth={1.8} />}
+                </button>
               </div>
             ))}
           </div>
