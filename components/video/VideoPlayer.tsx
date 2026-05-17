@@ -1026,7 +1026,7 @@ export default function VideoPlayer({
               onError={() => setPosterError(true)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
             />
-            {!isLoading && <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}><polygon points="5,3 19,12 5,21"/></svg>}
+            {!isLoading && <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}><polygon points="5,3 19,12 5,21"/></svg>}
           </div>
         )}
 
@@ -1117,6 +1117,22 @@ export default function VideoPlayer({
             <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.2s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
             <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.4s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
           </div>
+        )}
+
+        {/* Mute button visible on poster */}
+        {showPoster && (
+          <button
+            style={{ position: "absolute", top: 12, right: 12, zIndex: 6, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
+            onClick={(e) => { e.stopPropagation(); const next = !isMuted; setIsMuted(next); saveMute(next); }}
+            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); const next = !isMuted; setIsMuted(next); saveMute(next); }}
+            aria-label={isMuted ? "Unmute" : "Mute"}
+          >
+            {isMuted ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            )}
+          </button>
         )}
 
         {/* Custom controls — only shown after poster is dismissed */}
