@@ -107,9 +107,8 @@ export default function TipDetailsSheet({ postId, open, onClose }: Props) {
   }, [postId]);
 
   useEffect(() => {
-    if (!open) return;
     return load();
-  }, [open, load]);
+  }, [load]);
 
   useEffect(() => {
     if (!open) return;
