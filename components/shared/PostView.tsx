@@ -469,7 +469,7 @@ export default function PostView({ postId, sourceIsMessage, onBack }: PostViewPr
       )}
 
       {!sourceIsMessage && !post.locked && (
-        <div style={{ margin: "0", paddingLeft: "8px" }}>
+        <div style={{ margin: "0", paddingLeft: "7px" }}>
           <PostActions likes={post.like_count} comments={commentCount} liked={post.liked} bookmarked={savedPost} isSubscribed={post.can_access} isOwnProfile={isOwnPost} onLike={handleLike} onComment={handleComment} onTip={openTip} onBookmark={handleBookmark} />
         </div>
       )}
