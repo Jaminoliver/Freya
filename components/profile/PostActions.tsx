@@ -54,7 +54,7 @@ export default function PostActions({
   return (
     <div style={{ padding: "0", fontFamily: "'Inter', sans-serif" }}>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "20px", paddingLeft: "12px" }}>
+      <div ref={(el) => { if (el) console.log('[PostActions] actions left:', el.getBoundingClientRect().left); }} style={{ display: "flex", alignItems: "center", gap: "20px", paddingLeft: "5px" }}>
 
         {/* Like */}
         <button
