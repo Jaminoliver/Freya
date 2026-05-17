@@ -139,7 +139,10 @@ function ProfilePageInner() {
       );
       setFeedRefreshKey((k) => k + 1);
     }
-  }, [checkoutType, lockedPostId]);
+    if (checkoutType === "tips" && profile) {
+      refreshPostsRef.current?.(profile.username);
+    }
+  }, [checkoutType, lockedPostId, profile]);
 
   const [messageLoading, setMessageLoading] = React.useState(false);
 
@@ -170,7 +173,7 @@ function ProfilePageInner() {
 
   const refreshPosts = React.useCallback(async (creatorUsername: string) => {
     try {
-      const res  = await fetch(`/api/posts/creator/${creatorUsername}`);
+      const res  = await fetch(`/api/posts/creator/${creatorUsername}`, { cache: "no-store" });
       const data = await res.json();
       if (res.ok) {
         const freshPosts: ApiPost[] = data.posts || [];

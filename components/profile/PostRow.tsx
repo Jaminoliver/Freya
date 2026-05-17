@@ -334,7 +334,7 @@ export default function PostRow({
           <PostActions
             likes={engagement.likeCount}
             comments={engagement.commentCount}
-            tips={(isOwnProfile || isSubscribed) ? post.tip_total : undefined}
+            tips={post.tip_total}
             liked={engagement.liked}
             bookmarked={engagement.savedPost}
             isSubscribed={isSubscribed}

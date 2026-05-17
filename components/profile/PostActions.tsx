@@ -51,6 +51,17 @@ export default function PostActions({
     maximumFractionDigits: 2,
   });
 
+  const compact = (n: number) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+    if (n >= 10_000)    return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+    return n.toString();
+  };
+  const compactNaira = (n: number) => {
+    if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+    if (n >= 10_000)    return `₦${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+    return `₦${n.toLocaleString("en-NG")}`;
+  };
+
   return (
     <div style={{ padding: "0", fontFamily: "'Inter', sans-serif" }}>
 
@@ -70,7 +81,7 @@ export default function PostActions({
 }}
         >
           <Heart size={22} fill={liked ? "#EC4899" : "none"} strokeWidth={1.0} />
-          <span>{likes.toLocaleString()}</span>
+          <span>{compact(likes)}</span>
         </button>
 
         {/* Comment */}
@@ -87,9 +98,12 @@ export default function PostActions({
           }}
         >
           <MessageCircle size={22} strokeWidth={1.0} />
-          <span>{comments.toLocaleString()}</span>
+          <span>{compact(comments)}</span>
         </button>
 
+        {isOwnProfile && showTipsEarned && (
+          <span style={{ fontSize: "12px", color: "#9D8FBF", background: "rgba(139,92,246,0.10)", borderRadius: "999px", padding: "2px 8px" }}>{compactNaira(tipsNaira)} tipped</span>
+        )}
         {/* Tip — hidden on own profile */}
         {!isOwnProfile && (
           <button
@@ -110,7 +124,7 @@ export default function PostActions({
               <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
             </svg>
             {showTipsEarned && (
-  <span>₦{(tips! / 100).toLocaleString("en-NG")}</span>
+  <span style={{ fontSize: "12px", color: "#9D8FBF", background: "rgba(139,92,246,0.10)", borderRadius: "999px", padding: "2px 8px" }}>{compactNaira(tipsNaira)} tipped</span>
 )}
           </button>
         )}

@@ -138,7 +138,7 @@ export async function GET(
       : Promise.resolve({ data: [] });
 
     // ── Tip totals — fetched for own profile OR active subscribers ────────
-    const tipTotalsPromise = (isOwnProfile || isSubscribed) && postIds.length > 0
+    const tipTotalsPromise = postIds.length > 0
       ? service
           .from("tips")
           .select("post_id, amount")
@@ -275,7 +275,7 @@ export async function GET(
         poll: pollByPostId.get(postId) ?? null,
         saved_post: savedPostSet.has(postId),
         saved_creator: isSavedCreator,
-        ...((isOwnProfile || isSubscribed) && { tip_total: tipTotalMap.get(postId) ?? 0 }),
+        tip_total: tipTotalMap.get(postId) ?? 0,
       };
     });
 
