@@ -38,13 +38,16 @@ export function ManageBottomSheet({
   };
 
   const autoRenewDisabled = s.isFreeCreator || s.price === 0;
+  const mainEl   = typeof document !== "undefined" ? document.querySelector("main") : null;
+  const mainRect = mainEl?.getBoundingClientRect();
+  const overlayLeft = mainRect?.left ?? 0;
 
   return (
     <>
       <div
         onClick={onClose}
         style={{
-          position: "fixed", inset: 0,
+          position: "fixed", top: 0, left: overlayLeft, width: mainRect?.width ?? "100%", height: "100%",
           backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
           zIndex: 9998, animation: "freyaSheetFade 0.2s ease",
         }}
@@ -52,13 +55,15 @@ export function ManageBottomSheet({
 
       <style>{`
         @keyframes freyaSheetFade  { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes freyaSheetSlide { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes freyaSheetSlide { from { transform: translateX(-50%) translateY(100%); } to { transform: translateX(-50%) translateY(0); } }
       `}</style>
 
       <div
         style={{
-          position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
-        width: "min(480px, 100%)",
+          position: "fixed", bottom: 0,
+          left: `${overlayLeft + (mainRect?.width ?? 0) / 2}px`,
+          transform: "translateX(-50%)",
+          width: "min(480px, 100%)",
           backgroundColor: "#0F0F1A",
           borderTopLeftRadius: "20px", borderTopRightRadius: "20px",
           border: "1px solid #1E1E2E", borderBottom: "none",

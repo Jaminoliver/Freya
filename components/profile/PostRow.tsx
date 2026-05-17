@@ -13,6 +13,7 @@ import PostTextViewer from "@/components/shared/PostTextViewer";
 import PostOptionsSheet from "@/components/feed/PostOptionsSheet";
 import CreatorPostOptionsSheet from "@/components/profile/PostOptionsSheet";
 import PostHeader from "@/components/shared/PostHeader";
+import TipDetailsSheet from "@/components/profile/TipDetailsSheet";
 import EditCaptionModal from "@/components/profile/EditCaptionModal";
 import EditPPVModal from "@/components/profile/EditPPVModal";
 import { PollDisplay } from "@/components/feed/PollDisplay";
@@ -117,6 +118,7 @@ export default function PostRow({
   const [caption,          setCaption]          = React.useState<string | null>(post.caption);
   const [editOpen,         setEditOpen]         = React.useState(false);
   const [ppvEditOpen,      setPpvEditOpen]      = React.useState(false);
+  const [tipDetailsOpen,   setTipDetailsOpen]   = React.useState(false);
   const [ppvPrice,         setPpvPrice]         = React.useState<number | null>(post.ppv_price);
   const [isPPV,            setIsPPV]            = React.useState(post.is_ppv);
 
@@ -245,6 +247,7 @@ export default function PostRow({
         <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refresh(); }} />
       )}
 
+      {isOwnProfile && <TipDetailsSheet postId={post.id} open={tipDetailsOpen} onClose={() => setTipDetailsOpen(false)} />}
       {editOpen && <EditCaptionModal caption={caption ?? ""} onSave={handleSaveCaption} onClose={() => setEditOpen(false)} />}
       {ppvEditOpen && <EditPPVModal currentPrice={ppvPrice != null ? ppvPrice / 100 : null} onSave={handleSavePPV} onRemove={isPPV ? handleRemovePPV : undefined} onClose={() => setPpvEditOpen(false)} />}
 
@@ -344,6 +347,7 @@ export default function PostRow({
             onComment={engagement.handleToggleComment}
             onTip={() => onTip?.(String(post.id))}
             onBookmark={engagement.handleSavePost}
+            onTipDetails={() => setTipDetailsOpen(true)}
           />
         </div>
       )}

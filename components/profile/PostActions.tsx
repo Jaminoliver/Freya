@@ -16,7 +16,8 @@ interface PostActionsProps {
   onLike?:       () => void;
   onComment?:    () => void;
   onTip?:        () => void;
-  onBookmark?:   () => void;
+  onBookmark?:    () => void;
+  onTipDetails?:  () => void;
 }
 
 export default function PostActions({
@@ -24,7 +25,7 @@ export default function PostActions({
   liked = false,
   bookmarked: bookmarkedProp = false,
   isSubscribed, isFree = false, isOwnProfile = false,
-  onLike, onComment, onTip, onBookmark,
+  onLike, onComment, onTip, onBookmark, onTipDetails,
 }: PostActionsProps) {
   const [bookmarked, setBookmarked] = React.useState(bookmarkedProp);
 
@@ -102,7 +103,7 @@ export default function PostActions({
         </button>
 
         {isOwnProfile && showTipsEarned && (
-          <span style={{ fontSize: "12px", color: "#9D8FBF", background: "rgba(139,92,246,0.10)", borderRadius: "999px", padding: "2px 8px" }}>{compactNaira(tipsNaira)} tipped</span>
+          <button onClick={onTipDetails} style={{ fontSize: "12px", color: "#9D8FBF", background: "rgba(139,92,246,0.10)", borderRadius: "999px", padding: "2px 8px", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif" }}>{compactNaira(tipsNaira)} tipped</button>
         )}
         {/* Tip — hidden on own profile */}
         {!isOwnProfile && (
