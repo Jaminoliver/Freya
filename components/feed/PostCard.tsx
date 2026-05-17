@@ -466,7 +466,7 @@ function PostCardInner({
       )}
 
       {!post.isLocked && (
-        <div style={{ padding: "0 16px" }}>
+        <div style={{ padding: "0" }}>
           <PostActions
             likes={engagement.likeCount} comments={engagement.commentCount} liked={engagement.liked}
             bookmarked={engagement.savedPost} isSubscribed={true} isOwnProfile={false}

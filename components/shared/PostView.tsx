@@ -404,6 +404,7 @@ export default function PostView({ postId, sourceIsMessage, onBack }: PostViewPr
         </button>
       </div>
 
+      <div style={{ paddingLeft: "5px" }}>
       <PostHeader
         avatarUrl={post.profiles?.avatar_url ?? null}
         displayName={post.profiles?.display_name || post.profiles?.username || ""}
@@ -441,6 +442,7 @@ export default function PostView({ postId, sourceIsMessage, onBack }: PostViewPr
           </div>
         }
       />
+      </div>
 
       {sourceIsMessage && post.is_deleted && (
         <div style={{ margin: "0 16px 8px", padding: "8px 12px", borderRadius: "10px", backgroundColor: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", fontSize: "12px", color: "#A3A3C2", fontFamily: "'Inter', sans-serif" }}>
@@ -467,7 +469,7 @@ export default function PostView({ postId, sourceIsMessage, onBack }: PostViewPr
       )}
 
       {!sourceIsMessage && !post.locked && (
-        <div style={{ margin: "0 16px" }}>
+        <div style={{ margin: "0", paddingLeft: "8px" }}>
           <PostActions likes={post.like_count} comments={commentCount} liked={post.liked} bookmarked={savedPost} isSubscribed={post.can_access} isOwnProfile={isOwnPost} onLike={handleLike} onComment={handleComment} onTip={openTip} onBookmark={handleBookmark} />
         </div>
       )}
