@@ -39,7 +39,7 @@ function CaptionText({ text }: { text: string }) {
   return (
     <p
       dangerouslySetInnerHTML={{ __html: html }}
-      style={{ fontSize: "14px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 2px", whiteSpace: "pre-wrap" }}
+      style={{ fontSize: "14px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 2px 16px", whiteSpace: "pre-wrap" }}
     />
   );
 }
@@ -62,7 +62,7 @@ export default function PostHeader({
   return (
     <>
     <div style={{
-      padding: "16px 16px 2px",
+      padding: "16px 16px 2px 16px",
       display: "flex", alignItems: "center", justifyContent: "space-between",
       gap: "10px",
     }}>

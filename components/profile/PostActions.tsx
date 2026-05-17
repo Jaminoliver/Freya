@@ -54,7 +54,7 @@ export default function PostActions({
   return (
     <div style={{ padding: "0", fontFamily: "'Inter', sans-serif" }}>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "20px", paddingLeft: "12px" }}>
 
         {/* Like */}
         <button

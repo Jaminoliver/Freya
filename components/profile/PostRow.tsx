@@ -314,7 +314,7 @@ export default function PostRow({
       )}
 
       {viewerMedia.length > 0 && (
-        <div style={{ marginTop: "12px", margin: isMobileView ? "10px 4px" : "10px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
+        <div style={{ marginTop: "12px", margin: isMobileView ? "6px 4px" : "6px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
         <PostMediaViewer
           media={viewerMedia}
           isLocked={post.locked && !isOwnProfile}
@@ -330,7 +330,7 @@ export default function PostRow({
       )}
 
       {(!post.locked || (isSubscribed && !post.is_ppv) || isOwnProfile) && (
-        <div style={{ padding: "0 16px" }}>
+        <div style={{ padding: "0" }}>
           <PostActions
             likes={engagement.likeCount}
             comments={engagement.commentCount}
