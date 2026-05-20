@@ -16,8 +16,15 @@ interface CreatorGridProps {
 
 const PLAY_DURATION = 5000;
 
+interface FullscreenState {
+  data: VideoTileData;
+  initialTime: number;
+}
+
 export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: CreatorGridProps) {
-  const [fullscreenData, setFullscreenData] = useState<VideoTileData | null>(null);
+  const [fullscreen, setFullscreen] = useState<FullscreenState | null>(null);
+  const [isMuted, setIsMuted] = useState(true);
+
   const sentinelRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -64,7 +71,6 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     return { left: bestLeft, right: bestRight };
   };
 
-  // Fallback: pick first two video items directly from items array
   const getFirstPair = (): { left: number | null; right: number | null } => {
     const videoItems = items.filter((i): i is VideoTileData => i.type === "video");
     const left = videoItems.find((_, idx) => idx % 2 === 0)?.post_id ?? null;
@@ -136,14 +142,12 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runAutoPlay]);
 
-  // Re-trigger autoplay when items load (fixes hard refresh)
   useEffect(() => {
     if (!items.length) return;
     const timer = setTimeout(() => {
       if (userHoverRef.current !== null) return;
       if (autoPlayId !== null) return;
 
-      // Try observer ratios first
       const { left, right } = getBestPair();
       if (left || right) {
         lastPairRef.current = `${left}-${right}`;
@@ -151,7 +155,6 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
         return;
       }
 
-      // Fallback: observer ratios still 0, pick from items array
       const fallback = getFirstPair();
       if (fallback.left || fallback.right) {
         lastPairRef.current = `${fallback.left}-${fallback.right}`;
@@ -187,6 +190,14 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     }, PLAY_DURATION);
   }, []);
 
+  const handleOpenFullscreen = useCallback((data: VideoTileData, initialTime: number) => {
+    setFullscreen({ data, initialTime });
+  }, []);
+
+  const handleCloseFullscreen = useCallback(() => {
+    setFullscreen(null);
+  }, []);
+
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
@@ -217,9 +228,10 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
               key={`video-${item.post_id}`}
               data={item}
               isActive={autoPlayId === item.post_id || userHoverId === item.post_id}
+              isModalOpen={!!fullscreen}
               onTileRef={handleTileRef}
               onUserInteract={handleUserInteract}
-              onOpenFullscreen={setFullscreenData}
+              onOpenFullscreen={handleOpenFullscreen}
             />
           ) : (
             <IdentityCard key={`identity-${item.creator_id}`} data={item} />
@@ -240,9 +252,16 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
         </>
       )}
 
-      {fullscreenData && (
-        <VideoFullscreenModal data={fullscreenData} onClose={() => setFullscreenData(null)} />
+      {fullscreen && (
+        <VideoFullscreenModal
+          data={fullscreen.data}
+          initialTime={fullscreen.initialTime}
+          isMuted={isMuted}
+          onMuteChange={setIsMuted}
+          onClose={handleCloseFullscreen}
+        />
       )}
+
       {!hasMore && items.length > 0 && (
         <p style={{ textAlign: "center", color: "#4A4A6A", fontSize: "12px", fontFamily: "'Inter', sans-serif", padding: "24px 0 40px" }}>
           You've seen everything · Check back later
