@@ -39,6 +39,7 @@ export function VideoFullscreenModal({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [avatarError, setAvatarError] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   const [currentTime, setCurrentTime] = useState(initialTime);
   const [duration, setDuration] = useState(0);
@@ -52,17 +53,20 @@ export function VideoFullscreenModal({
   const initials = (name[0] ?? "?").toUpperCase();
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  // Mount animation
   useEffect(() => {
     const t = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(t);
   }, []);
 
+  // Lock body scroll
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, []);
 
+  // Auto-play on mount, resume from tile's current time
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
@@ -79,10 +83,38 @@ export function VideoFullscreenModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoSrc]);
 
+  // Sync mute to video
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = isMuted;
   }, [isMuted]);
 
+  // Keep isPaused in sync with actual video state
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onPlay  = () => setIsPaused(false);
+    const onPause = () => setIsPaused(true);
+    video.addEventListener("play",  onPlay);
+    video.addEventListener("pause", onPause);
+    return () => {
+      video.removeEventListener("play",  onPlay);
+      video.removeEventListener("pause", onPause);
+    };
+  }, []);
+
+  // Tap video to toggle pause/play
+  const handleVideoTap = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  };
+
+  // Seek bar
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
     if (!video || isSeeking) return;
@@ -95,16 +127,21 @@ export function VideoFullscreenModal({
     setDuration(video.duration);
   }, []);
 
-  const handleSeekStart = () => setIsSeeking(true);
-  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCurrentTime(Number(e.target.value));
+  const handleSeekStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    setIsSeeking(true);
+    videoRef.current?.pause();
   };
+
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    const val = Number(e.target.value);
+    setCurrentTime(val);
+    if (videoRef.current) videoRef.current.currentTime = val;
+  };
+
   const handleSeekEnd = () => {
-    const video = videoRef.current;
-    if (video) {
-      video.currentTime = currentTime;
-      video.play().catch(() => {});
-    }
+    videoRef.current?.play().catch(() => {});
     setIsSeeking(false);
   };
 
@@ -135,6 +172,12 @@ export function VideoFullscreenModal({
           from { opacity: 0; transform: translateY(12px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes vfm-play-pop {
+          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+          40%  { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+          70%  { transform: translate(-50%, -50%) scale(0.95); }
+          100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
 
         .vfm-seek {
           -webkit-appearance: none;
@@ -156,23 +199,29 @@ export function VideoFullscreenModal({
         .vfm-seek::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 0; height: 0;
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          background: #fff;
+          cursor: pointer;
+          margin-top: -4.5px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.4);
         }
         .vfm-seek::-moz-range-thumb {
-          width: 0; height: 0;
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          background: #fff;
           border: none;
-          background: transparent;
+          cursor: pointer;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.4);
         }
         .vfm-seek-wrapper {
           padding: 10px 0 0;
           cursor: pointer;
         }
-        .vfm-seek-wrapper:hover .vfm-seek,
-        .vfm-seek-wrapper:active .vfm-seek {
-          height: 4px;
-        }
+        .vfm-seek-wrapper:hover .vfm-seek { height: 4px; }
 
-        /* Desktop: constrain modal to phone-like column */
         .vfm-panel {
           position: fixed;
           inset: 0;
@@ -185,8 +234,6 @@ export function VideoFullscreenModal({
           position: relative;
           width: 100%;
           height: 100%;
-          max-width: 100%;
-          max-height: 100%;
           overflow: hidden;
         }
         @media (min-width: 768px) {
@@ -203,7 +250,7 @@ export function VideoFullscreenModal({
         }
       `}</style>
 
-      {/* Backdrop — clicking outside closes on desktop */}
+      {/* Backdrop */}
       <div
         style={{ position: "fixed", inset: 0, zIndex: 9998, backgroundColor: "#000" }}
         onClick={handleClose}
@@ -216,7 +263,7 @@ export function VideoFullscreenModal({
           opacity: mounted ? undefined : 0,
         }}
       >
-        <div className="vfm-inner" onClick={(e) => e.stopPropagation()}>
+        <div className="vfm-inner">
 
           {/* Close button */}
           <button
@@ -267,7 +314,7 @@ export function VideoFullscreenModal({
             )}
           </button>
 
-          {/* Video */}
+          {/* Video — tappable to pause/play */}
           {videoSrc && (
             <video
               ref={videoRef}
@@ -278,14 +325,38 @@ export function VideoFullscreenModal({
               preload="auto"
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
+              onClick={handleVideoTap}
               style={{
                 position: "absolute", inset: 0,
                 width: "100%", height: "100%",
                 objectFit: "contain",
                 backgroundColor: "#000",
                 display: "block",
+                cursor: "pointer",
               }}
             />
+          )}
+
+          {/* Play icon — only shown when paused, no background */}
+          {isPaused && (
+            <div
+              onClick={handleVideoTap}
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                zIndex: 10000,
+                pointerEvents: "auto",
+                cursor: "pointer",
+                animation: "vfm-play-pop 0.25s ease-out forwards",
+                transform: "translate(-50%, -50%)",
+                filter: "drop-shadow(0 2px 12px rgba(0,0,0,0.6))",
+              }}
+            >
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.92)" stroke="none" style={{ marginLeft: 5 }}>
+                <polygon points="5,3 19,12 5,21" />
+              </svg>
+            </div>
           )}
 
           {/* Bottom overlay — always visible */}
@@ -332,7 +403,7 @@ export function VideoFullscreenModal({
                 </div>
               </div>
 
-              {/* Stats row */}
+              {/* Stats */}
               <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -359,8 +430,8 @@ export function VideoFullscreenModal({
               </div>
             </div>
 
-            {/* Seek bar — flush to bottom edge */}
-            <div className="vfm-seek-wrapper" style={{ background: "rgba(0,0,0,0.88)", padding: "10px 0 0" }}>
+            {/* Seek bar */}
+            <div className="vfm-seek-wrapper" style={{ background: "rgba(0,0,0,0.88)", padding: "10px 0 0" }} onClick={(e) => e.stopPropagation()}>
               <input
                 type="range"
                 className="vfm-seek"
