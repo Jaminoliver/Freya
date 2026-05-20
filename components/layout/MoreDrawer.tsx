@@ -54,7 +54,7 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
       />
 
       <div
-        style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 201, backgroundColor: "#13131F", borderTop: "1px solid #2A2A3D", borderRadius: "20px 20px 0 0", padding: "12px 0 32px", animation: "slideUp 0.25s ease", fontFamily: "'Inter', sans-serif", maxWidth: "480px", margin: "0 auto" }}
+        style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 201, backgroundColor: "#0A0A0F", borderTop: "1px solid #2A2A3D", borderRadius: "20px 20px 0 0", padding: "12px 0 32px", animation: "slideUp 0.25s ease", fontFamily: "'Inter', sans-serif", maxWidth: "480px", margin: "0 auto" }}
       >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D" }} />

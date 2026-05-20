@@ -145,8 +145,7 @@ export default function PostRow({
   }, [post.profiles.id, router]);
 
   const firstMedia = post.media?.[0];
-  const isFreePost = post.audience === "everyone";
-
+  const isFreePost = !post.locked || post.audience === "everyone";
   const viewerMedia = React.useMemo(() => {
     if (!post.media?.length) return [];
     return post.media.map((m) => ({

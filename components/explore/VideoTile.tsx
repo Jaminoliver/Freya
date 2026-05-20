@@ -41,9 +41,10 @@ interface VideoTileProps {
   isActive: boolean;
   onTileRef: (id: number, el: HTMLDivElement | null) => void;
   onUserInteract: (id: number) => void;
+  onOpenFullscreen: (data: VideoTileData) => void;
 }
 
-export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTileProps) {
+export function VideoTile({ data, isActive, onTileRef, onUserInteract, onOpenFullscreen }: VideoTileProps) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [srcLoaded, setSrcLoaded] = useState(false);
@@ -101,7 +102,8 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
     };
   }, [isActive, srcLoaded]);
 
-  const handleClick = () => router.push(`/${data.username}?scrollTo=${data.post_id}`);
+  const handleClick = () => onOpenFullscreen(data);
+const handleAvatarClick = (e: React.MouseEvent) => { e.stopPropagation(); router.push(`/${data.username}`); };
 
   const rawThumb = data.thumbnail_url;
   const thumbnail =
@@ -222,7 +224,7 @@ export function VideoTile({ data, isActive, onTileRef, onUserInteract }: VideoTi
               )}
             </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "1px", overflow: "hidden", marginBottom: "4px" }}>
+          <div onClick={handleAvatarClick} style={{ display: "flex", flexDirection: "column", gap: "1px", overflow: "hidden" }}>
             <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {name}
             </p>

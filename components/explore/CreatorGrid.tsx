@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { VideoTile, type VideoTileData } from "@/components/explore/VideoTile";
 import { IdentityCard, type IdentityCardData } from "@/components/explore/IdentityCard";
+import { VideoFullscreenModal } from "@/components/explore/VideoFullscreenModal";
 
 export type GridItem = VideoTileData | IdentityCardData;
 
@@ -16,6 +17,7 @@ interface CreatorGridProps {
 const PLAY_DURATION = 5000;
 
 export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: CreatorGridProps) {
+  const [fullscreenData, setFullscreenData] = useState<VideoTileData | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -217,6 +219,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
               isActive={autoPlayId === item.post_id || userHoverId === item.post_id}
               onTileRef={handleTileRef}
               onUserInteract={handleUserInteract}
+              onOpenFullscreen={setFullscreenData}
             />
           ) : (
             <IdentityCard key={`identity-${item.creator_id}`} data={item} />
@@ -237,6 +240,9 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
         </>
       )}
 
+      {fullscreenData && (
+        <VideoFullscreenModal data={fullscreenData} onClose={() => setFullscreenData(null)} />
+      )}
       {!hasMore && items.length > 0 && (
         <p style={{ textAlign: "center", color: "#4A4A6A", fontSize: "12px", fontFamily: "'Inter', sans-serif", padding: "24px 0 40px" }}>
           You've seen everything · Check back later
