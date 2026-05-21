@@ -45,6 +45,9 @@ export function VideoFullscreenModal({
   const [currentTime, setCurrentTime] = useState(initialTime);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const [showSlowDots, setShowSlowDots] = useState(false);
+  const slowDotsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const videoSrc = data.bunny_video_id
     ? `https://${STREAM_CDN}/${data.bunny_video_id}/playlist.m3u8`
@@ -57,7 +60,11 @@ export function VideoFullscreenModal({
   // Mount animation
   useEffect(() => {
     const t = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(t);
+    slowDotsTimerRef.current = setTimeout(() => setShowSlowDots(true), 800);
+    return () => {
+      cancelAnimationFrame(t);
+      if (slowDotsTimerRef.current) clearTimeout(slowDotsTimerRef.current);
+    };
   }, []);
 
   // Lock body scroll
@@ -330,6 +337,31 @@ export function VideoFullscreenModal({
             )}
           </button>
 
+          {/* Thumbnail — visible until first frame plays */}
+          {!isVideoReady && data.thumbnail_url && (
+            <img
+              src={data.thumbnail_url}
+              alt=""
+              style={{
+                position: "absolute", inset: 0,
+                width: "100%", height: "100%",
+                objectFit: "contain",
+                zIndex: 9999,
+                pointerEvents: "none",
+              }}
+            />
+          )}
+
+          {/* Slow dots — only after 800ms, for slow connections */}
+          {!isVideoReady && showSlowDots && (
+            <div style={{ position: "absolute", left: 0, right: 0, top: "50%", transform: "translateY(-50%)", zIndex: 10002, display: "flex", justifyContent: "center", gap: "6px", pointerEvents: "none" }}>
+              <style>{`@keyframes vfm-dot { 0%,80%,100%{opacity:0.3;transform:scale(0.85)} 40%{opacity:1;transform:scale(1)} }`}</style>
+              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
+              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.2s" }} />
+              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.4s" }} />
+            </div>
+          )}
+
           {/* Video — tappable to pause/play */}
           {videoSrc && (
             <video
@@ -340,6 +372,11 @@ export function VideoFullscreenModal({
               preload="auto"
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
+              onPlaying={() => {
+                if (slowDotsTimerRef.current) { clearTimeout(slowDotsTimerRef.current); slowDotsTimerRef.current = null; }
+                setShowSlowDots(false);
+                setIsVideoReady(true);
+              }}
               onClick={handleVideoTap}
               style={{
                 position: "absolute", inset: 0,
