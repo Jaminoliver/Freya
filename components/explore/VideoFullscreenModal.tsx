@@ -474,7 +474,7 @@ export function VideoFullscreenModal({
               style={{
                 position: "absolute", inset: 0,
                 width: "100%", height: "100%",
-                objectFit: "contain",
+                objectFit: isMobile ? "cover" : "contain",
                 backgroundColor: "#000",
                 display: "block",
                 cursor: "pointer",
@@ -504,7 +504,7 @@ export function VideoFullscreenModal({
           <div
             style={{
               position: "absolute",
-              right: 12,
+              right: 4,
               bottom: 80,
               zIndex: 10001,
               display: "flex",
