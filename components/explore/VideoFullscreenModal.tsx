@@ -222,17 +222,17 @@ export function VideoFullscreenModal({
         .vfm-seek::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 16px;
-          height: 16px;
+          width: 13px;
+          height: 13px;
           border-radius: 50%;
           background: #fff;
           cursor: pointer;
-          margin-top: -6.5px;
+          margin-top: -2px;
           box-shadow: 0 1px 4px rgba(0,0,0,0.4);
         }
         .vfm-seek::-moz-range-thumb {
-          width: 16px;
-          height: 16px;
+          width: 13px;
+          height: 13px;
           border-radius: 50%;
           background: #fff;
           border: none;
