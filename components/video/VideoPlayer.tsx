@@ -291,8 +291,10 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
       container.style.transformOrigin  = "";
       container.style.transition       = "";
       (container.style as any).webkitBackfaceVisibility = "";
+      const savedScroll = (portalRef.current as any)?._savedScroll ?? 0;
       portalRef.current?.remove();
       portalRef.current = null;
+      window.scrollTo({ top: savedScroll, behavior: "instant" });
       container.removeEventListener("transitionend", onDone);
       setIsFakeFullscreen(false);
     };
@@ -408,6 +410,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           }
         }, { passive: true });
 
+        (portalRef.current as any)._savedScroll = window.scrollY;
         window.scrollTo({ top: 0, behavior: "instant" });
         setIsFakeFullscreen(true);
       } else {

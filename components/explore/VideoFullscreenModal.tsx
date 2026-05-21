@@ -233,10 +233,14 @@ export function VideoFullscreenModal({
 
   // Lock body scroll + force address bar visible
   useEffect(() => {
+    const savedScroll = window.scrollY;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     window.scrollTo({ top: 0, behavior: "instant" });
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+      window.scrollTo({ top: savedScroll, behavior: "instant" });
+    };
   }, []);
 
   // Auto-play on mount using HLS.js
