@@ -41,6 +41,9 @@ interface CreatorVideo {
   bunny_video_id: string | null;
   duration_seconds: number | null;
   caption: string | null;
+  width: number | null;
+  height: number | null;
+  aspect_ratio: number | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -153,7 +156,7 @@ const likedPostIds = new Set<number>();
       const { data: publicPosts } = await service
         .from("posts")
         .select(
-          "id, creator_id, like_count, comment_count, caption, published_at, media (media_type, thumbnail_url, duration_seconds, bunny_video_id)"
+          "id, creator_id, like_count, comment_count, caption, published_at, media (media_type, thumbnail_url, duration_seconds, bunny_video_id, width, height, aspect_ratio)"
         )
         .in("creator_id", eligibleIds)
         .eq("is_published", true)
@@ -188,6 +191,9 @@ const likedPostIds = new Set<number>();
             bunny_video_id: videoM.bunny_video_id,
             duration_seconds: videoM.duration_seconds,
             caption: post.caption ?? null,
+            width: videoM.width ?? null,
+            height: videoM.height ?? null,
+            aspect_ratio: videoM.aspect_ratio ?? null,
           });
         }
       }
@@ -308,6 +314,9 @@ const likedPostIds = new Set<number>();
           duration_seconds: video.duration_seconds,
           liked: likedPostIds.has(video.post_id),
           caption: video.caption,
+          width: video.width,
+          height: video.height,
+          aspect_ratio: video.aspect_ratio,
           subscriber_count: creator.subscriber_count ?? 0,
           likes_count: creator.likes_count ?? 0,
           is_free,

@@ -131,6 +131,13 @@ export function VideoFullscreenModal({
     ? `https://${STREAM_CDN}/${data.bunny_video_id}/playlist.m3u8`
     : null;
 
+  const videoRatio = (() => {
+    if (data.aspect_ratio != null && data.aspect_ratio > 0) return data.aspect_ratio;
+    if (data.width && data.height) return data.width / data.height;
+    return null;
+  })();
+  const isPortrait = videoRatio != null ? videoRatio < 0.6 : false;
+
   const name = data.display_name || data.username;
   const initials = (name[0] ?? "?").toUpperCase();
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -439,7 +446,7 @@ export function VideoFullscreenModal({
               style={{
                 position: "absolute", inset: 0,
                 width: "100%", height: "100%",
-                objectFit: "contain",
+                objectFit: isMobile && isPortrait ? "cover" : "contain",
                 zIndex: 9999,
                 pointerEvents: "none",
               }}
@@ -474,7 +481,7 @@ export function VideoFullscreenModal({
               style={{
                 position: "absolute", inset: 0,
                 width: "100%", height: "100%",
-                objectFit: isMobile ? "cover" : "contain",
+                objectFit: isMobile && isPortrait ? "cover" : "contain",
                 backgroundColor: "#000",
                 display: "block",
                 cursor: "pointer",

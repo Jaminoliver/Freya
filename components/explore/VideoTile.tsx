@@ -20,6 +20,9 @@ export interface VideoTileData {
   is_free?: boolean;
   liked?: boolean;
   caption?: string | null;
+  width?: number | null;
+  height?: number | null;
+  aspect_ratio?: number | null;
 }
 
 const STREAM_CDN =
