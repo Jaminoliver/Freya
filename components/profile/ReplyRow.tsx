@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { GifContextMenu } from "@/components/profile/GifContextMenu";
 import { useRouter } from "next/navigation";
 import { Heart, Trash2, MoreHorizontal } from "lucide-react";
 import { getRelativeTime } from "@/lib/utils/profile";
@@ -106,12 +107,11 @@ export function ReplyRow({ reply, postId, viewerUserId, onDeleted, onReply }: {
               <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#C4C4D4", lineHeight: 1.5, fontFamily: "'Inter', sans-serif", wordBreak: "break-word" }}>{reply.content}</p>
             )}
             {reply.gif_url && (
-              <div
-                onClick={() => setGifSheetOpen(true)}
-                style={{ marginTop: "6px", borderRadius: "10px", overflow: "hidden", maxWidth: "160px", cursor: "pointer", backgroundColor: "#1C1C2E", minHeight: "60px" }}
-              >
-                <img src={reply.gif_url} alt="GIF" loading="eager" onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "1"; }} style={{ width: "100%", display: "block", borderRadius: "10px", opacity: 0, transition: "opacity 0.2s ease" }} />
-              </div>
+              <GifContextMenu gifUrl={reply.gif_url} postId={postId} commentId={reply.id} onReply={() => onReply?.(reply)}>
+                <div style={{ marginTop: "6px", borderRadius: "10px", overflow: "hidden", maxWidth: "160px", cursor: "pointer", backgroundColor: "#1C1C2E", minHeight: "60px" }}>
+                  <img src={reply.gif_url} alt="GIF" loading="eager" onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "1"; }} style={{ width: "100%", display: "block", borderRadius: "10px", opacity: 0, transition: "opacity 0.2s ease" }} />
+                </div>
+              </GifContextMenu>
             )}
             {gifSheetOpen && reply.gif_url && (
               <GifCommentSheet
