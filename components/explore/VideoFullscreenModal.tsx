@@ -512,7 +512,7 @@ export function VideoFullscreenModal({
             style={{
               position: "absolute",
               right: 4,
-              bottom: 80,
+              bottom: isMobile ? 140 : 80,
               zIndex: 10001,
               display: "flex",
               flexDirection: "column",
@@ -595,7 +595,7 @@ export function VideoFullscreenModal({
           <div
             style={{
               position: "absolute",
-              bottom: 56,
+              bottom: isMobile ? 120 : 56,
               left: 12,
               right: 76,
               zIndex: 10000,
