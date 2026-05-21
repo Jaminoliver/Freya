@@ -321,6 +321,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
           onMuteChange={setIsMuted}
           onClose={handleCloseFullscreen}
           initialIsFollowing={followCache.current.get(fullscreen.data.creator_id) ?? false}
+          onFollowChange={(creatorId, val) => followCache.current.set(creatorId, val)}
         />
       )}
 

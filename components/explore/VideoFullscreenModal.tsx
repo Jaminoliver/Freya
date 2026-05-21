@@ -18,6 +18,7 @@ interface Props {
   isMuted: boolean;
   onMuteChange: (muted: boolean) => void;
   initialIsFollowing?: boolean;
+  onFollowChange?: (creatorId: string, isFollowing: boolean) => void;
 }
 
 function formatCount(n: number): string {
@@ -40,6 +41,7 @@ export function VideoFullscreenModal({
   isMuted,
   onMuteChange,
   initialIsFollowing = false,
+  onFollowChange,
 }: Props) {
   const router = useRouter();
 
@@ -119,9 +121,11 @@ export function VideoFullscreenModal({
       if (isFollowing) {
         await unfollowCreator(data.creator_id);
         setIsFollowing(false);
+        onFollowChange?.(data.creator_id, false);
       } else {
         await followCreator(data.creator_id);
         setIsFollowing(true);
+        onFollowChange?.(data.creator_id, true);
       }
     } catch (err) {
       console.error("Follow error:", err);
