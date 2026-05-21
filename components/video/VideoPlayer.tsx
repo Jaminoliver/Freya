@@ -411,7 +411,6 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         }, { passive: true });
 
         (portalRef.current as any)._savedScroll = window.scrollY;
-        window.scrollTo({ top: 0, behavior: "instant" });
         setIsFakeFullscreen(true);
       } else {
         exitFakeFullscreen();
