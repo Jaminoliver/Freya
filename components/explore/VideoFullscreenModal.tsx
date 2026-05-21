@@ -34,6 +34,32 @@ function formatTime(s: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
+function CaptionExpander({ caption }: { caption: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <p
+      onClick={() => setExpanded((e) => !e)}
+      style={{
+        margin: 0,
+        fontSize: 14,
+        lineHeight: "1.4",
+        color: "rgba(255,255,255,0.9)",
+        fontFamily: "'Inter', sans-serif",
+        wordBreak: "break-word",
+        cursor: "pointer",
+        ...(expanded ? {} : {
+          overflow: "hidden",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+        }),
+      }}
+    >
+      {caption}
+    </p>
+  );
+}
+
 export function VideoFullscreenModal({
   data,
   onClose,
@@ -368,6 +394,16 @@ export function VideoFullscreenModal({
           height: 100%;
           overflow: hidden;
         }
+        @media (min-width: 1024px) {
+          .vfm-panel {
+            left: 280px;
+            right: 380px;
+          }
+          .vfm-backdrop {
+            left: 280px;
+            right: 380px;
+          }
+        }
         .vfm-action-btn {
           background: none;
           border: none;
@@ -401,6 +437,7 @@ export function VideoFullscreenModal({
 
       {/* Backdrop */}
       <div
+        className="vfm-backdrop"
         style={{ position: "fixed", inset: 0, zIndex: 9998, backgroundColor: "#000" }}
         onClick={handleClose}
         onTouchMove={(e) => e.preventDefault()}
@@ -665,20 +702,7 @@ export function VideoFullscreenModal({
               </p>
             </div>
             {data.caption && (
-              <p style={{
-                margin: 0,
-                fontSize: 14,
-                lineHeight: "1.4",
-                color: "rgba(255,255,255,0.9)",
-                fontFamily: "'Inter', sans-serif",
-                overflow: "hidden",
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                wordBreak: "break-word",
-              }}>
-                {data.caption}
-              </p>
+              <CaptionExpander caption={data.caption} />
             )}
           </div>
 
