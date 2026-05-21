@@ -163,7 +163,7 @@ export function VideoFullscreenModal({
         setCommentCount(newCount);
         postSyncStore.emit({ postId, liked, like_count: likeCount, comment_count: newCount });
       }
-      setComments((prev) => [json.comment, ...prev]);
+      if (!parent_comment_id) setComments((prev) => [json.comment, ...prev]);
     }
   };
 
@@ -561,7 +561,7 @@ export function VideoFullscreenModal({
             style={{
               position: "absolute",
               right: 4,
-              bottom: isMobile ? 140 : 80,
+              bottom: isMobile ? 170 : 80,
               zIndex: 10001,
               display: "flex",
               flexDirection: "column",
@@ -614,7 +614,7 @@ export function VideoFullscreenModal({
 
             {/* Subscribers */}
             <button className="vfm-action-btn" onClick={handleProfileClick}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M2 18h20" /><path d="M4 18L2 8l4.5 4L12 4l5.5 8L22 8l-2 10H4z" />
                 <circle cx="12" cy="4" r="1.2" fill="#F5C842" stroke="none" />
                 <circle cx="6.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
@@ -625,7 +625,7 @@ export function VideoFullscreenModal({
 
             {/* Likes */}
             <button className="vfm-action-btn" onClick={handleLike}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill={liked ? "#EC4899" : "rgba(255,255,255,0.15)"} stroke={liked ? "#EC4899" : "rgba(255,255,255,0.9)"} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill={liked ? "#EC4899" : "rgba(255,255,255,0.15)"} stroke={liked ? "#EC4899" : "rgba(255,255,255,0.9)"} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
               <span>{formatCount(likeCount)}</span>
@@ -633,18 +633,17 @@ export function VideoFullscreenModal({
 
             {/* Comments */}
             <button className="vfm-action-btn" onClick={(e) => { e.stopPropagation(); setCommentsOpen(true); }}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.0" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.0" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
               <span>{formatCount(commentCount)}</span>
             </button>
           </div>
-
           {/* ── Bottom left: creator info ── */}
           <div
             style={{
               position: "absolute",
-              bottom: isMobile ? 120 : 56,
+              bottom: isMobile ? 90 : 56,
               left: 12,
               right: 76,
               zIndex: 10000,
@@ -652,10 +651,10 @@ export function VideoFullscreenModal({
             }}
           >
             <div onClick={handleProfileClick} style={{ cursor: "pointer", marginBottom: data.caption ? 6 : 0 }}>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {name} ›
               </p>
-              <p style={{ margin: "2px 0 0", fontSize: 12, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <p style={{ margin: "2px 0 0", fontSize: 13, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 @{data.username}
               </p>
             </div>
