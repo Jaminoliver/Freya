@@ -17,6 +17,7 @@ interface Props {
   initialTime?: number;
   isMuted: boolean;
   onMuteChange: (muted: boolean) => void;
+  initialIsFollowing?: boolean;
 }
 
 function formatCount(n: number): string {
@@ -38,6 +39,7 @@ export function VideoFullscreenModal({
   initialTime = 0,
   isMuted,
   onMuteChange,
+  initialIsFollowing = false,
 }: Props) {
   const router = useRouter();
 
@@ -59,7 +61,7 @@ export function VideoFullscreenModal({
   const [commentCount, setCommentCount] = useState(cached?.comment_count ?? data.comment_count ?? 0);
 
   // Follow state
-  const [isFollowing,   setIsFollowing]   = useState(false);
+  const [isFollowing,   setIsFollowing]   = useState(initialIsFollowing);
   const [followLoading, setFollowLoading] = useState(false);
 
   // Comment state
@@ -107,13 +109,7 @@ export function VideoFullscreenModal({
       .finally(() => setCommentsLoading(false));
   }, [commentsOpen, data.post_id]);
 
-  // Check follow status on mount
-  useEffect(() => {
-    if (!data.creator_id) return;
-    checkIsFollowing(data.creator_id)
-      .then((val) => setIsFollowing(!!val))
-      .catch(() => {});
-  }, [data.creator_id]);
+  // Follow state is pre-fetched via initialIsFollowing prop
 
   const handleFollowToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();

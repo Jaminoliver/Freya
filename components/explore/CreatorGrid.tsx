@@ -24,6 +24,7 @@ interface FullscreenState {
 export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: CreatorGridProps) {
   const [fullscreen, setFullscreen] = useState<FullscreenState | null>(null);
   const [isMuted, setIsMuted] = useState(true);
+  const followCache = useRef<Map<string, boolean>>(new Map());
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -189,7 +190,17 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
       userHoverRef.current = null;
       setUserHoverId(null);
     }, PLAY_DURATION);
-  }, []);
+
+    // Prefetch follow state
+    const item = items.find((i): i is VideoTileData => i.type === "video" && i.post_id === id);
+    if (item?.creator_id && !followCache.current.has(item.creator_id)) {
+      import("@/lib/utils/follow").then(({ checkIsFollowing }) => {
+        checkIsFollowing(item.creator_id).then((val) => {
+          followCache.current.set(item.creator_id, !!val);
+        }).catch(() => {});
+      });
+    }
+  }, [items]);
 
   const destroyPrewarm = useCallback((id: number) => {
     const entry = prewarmMap.current.get(id);
@@ -219,7 +230,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
   const handleOpenFullscreen = useCallback((data: VideoTileData, initialTime: number) => {
     destroyPrewarm(data.post_id);
     setFullscreen({ data, initialTime });
-  }, [destroyPrewarm]);
+  }, [destroyPrewarm, items]);
 
   const handleCloseFullscreen = useCallback(() => {
     setFullscreen(null);
@@ -309,6 +320,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
           isMuted={isMuted}
           onMuteChange={setIsMuted}
           onClose={handleCloseFullscreen}
+          initialIsFollowing={followCache.current.get(fullscreen.data.creator_id) ?? false}
         />
       )}
 
