@@ -40,6 +40,7 @@ interface CreatorVideo {
   thumbnail_url: string | null;
   bunny_video_id: string | null;
   duration_seconds: number | null;
+  caption: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -144,6 +145,7 @@ export async function GET(req: NextRequest) {
     const eligibleIds = eligible.map((c) => c.id);
 
     const latestVideoByCreator = new Map<string, CreatorVideo>();
+const likedPostIds = new Set<number>();
     const creatorHasPublicVideo = new Set<string>();
     const creatorHasPublicImage = new Set<string>();
 
@@ -151,7 +153,7 @@ export async function GET(req: NextRequest) {
       const { data: publicPosts } = await service
         .from("posts")
         .select(
-          "id, creator_id, like_count, comment_count, published_at, media (media_type, thumbnail_url, duration_seconds, bunny_video_id)"
+          "id, creator_id, like_count, comment_count, caption, published_at, media (media_type, thumbnail_url, duration_seconds, bunny_video_id)"
         )
         .in("creator_id", eligibleIds)
         .eq("is_published", true)
@@ -185,9 +187,20 @@ export async function GET(req: NextRequest) {
             thumbnail_url: videoM.thumbnail_url,
             bunny_video_id: videoM.bunny_video_id,
             duration_seconds: videoM.duration_seconds,
+            caption: post.caption ?? null,
           });
         }
       }
+    }
+
+    const videoPostIds = Array.from(latestVideoByCreator.values()).map((v) => v.post_id);
+    if (videoPostIds.length > 0) {
+      const { data: likedRows } = await service
+        .from("likes")
+        .select("post_id")
+        .eq("user_id", user.id)
+        .in("post_id", videoPostIds);
+      for (const row of likedRows ?? []) likedPostIds.add(row.post_id);
     }
 
     // Media-type filters
@@ -293,6 +306,8 @@ export async function GET(req: NextRequest) {
           like_count: video.like_count,
           comment_count: video.comment_count,
           duration_seconds: video.duration_seconds,
+          liked: likedPostIds.has(video.post_id),
+          caption: video.caption,
           subscriber_count: creator.subscriber_count ?? 0,
           likes_count: creator.likes_count ?? 0,
           is_free,

@@ -18,6 +18,8 @@ export interface VideoTileData {
   subscriber_count: number;
   likes_count: number;
   is_free?: boolean;
+  liked?: boolean;
+  caption?: string | null;
 }
 
 const STREAM_CDN =
@@ -256,7 +258,7 @@ export function VideoTile({
           {/* Avatar */}
           <div style={{
             width: "45px", height: "45px", borderRadius: "50%", padding: "1.5px",
-            background: "conic-gradient(#C45F8C, #8B3FBF, #C45F8C)", flexShrink: 0,
+            background: "transparent", flexShrink: 0,
           }}>
             <div style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden", border: "1.5px solid #0A0A0F" }}>
               {avatarError || !data.avatar_url ? (
