@@ -275,8 +275,7 @@ export function VideoFullscreenModal({
         .vfm-inner {
           position: relative;
           width: 100%;
-          height: 100vh;
-          height: 100dvh;
+          height: 100%;
           overflow: hidden;
         }
         @media (min-width: 768px) {
