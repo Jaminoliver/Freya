@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import type { VideoTileData } from "@/components/explore/VideoTile";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import { checkIsFollowing, followCreator, unfollowCreator } from "@/lib/utils/follow";
+import CommentSection from "@/components/profile/CommentSection";
+import type { ApiComment } from "@/components/profile/CommentSection";
 
 const STREAM_CDN =
   process.env.NEXT_PUBLIC_BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
@@ -56,8 +58,28 @@ export function VideoFullscreenModal({
   const [isFollowing,   setIsFollowing]   = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
 
+  // Comment state
+  const [commentsOpen,    setCommentsOpen]    = useState(false);
+  const [comments,        setComments]        = useState<ApiComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [viewer,          setViewer]          = useState<{ username: string; display_name: string; avatar_url?: string } | null>(null);
+  const [viewerUserId,    setViewerUserId]    = useState<string | undefined>(undefined);
+
   useEffect(() => {
     setIsMobile(!window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+  }, []);
+
+  useEffect(() => {
+    import("@/lib/supabase/client").then(({ createClient }) => {
+      const supabase = createClient();
+      supabase.auth.getUser().then((authRes: Awaited<ReturnType<typeof supabase.auth.getUser>>) => {
+        if (!authRes.data.user) return;
+        setViewerUserId(authRes.data.user.id);
+        supabase.from("profiles").select("username, display_name, avatar_url").eq("id", authRes.data.user.id).single().then((profileRes: { data: { username: string; display_name: string | null; avatar_url: string | null } | null }) => {
+          if (profileRes.data) setViewer({ username: profileRes.data.username, display_name: profileRes.data.display_name ?? profileRes.data.username, avatar_url: profileRes.data.avatar_url ?? undefined });
+        });
+      });
+    });
   }, []);
 
   // Subscribe to postSyncStore for live like/comment updates
@@ -70,6 +92,16 @@ export function VideoFullscreenModal({
     });
     return unsub;
   }, [postId]);
+
+  useEffect(() => {
+    if (!commentsOpen) return;
+    setCommentsLoading(true);
+    fetch(`/api/posts/${data.post_id}/comments`)
+      .then((r) => r.json())
+      .then((d) => { if (d.comments) setComments(d.comments); })
+      .catch(() => {})
+      .finally(() => setCommentsLoading(false));
+  }, [commentsOpen, data.post_id]);
 
   // Check follow status on mount
   useEffect(() => {
@@ -115,6 +147,23 @@ export function VideoFullscreenModal({
       setLiked(!newLiked);
       setLikeCount(likeCount);
       postSyncStore.emit({ postId, liked: !newLiked, like_count: likeCount });
+    }
+  };
+
+  const handleAddComment = async (postId: string, text: string, gif_url?: string, parent_comment_id?: string | number, reply_to_username?: string | null, reply_to_id?: string | number | null) => {
+    const res = await fetch(`/api/posts/${postId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text, gif_url, parent_comment_id, reply_to_username, reply_to_id }),
+    });
+    const json = await res.json();
+    if (res.ok && json.comment) {
+      if (!parent_comment_id) {
+        const newCount = commentCount + 1;
+        setCommentCount(newCount);
+        postSyncStore.emit({ postId, liked, like_count: likeCount, comment_count: newCount });
+      }
+      setComments((prev) => [json.comment, ...prev]);
     }
   };
 
@@ -583,7 +632,7 @@ export function VideoFullscreenModal({
             </button>
 
             {/* Comments */}
-            <button className="vfm-action-btn">
+            <button className="vfm-action-btn" onClick={(e) => { e.stopPropagation(); setCommentsOpen(true); }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.0" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
@@ -613,7 +662,7 @@ export function VideoFullscreenModal({
             {data.caption && (
               <p style={{
                 margin: 0,
-                fontSize: 12,
+                fontSize: 14,
                 lineHeight: "1.4",
                 color: "rgba(255,255,255,0.9)",
                 fontFamily: "'Inter', sans-serif",
@@ -668,6 +717,23 @@ export function VideoFullscreenModal({
 
         </div>
       </div>
+
+      <CommentSection
+        postId={String(data.post_id)}
+        comments={comments}
+        viewer={viewer}
+        viewerUserId={viewerUserId}
+        onAddComment={handleAddComment}
+        onDeleteComment={() => {
+          const newCount = Math.max(commentCount - 1, 0);
+          setCommentCount(newCount);
+          postSyncStore.emit({ postId, liked, like_count: likeCount, comment_count: newCount });
+        }}
+        isOpen={commentsOpen}
+        onClose={() => setCommentsOpen(false)}
+        isLoading={commentsLoading}
+        totalCommentCount={commentCount}
+      />
     </>
   );
 }

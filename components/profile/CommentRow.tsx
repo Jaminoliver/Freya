@@ -215,7 +215,7 @@ export function CommentRow({ comment, postId, viewerUserId, onDeleted, onReply }
                     <MoreHorizontal size={15} />
                   </button>
                   {menuOpen && (
-                    <div style={{ position: "absolute", right: 0, top: "32px", zIndex: 9999, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", overflow: "hidden", minWidth: "130px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+                    <div style={{ position: "absolute", right: 0, top: "32px", zIndex: 10300, backgroundColor: "#1C1C2E", border: "1px solid #2A2A3D", borderRadius: "10px", overflow: "hidden", minWidth: "130px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
                       <button onClick={handleDelete} disabled={deleting}
                         style={{ width: "100%", padding: "10px 14px", border: "none", backgroundColor: "transparent", color: "#EF4444", fontSize: "13px", textAlign: "left", cursor: deleting ? "default" : "pointer", fontFamily: "'Inter', sans-serif", display: "flex", alignItems: "center", gap: "8px", opacity: deleting ? 0.5 : 1 }}
                         onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2A2A3D")}

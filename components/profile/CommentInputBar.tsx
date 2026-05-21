@@ -136,7 +136,7 @@ export default function CommentInputBar({
         left: 0,
         right: 0,
         bottom: 0,
-        zIndex: 1100,
+        zIndex: 10200,
         backgroundColor: "#0D0D1A",
         borderTop: "1px solid #1C1C2E",
         transform: `translateY(-${keyboardTranslateY}px)`,
@@ -147,7 +147,7 @@ export default function CommentInputBar({
     >
       {/* GIF Picker — floats above bar */}
       {gifPickerOpen && (
-        <div style={{ position: "absolute", bottom: "100%", left: 0, right: 0, zIndex: 1101 }}>
+        <div style={{ position: "absolute", bottom: "100%", left: 0, right: 0, zIndex: 10201 }}>
           <GifPicker
             onSelect={(gif) => { setSelectedGif(gif); setGifPickerOpen(false); setText(""); }}
             onClose={() => setGifPickerOpen(false)}
@@ -175,24 +175,26 @@ export default function CommentInputBar({
             scrollbarWidth: "none",
           }}
         >
-          <button
-            onClick={() => setGifPickerOpen((o) => !o)}
-            style={{
-              padding: "5px 10px",
-              borderRadius: "8px",
-              border: `1px solid ${gifPickerOpen ? "#8B5CF6" : "#2A2A3D"}`,
-              backgroundColor: gifPickerOpen ? "#2D1F4E" : "#1C1C2E",
-              color: gifPickerOpen ? "#8B5CF6" : "#8A8AA0",
-              fontSize: "12px",
-              fontWeight: 700,
-              cursor: "pointer",
-              flexShrink: 0,
-              fontFamily: "'Inter', sans-serif",
-              transition: "all 0.15s",
-            }}
-          >
-            GIF
-          </button>
+          {!emojiVisible && (
+            <button
+              onClick={() => setGifPickerOpen((o) => !o)}
+              style={{
+                padding: "5px 10px",
+                borderRadius: "8px",
+                border: `1px solid ${gifPickerOpen ? "#8B5CF6" : "#2A2A3D"}`,
+                backgroundColor: gifPickerOpen ? "#2D1F4E" : "#1C1C2E",
+                color: gifPickerOpen ? "#8B5CF6" : "#8A8AA0",
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+                flexShrink: 0,
+                fontFamily: "'Inter', sans-serif",
+                transition: "all 0.15s",
+              }}
+            >
+              GIF
+            </button>
+          )}
           {QUICK_EMOJIS.map((emoji) => (
             <button
               key={emoji}
@@ -274,6 +276,23 @@ export default function CommentInputBar({
         }}
       >
         <Avatar src={viewer?.avatar_url} name={viewer?.display_name || "You"} size={32} />
+        <button
+          onClick={() => setGifPickerOpen((o) => !o)}
+          style={{
+            padding: "5px 10px",
+            borderRadius: "8px",
+            border: `1px solid ${gifPickerOpen ? "#8B5CF6" : "#2A2A3D"}`,
+            backgroundColor: gifPickerOpen ? "#2D1F4E" : "#1C1C2E",
+            color: gifPickerOpen ? "#8B5CF6" : "#8A8AA0",
+            fontSize: "12px",
+            fontWeight: 700,
+            cursor: "pointer",
+            flexShrink: 0,
+            fontFamily: "'Inter', sans-serif",
+          }}
+        >
+          GIF
+        </button>
         <div
           style={{
             flex: 1,
@@ -340,7 +359,7 @@ export default function CommentInputBar({
           right: 0;
           height: env(safe-area-inset-bottom, 20px);
           background-color: #0D0D1A;
-          z-index: 1099;
+          z-index: 10199;
         }
       `}</style>
       <div className="comment-input-safe-cover" />

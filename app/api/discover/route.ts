@@ -172,6 +172,9 @@ const likedPostIds = new Set<number>();
           thumbnail_url: string | null;
           duration_seconds: number | null;
           bunny_video_id: string | null;
+          width: number | null;
+          height: number | null;
+          aspect_ratio: number | null;
         }>;
 
         const videoM = media.find((m) => m.media_type === "video");
