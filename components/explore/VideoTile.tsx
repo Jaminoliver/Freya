@@ -67,6 +67,7 @@ export function VideoTile({
   const [avatarError, setAvatarError] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const isTouchRef = useRef(false);
 
   const previewUrl = data.bunny_video_id
     ? `https://${STREAM_CDN}/${data.bunny_video_id}/play_360p.mp4`
@@ -138,6 +139,7 @@ export function VideoTile({
   // Pass current playback time so modal resumes exactly where tile left off
   const handleClick = () => {
     const currentTime = videoRef.current?.currentTime ?? 0;
+    if (videoRef.current) videoRef.current.pause();
     onOpenFullscreen(data, currentTime);
   };
 
@@ -156,8 +158,8 @@ export function VideoTile({
     <div
       ref={(el) => onTileRef(data.post_id, el)}
       onClick={handleClick}
-      onMouseEnter={() => onUserInteract(data.post_id)}
-      onTouchStart={() => {}}
+      onMouseEnter={() => { if (!isTouchRef.current) onUserInteract(data.post_id); }}
+      onTouchStart={() => { isTouchRef.current = true; }}
       style={{
         position: "relative",
         width: "100%",
