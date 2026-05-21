@@ -229,8 +229,17 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
 
   const handleOpenFullscreen = useCallback((data: VideoTileData, initialTime: number) => {
     destroyPrewarm(data.post_id);
-    setFullscreen({ data, initialTime });
-  }, [destroyPrewarm, items]);
+    if (data.creator_id && !followCache.current.has(data.creator_id)) {
+      import("@/lib/utils/follow").then(({ checkIsFollowing }) => {
+        checkIsFollowing(data.creator_id).then((val) => {
+          followCache.current.set(data.creator_id, !!val);
+          setFullscreen({ data, initialTime });
+        }).catch(() => setFullscreen({ data, initialTime }));
+      });
+    } else {
+      setFullscreen({ data, initialTime });
+    }
+  }, [destroyPrewarm]);
 
   const handleCloseFullscreen = useCallback(() => {
     setFullscreen(null);
