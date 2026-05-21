@@ -376,7 +376,7 @@ export function VideoFullscreenModal({
           -webkit-tap-highlight-color: transparent;
         }
         .vfm-action-btn span {
-          font-size: 11px;
+          font-size: 13px;
           color: rgba(255,255,255,0.75);
           font-family: 'Inter', sans-serif;
           font-weight: 600;
@@ -399,6 +399,7 @@ export function VideoFullscreenModal({
       <div
         style={{ position: "fixed", inset: 0, zIndex: 9998, backgroundColor: "#000" }}
         onClick={handleClose}
+        onTouchMove={(e) => e.preventDefault()}
       />
 
       <div
@@ -406,6 +407,7 @@ export function VideoFullscreenModal({
         style={{
           animation: mounted ? "vfm-scale-in 0.2s ease-out forwards" : "none",
           opacity: mounted ? undefined : 0,
+          touchAction: "none",
         }}
       >
         <div
@@ -575,7 +577,7 @@ export function VideoFullscreenModal({
               <button
                 onClick={handleProfileClick}
                 style={{
-                  width: 48, height: 48, borderRadius: "50%", overflow: "hidden",
+                  width: 56, height: 56, borderRadius: "50%", overflow: "hidden",
                   border: "none", padding: 0, cursor: "pointer",
                   display: "block", WebkitTapHighlightColor: "transparent",
                 }}
@@ -643,7 +645,7 @@ export function VideoFullscreenModal({
           <div
             style={{
               position: "absolute",
-              bottom: isMobile ? 90 : 56,
+              bottom: isMobile ? 60 : 56,
               left: 12,
               right: 76,
               zIndex: 10000,
