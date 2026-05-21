@@ -387,6 +387,8 @@ export function VideoFullscreenModal({
           justify-content: center;
           height: 100vh;
           height: 100dvh;
+          left: var(--sidebar-w, 0px);
+          right: var(--right-panel-w, 0px);
         }
         .vfm-inner {
           position: relative;
@@ -402,6 +404,12 @@ export function VideoFullscreenModal({
           .vfm-backdrop {
             left: 280px;
             right: 380px;
+            background: transparent !important;
+          }
+          .vfm-inner {
+            max-width: 100% !important;
+            max-height: 100% !important;
+            border-radius: 0 !important;
           }
         }
         .vfm-action-btn {
@@ -431,6 +439,12 @@ export function VideoFullscreenModal({
             max-height: 90vh;
             border-radius: 16px;
             box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+          }
+        }
+        @media (min-width: 1024px) {
+          .vfm-panel {
+            background: transparent;
+            backdrop-filter: none;
           }
         }
       `}</style>
