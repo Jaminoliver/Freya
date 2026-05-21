@@ -322,12 +322,9 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
 
         // Portal starts fully transparent — no black flash
         const portal = document.createElement("div");
-        const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
         Object.assign(portal.style, {
           position:        "fixed",
           inset:           "0",
-          left:            isDesktop ? "280px" : "0",
-          right:           isDesktop ? "380px" : "0",
           zIndex:          "9999",
           backgroundColor: "rgba(0,0,0,0)",
           display:         "flex",

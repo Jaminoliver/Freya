@@ -552,7 +552,7 @@ export function VideoFullscreenModal({
               style={{
                 position: "absolute", inset: 0,
                 width: "100%", height: "100%",
-                objectFit: isMobile && isPortrait ? "cover" : "contain",
+                objectFit: "contain",
                 zIndex: 9999,
                 pointerEvents: "none",
               }}
@@ -587,7 +587,7 @@ export function VideoFullscreenModal({
               style={{
                 position: "absolute", inset: 0,
                 width: "100%", height: "100%",
-                objectFit: isMobile && isPortrait ? "cover" : "contain",
+                objectFit: "contain",
                 backgroundColor: "#000",
                 display: "block",
                 cursor: "pointer",
