@@ -297,7 +297,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
             <VideoTile
               key={`video-${item.post_id}`}
               data={item}
-              isActive={autoPlayId === item.post_id || userHoverId === item.post_id}
+              isActive={autoPlayId === item.post_id || (!('ontouchstart' in window) && userHoverId === item.post_id)}
               isModalOpen={!!fullscreen}
               onTileRef={handleTileRef}
               onUserInteract={handleUserInteract}
