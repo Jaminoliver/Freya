@@ -41,6 +41,11 @@ export function VideoFullscreenModal({
   const [avatarError, setAvatarError] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(!window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+  }, []);
 
   const [currentTime, setCurrentTime] = useState(initialTime);
   const [duration, setDuration] = useState(0);
@@ -197,7 +202,6 @@ export function VideoFullscreenModal({
 
   const handleProfileClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    handleClose();
     router.push(`/${data.username}`);
   };
 
@@ -475,7 +479,7 @@ export function VideoFullscreenModal({
               </div>
 
               {/* Stats */}
-              <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "12px" }}>
+              <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", alignItems: isMobile ? "center" : "flex-start", gap: isMobile ? "20px" : "8px", marginBottom: "12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M2 18h20" /><path d="M4 18L2 8l4.5 4L12 4l5.5 8L22 8l-2 10H4z" />
