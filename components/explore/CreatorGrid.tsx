@@ -38,6 +38,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPairRef = useRef<string>("");
+  const prewarmMap = useRef<Map<number, { hls: any; video: HTMLVideoElement }>>(new Map());
 
   useEffect(() => {
     indexMap.current.clear();
@@ -190,13 +191,62 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     }, PLAY_DURATION);
   }, []);
 
-  const handleOpenFullscreen = useCallback((data: VideoTileData, initialTime: number) => {
-    setFullscreen({ data, initialTime });
+  const destroyPrewarm = useCallback((id: number) => {
+    const entry = prewarmMap.current.get(id);
+    if (!entry) return;
+    try { entry.hls.destroy(); } catch {}
+    try { entry.video.remove(); } catch {}
+    prewarmMap.current.delete(id);
   }, []);
+
+  const prewarmHls = useCallback(async (id: number, bunnyVideoId: string | null) => {
+    if (!bunnyVideoId || prewarmMap.current.has(id)) return;
+    const Hls = (await import("hls.js")).default;
+    if (!Hls.isSupported()) return;
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;";
+    document.body.appendChild(video);
+    const hls = new Hls({ autoStartLoad: true, maxBufferLength: 8, startLevel: 0 });
+    const cdn = process.env.NEXT_PUBLIC_BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
+    hls.loadSource(`https://${cdn}/${bunnyVideoId}/playlist.m3u8`);
+    hls.attachMedia(video);
+    prewarmMap.current.set(id, { hls, video });
+    setTimeout(() => { hls.stopLoad(); }, 6000);
+  }, []);
+
+  const handleOpenFullscreen = useCallback((data: VideoTileData, initialTime: number) => {
+    destroyPrewarm(data.post_id);
+    setFullscreen({ data, initialTime });
+  }, [destroyPrewarm]);
 
   const handleCloseFullscreen = useCallback(() => {
     setFullscreen(null);
   }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const id = Number((entry.target as HTMLElement).dataset.videoId);
+          if (isNaN(id)) return;
+          const item = items.find((i): i is VideoTileData => i.type === "video" && i.post_id === id);
+          if (item) prewarmHls(id, item.bunny_video_id);
+        });
+      },
+      { threshold: 0.3 }
+    );
+
+    document.querySelectorAll<HTMLElement>("[data-video-id]").forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, [items, prewarmHls]);
+
+  useEffect(() => {
+    return () => { prewarmMap.current.forEach((_, id) => destroyPrewarm(id)); };
+  }, [destroyPrewarm]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
