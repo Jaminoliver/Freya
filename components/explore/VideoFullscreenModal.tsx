@@ -37,6 +37,7 @@ export function VideoFullscreenModal({
 }: Props) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<any>(null);
   const [avatarError, setAvatarError] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -46,7 +47,7 @@ export function VideoFullscreenModal({
   const [isSeeking, setIsSeeking] = useState(false);
 
   const videoSrc = data.bunny_video_id
-    ? `https://${STREAM_CDN}/${data.bunny_video_id}/play_720p.mp4`
+    ? `https://${STREAM_CDN}/${data.bunny_video_id}/playlist.m3u8`
     : null;
 
   const name = data.display_name || data.username;
@@ -66,20 +67,35 @@ export function VideoFullscreenModal({
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  // Auto-play on mount, resume from tile's current time
+  // Auto-play on mount using HLS.js (same as VideoPlayer)
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
     video.muted = isMuted;
+
     const tryPlay = () => {
       if (initialTime > 0) video.currentTime = initialTime;
       video.play().catch(() => {});
     };
-    if (video.readyState >= 2) {
-      tryPlay();
-    } else {
-      video.addEventListener("loadeddata", tryPlay, { once: true });
-    }
+
+    (async () => {
+      const Hls = (await import("hls.js")).default;
+      if (Hls.isSupported()) {
+        const hls = new Hls({ startLevel: -1, capLevelToPlayerSize: false });
+        hlsRef.current = hls;
+        hls.loadSource(videoSrc);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => tryPlay());
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = videoSrc;
+        video.addEventListener("loadeddata", tryPlay, { once: true });
+      }
+    })();
+
+    return () => {
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoSrc]);
 
@@ -318,7 +334,6 @@ export function VideoFullscreenModal({
           {videoSrc && (
             <video
               ref={videoRef}
-              src={videoSrc}
               muted={isMuted}
               playsInline
               loop
