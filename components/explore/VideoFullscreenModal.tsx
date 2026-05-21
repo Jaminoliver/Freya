@@ -231,10 +231,11 @@ export function VideoFullscreenModal({
     };
   }, []);
 
-  // Lock body scroll
+  // Lock body scroll + force address bar visible
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    window.scrollTo({ top: 0, behavior: "instant" });
     return () => { document.body.style.overflow = prev; };
   }, []);
 
