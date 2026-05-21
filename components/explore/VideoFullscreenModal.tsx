@@ -222,17 +222,17 @@ export function VideoFullscreenModal({
         .vfm-seek::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 12px;
-          height: 12px;
+          width: 16px;
+          height: 16px;
           border-radius: 50%;
           background: #fff;
           cursor: pointer;
-          margin-top: -4.5px;
+          margin-top: -6.5px;
           box-shadow: 0 1px 4px rgba(0,0,0,0.4);
         }
         .vfm-seek::-moz-range-thumb {
-          width: 12px;
-          height: 12px;
+          width: 16px;
+          height: 16px;
           border-radius: 50%;
           background: #fff;
           border: none;
@@ -483,7 +483,7 @@ export function VideoFullscreenModal({
             </div>
 
             {/* Seek bar */}
-            <div className="vfm-seek-wrapper" style={{ background: "rgba(0,0,0,0.88)", padding: "10px 0 0" }} onClick={(e) => e.stopPropagation()}>
+            <div className="vfm-seek-wrapper" style={{ background: "rgba(0,0,0,0.88)", padding: "10px 0 6px" }} onClick={(e) => e.stopPropagation()}>
               <input
                 type="range"
                 className="vfm-seek"
