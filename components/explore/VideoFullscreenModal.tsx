@@ -150,22 +150,39 @@ export function VideoFullscreenModal({
     setDuration(video.duration);
   }, []);
 
-  const handleSeekStart = (e: React.MouseEvent | React.TouchEvent) => {
+  const seekBarRef = useRef<HTMLDivElement>(null);
+  const wasPlayingRef = useRef(false);
+
+  const getSeekFraction = (clientX: number): number => {
+    const bar = seekBarRef.current;
+    if (!bar) return 0;
+    const rect = bar.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  };
+
+  const handleSeekPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
-    setIsSeeking(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    wasPlayingRef.current = !videoRef.current?.paused;
     videoRef.current?.pause();
+    setIsSeeking(true);
+    const newTime = getSeekFraction(e.clientX) * duration;
+    setCurrentTime(newTime);
+    if (videoRef.current) videoRef.current.currentTime = newTime;
   };
 
-  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSeekPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
     e.stopPropagation();
-    const val = Number(e.target.value);
-    setCurrentTime(val);
-    if (videoRef.current) videoRef.current.currentTime = val;
+    const newTime = getSeekFraction(e.clientX) * duration;
+    setCurrentTime(newTime);
+    if (videoRef.current) videoRef.current.currentTime = newTime;
   };
 
-  const handleSeekEnd = () => {
-    videoRef.current?.play().catch(() => {});
+  const handleSeekPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
     setIsSeeking(false);
+    if (wasPlayingRef.current) videoRef.current?.play().catch(() => {});
   };
 
   const toggleMute = (e: React.MouseEvent) => {
@@ -252,11 +269,14 @@ export function VideoFullscreenModal({
           display: flex;
           align-items: center;
           justify-content: center;
+          height: 100vh;
+          height: 100dvh;
         }
         .vfm-inner {
           position: relative;
           width: 100%;
-          height: 100%;
+          height: 100vh;
+          height: 100dvh;
           overflow: hidden;
         }
         @media (min-width: 768px) {
@@ -390,7 +410,7 @@ export function VideoFullscreenModal({
           )}
 
           {/* Play icon — only shown when paused, no background */}
-          {isPaused && (
+          {isPaused && !isSeeking && (
             <div
               onClick={handleVideoTap}
               style={{
@@ -483,20 +503,20 @@ export function VideoFullscreenModal({
             </div>
 
             {/* Seek bar */}
-            <div className="vfm-seek-wrapper" style={{ background: "rgba(0,0,0,0.88)", padding: "10px 0 6px" }} onClick={(e) => e.stopPropagation()}>
-              <input
-                type="range"
-                className="vfm-seek"
-                min={0}
-                max={duration || 100}
-                step={0.1}
-                value={currentTime}
-                onMouseDown={handleSeekStart}
-                onTouchStart={handleSeekStart}
-                onChange={handleSeekChange}
-                onMouseUp={handleSeekEnd}
-                onTouchEnd={handleSeekEnd}
-              />
+            <div className="vfm-seek-wrapper" style={{ background: "rgba(0,0,0,0.88)", padding: "0 16px 8px" }} onClick={(e) => e.stopPropagation()}>
+              <div
+                ref={seekBarRef}
+                onPointerDown={handleSeekPointerDown}
+                onPointerMove={handleSeekPointerMove}
+                onPointerUp={handleSeekPointerUp}
+                onPointerCancel={handleSeekPointerUp}
+                style={{ position: "relative", width: "100%", height: "44px", display: "flex", alignItems: "center", touchAction: "none", cursor: "pointer" }}
+              >
+                <div style={{ position: "absolute", left: 0, right: 0, height: "3px", borderRadius: "2px", background: "rgba(255,255,255,0.25)" }}>
+                  <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${progress}%`, background: "rgba(255,255,255,0.95)", borderRadius: "2px" }} />
+                  <div style={{ position: "absolute", top: "50%", left: `${progress}%`, transform: "translate(-50%, -50%)", width: "13px", height: "13px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
+                </div>
+              </div>
             </div>
           </div>
 
