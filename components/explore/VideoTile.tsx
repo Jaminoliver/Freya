@@ -157,7 +157,7 @@ export function VideoTile({
       ref={(el) => onTileRef(data.post_id, el)}
       onClick={handleClick}
       onMouseEnter={() => onUserInteract(data.post_id)}
-      onTouchStart={() => onUserInteract(data.post_id)}
+      onTouchStart={() => {}}
       style={{
         position: "relative",
         width: "100%",
