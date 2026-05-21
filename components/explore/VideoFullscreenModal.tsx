@@ -40,6 +40,10 @@ export function VideoFullscreenModal({
   onMuteChange,
 }: Props) {
   const router = useRouter();
+
+  useEffect(() => {
+    if (data.username) router.prefetch(`/${data.username}`);
+  }, [data.username, router]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
   const [avatarError, setAvatarError] = useState(false);
