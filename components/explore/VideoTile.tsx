@@ -138,9 +138,12 @@ const isTouchRef = useRef(false);
 
   // Pass current playback time so modal resumes exactly where tile left off
   const handleClick = () => {
+    const t0 = performance.now();
+    console.log("[VideoTile] click fired", { post_id: data.post_id, t: t0.toFixed(1) });
     const currentTime = videoRef.current?.currentTime ?? 0;
     if (videoRef.current) videoRef.current.pause();
     onOpenFullscreen(data, currentTime);
+    console.log("[VideoTile] onOpenFullscreen called", { delay: (performance.now() - t0).toFixed(1) + "ms" });
   };
 
   const handleAvatarClick = (e: React.MouseEvent) => {
@@ -159,7 +162,7 @@ const isTouchRef = useRef(false);
       ref={(el) => onTileRef(data.post_id, el)}
       onClick={handleClick}
       onMouseEnter={() => { if (!isTouchRef.current) onUserInteract(data.post_id); }}
-      onTouchStart={() => { isTouchRef.current = true; }}
+      onTouchStart={() => { isTouchRef.current = true; console.log("[VideoTile] touchStart", performance.now().toFixed(1)); }}
       style={{
         position: "relative",
         width: "100%",
@@ -170,6 +173,7 @@ const isTouchRef = useRef(false);
         backgroundColor: "#1A1A2E",
         userSelect: "none",
         WebkitUserSelect: "none",
+        touchAction: "manipulation",
       }}
     >
       {/* Thumbnail */}

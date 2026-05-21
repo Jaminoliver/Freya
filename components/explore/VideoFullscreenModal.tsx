@@ -70,6 +70,7 @@ export function VideoFullscreenModal({
   onFollowChange,
 }: Props) {
   const router = useRouter();
+  console.log("[VideoModal] mounted at", performance.now().toFixed(1));
 
   useEffect(() => {
     if (data.username) router.prefetch(`/${data.username}`);
@@ -261,7 +262,7 @@ export function VideoFullscreenModal({
         hlsRef.current = hls;
         hls.loadSource(videoSrc);
         hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => tryPlay());
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { console.log("[VideoModal] HLS manifest parsed at", performance.now().toFixed(1)); tryPlay(); });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = videoSrc;
         video.addEventListener("loadeddata", tryPlay, { once: true });
@@ -584,6 +585,7 @@ export function VideoFullscreenModal({
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
               onPlaying={() => {
+                console.log("[VideoModal] video playing at", performance.now().toFixed(1));
                 if (slowDotsTimerRef.current) { clearTimeout(slowDotsTimerRef.current); slowDotsTimerRef.current = null; }
                 setShowSlowDots(false);
                 setIsVideoReady(true);
