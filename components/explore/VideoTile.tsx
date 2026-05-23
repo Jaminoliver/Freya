@@ -44,11 +44,8 @@ function formatDuration(seconds: number | null): string {
 interface VideoTileProps {
   data: VideoTileData;
   isActive: boolean;
-  /** When the fullscreen modal is open, tile video should be paused */
   isModalOpen?: boolean;
   onTileRef: (id: number, el: HTMLDivElement | null) => void;
-  onUserInteract: (id: number) => void;
-  /** Now also receives the tile's current playback time so modal can resume seamlessly */
   onOpenFullscreen: (data: VideoTileData, initialTime: number) => void;
 }
 
@@ -57,7 +54,6 @@ export function VideoTile({
   isActive,
   isModalOpen = false,
   onTileRef,
-  onUserInteract,
   onOpenFullscreen,
 }: VideoTileProps) {
   const router = useRouter();
@@ -161,7 +157,6 @@ const isTouchRef = useRef(false);
     <div
       ref={(el) => onTileRef(data.post_id, el)}
       onClick={handleClick}
-      onMouseEnter={() => { if (!isTouchRef.current) onUserInteract(data.post_id); }}
       onTouchStart={() => { isTouchRef.current = true; console.log("[VideoTile] touchStart", performance.now().toFixed(1)); }}
       style={{
         position: "relative",

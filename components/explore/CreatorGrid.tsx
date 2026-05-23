@@ -12,19 +12,25 @@ interface CreatorGridProps {
   onLoadMore: () => void;
   loadingMore: boolean;
   hasMore: boolean;
+  followMap?: Record<string, boolean>;
 }
 
-const PLAY_DURATION = 5000;
+// tiles play immediately when sufficiently visible (ratio >= 0.6)
 
 interface FullscreenState {
   data: VideoTileData;
   initialTime: number;
+  existingHls?: any;
 }
 
-export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: CreatorGridProps) {
+export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap }: CreatorGridProps) {
   const [fullscreen, setFullscreen] = useState<FullscreenState | null>(null);
   const [isMuted, setIsMuted] = useState(true);
   const followCache = useRef<Map<string, boolean>>(new Map());
+  useEffect(() => {
+    if (!followMap) return;
+    Object.entries(followMap).forEach(([id, val]) => followCache.current.set(id, val));
+  }, [followMap]);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -33,12 +39,9 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
   const indexMap = useRef<Map<number, number>>(new Map());
   const pendingEls = useRef<Map<number, HTMLDivElement>>(new Map());
 
-  const [autoPlayId, setAutoPlayId] = useState<number | null>(null);
-  const [userHoverId, setUserHoverId] = useState<number | null>(null);
-  const userHoverRef = useRef<number | null>(null);
-  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastPairRef = useRef<string>("");
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const activeIdRef = useRef<number | null>(null);
+  // no dwell timer needed — immediate play
   const prewarmMap = useRef<Map<number, { hls: any; video: HTMLVideoElement }>>(new Map());
 
   useEffect(() => {
@@ -52,52 +55,13 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     });
   }, [items]);
 
-  const isLeftColumn = (postId: number) => (indexMap.current.get(postId) ?? 0) % 2 === 0;
+  const clearDwellTimer = () => {};
 
-  const clearAutoTimer = () => {
-    if (autoTimerRef.current) { clearTimeout(autoTimerRef.current); autoTimerRef.current = null; }
-  };
-
-  const getBestPair = (): { left: number | null; right: number | null } => {
-    let bestLeft: number | null = null, bestLeftRatio = 0.1;
-    let bestRight: number | null = null, bestRightRatio = 0.1;
-
-    ratioMap.current.forEach((ratio, id) => {
-      if (isLeftColumn(id)) {
-        if (ratio > bestLeftRatio) { bestLeftRatio = ratio; bestLeft = id; }
-      } else {
-        if (ratio > bestRightRatio) { bestRightRatio = ratio; bestRight = id; }
-      }
-    });
-
-    return { left: bestLeft, right: bestRight };
-  };
-
-  const getFirstPair = (): { left: number | null; right: number | null } => {
-    const videoItems = items.filter((i): i is VideoTileData => i.type === "video");
-    const left = videoItems.find((_, idx) => idx % 2 === 0)?.post_id ?? null;
-    const right = videoItems.find((_, idx) => idx % 2 === 1)?.post_id ?? null;
-    return { left, right };
-  };
-
-  const runAutoPlay = useCallback((left: number | null, right: number | null) => {
-    clearAutoTimer();
-    setAutoPlayId(null);
-    if (!left && !right) return;
-
-    const first = left ?? right;
-    const second = left && right ? right : null;
-
-    setAutoPlayId(first);
-    autoTimerRef.current = setTimeout(() => {
-      setAutoPlayId(null);
-      if (second) {
-        autoTimerRef.current = setTimeout(() => {
-          setAutoPlayId(second);
-          autoTimerRef.current = setTimeout(() => setAutoPlayId(null), PLAY_DURATION);
-        }, 100);
-      }
-    }, PLAY_DURATION);
+  const startDwell = useCallback((id: number) => {
+    if (activeIdRef.current === id) return; // already playing this tile
+    clearDwellTimer();
+    setActiveId(id);
+    activeIdRef.current = id;
   }, []);
 
   useEffect(() => {
@@ -105,18 +69,21 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
       (entries) => {
         entries.forEach((entry) => {
           const id = Number((entry.target as HTMLElement).dataset.videoId);
-          if (!isNaN(id)) ratioMap.current.set(id, entry.intersectionRatio);
-        });
+          if (isNaN(id)) return;
+          const ratio = entry.intersectionRatio;
+          ratioMap.current.set(id, ratio);
 
-        if (userHoverRef.current !== null) return;
-        const { left, right } = getBestPair();
-        const pairKey = `${left}-${right}`;
-        if (pairKey !== lastPairRef.current) {
-          lastPairRef.current = pairKey;
-          runAutoPlay(left, right);
-        }
+          if (ratio >= 0.6) {
+            // tile sufficiently visible — start dwell timer
+            startDwell(id);
+          } else if (ratio < 0.1 && activeIdRef.current === id) {
+            // tile fully left viewport — stop playing
+            setActiveId(null);
+            activeIdRef.current = null;
+          }
+        });
       },
-      { threshold: Array.from({ length: 11 }, (_, i) => i / 10) }
+      { threshold: [0, 0.1, 0.3, 0.6, 0.8, 1.0] }
     );
 
     observerRef.current = observer;
@@ -126,46 +93,15 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     });
     pendingEls.current.clear();
 
-    const initTimer = setTimeout(() => {
-      const { left, right } = getBestPair();
-      const pairKey = `${left}-${right}`;
-      if ((left || right) && pairKey !== lastPairRef.current) {
-        lastPairRef.current = pairKey;
-        runAutoPlay(left, right);
-      }
-    }, 500);
-
     return () => {
-      clearTimeout(initTimer);
-      clearAutoTimer();
+      clearDwellTimer();
       observer.disconnect();
       observerRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runAutoPlay]);
+  }, [startDwell]);
 
-  useEffect(() => {
-    if (!items.length) return;
-    const timer = setTimeout(() => {
-      if (userHoverRef.current !== null) return;
-      if (autoPlayId !== null) return;
-
-      const { left, right } = getBestPair();
-      if (left || right) {
-        lastPairRef.current = `${left}-${right}`;
-        runAutoPlay(left, right);
-        return;
-      }
-
-      const fallback = getFirstPair();
-      if (fallback.left || fallback.right) {
-        lastPairRef.current = `${fallback.left}-${fallback.right}`;
-        runAutoPlay(fallback.left, fallback.right);
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length]);
+  // Dwell system handles all autoplay — no fallback timer needed
 
   const handleTileRef = useCallback((id: number, el: HTMLDivElement | null) => {
     if (!el) { ratioMap.current.delete(id); return; }
@@ -178,29 +114,8 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     }
   }, []);
 
-  const handleUserInteract = useCallback((id: number) => {
-    clearAutoTimer();
-    setAutoPlayId(null);
-    lastPairRef.current = "";
-
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    userHoverRef.current = id;
-    setUserHoverId(id);
-    hoverTimerRef.current = setTimeout(() => {
-      userHoverRef.current = null;
-      setUserHoverId(null);
-    }, PLAY_DURATION);
-
-    // Prefetch follow state
-    const item = items.find((i): i is VideoTileData => i.type === "video" && i.post_id === id);
-    if (item?.creator_id && !followCache.current.has(item.creator_id)) {
-      import("@/lib/utils/follow").then(({ checkIsFollowing }) => {
-        checkIsFollowing(item.creator_id).then((val) => {
-          followCache.current.set(item.creator_id, !!val);
-        }).catch(() => {});
-      });
-    }
-  }, [items]);
+  // onTouchStart in VideoTile triggers prewarm via the intersection observer prewarm effect
+  // follow prefetch happens via followMap from ExplorePage
 
   const destroyPrewarm = useCallback((id: number) => {
     const entry = prewarmMap.current.get(id);
@@ -224,22 +139,27 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
     hls.loadSource(`https://${cdn}/${bunnyVideoId}/playlist.m3u8`);
     hls.attachMedia(video);
     prewarmMap.current.set(id, { hls, video });
-    setTimeout(() => { hls.stopLoad(); }, 6000);
+    // keep loading until tap or tile leaves viewport
   }, []);
 
   const handleOpenFullscreen = useCallback((data: VideoTileData, initialTime: number) => {
-    destroyPrewarm(data.post_id);
+    const prewarm = prewarmMap.current.get(data.post_id);
+    const existingHls = prewarm?.hls ?? undefined;
+    if (prewarm) {
+      try { prewarm.video.pause(); } catch {}
+      prewarmMap.current.delete(data.post_id);
+    }
     if (data.creator_id && !followCache.current.has(data.creator_id)) {
       import("@/lib/utils/follow").then(({ checkIsFollowing }) => {
         checkIsFollowing(data.creator_id).then((val) => {
           followCache.current.set(data.creator_id, !!val);
-          setFullscreen({ data, initialTime });
-        }).catch(() => setFullscreen({ data, initialTime }));
+          setFullscreen({ data, initialTime, existingHls });
+        }).catch(() => setFullscreen({ data, initialTime, existingHls }));
       });
     } else {
-      setFullscreen({ data, initialTime });
+      setFullscreen({ data, initialTime, existingHls });
     }
-  }, [destroyPrewarm]);
+  }, []);
 
   const handleCloseFullscreen = useCallback(() => {
     setFullscreen(null);
@@ -297,10 +217,9 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
             <VideoTile
               key={`video-${item.post_id}`}
               data={item}
-              isActive={autoPlayId === item.post_id || (!('ontouchstart' in window) && userHoverId === item.post_id)}
+              isActive={activeId === item.post_id}
               isModalOpen={!!fullscreen}
               onTileRef={handleTileRef}
-              onUserInteract={handleUserInteract}
               onOpenFullscreen={handleOpenFullscreen}
             />
           ) : (
@@ -326,6 +245,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore }: Creator
         <VideoFullscreenModal
           data={fullscreen.data}
           initialTime={fullscreen.initialTime}
+          existingHls={fullscreen.existingHls}
           isMuted={isMuted}
           onMuteChange={setIsMuted}
           onClose={handleCloseFullscreen}

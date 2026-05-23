@@ -30,6 +30,7 @@ export default function ExplorePage() {
   const [hasMore, setHasMore]             = useState(true);
   const [sort, setSort]                   = useState<SortOption>("most_liked");
   const [dropdownOpen, setDropdownOpen]   = useState(false);
+  const [followMap, setFollowMap]         = useState<Record<string, boolean>>({});
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -48,10 +49,18 @@ export default function ExplorePage() {
         const data   = await res.json();
         if (cancelled) return;
 
-        setStripCreators(data.strip  ?? []);
-        setGridItems(data.grid       ?? []);
-        setCursor(data.nextCursor    ?? null);
+        const grid = data.grid ?? [];
+        setStripCreators(data.strip ?? []);
+        setGridItems(grid);
+        setCursor(data.nextCursor ?? null);
         setHasMore(!!data.nextCursor);
+
+        const creatorIds = [...new Set<string>(grid.filter((i: GridItem) => i.type === "video").map((i: GridItem) => (i as any).creator_id).filter((id: unknown): id is string => typeof id === "string"))];
+        if (creatorIds.length) {
+          import("@/lib/utils/follow").then(({ checkIsFollowingBulk }) => {
+            checkIsFollowingBulk(creatorIds).then((map) => setFollowMap(map)).catch(() => {});
+          });
+        }
       } catch (err) {
         console.error("[ExplorePage] fetch error:", err);
       } finally {
@@ -201,6 +210,7 @@ export default function ExplorePage() {
             onLoadMore={handleLoadMore}
             loadingMore={loadingMore}
             hasMore={hasMore}
+            followMap={followMap}
           />
         )}
       </div>

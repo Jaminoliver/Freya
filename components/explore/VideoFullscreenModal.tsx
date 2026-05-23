@@ -15,6 +15,7 @@ interface Props {
   data: VideoTileData;
   onClose: () => void;
   initialTime?: number;
+  existingHls?: any;
   isMuted: boolean;
   onMuteChange: (muted: boolean) => void;
   initialIsFollowing?: boolean;
@@ -64,6 +65,7 @@ export function VideoFullscreenModal({
   data,
   onClose,
   initialTime = 0,
+  existingHls,
   isMuted,
   onMuteChange,
   initialIsFollowing = false,

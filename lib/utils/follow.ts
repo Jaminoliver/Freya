@@ -40,3 +40,20 @@ export async function checkIsFollowing(followedId: string): Promise<boolean> {
 
   return !!data;
 }
+export async function checkIsFollowingBulk(followedIds: string[]): Promise<Record<string, boolean>> {
+  if (!followedIds.length) return {};
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  const { data } = await supabase
+    .from("follows")
+    .select("followed_id")
+    .eq("follower_id", user.id)
+    .in("followed_id", followedIds);
+
+  const result: Record<string, boolean> = {};
+  followedIds.forEach((id) => result[id] = false);
+  (data ?? []).forEach((row: { followed_id: string }) => result[row.followed_id] = true);
+  return result;
+}
