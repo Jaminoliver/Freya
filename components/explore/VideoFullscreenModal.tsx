@@ -570,9 +570,9 @@ export function VideoFullscreenModal({
           {/* Slow dots */}
           {!isVideoReady && showSlowDots && (
             <div style={{ position: "absolute", left: 0, right: 0, top: "50%", transform: "translateY(-50%)", zIndex: 10002, display: "flex", justifyContent: "center", gap: "6px", pointerEvents: "none" }}>
-              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
-              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.2s" }} />
-              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.4s" }} />
+              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#8B5CF6", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
+              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#B44DD4", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.2s" }} />
+              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#EC4899", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.4s" }} />
             </div>
           )}
 

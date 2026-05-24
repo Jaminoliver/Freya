@@ -260,9 +260,9 @@ const isTouchRef = useRef(false);
       <div style={{ position: "absolute", bottom: "10px", left: "10px", right: "10px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
           {/* Avatar */}
-          <div style={{
+          <div onClick={handleAvatarClick} style={{
             width: "45px", height: "45px", borderRadius: "50%", padding: "1.5px",
-            background: "transparent", flexShrink: 0,
+            background: "transparent", flexShrink: 0, cursor: "pointer",
           }}>
             <div style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden", border: "1.5px solid #0A0A0F" }}>
               {avatarError || !data.avatar_url ? (
@@ -287,7 +287,6 @@ const isTouchRef = useRef(false);
 
           {/* Name + handle */}
           <div
-            onClick={handleAvatarClick}
             style={{ display: "flex", flexDirection: "column", gap: "1px", overflow: "hidden" }}
           >
             <p style={{

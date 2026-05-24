@@ -995,6 +995,7 @@ export default function VideoPlayer({
       <style>{`
         @keyframes spin   { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes vp-dot { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1); } }
       `}</style>
 
       <div
@@ -1073,40 +1074,10 @@ export default function VideoPlayer({
             Shows during entire load window: poster dismissed → first frame paints,
             plus any mid-playback stall. */}
         {(isLoading || (!showPoster && !hasError && isBuffering)) && (
-          <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <style>{`
-              @keyframes vp-ring-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-              @keyframes vp-ring-pulse  {
-                0%, 100% { transform: scale(1);    opacity: 0.9; }
-                50%      { transform: scale(1.06); opacity: 1; }
-              }
-            `}</style>
-            <div style={{
-              width:     "56px",
-              height:    "56px",
-              animation: "vp-ring-pulse 1.4s ease-in-out infinite",
-              filter:    "drop-shadow(0 0 12px rgba(139,92,246,0.5)) drop-shadow(0 0 20px rgba(236,72,153,0.3))",
-            }}>
-              <svg
-                width="56" height="56" viewBox="0 0 56 56"
-                style={{ animation: "vp-ring-rotate 1s linear infinite", display: "block" }}
-              >
-                <defs>
-                  <linearGradient id="vp-ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%"   stopColor="#8B5CF6" />
-                    <stop offset="100%" stopColor="#EC4899" />
-                  </linearGradient>
-                </defs>
-                {/* Background track */}
-                <circle cx="28" cy="28" r="22" fill="none"
-                        stroke="rgba(255,255,255,0.12)" strokeWidth="3.5" />
-                {/* Gradient arc — covers ~40% of circumference */}
-                <circle cx="28" cy="28" r="22" fill="none"
-                        stroke="url(#vp-ring-grad)" strokeWidth="3.5"
-                        strokeLinecap="round"
-                        strokeDasharray="55 138" />
-              </svg>
-            </div>
+          <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#8B5CF6", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
+            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#B44DD4", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.2s" }} />
+            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#EC4899", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.4s" }} />
           </div>
         )}
 
@@ -1116,9 +1087,9 @@ export default function VideoPlayer({
             <style>{`
               @keyframes vp-dot { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1); } }
             `}</style>
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s",   boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.2s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.95)", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.4s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#8B5CF6", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s",   boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B44DD4", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.2s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#EC4899", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.4s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
           </div>
         )}
 
