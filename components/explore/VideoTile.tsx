@@ -34,12 +34,7 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-function formatDuration(seconds: number | null): string {
-  if (!seconds || seconds <= 0) return "";
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
+// formatDuration removed — duration badge no longer rendered
 
 interface VideoTileProps {
   data: VideoTileData;
@@ -66,6 +61,8 @@ export function VideoTile({
   const [buffering, setBuffering] = useState(false);
   const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTouchRef = useRef(false);
+  // Guard: prevents onPreviewEnd firing more than once per activation
+  const hasEndedRef = useRef(false);
 
   const previewUrl = data.bunny_video_id
     ? `https://${STREAM_CDN}/${data.bunny_video_id}/play_360p.mp4`
@@ -106,17 +103,23 @@ export function VideoTile({
     video.addEventListener("playing", onPlaying);
 
     if (isActive && !isModalOpen) {
+      // Reset end guard each time this tile becomes active
+      hasEndedRef.current = false;
+
       const tryPlay = () => {
         video.currentTime = 0;
         video.muted = true;
+        console.log("[VideoTile] playing", { post_id: data.post_id, t: performance.now().toFixed(1) });
         video.play().catch(() => {});
       };
 
-      // Clip preview to 5 seconds then fire onPreviewEnd
+      // Clip preview to 5 seconds — hasEndedRef prevents double-fire
       const handleTimeUpdate = () => {
-        if (video.currentTime >= 5) {
+        if (video.currentTime >= 5 && !hasEndedRef.current) {
+          hasEndedRef.current = true;
           video.currentTime = 0;
           video.pause();
+          console.log("[VideoTile] 5s end fired", { post_id: data.post_id, t: performance.now().toFixed(1) });
           onPreviewEnd?.(data.post_id);
         }
       };
@@ -137,6 +140,7 @@ export function VideoTile({
         if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
       };
     } else {
+      console.log("[VideoTile] pausing", { post_id: data.post_id, isActive, isModalOpen });
       video.pause();
       if (bufferTimerRef.current) {
         clearTimeout(bufferTimerRef.current);
@@ -169,7 +173,6 @@ export function VideoTile({
 
   const rawThumb = data.thumbnail_url;
   const thumbnail = rawThumb && !rawThumb.includes("undefined") ? rawThumb : null;
-  const duration = formatDuration(data.duration_seconds);
   const name = data.display_name || data.username;
   const initials = (name[0] ?? "?").toUpperCase();
 
@@ -216,7 +219,7 @@ export function VideoTile({
             position: "absolute", inset: 0, width: "100%", height: "100%",
             objectFit: "cover",
             opacity: isActive && !isModalOpen ? 1 : 0,
-            transition: "opacity 0.3s ease",
+            transition: "opacity 0.15s ease",
           }}
         />
       )}

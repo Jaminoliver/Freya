@@ -60,10 +60,11 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
   // (e.g. both tiles in the same row), tie-break by whichever tile's center
   // is closest to the vertical center of the viewport.
   const selectDominantTile = useCallback(() => {
-    const visible = [...ratioMap.current.entries()].filter(([, r]) => r > 0.05);
+    const visible = [...ratioMap.current.entries()].filter(([, r]) => r > 0.3);
 
     if (!visible.length) {
       if (activeIdRef.current !== null) {
+        console.log("[Grid] selectDominant → no visible tiles, clearing activeId");
         setActiveId(null);
         activeIdRef.current = null;
       }
@@ -71,8 +72,6 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
     }
 
     const maxRatio = Math.max(...visible.map(([, r]) => r));
-
-    // Collect all tiles within 5% of the max ratio (handles floating-point ties)
     const candidates = visible.filter(([, r]) => maxRatio - r < 0.05);
 
     let bestId: number = candidates[0][0];
@@ -93,9 +92,23 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
           bestId = id;
         }
       });
+
+      console.log("[Grid] selectDominant → TIE", {
+        candidates: candidates.map(([id, r]) => ({ id, r: r.toFixed(2) })),
+        winner: bestId,
+        viewportCenter: window.innerHeight / 2,
+      });
     }
 
     if (bestId !== activeIdRef.current) {
+      console.log("[Grid] selectDominant → activeId", {
+        from: activeIdRef.current,
+        to: bestId,
+        maxRatio: maxRatio.toFixed(2),
+        visibleCount: visible.length,
+        phase: autoAdvancePhaseRef.current,
+        t: performance.now().toFixed(1),
+      });
       setActiveId(bestId);
       activeIdRef.current = bestId;
       autoAdvancePhaseRef.current = 0; // user scrolled — reset sequence
@@ -107,6 +120,20 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
   // Phase 1 (adjacent playing): tile 2 ends → clear activeId, enter phase 2 (done)
   // Phase 2: nothing plays until user scrolls again (selectDominantTile resets to 0)
   const handlePreviewEnd = useCallback((postId: number) => {
+    console.log("[Grid] handlePreviewEnd", {
+      postId,
+      activeId: activeIdRef.current,
+      phase: autoAdvancePhaseRef.current,
+      t: performance.now().toFixed(1),
+    });
+
+    // Race condition guard: ignore if this tile is no longer the active one
+    // (user scrolled away while tile was playing)
+    if (postId !== activeIdRef.current) {
+      console.log("[Grid] handlePreviewEnd IGNORED — postId no longer active (scroll race)");
+      return;
+    }
+
     if (autoAdvancePhaseRef.current === 0) {
       const currentIdx = indexMap.current.get(postId);
       if (currentIdx === undefined) {
@@ -115,12 +142,12 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
         autoAdvancePhaseRef.current = 2;
         return;
       }
-      // Adjacent = sibling in the same 2-column row
       const adjacentIdx = currentIdx % 2 === 0 ? currentIdx + 1 : currentIdx - 1;
       let adjacentPostId: number | null = null;
       indexMap.current.forEach((idx, pid) => {
         if (idx === adjacentIdx) adjacentPostId = pid;
       });
+      console.log("[Grid] handlePreviewEnd → advancing to adjacent", { currentIdx, adjacentIdx, adjacentPostId });
       if (adjacentPostId !== null) {
         setActiveId(adjacentPostId);
         activeIdRef.current = adjacentPostId;
@@ -131,6 +158,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
         autoAdvancePhaseRef.current = 2;
       }
     } else if (autoAdvancePhaseRef.current === 1) {
+      console.log("[Grid] handlePreviewEnd → both tiles done, clearing");
       setActiveId(null);
       activeIdRef.current = null;
       autoAdvancePhaseRef.current = 2;
@@ -147,13 +175,22 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
           ratioMap.current.set(id, entry.intersectionRatio);
         });
 
+        console.log("[Grid] observer fired", {
+          entryCount: entries.length,
+          ratios: entries.map((e) => ({
+            id: (e.target as HTMLElement).dataset.videoId,
+            r: e.intersectionRatio.toFixed(2),
+          })),
+          t: performance.now().toFixed(1),
+        });
+
         // 2. Pick the single dominant tile across ALL tracked tiles
         selectDominantTile();
       },
       {
         // Shrink trigger zone to centre 40% of viewport — tiles above/below
         // the eye-line won't win even if they're partially visible.
-        rootMargin: "-30% 0px -30% 0px",
+        rootMargin: "-15% 0px -15% 0px",
         threshold: [0, 0.1, 0.25, 0.5, 0.75, 1.0],
       }
     );
