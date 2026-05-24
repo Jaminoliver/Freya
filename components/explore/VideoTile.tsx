@@ -47,6 +47,7 @@ interface VideoTileProps {
   isModalOpen?: boolean;
   onTileRef: (id: number, el: HTMLDivElement | null) => void;
   onOpenFullscreen: (data: VideoTileData, initialTime: number) => void;
+  onPreviewEnd?: (postId: number) => void;
 }
 
 export function VideoTile({
@@ -55,6 +56,7 @@ export function VideoTile({
   isModalOpen = false,
   onTileRef,
   onOpenFullscreen,
+  onPreviewEnd,
 }: VideoTileProps) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -63,13 +65,13 @@ export function VideoTile({
   const [avatarError, setAvatarError] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-const isTouchRef = useRef(false);
+  const isTouchRef = useRef(false);
 
   const previewUrl = data.bunny_video_id
     ? `https://${STREAM_CDN}/${data.bunny_video_id}/play_360p.mp4`
     : null;
 
-  // Load src only when tile becomes active (lazy load)
+  // Lazy-load src only when tile first becomes active
   useEffect(() => {
     if (isActive && !srcLoaded) setSrcLoaded(true);
   }, [isActive, srcLoaded]);
@@ -110,12 +112,30 @@ const isTouchRef = useRef(false);
         video.play().catch(() => {});
       };
 
+      // Clip preview to 5 seconds then fire onPreviewEnd
+      const handleTimeUpdate = () => {
+        if (video.currentTime >= 5) {
+          video.currentTime = 0;
+          video.pause();
+          onPreviewEnd?.(data.post_id);
+        }
+      };
+
+      video.addEventListener("timeupdate", handleTimeUpdate);
+
       if (video.readyState >= 3) {
         tryPlay();
       } else {
         if (video.src) video.load();
         video.addEventListener("canplay", tryPlay, { once: true });
       }
+
+      return () => {
+        video.removeEventListener("waiting", onWaiting);
+        video.removeEventListener("playing", onPlaying);
+        video.removeEventListener("timeupdate", handleTimeUpdate);
+        if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+      };
     } else {
       video.pause();
       if (bufferTimerRef.current) {
@@ -130,7 +150,7 @@ const isTouchRef = useRef(false);
       video.removeEventListener("playing", onPlaying);
       if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
     };
-  }, [isActive, isModalOpen, srcLoaded]);
+  }, [isActive, isModalOpen, srcLoaded, onPreviewEnd, data.post_id]);
 
   // Pass current playback time so modal resumes exactly where tile left off
   const handleClick = () => {
@@ -184,7 +204,7 @@ const isTouchRef = useRef(false);
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #1A1A2E 0%, #2A2A3D 100%)" }} />
       )}
 
-      {/* Preview video */}
+      {/* Preview video — loop added so ended tiles restart instead of freezing */}
       {previewUrl && (
         <video
           ref={videoRef}
@@ -243,19 +263,6 @@ const isTouchRef = useRef(false);
         </span>
       )}
 
-      {/* Duration badge */}
-      {duration && (
-        <div style={{
-          position: "absolute", top: "8px", right: "8px",
-          backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
-          color: "#fff", fontSize: "10px", fontWeight: 600,
-          padding: "2px 6px", borderRadius: "4px",
-          fontFamily: "'Inter', sans-serif", letterSpacing: "0.3px",
-        }}>
-          {duration}
-        </div>
-      )}
-
       {/* Bottom creator info */}
       <div style={{ position: "absolute", bottom: "10px", left: "10px", right: "10px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
@@ -286,9 +293,7 @@ const isTouchRef = useRef(false);
           </div>
 
           {/* Name + handle */}
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "1px", overflow: "hidden" }}
-          >
+          <div style={{ display: "flex", flexDirection: "column", gap: "1px", overflow: "hidden" }}>
             <p style={{
               margin: 0, fontSize: "13px", fontWeight: 700, color: "#fff",
               fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap",

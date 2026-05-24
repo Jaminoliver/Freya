@@ -15,8 +15,6 @@ interface CreatorGridProps {
   followMap?: Record<string, boolean>;
 }
 
-// tiles play immediately when sufficiently visible (ratio >= 0.6)
-
 interface FullscreenState {
   data: VideoTileData;
   initialTime: number;
@@ -41,7 +39,8 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
 
   const [activeId, setActiveId] = useState<number | null>(null);
   const activeIdRef = useRef<number | null>(null);
-  // no dwell timer needed — immediate play
+  // 0 = scroll-triggered (initial), 1 = advanced to adjacent, 2 = done (nothing plays)
+  const autoAdvancePhaseRef = useRef<number>(0);
   const prewarmMap = useRef<Map<number, { hls: any; video: HTMLVideoElement }>>(new Map());
 
   useEffect(() => {
@@ -55,35 +54,108 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
     });
   }, [items]);
 
-  const clearDwellTimer = () => {};
+  // ── Dominant tile selection ──────────────────────────────────────────────
+  // After every intersection update, scan ALL ratios and play only the
+  // single tile that is most visible. When two tiles share the same ratio
+  // (e.g. both tiles in the same row), tie-break by whichever tile's center
+  // is closest to the vertical center of the viewport.
+  const selectDominantTile = useCallback(() => {
+    const visible = [...ratioMap.current.entries()].filter(([, r]) => r > 0.05);
 
-  const startDwell = useCallback((id: number) => {
-    if (activeIdRef.current === id) return; // already playing this tile
-    clearDwellTimer();
-    setActiveId(id);
-    activeIdRef.current = id;
+    if (!visible.length) {
+      if (activeIdRef.current !== null) {
+        setActiveId(null);
+        activeIdRef.current = null;
+      }
+      return;
+    }
+
+    const maxRatio = Math.max(...visible.map(([, r]) => r));
+
+    // Collect all tiles within 5% of the max ratio (handles floating-point ties)
+    const candidates = visible.filter(([, r]) => maxRatio - r < 0.05);
+
+    let bestId: number = candidates[0][0];
+
+    if (candidates.length > 1) {
+      // Tie-break: tile whose center Y is closest to viewport center
+      const viewportCenter = window.innerHeight / 2;
+      let minDist = Infinity;
+
+      candidates.forEach(([id]) => {
+        const el = document.querySelector<HTMLElement>(`[data-video-id="${id}"]`);
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const tileCenter = rect.top + rect.height / 2;
+        const dist = Math.abs(tileCenter - viewportCenter);
+        if (dist < minDist) {
+          minDist = dist;
+          bestId = id;
+        }
+      });
+    }
+
+    if (bestId !== activeIdRef.current) {
+      setActiveId(bestId);
+      activeIdRef.current = bestId;
+      autoAdvancePhaseRef.current = 0; // user scrolled — reset sequence
+    }
+  }, []);
+
+  // ── Auto-advance to adjacent tile after 5s preview ──────────────────────
+  // Phase 0 (scroll-triggered): tile 1 ends → play adjacent tile, enter phase 1
+  // Phase 1 (adjacent playing): tile 2 ends → clear activeId, enter phase 2 (done)
+  // Phase 2: nothing plays until user scrolls again (selectDominantTile resets to 0)
+  const handlePreviewEnd = useCallback((postId: number) => {
+    if (autoAdvancePhaseRef.current === 0) {
+      const currentIdx = indexMap.current.get(postId);
+      if (currentIdx === undefined) {
+        setActiveId(null);
+        activeIdRef.current = null;
+        autoAdvancePhaseRef.current = 2;
+        return;
+      }
+      // Adjacent = sibling in the same 2-column row
+      const adjacentIdx = currentIdx % 2 === 0 ? currentIdx + 1 : currentIdx - 1;
+      let adjacentPostId: number | null = null;
+      indexMap.current.forEach((idx, pid) => {
+        if (idx === adjacentIdx) adjacentPostId = pid;
+      });
+      if (adjacentPostId !== null) {
+        setActiveId(adjacentPostId);
+        activeIdRef.current = adjacentPostId;
+        autoAdvancePhaseRef.current = 1;
+      } else {
+        setActiveId(null);
+        activeIdRef.current = null;
+        autoAdvancePhaseRef.current = 2;
+      }
+    } else if (autoAdvancePhaseRef.current === 1) {
+      setActiveId(null);
+      activeIdRef.current = null;
+      autoAdvancePhaseRef.current = 2;
+    }
   }, []);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
+        // 1. Update ratioMap with latest values
         entries.forEach((entry) => {
           const id = Number((entry.target as HTMLElement).dataset.videoId);
           if (isNaN(id)) return;
-          const ratio = entry.intersectionRatio;
-          ratioMap.current.set(id, ratio);
-
-          if (ratio >= 0.6) {
-            // tile sufficiently visible — start dwell timer
-            startDwell(id);
-          } else if (ratio < 0.1 && activeIdRef.current === id) {
-            // tile fully left viewport — stop playing
-            setActiveId(null);
-            activeIdRef.current = null;
-          }
+          ratioMap.current.set(id, entry.intersectionRatio);
         });
+
+        // 2. Pick the single dominant tile across ALL tracked tiles
+        selectDominantTile();
       },
-      { threshold: [0, 0.1, 0.3, 0.6, 0.8, 1.0] }
+      {
+        // Shrink trigger zone to centre 40% of viewport — tiles above/below
+        // the eye-line won't win even if they're partially visible.
+        rootMargin: "-30% 0px -30% 0px",
+        threshold: [0, 0.1, 0.25, 0.5, 0.75, 1.0],
+      }
     );
 
     observerRef.current = observer;
@@ -94,14 +166,10 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
     pendingEls.current.clear();
 
     return () => {
-      clearDwellTimer();
       observer.disconnect();
       observerRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDwell]);
-
-  // Dwell system handles all autoplay — no fallback timer needed
+  }, [selectDominantTile]);
 
   const handleTileRef = useCallback((id: number, el: HTMLDivElement | null) => {
     if (!el) { ratioMap.current.delete(id); return; }
@@ -113,9 +181,6 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
       pendingEls.current.set(id, el);
     }
   }, []);
-
-  // onTouchStart in VideoTile triggers prewarm via the intersection observer prewarm effect
-  // follow prefetch happens via followMap from ExplorePage
 
   const destroyPrewarm = useCallback((id: number) => {
     const entry = prewarmMap.current.get(id);
@@ -139,7 +204,6 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
     hls.loadSource(`https://${cdn}/${bunnyVideoId}/playlist.m3u8`);
     hls.attachMedia(video);
     prewarmMap.current.set(id, { hls, video });
-    // keep loading until tap or tile leaves viewport
   }, []);
 
   const handleOpenFullscreen = useCallback((data: VideoTileData, initialTime: number) => {
@@ -165,6 +229,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
     setFullscreen(null);
   }, []);
 
+  // Prewarm HLS for tiles entering viewport
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -188,6 +253,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
     return () => { prewarmMap.current.forEach((_, id) => destroyPrewarm(id)); };
   }, [destroyPrewarm]);
 
+  // Infinite scroll sentinel
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
@@ -221,6 +287,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
               isModalOpen={!!fullscreen}
               onTileRef={handleTileRef}
               onOpenFullscreen={handleOpenFullscreen}
+              onPreviewEnd={handlePreviewEnd}
             />
           ) : (
             <IdentityCard key={`identity-${item.creator_id}`} data={item} />
