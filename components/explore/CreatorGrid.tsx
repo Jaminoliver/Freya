@@ -41,6 +41,8 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
   const activeIdRef = useRef<number | null>(null);
   // 0 = scroll-triggered (initial), 1 = advanced to adjacent, 2 = done (nothing plays)
   const autoAdvancePhaseRef = useRef<number>(0);
+  const isScrollingRef = useRef(false);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prewarmMap = useRef<Map<number, { hls: any; video: HTMLVideoElement }>>(new Map());
 
   useEffect(() => {
@@ -53,13 +55,27 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
       }
     });
   }, [items]);
-
-  // ── Dominant tile selection ──────────────────────────────────────────────
   // After every intersection update, scan ALL ratios and play only the
   // single tile that is most visible. When two tiles share the same ratio
   // (e.g. both tiles in the same row), tie-break by whichever tile's center
   // is closest to the vertical center of the viewport.
   const selectDominantTile = useCallback(() => {
+    // ── Scroll guard ─────────────────────────────────────────────────────────
+    // During active scroll: only clear the current tile if it left the viewport.
+    // Never start a new tile mid-scroll — wait until scroll stops.
+    if (isScrollingRef.current) {
+      if (activeIdRef.current !== null) {
+        const currentRatio = ratioMap.current.get(activeIdRef.current) ?? 0;
+        if (currentRatio < 0.1) {
+          console.log("[Grid] scroll active — current tile left viewport, clearing", { id: activeIdRef.current });
+          setActiveId(null);
+          activeIdRef.current = null;
+        }
+        // else: tile still visible, let it keep playing
+      }
+      return;
+    }
+
     const visible = [...ratioMap.current.entries()].filter(([, r]) => r > 0.3);
 
     if (!visible.length) {
@@ -114,6 +130,27 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
       autoAdvancePhaseRef.current = 0; // user scrolled — reset sequence
     }
   }, []);
+
+  // ── Scroll detection ─────────────────────────────────────────────────────
+  // Block new tile activation during scroll. 150ms after scroll stops,
+  // run selectDominantTile once to pick the tile the user settled on.
+  useEffect(() => {
+    const onScroll = () => {
+      isScrollingRef.current = true;
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => {
+        isScrollingRef.current = false;
+        console.log("[Grid] scroll stopped — selecting dominant tile");
+        selectDominantTile();
+      }, 150);
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    };
+  }, [selectDominantTile]);
 
   // ── Auto-advance to adjacent tile after 5s preview ──────────────────────
   // Phase 0 (scroll-triggered): tile 1 ends → play adjacent tile, enter phase 1
