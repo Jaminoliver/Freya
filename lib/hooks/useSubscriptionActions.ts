@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useGuestGuard } from "@/lib/hooks/useGuestGuard";
 import type { Subscription, SubscriptionStatus } from "@/lib/types/subscription";
 
 export function useSubscriptionActions(s: Subscription, onRefresh?: () => void, onFavouriteChange?: (id: number, next: boolean) => void, onStatusChange?: (id: number, status: SubscriptionStatus) => void) {
@@ -10,6 +11,7 @@ export function useSubscriptionActions(s: Subscription, onRefresh?: () => void, 
   const [autoBusy,      setAutoBusy]      = useState(false);
   const [cancelBusy,    setCancelBusy]    = useState(false);
   const [freeResubBusy, setFreeResubBusy] = useState(false);
+  const guard = useGuestGuard();
 
   // Keep local state in sync when parent re-fetches
   useEffect(() => { setIsFavourite(s.isFavourite); }, [s.isFavourite]);
@@ -119,9 +121,9 @@ export function useSubscriptionActions(s: Subscription, onRefresh?: () => void, 
     autoBusy,
     cancelBusy,
     freeResubBusy,
-    toggleFavourite,
-    toggleAutoRenew,
-    freeResubscribe,
-    cancelSubscription,
+    toggleFavourite:    guard(toggleFavourite),
+    toggleAutoRenew:    guard(toggleAutoRenew),
+    freeResubscribe:    guard(freeResubscribe),
+    cancelSubscription: guard(cancelSubscription),
   };
 }

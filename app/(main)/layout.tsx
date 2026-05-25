@@ -14,6 +14,7 @@ import PageLoader from "@/components/ui/PageLoader";
 import SplashScreen from "@/components/ui/SplashScreen";
 import { useVisibilitySplash } from "@/lib/hooks/useVisibilitySplash";
 import { useAppStore } from "@/lib/store/appStore";
+import { AuthModal } from "@/components/auth/modal/AuthModal";
 
 function NavigationWatcher() {
   const pathname      = usePathname();
@@ -164,6 +165,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
       <MobileBottomNav />
       <UploadProgressBar />
+      <AuthModal />
       
     </div>
   );

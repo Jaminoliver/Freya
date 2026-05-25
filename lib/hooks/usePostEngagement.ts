@@ -4,6 +4,7 @@
 import * as React from "react";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import { useAppStore } from "@/lib/store/appStore";
+import { useGuestGuard } from "@/lib/hooks/useGuestGuard";
 
 interface UsePostEngagementOptions {
   postId:               string;
@@ -36,6 +37,7 @@ export function usePostEngagement({
   const [savedPost,       setSavedPost]       = React.useState(initialSavedPost);
   const [savedCreator,    setSavedCreator]    = React.useState(initialSavedCreator);
   const { updateFeedPost, clearProfile } = useAppStore();
+  const guard = useGuestGuard();
 
   // ── Refs for stable access in callbacks (fixes stale closures) ─────────
   const isLiking     = React.useRef(false);
@@ -235,9 +237,13 @@ export function usePostEngagement({
     setComments, setSavedPost,
     // handlers
     prefetchRef,
-    handleLike, handleDoubleTapLike,
-    handleToggleComment, closeCommentSection,
-    handleAddComment, handleDeleteComment,
-    handleSavePost, handleSaveCreator,
+    handleLike:            guard(handleLike),
+    handleDoubleTapLike:   guard(handleDoubleTapLike),
+    handleToggleComment:   guard(handleToggleComment),
+    closeCommentSection,
+    handleAddComment:      guard(handleAddComment),
+    handleDeleteComment,
+    handleSavePost:        guard(handleSavePost),
+    handleSaveCreator:     guard(handleSaveCreator),
   };
 }

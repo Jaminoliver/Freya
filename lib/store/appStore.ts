@@ -106,6 +106,9 @@ interface AppStore {
   setNavigating: (val: boolean) => void;
   settingsPanel: string | null;
   setSettingsPanel: (panel: string | null) => void;
+  authModalOpen: boolean;
+  openAuthModal: () => void;
+  closeAuthModal: () => void;
   clearAll: () => void;
 }
 
@@ -149,6 +152,10 @@ export const useAppStore = create<AppStore>((set) => ({
   setNavigating: (val) => set({ isNavigating: val }),
   settingsPanel: null,
   setSettingsPanel: (panel) => set({ settingsPanel: panel }),
+
+  authModalOpen: false,
+  openAuthModal:  () => set({ authModalOpen: true }),
+  closeAuthModal: () => set({ authModalOpen: false }),
 
   // ── Clear ALL caches: call on logout or user switch ──────────────────────
   clearAll: () => {
