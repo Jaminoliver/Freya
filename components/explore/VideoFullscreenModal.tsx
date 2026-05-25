@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useAppStore } from "@/lib/store/appStore";
 import { useRouter } from "next/navigation";
 import type { VideoTileData } from "@/components/explore/VideoTile";
 import { postSyncStore } from "@/lib/store/postSyncStore";
@@ -72,6 +73,7 @@ export function VideoFullscreenModal({
   onFollowChange,
 }: Props) {
   const router = useRouter();
+  const openAuthModal = useAppStore((s) => s.openAuthModal);
   console.log("[VideoModal] mounted at", performance.now().toFixed(1));
 
   useEffect(() => {
@@ -144,6 +146,7 @@ export function VideoFullscreenModal({
 
   const handleFollowToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!viewerUserId) { openAuthModal(); return; }
     if (followLoading || !data.creator_id) return;
     setFollowLoading(true);
     try {
@@ -165,6 +168,7 @@ export function VideoFullscreenModal({
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!viewerUserId) { openAuthModal(); return; }
     const newLiked = !liked;
     const newCount = newLiked ? likeCount + 1 : Math.max(likeCount - 1, 0);
     setLiked(newLiked);
@@ -698,7 +702,7 @@ export function VideoFullscreenModal({
             </button>
 
             {/* Comments */}
-            <button className="vfm-action-btn" onClick={(e) => { e.stopPropagation(); setCommentsOpen(true); }}>
+            <button className="vfm-action-btn" onClick={(e) => { e.stopPropagation(); if (!viewerUserId) { openAuthModal(); return; } setCommentsOpen(true); }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.0" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>

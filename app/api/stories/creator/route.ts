@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 // GET /api/stories/creator?creator_id=X
 export async function GET(req: NextRequest) {
   try {
-    const { user, error: authErr } = await getUser();
-    if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { user } = await getUser();
+    // Guests can view creator story rings (no view tracking)
 
     const creatorId = req.nextUrl.searchParams.get("creator_id");
     if (!creatorId) return NextResponse.json({ error: "creator_id required" }, { status: 400 });
@@ -32,7 +32,10 @@ export async function GET(req: NextRequest) {
 
     const [{ data: profile }, { data: views }] = await Promise.all([
       supabase.from("profiles").select("id, username, display_name, avatar_url, subscription_price, bundle_price_3_months, bundle_price_6_months").eq("id", creatorId).single(),
-      supabase.from("story_views").select("story_id").eq("user_id", user.id).in("story_id", storyIds),
+      // Only fetch views for authenticated users
+      (user && storyIds.length > 0)
+        ? supabase.from("story_views").select("story_id").eq("user_id", user.id).in("story_id", storyIds)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const viewedSet = new Set((views ?? []).map((v: any) => v.story_id));

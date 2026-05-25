@@ -79,10 +79,8 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   try {
-    const { user, error: authErr } = await getUser();
-    if (authErr || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { user } = await getUser();
+// Guests allowed — discover is public
 
     const { searchParams } = new URL(req.url);
     const filter = (searchParams.get("filter") ?? "all") as FilterId;
@@ -93,11 +91,11 @@ export async function GET(req: NextRequest) {
     const service = createServiceSupabaseClient();
 
     // ── 1. Subscribed creator IDs ───────────────────────────────────────────
-    const { data: subs } = await service
+    const { data: subs } = user ? await service
       .from("subscriptions")
       .select("creator_id")
       .eq("fan_id", user.id)
-      .eq("status", "active");
+      .eq("status", "active") : { data: [] };
 
     const subscribedSet = new Set(
       (subs ?? []).map((s: { creator_id: string }) => s.creator_id)
@@ -124,7 +122,7 @@ export async function GET(req: NextRequest) {
 
     // Exclude self + subscribed
     let eligible = ((allCreators ?? []) as CreatorProfile[]).filter(
-      (c) => c.id !== user.id && !subscribedSet.has(c.id)
+      (c) => c.id !== (user?.id ?? "") && !subscribedSet.has(c.id)
     );
 
     // Text search
@@ -203,7 +201,7 @@ const likedPostIds = new Set<number>();
     }
 
     const videoPostIds = Array.from(latestVideoByCreator.values()).map((v) => v.post_id);
-    if (videoPostIds.length > 0) {
+    if (user && videoPostIds.length > 0) {
       const { data: likedRows } = await service
         .from("likes")
         .select("post_id")
@@ -352,7 +350,7 @@ const likedPostIds = new Set<number>();
     const daySeed = Math.floor(Date.now() / 86_400_000);
 
     let stripPool = ((allCreators ?? []) as CreatorProfile[]).filter(
-      (c) => c.id !== user.id && !subscribedSet.has(c.id)
+      (c) => c.id !== (user?.id ?? "") && !subscribedSet.has(c.id)
     );
 
     if (filter === "nigerian") {

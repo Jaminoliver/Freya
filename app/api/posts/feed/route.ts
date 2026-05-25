@@ -213,9 +213,8 @@ const POST_SELECT = `
 
 export async function GET(req: NextRequest) {
   try {
-    const { user, error: authErr } = await getUser();
-    if (authErr || !user)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { user } = await getUser();
+    // Guests (unauthenticated) are allowed — they see the public feed with no sub slot.
 
     const { searchParams } = new URL(req.url);
     const subOffset   = Math.max(0, parseInt(searchParams.get("subOffset")   ?? "0"));
@@ -223,13 +222,15 @@ export async function GET(req: NextRequest) {
     const hotOffset   = Math.max(0, parseInt(searchParams.get("hotOffset")   ?? "0"));
     const service     = createServiceSupabaseClient();
 
-    // ── Fetch active subs + lapsed subs in parallel ──────────────────────
-    const [{ data: activeSubs }, { data: lapsedSubs }] = await Promise.all([
-      service.from("subscriptions").select("creator_id")
-        .eq("fan_id", user.id).eq("status", "active"),
-      service.from("subscriptions").select("creator_id")
-        .eq("fan_id", user.id).in("status", LAPSED_STATUSES),
-    ]);
+    // ── Fetch active subs + lapsed subs in parallel (authenticated users only) ──
+    const [{ data: activeSubs }, { data: lapsedSubs }] = user
+      ? await Promise.all([
+          service.from("subscriptions").select("creator_id")
+            .eq("fan_id", user.id).eq("status", "active"),
+          service.from("subscriptions").select("creator_id")
+            .eq("fan_id", user.id).in("status", LAPSED_STATUSES),
+        ])
+      : [{ data: [] }, { data: [] }];
 
     const subscribedIds = (activeSubs ?? []).map((s: { creator_id: string }) => s.creator_id);
     const lapsedIds     = (lapsedSubs ?? []).map((s: { creator_id: string }) => s.creator_id);
@@ -240,8 +241,8 @@ export async function GET(req: NextRequest) {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
-    // ── Sub pool: chronological from posts table ─────────────────────────
-    const subPostsPromise = subscribedIds.length > 0
+    // ── Sub pool: chronological from posts table (authenticated only) ─────
+    const subPostsPromise = (user && subscribedIds.length > 0)
       ? service.from("posts").select(POST_SELECT)
           .eq("is_published", true).eq("is_deleted", false)
           .in("creator_id", subscribedIds)
@@ -254,11 +255,11 @@ export async function GET(req: NextRequest) {
     let freshQuery = service.from("posts_ranked").select(POST_SELECT)
       .eq("is_published", true).eq("is_deleted", false)
       .eq("audience", "everyone")
-      .neq("creator_id", user.id)
       .gt("published_at", twentyFourHoursAgo)
       .order("hot_score", { ascending: false })
       .range(freshOffset, freshOffset + FRESH_FETCH_SIZE - 1);
 
+    if (user) freshQuery = freshQuery.neq("creator_id", user.id);
     if (subscribedIds.length > 0)
       freshQuery = freshQuery.not("creator_id", "in", `(${subscribedIds.join(",")})`);
 
@@ -266,11 +267,11 @@ export async function GET(req: NextRequest) {
     let hotQuery = service.from("posts_ranked").select(POST_SELECT)
       .eq("is_published", true).eq("is_deleted", false)
       .eq("audience", "everyone")
-      .neq("creator_id", user.id)
       .lte("published_at", twentyFourHoursAgo)
       .order("hot_score", { ascending: false })
       .range(hotOffset, hotOffset + HOT_FETCH_SIZE - 1);
 
+    if (user) hotQuery = hotQuery.neq("creator_id", user.id);
     if (subscribedIds.length > 0)
       hotQuery = hotQuery.not("creator_id", "in", `(${subscribedIds.join(",")})`);
 
@@ -300,9 +301,9 @@ export async function GET(req: NextRequest) {
     const freshReady = filterReady(rawFreshArr);
     const hotReady   = filterReady(sortedHotRaw);
 
-    // ── Seed PRNG from user.id; weighted-shuffle fresh + hot pools ───────
+    // ── Seed PRNG from user.id or stable guest seed; weighted-shuffle fresh + hot pools ───────
     // Sub pool stays chronological (subscription promise intact)
-    const rng = mulberry32(hashString(user.id));
+    const rng = mulberry32(hashString(user?.id ?? "guest"));
     const freshShuffled = weightedShuffle(freshReady, computeHotScore, rng);
     const hotShuffled   = weightedShuffle(hotReady,   computeHotScore, rng);
 
@@ -320,49 +321,63 @@ export async function GET(req: NextRequest) {
     const hotHasMore   = rawHotArr.length   === HOT_FETCH_SIZE;
     const hasMore      = (subHasMore || freshHasMore || hotHasMore) && merged.length > 0;
 
-    // ── Parallel lookups ──────────────────────────────────────────────────
+    // ── Parallel lookups (authenticated users only) ───────────────────────
     const postIds        = merged.map((p) => Number(p.id));
     const pageCreatorIds = [...new Set(merged.map((p) => p.creator_id as string))];
-
     const [
       { data: userLikes },
       { data: ppvUnlocksRaw },
       { data: savedPostsRaw },
       { data: savedCreatorsRaw },
       { data: pollsRaw },
-    ] = await Promise.all([
-      postIds.length > 0
-        ? service.from("likes").select("post_id").eq("user_id", user.id).in("post_id", postIds)
-        : Promise.resolve({ data: [] }),
-      postIds.length > 0
-        ? service.from("ppv_unlocks").select("post_id").eq("fan_id", user.id).in("post_id", postIds)
-        : Promise.resolve({ data: [] }),
-      postIds.length > 0
-        ? service.from("saved_posts").select("post_id").eq("user_id", user.id).in("post_id", postIds)
-        : Promise.resolve({ data: [] }),
-      pageCreatorIds.length > 0
-        ? service.from("saved_creators").select("creator_id").eq("user_id", user.id).in("creator_id", pageCreatorIds)
-        : Promise.resolve({ data: [] }),
-      (() => {
-        const pollPostIds = merged
-          .filter((p) => p.content_type === "poll")
-          .map((p) => Number(p.id));
-        return pollPostIds.length > 0
-          ? service.from("polls")
-              .select("id, post_id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)")
-              .in("post_id", pollPostIds)
-          : Promise.resolve({ data: [] });
-      })(),
-    ]);
+    ] = user
+      ? await Promise.all([
+          postIds.length > 0
+            ? service.from("likes").select("post_id").eq("user_id", user.id).in("post_id", postIds)
+            : Promise.resolve({ data: [] }),
+          postIds.length > 0
+            ? service.from("ppv_unlocks").select("post_id").eq("fan_id", user.id).in("post_id", postIds)
+            : Promise.resolve({ data: [] }),
+          postIds.length > 0
+            ? service.from("saved_posts").select("post_id").eq("user_id", user.id).in("post_id", postIds)
+            : Promise.resolve({ data: [] }),
+          pageCreatorIds.length > 0
+            ? service.from("saved_creators").select("creator_id").eq("user_id", user.id).in("creator_id", pageCreatorIds)
+            : Promise.resolve({ data: [] }),
+          (() => {
+            const pollPostIds = merged
+              .filter((p) => p.content_type === "poll")
+              .map((p) => Number(p.id));
+            return pollPostIds.length > 0
+              ? service.from("polls")
+                  .select("id, post_id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)")
+                  .in("post_id", pollPostIds)
+              : Promise.resolve({ data: [] });
+          })(),
+        ])
+      : [
+          { data: [] }, { data: [] }, { data: [] }, { data: [] },
+          // Still fetch polls for guests so they can see poll content
+          await (() => {
+            const pollPostIds = merged
+              .filter((p) => p.content_type === "poll")
+              .map((p) => Number(p.id));
+            return pollPostIds.length > 0
+              ? service.from("polls")
+                  .select("id, post_id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)")
+                  .in("post_id", pollPostIds)
+              : Promise.resolve({ data: [] });
+          })(),
+        ];
 
     const likedSet        = new Set((userLikes     ?? []).map((l: { post_id: number | string }) => Number(l.post_id)));
     const ppvUnlockedSet  = new Set((ppvUnlocksRaw ?? []).map((u: { post_id: number | string }) => Number(u.post_id)));
     const savedPostSet    = new Set((savedPostsRaw ?? []).map((s: { post_id: number | string }) => Number(s.post_id)));
     const savedCreatorSet = new Set((savedCreatorsRaw ?? []).map((s: { creator_id: string }) => s.creator_id));
 
-    // ── Poll votes ────────────────────────────────────────────────────────
+    // ── Poll votes (authenticated users only) ─────────────────────────────
     const pollIds = (pollsRaw ?? []).map((p: { id: number }) => p.id);
-    const { data: userVotesRaw } = pollIds.length > 0
+    const { data: userVotesRaw } = (user && pollIds.length > 0)
       ? await service.from("poll_votes").select("poll_id, poll_option_id")
           .eq("user_id", user.id).in("poll_id", pollIds)
       : { data: [] as { poll_id: number; poll_option_id: number }[] };
@@ -389,7 +404,7 @@ export async function GET(req: NextRequest) {
       const isSubscribed = subscribedSet.has(creatorId);
       const isRenewal    = lapsedSet.has(creatorId) && !isSubscribed;
       const canAccess    = isPpv
-        ? ppvUnlockedSet.has(postId)
+        ? (user ? ppvUnlockedSet.has(postId) : false)
         : (isSubscribed || (post.audience as string) === "everyone");
 
       const mediaItems = ((post.media as Record<string, unknown>[]) ?? [])

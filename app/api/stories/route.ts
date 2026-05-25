@@ -15,8 +15,9 @@ export const maxDuration = 300;
 export async function GET(req: NextRequest) {
   try {
     const t0 = Date.now();
-    const { user, error: authErr } = await getUser();
-    if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { user } = await getUser();
+    // Guests are allowed — they have no subscriptions so they get empty groups.
+    if (!user) return NextResponse.json({ groups: [] });
     console.log(`[stories] auth: ${Date.now() - t0}ms`);
 
     const supabase = createServiceSupabaseClient();
