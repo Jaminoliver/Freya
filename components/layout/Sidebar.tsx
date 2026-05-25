@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useAppStore } from "@/lib/store/appStore";
 import { useNav } from "@/lib/hooks/useNav";
+import { useGuestGuard } from "@/lib/hooks/useGuestGuard";
 import { useUnreadConversationCount } from "@/app/(main)/messages/page";
 import { useUnreadNotificationCount } from "@/lib/notifications/store";
 
@@ -50,6 +51,7 @@ export function Sidebar() {
     pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
 
   const [moreOpen, setMoreOpen] = useState(false);
+  const guard = useGuestGuard();
 
   const handleNav = (href: string) => navigate(href);
 
@@ -84,12 +86,7 @@ export function Sidebar() {
             );
           })}
 
-          {username === null ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px" }}>
-              <div style={{ width: "22px", height: "22px", borderRadius: "50%", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />
-              <div style={{ width: "80px", height: "14px", borderRadius: "6px", backgroundColor: "#2A2A3D", animation: "pulse 1.5s ease-in-out infinite" }} />
-            </div>
-          ) : (() => {
+          {username !== null && (() => {
             const href   = `/${username}`;
             const active = isActive(href);
             return (
@@ -104,7 +101,7 @@ export function Sidebar() {
             );
           })()}
 
-          <button onClick={() => setMoreOpen(true)}
+          <button onClick={guard(() => setMoreOpen(true))}
             style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", background: "none", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif", color: "#A3A3C2", fontSize: "16px", fontWeight: 400, transition: "all 0.15s ease", width: "100%", textAlign: "left" }}
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#1A1A2E"; e.currentTarget.style.color = "#F1F5F9"; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; }}

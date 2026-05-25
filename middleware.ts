@@ -1,7 +1,25 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/verify-otp', '/terms', '/privacy', '/auth/callback']
+// Routes that always require authentication
+const PROTECTED_ROUTES = [
+  '/messages',
+  '/notifications',
+  '/wallet',
+  '/settings',
+  '/subscriptions',
+  '/saved',
+  '/create',
+  '/create-story',
+  '/become-a-creator',
+  '/admin',
+]
+
+// Auth + legal pages — always public, no session check needed
+const AUTH_ROUTES = [
+  '/login', '/signup', '/forgot-password', '/reset-password',
+  '/verify-email', '/verify-otp', '/terms', '/privacy', '/auth/callback',
+]
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -16,14 +34,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request })
   }
 
-  // Redirect root to login
+  // Root → feed (guests and logged-in users both go to dashboard)
   if (pathname === '/') {
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(route))
+  const isProtectedRoute = PROTECTED_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(route + '/')
+  )
+  const isAuthRoute = AUTH_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(route)
+  )
 
-  if (isPublicRoute && !['/login', '/signup'].includes(pathname)) {
+  // Public = auth/legal pages OR anything not in the protected list
+  // This covers: /explore, /dashboard, /posts/*, /[username] (creator pages)
+  const isPublicRoute = isAuthRoute || !isProtectedRoute
+
+  if (isAuthRoute) {
     return NextResponse.next({ request })
   }
 
@@ -53,39 +80,30 @@ export async function middleware(request: NextRequest) {
   let user = null
 
   try {
-    // ── OPTIMIZED: getSession() instead of getUser() ─────────────────────
-    // getSession() validates the JWT from the cookie locally — no network call.
-    // getUser() hits the Supabase Auth server on EVERY navigation (200-400ms
-    // on Nigerian connections). For route protection this is unnecessary —
-    // individual API routes still use getUser() for data-mutating security.
-    //
-    // Tradeoff: if a session is revoked server-side, the middleware won't catch
-    // it until the JWT expires (default 1 hour). This is acceptable for page
-    // navigation — the worst case is the user sees the page briefly and then
-    // API calls fail with 401.
     const { data } = await supabase.auth.getSession()
     user = data.session?.user ?? null
   } catch (error) {
-    // Network failure or Supabase unreachable — fail open on public routes,
-    // redirect to login on protected routes to avoid crashing
     console.error('[Middleware] Supabase getSession failed:', error)
 
-    if (!isPublicRoute) {
+    if (isProtectedRoute) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
 
     return NextResponse.next({ request })
   }
 
-  if (!user && !isPublicRoute) {
+  // Guest hitting a protected route → redirect to login
+  if (!user && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // Logged-in user hitting login/signup → redirect to dashboard
   if (user && (pathname.startsWith('/login') || pathname.startsWith('/signup'))) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  if (user && !user.email_confirmed_at && !isPublicRoute) {
+  // Logged-in but unverified email → redirect to verify (skip for public routes)
+  if (user && !user.email_confirmed_at && isProtectedRoute) {
     return NextResponse.redirect(new URL('/verify-email', request.url))
   }
 

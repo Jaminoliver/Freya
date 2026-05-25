@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/lib/store/appStore";
@@ -27,11 +27,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const { setViewer, clearAll } = useAppStore();
   const fetchingRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    const supabase = createClient();
-
-    // Hydrate viewer from sessionStorage immediately on mount
-    // so the page doesn't wait for onAuthStateChange on reload
+  // Hydrate viewer from sessionStorage synchronously before first paint.
+  // useLayoutEffect runs after DOM mutations but before the browser paints,
+  // so the component renders with the real viewer on the very first frame —
+  // no flicker, and no SSR mismatch (useLayoutEffect is skipped on the server).
+  useLayoutEffect(() => {
     const stored = sessionStorage.getItem("freya_viewer_cache");
     if (stored) {
       try {
@@ -39,6 +39,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         if (parsed?.id) setViewer(parsed);
       } catch {}
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
 
     const fetchAndSetViewer = async (userId: string, accessToken: string) => {
       if (fetchingRef.current === userId) return;
@@ -83,9 +88,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           // Previously only called setViewer(null) which left freya_feed_cache,
           // freya_profiles_cache, freya_content_feeds_cache in sessionStorage.
           // Next login on the same tab would show the old user's feed.
+          const hadViewer = !!useAppStore.getState().viewer;
           clearAll();
 
-          if (event === "SIGNED_OUT") {
+          if (event === "SIGNED_OUT" && hadViewer) {
             window.location.href = "/login";
           }
         }

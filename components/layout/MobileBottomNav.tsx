@@ -7,11 +7,13 @@ import { useNav } from "@/lib/hooks/useNav";
 import { useUnreadConversationCount } from "@/app/(main)/messages/page";
 import { House, MessagesSquare, Search, Crown, User, AlignJustify } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
+import { useGuestGuard } from "@/lib/hooks/useGuestGuard";
 export function MobileBottomNav() {
   const pathname     = usePathname();
   const { navigate } = useNav();
   const { viewer } = useAppStore(); // add this line
   const [moreOpen, setMoreOpen] = useState(false);
+  const guard = useGuestGuard();
   const unreadCount = useUnreadConversationCount();
 
   const inChat = pathname.startsWith("/messages/");
@@ -104,7 +106,7 @@ border: "none",
   <Crown size={25} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
 </button>
 
-<button onClick={() => setMoreOpen(true)} style={btn(moreOpen)}>
+<button onClick={guard(() => setMoreOpen(true))} style={btn(moreOpen)}>
   {viewer?.avatar_url ? (
     <img
       src={viewer.avatar_url}

@@ -36,8 +36,7 @@ export function AuthModal() {
 
   const handleSuccess = useCallback(() => {
     handleClose();
-    // Refresh viewer in store
-    window.location.reload();
+    // AppStoreProvider.onAuthStateChange handles viewer update automatically
   }, [handleClose]);
 
   if (!isOpen) return null;
