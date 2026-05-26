@@ -241,7 +241,7 @@ export function usePostEngagement({
     handleDoubleTapLike:   guard(handleDoubleTapLike),
     handleToggleComment:   guard(handleToggleComment),
     closeCommentSection,
-    handleAddComment:      guard(handleAddComment),
+    handleAddComment:      (...args: Parameters<typeof handleAddComment>) => guard(handleAddComment)(...args) ?? Promise.resolve(),
     handleDeleteComment,
     handleSavePost:        guard(handleSavePost),
     handleSaveCreator:     guard(handleSaveCreator),
