@@ -35,6 +35,7 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
   const [password, setPassword]         = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading]           = useState(false);
+const [username, setUsername]         = useState("");
   const [success, setSuccess]           = useState(false);
   const [banner, setBanner]             = useState<Banner>(null);
   const [errors, setErrors]             = useState<{ identifier?: string; password?: string }>({});
@@ -59,7 +60,7 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
     }
 
     const supabase = createClient();
-    const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (loginError) {
       const msg = loginError.message.toLowerCase();
@@ -76,6 +77,8 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
       return;
     }
 
+    const { data: profile } = await supabase.from("profiles").select("username").eq("id", loginData.user?.id).single();
+    setUsername(profile?.username ?? "");
     setSuccess(true);
     setTimeout(() => onSuccess(), 1800);
   };
@@ -105,7 +108,7 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
         </button>
       </div>
 
-      {success && <SuccessOverlay message="You're logged in!" />}
+      {success && <SuccessOverlay message={`Welcome back, @${username}!`} />}
       {/* Body */}
       <div style={styles.modalBody}>
         <div>
@@ -129,7 +132,7 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
               placeholder="Email or username"
               autoComplete="username"
               value={identifier}
-              onChange={(e) => { setIdentifier(e.target.value); setErrors((p) => ({ ...p, identifier: undefined })); }}
+              onChange={(e) => { setIdentifier(e.target.value.toLowerCase()); setErrors((p) => ({ ...p, identifier: undefined })); }}
               onKeyDown={(e) => e.key === "Enter" && passwordRef.current?.focus()}
             />
             {errors.identifier && <p style={styles.fieldError}>{errors.identifier}</p>}

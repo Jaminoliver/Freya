@@ -76,7 +76,8 @@ function LoginFormInner() {
   };
 
   const updateField = (field: keyof typeof formData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    const formatted = field === "identifier" ? value.toLowerCase() : value;
+    setFormData((prev) => ({ ...prev, [field]: formatted }));
     if (fieldErrors[field as keyof FieldErrors]) {
       setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
     }

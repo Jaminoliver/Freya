@@ -228,8 +228,9 @@ export default function ProfileSettings({ onBack, saveRef, onSaveStateChange }: 
           telegram_url:  data.telegram_url  ?? "",
           facebook_url:  data.facebook_url  ?? "",
         });
-        setOriginalUsername(data.username ?? "");
-        setUsernameInput(data.username ?? "");
+        const normalizedUsername = (data.username ?? "").toLowerCase();
+        setOriginalUsername(normalizedUsername);
+        setUsernameInput(normalizedUsername);
         setAvatarUrl(data.avatar_url ?? null);
         setBannerUrl(data.banner_url ?? null);
       }
@@ -270,9 +271,10 @@ export default function ProfileSettings({ onBack, saveRef, onSaveStateChange }: 
   }, [originalUsername]);
 
   const handleUsernameChange = (value: string) => {
-    setUsernameInput(value); setUsernameStatus("idle"); setUsernameMsg(null); setSuggestions([]);
+    const formatted = value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30);
+    setUsernameInput(formatted); setUsernameStatus("idle"); setUsernameMsg(null); setSuggestions([]);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => checkUsername(value), 500);
+    debounceTimer.current = setTimeout(() => checkUsername(formatted), 500);
   };
 
   const set = (key: keyof ProfileForm, value: string) => {
