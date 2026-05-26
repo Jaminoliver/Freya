@@ -1,11 +1,13 @@
-import Link from "next/link";
+import { AuthBrandingPanel } from "@/components/auth/AuthBrandingPanel";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 
 export default function ForgotPasswordPage() {
   return (
-    <div style={{ height: "100vh", backgroundColor: "#0A0A0F", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", boxSizing: "border-box", overflow: "hidden" }}>
-      <Link href="/"><img src="/freya_logo.png" alt="Fréya" style={{ height: "85px", width: "auto", marginBottom: "32px" }} /></Link>
-      <ForgotPasswordForm />
+    <div style={{ display: "flex", backgroundColor: "#0A0A0F", height: "100vh", overflow: "hidden" }}>
+      <AuthBrandingPanel heading="Welcome Back." subtext="Your account is waiting for you." gradient={false} />
+      <div className="w-full md:w-1/2" style={{ display: "flex", flexDirection: "column", overflowY: "auto", height: "100vh" }}>
+        <ForgotPasswordForm />
+      </div>
     </div>
   );
 }

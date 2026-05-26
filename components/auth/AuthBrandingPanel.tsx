@@ -23,7 +23,9 @@ export function AuthBrandingPanel({ heading, subtext, gradient = true }: AuthBra
       className="hidden md:flex"
       style={{
         width: "50%",
-        position: "relative",
+        height: "100vh",
+        position: "sticky",
+        top: 0,
         overflow: "hidden",
         flexDirection: "column",
         justifyContent: "space-between",
