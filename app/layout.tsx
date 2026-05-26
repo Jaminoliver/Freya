@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Freya - Premium Content Platform",
+  title: "Fréya - Premium Content Platform",
   description: "Connect with your favorite creators on Freya",
   appleWebApp: {
     capable: true,
