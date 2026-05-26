@@ -9,11 +9,25 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Fréya - Premium Content Platform",
-  description: "Connect with your favorite creators on Freya",
+  description: "Connect with your favorite creators on Fréya",
+  openGraph: {
+    title: "Fréya - Premium Content Platform",
+    description: "Connect with your favorite creators on Fréya",
+    url: "https://freya-ruby.vercel.app",
+    siteName: "Fréya",
+    images: [{ url: "/freya_logo.png", width: 1280, height: 720, alt: "Fréya" }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Fréya - Premium Content Platform",
+    description: "Connect with your favorite creators on Fréya",
+    images: ["/freya_logo.png"],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Freya",
+    title: "Fréya",
   },
 };
 
