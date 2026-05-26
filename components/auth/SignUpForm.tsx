@@ -249,21 +249,21 @@ export function SignUpForm() {
 
   return (
     <div style={{ width: "390px", minHeight: "100vh", backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column", position: "relative", overflowX: "hidden" }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "#0A0A0F", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 12px" }}>
-        <span style={{ color: "#8B5CF6", fontSize: "22px", fontWeight: 800, letterSpacing: "-0.5px" }}>Freya</span>
+      <div style={{ position: "sticky", top: 0, zIndex: 10, backgroundColor: "#0A0A0F", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 12px 0" }}>
+        <img src="/freya_logo.png" alt="Fréya" style={{ height: "85px", width: "auto" }} />
         <button type="button" onClick={() => router.back()} style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: 0 }}>
           <ArrowLeft size={20} />
         </button>
       </div>
 
-      <div style={{ padding: "24px 24px 0" }}>
+      <div style={{ padding: "8px 24px 0" }}>
         <h1 style={{ margin: "0 0 8px", fontSize: "26px", fontWeight: 600, background: "linear-gradient(90deg, #8B5CF6, #EC4899)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1.25 }}>
           Own Your Content.<br />Own Your Bag.
         </h1>
         <p style={{ color: "#A3A3C2", fontSize: "14px", margin: 0, lineHeight: 1.5 }}>Join 10,000+ African creators already earning on Freya.</p>
       </div>
 
-      <div style={{ padding: "32px 24px 120px", display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div style={{ padding: "12px 24px 120px", display: "flex", flexDirection: "column", gap: "20px" }}>
         <h2 style={{ color: "#F1F5F9", fontSize: "18px", fontWeight: 500, margin: 0 }}>Create Account</h2>
 
         {/* ───── Banner ───── */}
