@@ -99,9 +99,6 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
     } catch {}
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false } });
-    // Send OTP regardless — we use signUp flow below; this just validates the code flow
-    // Actually send a proper verification using supabase OTP
     const { error: otpError } = await supabase.auth.signUp({
       email: email.trim(),
       password: Math.random().toString(36), // temp; will be replaced on submit
@@ -116,6 +113,14 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
     setCodeSent(true);
     setBanner({ type: "success", message: "Code sent! Check your inbox." });
     startLockout();
+  };
+
+  const handleVerifyCode = async () => {
+    if (!code.trim()) return;
+    const supabase = createClient();
+    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "signup" });
+    if (error) { setBanner({ type: "error", message: "Invalid or expired code." }); }
+    else { setBanner({ type: "success", message: "Email verified! Click Create Account to finish." }); }
   };
 
   const handleSubmit = async () => {
@@ -153,12 +158,24 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
       data: { account_type: "fan" },
     });
 
-    setLoading(false);
     if (updateError) {
+      setLoading(false);
       setBanner({ type: "error", message: updateError.message });
       return;
     }
 
+    // Save DOB to profile
+    const dobString = `${year}-${String(MONTHS.indexOf(month) + 1).padStart(2, "0")}-${String(parseInt(day)).padStart(2, "0")}`;
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (currentUser) {
+      await supabase.from("profiles").update({
+        date_of_birth: dobString,
+        is_age_verified: true,
+        age_verified_at: new Date().toISOString(),
+      }).eq("id", currentUser.id);
+    }
+
+    setLoading(false);
     onSuccess();
   };
 
@@ -169,6 +186,10 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
 
   return (
     <>
+      <style>{`
+        @keyframes sendPulse { 0%{transform:scale(1)} 50%{transform:scale(0.94)} 100%{transform:scale(1)} }
+        .send-btn-pulse:active { animation: sendPulse 0.2s ease; }
+      `}</style>
       {/* Header */}
       <div style={styles.modalTop}>
         <button style={styles.iconBtn} onClick={() => onNavigate(3)} aria-label="Back">
@@ -176,7 +197,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
-        <span style={styles.brand}>Fréya</span>
+        <img src="/freya_logo.png" alt="Fréya" style={{ height: "70px", width: "auto" }} />
         <button style={styles.iconBtn} onClick={onClose} aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -283,15 +304,21 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
               <input
                 style={{ ...styles.inp, flex: 1, borderColor: errors.code ? "#EF4444" : "#1F1F2A" }}
                 type="text"
-                placeholder="Enter 6-digit code"
+                placeholder="Enter 8-digit code"
                 value={code}
-                maxLength={6}
-                onChange={(e) => { setCode(e.target.value); setErrors((p) => ({ ...p, code: "" })); }}
+                maxLength={8}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCode(val);
+                  setErrors((p) => ({ ...p, code: "" }));
+                  if (val.length === 8) handleVerifyCode();
+                }}
               />
               <button
-                style={{ ...styles.sendBtn, opacity: locked || sendingCode ? 0.6 : 1 }}
+                className="send-btn-pulse"
+                style={{ ...styles.sendBtn, opacity: locked || sendingCode || !email.trim() || !validateAge() ? 0.6 : 1, transition: "all 0.15s" }}
                 onClick={handleSendCode}
-                disabled={locked || sendingCode}
+                disabled={locked || sendingCode || !email.trim() || !validateAge()}
               >
                 {sendingCode ? "Sending…" : locked ? `${countdown}s` : codeSent ? "Resend" : "Send code"}
               </button>
@@ -343,9 +370,9 @@ const styles: Record<string, React.CSSProperties> = {
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
   },
   iconBtn: { background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "8px" },
-  modalBody: { padding: "24px 24px 28px", display: "flex", flexDirection: "column", gap: "20px", maxHeight: "80vh", overflowY: "auto" },
+  modalBody: { padding: "12px 24px 28px", display: "flex", flexDirection: "column", gap: "16px", maxHeight: "80vh", overflowY: "auto" },
   heading: {
-    fontSize: "24px", fontWeight: 600, lineHeight: 1.25,
+    fontSize: "18px", fontWeight: 600, lineHeight: 1.25,
     background: "linear-gradient(90deg, #8B5CF6, #EC4899)",
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
   },
@@ -354,15 +381,15 @@ const styles: Record<string, React.CSSProperties> = {
   formStack: { display: "flex", flexDirection: "column", gap: "14px" },
   fieldLabel: { fontSize: "12px", fontWeight: 500, color: "#A3A3C2", marginBottom: "7px" },
   inp: {
-    width: "100%", padding: "15px 16px", background: "#141420", border: "1.5px solid #1F1F2A",
-    borderRadius: "10px", color: "#F1F5F9", fontSize: "15px", outline: "none",
+    width: "100%", padding: "12px 14px", background: "#141420", border: "1.5px solid #1F1F2A",
+    borderRadius: "10px", color: "#F1F5F9", fontSize: "14px", outline: "none",
     fontFamily: "'Inter', sans-serif", transition: "border-color 0.15s", boxSizing: "border-box",
   },
   inpWrap: { position: "relative" },
   eyeBtn: { position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" },
   dobRow: { display: "flex", gap: "8px" },
   dobSel: {
-    flex: 1, padding: "14px 8px", background: "#141420", border: "1.5px solid #1F1F2A",
+    flex: 1, padding: "12px 8px", background: "#141420", border: "1.5px solid #1F1F2A",
     borderRadius: "10px", color: "#F1F5F9", fontSize: "13px", outline: "none",
     appearance: "none" as const, textAlign: "center" as const, cursor: "pointer",
     fontFamily: "'Inter', sans-serif", transition: "border-color 0.15s",
@@ -377,8 +404,8 @@ const styles: Record<string, React.CSSProperties> = {
   checkRow: { display: "flex", alignItems: "flex-start", gap: "10px" },
   fieldError: { margin: "6px 2px 0", fontSize: "12px", color: "#EF4444", lineHeight: 1.4 },
   btnPrimary: {
-    width: "100%", padding: "16px", background: "#8B5CF6", border: "none",
-    borderRadius: "12px", color: "#fff", fontSize: "15px", fontWeight: 700,
+    width: "100%", padding: "11px 24px", background: "#8B5CF6", border: "none",
+    borderRadius: "10px", color: "#fff", fontSize: "14px", fontWeight: 600,
     cursor: "pointer", fontFamily: "'Inter', sans-serif",
     boxShadow: "0 4px 24px rgba(139,92,246,0.35)", transition: "background 0.15s",
   },

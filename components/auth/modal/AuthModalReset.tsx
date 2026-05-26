@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
@@ -26,7 +26,11 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
   const [countdown, setCountdown]       = useState(0);
   const [banner, setBanner]             = useState<Banner>(null);
   const [errors, setErrors]             = useState<Record<string, string>>({});
+  const [codeVerified, setCodeVerified] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
   const timerRef                        = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
   const startLockout = () => {
     setLocked(true);
@@ -65,11 +69,20 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
     }
   };
 
+  const handleVerifyCode = async () => {
+    if (!code.trim()) { setErrors((p) => ({ ...p, code: "Please enter the code" })); return; }
+    setVerifyingCode(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "recovery" });
+    setVerifyingCode(false);
+    if (error) { setBanner({ type: "error", message: "Invalid or expired code." }); }
+    else { setCodeVerified(true); setBanner({ type: "success", message: "Verified! Set your new password." }); }
+  };
+
   const handleSubmit = async () => {
     setBanner(null);
     const newErrors: Record<string, string> = {};
     if (!email.trim()) newErrors.email = "Please enter your email";
-    if (!code.trim()) newErrors.code = "Please enter the verification code";
     if (!newPassword) newErrors.newPassword = "Please enter a new password";
     if (newPassword.length < 8) newErrors.newPassword = "Password must be at least 8 characters";
     if (newPassword !== confirmPw) newErrors.confirmPw = "Passwords do not match";
@@ -78,18 +91,6 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
 
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: code.trim(),
-      type: "recovery",
-    });
-
-    if (error) {
-      setBanner({ type: "error", message: "Invalid or expired code. Please try again." });
-      setLoading(false);
-      return;
-    }
-
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     setLoading(false);
     if (updateError) {
@@ -102,6 +103,12 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
 
   return (
     <>
+      <style>{`
+        @keyframes sendPulse { 0%{transform:scale(1)} 50%{transform:scale(0.94)} 100%{transform:scale(1)} }
+        .send-btn-pulse:active { animation: sendPulse 0.2s ease; }
+        @keyframes fadeSlideDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+        .fade-slide-down { animation: fadeSlideDown 0.25s ease forwards; }
+      `}</style>
       {/* Header */}
       <div style={styles.modalTop}>
         <button style={styles.iconBtn} onClick={() => onNavigate(1)} aria-label="Back">
@@ -109,7 +116,7 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
-        <span style={styles.brand}>Fréya</span>
+        <img src="/freya_logo.png" alt="Fréya" style={{ height: "70px", width: "auto" }} />
         <button style={styles.iconBtn} onClick={onClose} aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -157,22 +164,33 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
               <input
                 style={{ ...styles.inp, flex: 1, borderColor: errors.code ? "#EF4444" : "#1F1F2A" }}
                 type="text"
-                placeholder="6-digit code"
+                placeholder="8-digit code"
                 value={code}
-                maxLength={6}
+                maxLength={8}
                 onChange={(e) => { setCode(e.target.value); setErrors((p) => ({ ...p, code: "" })); }}
               />
               <button
-                style={{ ...styles.sendBtn, opacity: locked || sendingCode ? 0.6 : 1 }}
+                className="send-btn-pulse"
+                style={{ ...styles.sendBtn, opacity: locked || sendingCode || !email.trim() ? 0.6 : 1, transition: "all 0.15s" }}
                 onClick={handleSendCode}
-                disabled={locked || sendingCode}
+                disabled={locked || sendingCode || !email.trim()}
               >
                 {sendingCode ? "Sending…" : locked ? `${countdown}s` : codeSent ? "Resend" : "Send code"}
               </button>
             </div>
             {errors.code && <p style={styles.fieldError}>{errors.code}</p>}
+            {!codeVerified && codeSent && (
+              <button
+                style={{ ...styles.btnPrimary, marginTop: "8px", opacity: verifyingCode ? 0.7 : 1 }}
+                onClick={handleVerifyCode}
+                disabled={verifyingCode}
+              >
+                {verifyingCode ? "Verifying…" : "Verify Code"}
+              </button>
+            )}
           </div>
 
+          {codeVerified && <div className="fade-slide-down" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           {/* New password */}
           <div>
             <div style={styles.fieldLabel}><span>New password</span></div>
@@ -208,14 +226,17 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
             </div>
             {errors.confirmPw && <p style={styles.fieldError}>{errors.confirmPw}</p>}
           </div>
+          </div>}
 
-          <button
-            style={{ ...styles.btnPrimary, opacity: loading ? 0.7 : 1, marginTop: "4px" }}
-            onClick={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? "Resetting…" : "Reset Password"}
-          </button>
+          {codeVerified && (
+            <button
+              style={{ ...styles.btnPrimary, opacity: loading ? 0.7 : 1, marginTop: "4px" }}
+              onClick={handleSubmit}
+              disabled={loading}
+            >
+              {loading ? "Resetting…" : "Reset Password"}
+            </button>
+          )}
         </div>
 
         <div style={styles.footerLinks}>
@@ -249,9 +270,9 @@ const styles: Record<string, React.CSSProperties> = {
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
   },
   iconBtn: { background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "8px" },
-  modalBody: { padding: "24px 24px 28px", display: "flex", flexDirection: "column", gap: "20px" },
+  modalBody: { padding: "12px 24px 28px", display: "flex", flexDirection: "column", gap: "16px" },
   heading: {
-    fontSize: "24px", fontWeight: 600, lineHeight: 1.25,
+    fontSize: "18px", fontWeight: 600, lineHeight: 1.25,
     background: "linear-gradient(90deg, #8B5CF6, #EC4899)",
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
   },
@@ -260,8 +281,8 @@ const styles: Record<string, React.CSSProperties> = {
   formStack: { display: "flex", flexDirection: "column", gap: "14px" },
   fieldLabel: { fontSize: "12px", fontWeight: 500, color: "#A3A3C2", marginBottom: "7px" },
   inp: {
-    width: "100%", padding: "15px 16px", background: "#141420", border: "1.5px solid #1F1F2A",
-    borderRadius: "10px", color: "#F1F5F9", fontSize: "15px", outline: "none",
+    width: "100%", padding: "12px 14px", background: "#141420", border: "1.5px solid #1F1F2A",
+    borderRadius: "10px", color: "#F1F5F9", fontSize: "14px", outline: "none",
     fontFamily: "'Inter', sans-serif", transition: "border-color 0.15s", boxSizing: "border-box",
   },
   inpWrap: { position: "relative" },
@@ -275,8 +296,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   fieldError: { margin: "6px 2px 0", fontSize: "12px", color: "#EF4444", lineHeight: 1.4 },
   btnPrimary: {
-    width: "100%", padding: "16px", background: "#8B5CF6", border: "none",
-    borderRadius: "12px", color: "#fff", fontSize: "15px", fontWeight: 700,
+    width: "100%", padding: "11px 24px", background: "#8B5CF6", border: "none",
+    borderRadius: "10px", color: "#fff", fontSize: "14px", fontWeight: 600,
     cursor: "pointer", fontFamily: "'Inter', sans-serif",
     boxShadow: "0 4px 24px rgba(139,92,246,0.35)", transition: "background 0.15s",
   },

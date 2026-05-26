@@ -95,7 +95,7 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
-        <span style={styles.brand}>Fréya</span>
+        <img src="/freya_logo.png" alt="Fréya" style={{ height: "70px", width: "auto" }} />
         <button style={styles.iconBtn} onClick={onClose} aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -206,9 +206,9 @@ const styles: Record<string, React.CSSProperties> = {
     background: "none", border: "none", cursor: "pointer", color: "#A3A3C2",
     display: "flex", alignItems: "center", padding: "4px", borderRadius: "8px",
   },
-  modalBody: { padding: "24px 24px 28px", display: "flex", flexDirection: "column", gap: "20px" },
+  modalBody: { padding: "12px 24px 28px", display: "flex", flexDirection: "column", gap: "16px" },
   heading: {
-    fontSize: "24px", fontWeight: 600, lineHeight: 1.25,
+    fontSize: "18px", fontWeight: 600, lineHeight: 1.25,
     background: "linear-gradient(90deg, #8B5CF6, #EC4899)",
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
   },
@@ -220,9 +220,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "12px", fontWeight: 500, color: "#A3A3C2", marginBottom: "7px",
   },
   inp: {
-    width: "100%", padding: "15px 16px", background: "#141420",
+    width: "100%", padding: "12px 14px", background: "#141420",
     border: "1.5px solid #1F1F2A", borderRadius: "10px", color: "#F1F5F9",
-    fontSize: "15px", outline: "none", fontFamily: "'Inter', sans-serif",
+    fontSize: "14px", outline: "none", fontFamily: "'Inter', sans-serif",
     transition: "border-color 0.15s", boxSizing: "border-box",
   },
   inpWrap: { position: "relative" },
@@ -233,8 +233,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   fieldError: { margin: "6px 2px 0", fontSize: "12px", color: "#EF4444", lineHeight: 1.4 },
   btnPrimary: {
-    width: "100%", padding: "16px", background: "#8B5CF6", border: "none",
-    borderRadius: "12px", color: "#fff", fontSize: "15px", fontWeight: 700,
+    width: "100%", padding: "11px 24px", background: "#8B5CF6", border: "none",
+    borderRadius: "10px", color: "#fff", fontSize: "14px", fontWeight: 600,
     cursor: "pointer", fontFamily: "'Inter', sans-serif",
     boxShadow: "0 4px 24px rgba(139,92,246,0.35)", transition: "background 0.15s", marginTop: "4px",
   },
@@ -243,7 +243,7 @@ const styles: Record<string, React.CSSProperties> = {
   dividerLabel: { fontSize: "12px", color: "#6B6B8A" },
   btnSecondary: {
     width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-    gap: "10px", padding: "14px 16px", background: "#141420",
+    gap: "10px", padding: "12px 16px", background: "#141420",
     border: "1.5px solid #1F1F2A", borderRadius: "10px", color: "#F1F5F9",
     fontSize: "14px", fontWeight: 500, cursor: "pointer",
     fontFamily: "'Inter', sans-serif", transition: "border-color 0.15s",

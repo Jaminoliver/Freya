@@ -24,6 +24,7 @@ import { useViewer } from "@/lib/hooks/useViewer";
 import { useRelativeTimestamp } from "@/lib/hooks/useRelativeTimestamp";
 import { usePostEngagement } from "@/lib/hooks/usePostEngagement";
 import { createClient } from "@/lib/supabase/client";
+import { useAppStore } from "@/lib/store/appStore";
 
 import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
@@ -123,6 +124,7 @@ function PostCardInner({
   const { navigate } = useNav();
   const router  = useRouter();
   const viewer  = useViewer();
+  const openAuthModal = useAppStore((s) => s.openAuthModal);
 
   const { group: storyGroup, hasUnviewed, refresh } = useCreatorStory(post.creator.id);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
@@ -220,6 +222,7 @@ function PostCardInner({
 
   const handleSubscribeBannerClick = useCallback(async () => {
     if (subscribed) return;
+    if (!viewer) { openAuthModal(); return; }
     // Free subscribe/resubscribe — no checkout needed
     if (isFree) {
       setFreeSubbing(true);
@@ -320,9 +323,9 @@ function PostCardInner({
         loading={isLoading}
         onClick={handleSubscribeBannerClick}
       />
-      {subscribed && moreButton}
+      {subscribed && viewer && moreButton}
     </>
-  ) : moreButton;
+  ) : viewer ? moreButton : null;
 
   // "· Free" inline suffix only shown when there's a pill AND creator is free
   const freeSuffix = undefined;
@@ -471,7 +474,7 @@ function PostCardInner({
             likes={engagement.likeCount} comments={engagement.commentCount} liked={engagement.liked}
             bookmarked={engagement.savedPost} isSubscribed={true} isOwnProfile={false}
             onLike={engagement.handleLike} onComment={engagement.handleToggleComment}
-            onTip={() => setTipOpen(true)} onBookmark={engagement.handleSavePost}
+            onTip={() => { if (!viewer) { openAuthModal(); return; } setTipOpen(true); }} onBookmark={engagement.handleSavePost}
           />
           <CommentSection
             postId={post.id} comments={engagement.comments}

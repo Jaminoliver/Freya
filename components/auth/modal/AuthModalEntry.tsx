@@ -29,7 +29,7 @@ export function AuthModalEntry({ onNavigate, onClose }: Props) {
     <>
       {/* Header */}
       <div style={styles.modalTop}>
-        <span style={styles.brand}>Fréya</span>
+        <img src="/freya_logo.png" alt="Fréya" style={{ height: "80px", width: "auto", marginLeft: "-8px" }} />
         <button style={styles.iconBtn} onClick={onClose} aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -40,7 +40,6 @@ export function AuthModalEntry({ onNavigate, onClose }: Props) {
       {/* Body */}
       <div style={styles.modalBody}>
         <div>
-          <p style={styles.heading}>Welcome back.</p>
           <p style={styles.subtext}>Log in to continue on Fréya.</p>
         </div>
 

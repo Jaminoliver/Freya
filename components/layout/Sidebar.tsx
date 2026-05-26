@@ -41,7 +41,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const { navigate } = useNav();
 
-  const viewer   = useAppStore((s) => s.viewer);
+  const viewer        = useAppStore((s) => s.viewer);
+  const openAuthModal = useAppStore((s) => s.openAuthModal);
   const username = viewer?.username ?? null;
 
   const unreadMessageCount      = useUnreadConversationCount();
@@ -73,8 +74,9 @@ export function Sidebar() {
             const isMsg   = href === "/messages";
             const isNotif = href === "/notifications";
             const badge   = isMsg ? unreadMessageCount : isNotif ? unreadNotificationCount : 0;
+            const isPublic = href === "/dashboard";
             return (
-              <button key={href} onClick={() => handleNav(href)}
+              <button key={href} onClick={() => isPublic ? handleNav(href) : guard(() => handleNav(href))()}
                 style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", background: active ? "#1E1E2E" : "none", border: "none", cursor: "pointer", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease", width: "100%", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
                 onMouseEnter={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "#1A1A2E"; e.currentTarget.style.color = "#F1F5F9"; }}}
                 onMouseLeave={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; }}}
@@ -90,7 +92,7 @@ export function Sidebar() {
             const href   = `/${username}`;
             const active = isActive(href);
             return (
-              <button onClick={() => handleNav(href)}
+              <button onClick={guard(() => handleNav(href))}
                 style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderRadius: "12px", background: active ? "#1E1E2E" : "none", border: "none", cursor: "pointer", color: active ? "#8B5CF6" : "#A3A3C2", fontSize: "16px", fontWeight: active ? 600 : 400, transition: "all 0.15s ease", width: "100%", textAlign: "left", fontFamily: "'Inter', sans-serif" }}
                 onMouseEnter={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "#1A1A2E"; e.currentTarget.style.color = "#F1F5F9"; }}}
                 onMouseLeave={(e) => { if (!active) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#A3A3C2"; }}}
@@ -110,6 +112,14 @@ export function Sidebar() {
             More
           </button>
 
+          {!viewer && (
+            <button
+              onClick={() => openAuthModal()}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "13px 16px", borderRadius: "30px", border: "1.5px solid #1F1F2A", cursor: "pointer", background: "#141420", color: "#F1F5F9", fontSize: "15px", fontWeight: 500, marginTop: "16px", fontFamily: "'Inter', sans-serif" }}
+            >
+              Log in
+            </button>
+          )}
           {viewer?.role === "creator" && <button onClick={() => handleNav("/create")}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "13px 16px", borderRadius: "30px", border: "none", cursor: "pointer", background: "linear-gradient(to right, #8B5CF6, #EC4899)", color: "#fff", fontSize: "15px", fontWeight: 700, marginTop: "16px", transition: "opacity 0.15s ease", fontFamily: "'Inter', sans-serif" }}
             onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}

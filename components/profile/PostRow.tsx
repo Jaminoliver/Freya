@@ -19,6 +19,7 @@ import EditPPVModal from "@/components/profile/EditPPVModal";
 import { PollDisplay } from "@/components/feed/PollDisplay";
 
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
+import { useAppStore } from "@/lib/store/appStore";
 import { createClient } from "@/lib/supabase/client";
 import { useRelativeTimestamp } from "@/lib/hooks/useRelativeTimestamp";
 import { usePostEngagement } from "@/lib/hooks/usePostEngagement";
@@ -91,6 +92,7 @@ export default function PostRow({
   onPPVUpdated?: (id: string, priceKobo: number) => void;
 }) {
   const router = useRouter();
+  const openAuthModal = useAppStore((s) => s.openAuthModal);
 
   const { group: storyGroup, hasStory, hasUnviewed, refresh } = useCreatorStory(
     isOwnProfile ? undefined : post.profiles?.id
@@ -200,6 +202,7 @@ export default function PostRow({
 
   const handleOpenMoreMenu = () => {
     if (isOwnProfile) setCreatorSheetOpen(true);
+    else if (!viewer) { openAuthModal(); return; }
     else handleOpenFanSheet();
   };
 

@@ -79,7 +79,7 @@ border: "none",
   <House size={25} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
 </button>
 
-       <button onClick={() => navigate("/messages")} style={{ ...btn(pathname === "/messages"), position: "relative" }}>
+       <button onClick={guard(() => navigate("/messages"))} style={{ ...btn(pathname === "/messages"), position: "relative" }}>
   <div style={{ position: "relative", display: "inline-flex" }}>
     <MessagesSquare size={25} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
     {unreadCount > 0 && (
@@ -102,7 +102,7 @@ border: "none",
 
 </button>
 
-<button onClick={() => navigate("/subscriptions")} style={btn(pathname === "/subscriptions")}>
+<button onClick={guard(() => navigate("/subscriptions"))} style={btn(pathname === "/subscriptions")}>
   <Crown size={25} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
 </button>
 

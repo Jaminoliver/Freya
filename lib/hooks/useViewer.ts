@@ -68,7 +68,17 @@ export function fetchViewer(): Promise<Viewer | null> {
 }
 
 export function useViewer() {
-  const [viewer, setViewer] = useState<Viewer | null>(cachedViewer);
+  const [viewer, setViewer] = useState<Viewer | null>(() => {
+    if (cachedViewer) return cachedViewer;
+    // Fast path: read from appStore sessionStorage before Supabase resolves
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = sessionStorage.getItem("freya_viewer_cache");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed?.id ? parsed as Viewer : null;
+    } catch { return null; }
+  });
 
   useEffect(() => {
     if (cachedViewer) { setViewer(cachedViewer); return; }

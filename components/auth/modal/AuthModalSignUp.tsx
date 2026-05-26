@@ -29,7 +29,7 @@ export function AuthModalSignUp({ onNavigate, onClose }: Props) {
     <>
       {/* Header */}
       <div style={styles.modalTop}>
-        <span style={styles.brand}>Fréya</span>
+        <img src="/freya_logo.png" alt="Fréya" style={{ height: "70px", width: "auto" }} />
         <button style={styles.iconBtn} onClick={onClose} aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -83,9 +83,9 @@ const styles: Record<string, React.CSSProperties> = {
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
   },
   iconBtn: { background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "8px" },
-  modalBody: { padding: "24px 24px 28px", display: "flex", flexDirection: "column", gap: "20px" },
+  modalBody: { padding: "12px 24px 28px", display: "flex", flexDirection: "column", gap: "16px" },
   heading: {
-    fontSize: "24px", fontWeight: 600, lineHeight: 1.25,
+    fontSize: "18px", fontWeight: 600, lineHeight: 1.25,
     background: "linear-gradient(90deg, #8B5CF6, #EC4899)",
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
   },
@@ -93,7 +93,7 @@ const styles: Record<string, React.CSSProperties> = {
   formStack: { display: "flex", flexDirection: "column", gap: "14px" },
   btnSecondary: {
     width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-    gap: "10px", padding: "14px 16px", background: "#141420",
+    gap: "10px", padding: "12px 16px", background: "#141420",
     border: "1.5px solid #1F1F2A", borderRadius: "10px", color: "#F1F5F9",
     fontSize: "14px", fontWeight: 500, cursor: "pointer",
     fontFamily: "'Inter', sans-serif", transition: "border-color 0.15s",

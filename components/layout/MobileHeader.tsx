@@ -213,6 +213,7 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
   const { navigate } = useNav();
   const router = useRouter();
   const { viewer } = useAppStore();
+  const openAuthModal = useAppStore((s) => s.openAuthModal);
   const isCreator = viewer?.role === "creator";
   useEffect(() => { router.prefetch("/create"); }, [router]);
 
@@ -349,7 +350,19 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
       >
         {/* Default bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
-  {isCreator ? (
+  {!viewer ? (
+    <button
+      onClick={() => openAuthModal()}
+      style={{
+        background: "#141420", border: "1.5px solid #1F1F2A",
+        borderRadius: "10px", padding: "7px 14px", cursor: "pointer",
+        color: "#F1F5F9", fontSize: "13px", fontWeight: 500,
+        fontFamily: "'Inter', sans-serif",
+      }}
+    >
+      Login
+    </button>
+  ) : isCreator ? (
     <div style={{ position: "relative" }}>
       <button onClick={() => setPlusOpen((o) => !o)} aria-label="Create" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
         <Plus size={23} strokeWidth={1.8} />
@@ -384,7 +397,7 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
     <button onClick={() => setSearchOpen(true)} aria-label="Search" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px" }}>
       <Search size={23} strokeWidth={1.8} />
     </button>
-    <button onClick={() => navigate("/notifications")} aria-label="Notifications" style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
+    <button onClick={() => { if (!viewer) { openAuthModal(); return; } navigate("/notifications"); }} aria-label="Notifications" style={{ display: "flex", alignItems: "center", padding: "8px", borderRadius: "8px", color: isActive("/notifications") ? "#8B5CF6" : "#A3A3C2", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
       <Bell size={23} strokeWidth={1.8} />
       {unreadNotificationCount > 0 && (
         <span style={{ position: "absolute", top: "6px", right: "6px", minWidth: "14px", height: "14px", borderRadius: "7px", backgroundColor: "#EF4444", color: "#FFFFFF", fontSize: "9px", fontWeight: 700, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", boxShadow: "0 0 0 1.5px #13131F" }}>

@@ -27,21 +27,15 @@ export default function PostActions({
   isSubscribed, isFree = false, isOwnProfile = false,
   onLike, onComment, onTip, onBookmark, onTipDetails,
 }: PostActionsProps) {
-  const [bookmarked, setBookmarked] = React.useState(bookmarkedProp);
+  const bookmarked = bookmarkedProp;
 
-  React.useEffect(() => {
-    setBookmarked(bookmarkedProp);
-  }, [bookmarkedProp]);
-
-  const canLike = isSubscribed || isOwnProfile || isFree;
+  // canLike removed — guard handled by parent
 
   const handleLike = () => {
-    if (!canLike) return;
     onLike?.();
   };
 
   const handleBookmark = () => {
-    setBookmarked(!bookmarked);
     onBookmark?.();
   };
 
@@ -71,7 +65,7 @@ export default function PostActions({
         {/* Like */}
         <button
           onClick={handleLike}
-          title={canLike ? "Like" : "Subscribe to like"}
+          
           style={{
   display: "flex", alignItems: "center", gap: "6px",
   background: "none", border: "none", padding: 0,

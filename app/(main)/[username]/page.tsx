@@ -109,7 +109,9 @@ function ProfilePageInner() {
     return "unsubscribedCreator";
   }, [viewer, profile, isSubscribed]);
 
+  const openAuthModal = useAppStore((s) => s.openAuthModal);
   const openCheckout = (type: CheckoutType, tier: SubscriptionTier = "monthly") => {
+    if (!viewer) { openAuthModal(); return; }
     setCheckoutType(type);
     setCheckoutTier(tier);
     setCheckoutOpen(true);
@@ -500,6 +502,7 @@ function ProfilePageInner() {
   }, [profile, fetchSubscriptionStatus, refreshPosts, username, clearProfile, updateProfile]);
 
   const handleFollow = async () => {
+    if (!viewer) { openAuthModal(); return; }
     if (!profile || followLoading) return;
     setFollowLoading(true);
     try {
