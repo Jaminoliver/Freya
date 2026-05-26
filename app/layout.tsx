@@ -40,6 +40,8 @@ export default function RootLayout({
 
         {/* Theme color for Safari status bar */}
         <meta name="theme-color" content="#0A0A0F" />
+        <meta name="apple-mobile-web-app-title" content="Fréya" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon.png" />
       </head>
       <body className={inter.className}>
         {children}
