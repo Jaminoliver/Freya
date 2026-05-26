@@ -40,6 +40,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
   const [showPw, setShowPw]         = useState(false);
   const [showConf, setShowConf]     = useState(false);
   const [loading, setLoading]       = useState(false);
+  const [success, setSuccess]       = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [codeSent, setCodeSent]     = useState(false);
   const [locked, setLocked]         = useState(false);
@@ -176,7 +177,8 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
     }
 
     setLoading(false);
-    window.location.reload();
+    setSuccess(true);
+    setTimeout(() => window.location.reload(), 1800);
   };
 
   const selStyle = (hasError?: boolean): React.CSSProperties => ({
@@ -205,6 +207,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
         </button>
       </div>
 
+      {success && <SuccessOverlay message="Account created!" />}
       {/* Body */}
       <div style={styles.modalBody}>
         <div>
@@ -414,3 +417,31 @@ const styles: Record<string, React.CSSProperties> = {
   terms: { fontSize: "11px", color: "#6B6B8A", textAlign: "center", lineHeight: 1.6 },
   termsLink: { color: "#8B5CF6", cursor: "pointer" },
 };
+
+function SuccessOverlay({ message }: { message: string }) {
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 10,
+      background: "#0A0A0F", borderRadius: "16px",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "48px 24px", gap: "16px",
+    }}>
+      <style>{`
+        @keyframes successCheck { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes successFade  { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+      `}</style>
+      <div style={{
+        width: "64px", height: "64px", borderRadius: "50%",
+        background: "linear-gradient(135deg, #22C55E, #16A34A)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        animation: "successCheck 0.5s ease-out forwards",
+      }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <p style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "#FFFFFF", animation: "successFade 0.4s ease-out 0.3s forwards", opacity: 0 }}>{message}</p>
+    </div>
+  );
+}

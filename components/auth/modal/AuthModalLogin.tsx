@@ -35,6 +35,7 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
   const [password, setPassword]         = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading]           = useState(false);
+  const [success, setSuccess]           = useState(false);
   const [banner, setBanner]             = useState<Banner>(null);
   const [errors, setErrors]             = useState<{ identifier?: string; password?: string }>({});
   const identifierRef                   = useRef<HTMLInputElement>(null);
@@ -75,7 +76,8 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
       return;
     }
 
-    onSuccess();
+    setSuccess(true);
+    setTimeout(() => onSuccess(), 1800);
   };
 
   const handleGoogle = async () => {
@@ -103,6 +105,7 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
         </button>
       </div>
 
+      {success && <SuccessOverlay message="You're logged in!" />}
       {/* Body */}
       <div style={styles.modalBody}>
         <div>
@@ -186,7 +189,7 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
         </div>
 
         <div style={styles.footerLinks}>
-          <button style={styles.lnkMuted} onClick={() => onNavigate(3)}>Sign up for Fréya</button>
+          <button style={{ ...styles.lnkMuted, color: "#8B5CF6", fontWeight: 500 }} onClick={() => onNavigate(3)}>Sign up for Fréya</button>
         </div>
       </div>
     </>
@@ -260,3 +263,31 @@ const styles: Record<string, React.CSSProperties> = {
   terms: { fontSize: "11px", color: "#6B6B8A", textAlign: "center", lineHeight: 1.6 },
   termsLink: { color: "#8B5CF6", cursor: "pointer" },
 };
+
+function SuccessOverlay({ message }: { message: string }) {
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 10,
+      background: "#0A0A0F", borderRadius: "16px",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "48px 24px", gap: "16px",
+    }}>
+      <style>{`
+        @keyframes successCheck { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes successFade  { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+      `}</style>
+      <div style={{
+        width: "64px", height: "64px", borderRadius: "50%",
+        background: "linear-gradient(135deg, #22C55E, #16A34A)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        animation: "successCheck 0.5s ease-out forwards",
+      }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <p style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "#FFFFFF", animation: "successFade 0.4s ease-out 0.3s forwards", opacity: 0 }}>{message}</p>
+    </div>
+  );
+}

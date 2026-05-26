@@ -28,6 +28,7 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
   const [errors, setErrors]             = useState<Record<string, string>>({});
   const [codeVerified, setCodeVerified] = useState(false);
   const [verifyingCode, setVerifyingCode] = useState(false);
+  const [success, setSuccess]             = useState(false);
   const timerRef                        = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
@@ -96,8 +97,8 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
     if (updateError) {
       setBanner({ type: "error", message: updateError.message });
     } else {
-      setBanner({ type: "success", message: "Password reset! You can now log in." });
-      setTimeout(() => onNavigate(1), 1500);
+      setSuccess(true);
+      setTimeout(() => onNavigate(1), 1800);
     }
   };
 
@@ -124,6 +125,7 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
         </button>
       </div>
 
+      {success && <SuccessOverlay message="Password reset!" />}
       {/* Body */}
       <div style={styles.modalBody}>
         <div>
@@ -202,7 +204,7 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
                 value={newPassword}
                 onChange={(e) => { setNewPassword(e.target.value); setErrors((p) => ({ ...p, newPassword: "" })); }}
               />
-              <button style={styles.eyeBtn} onClick={() => setShowNewPw(!showNewPw)} aria-label="Toggle">
+              <button style={styles.eyeBtn} onMouseDown={(e) => e.preventDefault()} onClick={() => setShowNewPw(!showNewPw)} aria-label="Toggle">
                 <EyeIcon show={showNewPw} />
               </button>
             </div>
@@ -220,7 +222,7 @@ export function AuthModalReset({ onNavigate, onClose }: Props) {
                 value={confirmPw}
                 onChange={(e) => { setConfirmPw(e.target.value); setErrors((p) => ({ ...p, confirmPw: "" })); }}
               />
-              <button style={styles.eyeBtn} onClick={() => setShowConfPw(!showConfPw)} aria-label="Toggle">
+              <button style={styles.eyeBtn} onMouseDown={(e) => e.preventDefault()} onClick={() => setShowConfPw(!showConfPw)} aria-label="Toggle">
                 <EyeIcon show={showConfPw} />
               </button>
             </div>
@@ -304,3 +306,31 @@ const styles: Record<string, React.CSSProperties> = {
   footerLinks: { display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" },
   lnk: { color: "#8B5CF6", background: "none", border: "none", cursor: "pointer", fontSize: "13px", fontFamily: "'Inter', sans-serif", fontWeight: 500 },
 };
+
+function SuccessOverlay({ message }: { message: string }) {
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 10,
+      background: "#0A0A0F", borderRadius: "16px",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "48px 24px", gap: "16px",
+    }}>
+      <style>{`
+        @keyframes successCheck { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes successFade  { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+      `}</style>
+      <div style={{
+        width: "64px", height: "64px", borderRadius: "50%",
+        background: "linear-gradient(135deg, #22C55E, #16A34A)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        animation: "successCheck 0.5s ease-out forwards",
+      }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <p style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "#FFFFFF", animation: "successFade 0.4s ease-out 0.3s forwards", opacity: 0 }}>{message}</p>
+    </div>
+  );
+}

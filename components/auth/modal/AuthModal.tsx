@@ -76,6 +76,7 @@ export function AuthModal() {
             borderRadius: "16px",
             overflow: "hidden",
             pointerEvents: "auto",
+            position: "relative",
             fontFamily: "'Inter', sans-serif",
             animation: "slideUp 0.2s ease",
           }}
