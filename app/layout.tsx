@@ -15,14 +15,14 @@ export const metadata: Metadata = {
     description: "Connect with your favorite creators on Fréya",
     url: "https://freya-ruby.vercel.app",
     siteName: "Fréya",
-    images: [{ url: "/freya_logo.png", width: 1280, height: 720, alt: "Fréya" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Fréya" }],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "Fréya - Premium Content Platform",
     description: "Connect with your favorite creators on Fréya",
-    images: ["/freya_logo.png"],
+    images: ["/og-image.png"],
   },
   appleWebApp: {
     capable: true,
