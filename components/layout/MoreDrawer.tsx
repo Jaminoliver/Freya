@@ -22,7 +22,7 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
     setLoggingOut(true);
     try {
       const supabase = createClient();
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "global" });
     } catch (err) {
       console.error("[MoreDrawer] Logout failed:", err);
       setLoggingOut(false);
