@@ -176,7 +176,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
     }
 
     setLoading(false);
-    onSuccess();
+    window.location.reload();
   };
 
   const selStyle = (hasError?: boolean): React.CSSProperties => ({

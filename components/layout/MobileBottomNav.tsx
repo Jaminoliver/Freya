@@ -5,7 +5,7 @@ import { useState } from "react";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useNav } from "@/lib/hooks/useNav";
 import { useUnreadConversationCount } from "@/app/(main)/messages/page";
-import { House, MessagesSquare, Search, Crown, User, AlignJustify } from "lucide-react";
+import { House, MessagesSquare, Search, Crown, AlignJustify } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useGuestGuard } from "@/lib/hooks/useGuestGuard";
 export function MobileBottomNav() {
@@ -107,15 +107,27 @@ border: "none",
 </button>
 
 <button onClick={guard(() => setMoreOpen(true))} style={btn(moreOpen)}>
-  {viewer?.avatar_url ? (
-    <img
-      src={viewer.avatar_url}
-      alt="profile"
-      style={{
+  {viewer ? (
+    viewer.avatar_url ? (
+      <img
+        src={viewer.avatar_url}
+        alt="profile"
+        style={{
+          width: "26px", height: "26px", borderRadius: "50%", objectFit: "cover",
+          border: moreOpen ? "2px solid #A78BFA" : "2px solid #8888AA",
+        }}
+      />
+    ) : (
+      <div style={{
         width: "26px", height: "26px", borderRadius: "50%", objectFit: "cover",
         border: moreOpen ? "2px solid #A78BFA" : "2px solid #8888AA",
-      }}
-    />
+        background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "11px", fontWeight: 700, color: "#fff",
+      }}>
+        {(viewer.display_name || viewer.username)?.[0]?.toUpperCase()}
+      </div>
+    )
   ) : (
     <AlignJustify size={25} strokeWidth={1.8} />
   )}
