@@ -124,6 +124,6 @@ export function useSubscriptionActions(s: Subscription, onRefresh?: () => void, 
     toggleFavourite:    guard(toggleFavourite),
     toggleAutoRenew:    guard(toggleAutoRenew),
     freeResubscribe:    guard(freeResubscribe),
-    cancelSubscription: guard(cancelSubscription),
+    cancelSubscription: (...args: Parameters<typeof cancelSubscription>) => guard(cancelSubscription)(...args) ?? Promise.resolve(false),
   };
 }
