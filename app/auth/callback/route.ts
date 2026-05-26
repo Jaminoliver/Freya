@@ -28,11 +28,16 @@ async function ensureProfile(
     if (!existing) {
       const fullName = (user.user_metadata?.full_name as string) ?? user.email ?? 'user'
       const username = generateUsername(fullName)
+      const avatarUrl = (user.user_metadata?.avatar_url as string) ?? null
+      const isEmailVerified = user.user_metadata?.email_verified === true || user.user_metadata?.email_verified === 'true'
       const { error: insertError } = await supabase.from('profiles').insert({
         id: user.id,
         role: 'fan',
         username,
         display_name: fullName,
+        avatar_url: avatarUrl,
+        is_email_verified: isEmailVerified,
+        email_verified_at: isEmailVerified ? new Date().toISOString() : null,
       })
 
       if (insertError) {
