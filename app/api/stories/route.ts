@@ -132,7 +132,11 @@ export async function GET(req: NextRequest) {
 
     // Split into unviewed / viewed buckets, each sorted by latestStoryAt desc (most recent first)
     for (const group of Object.values(groupMap) as any[]) {
-      group.items.sort((a: any, b: any) => a.displayOrder - b.displayOrder);
+      group.items.sort((a: any, b: any) => {
+        const timeDiff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.displayOrder - b.displayOrder;
+      });
     }
     const allGroups = Object.values(groupMap) as any[];
     const unviewed  = allGroups.filter((g) =>  g.hasUnviewed).sort((a, b) => b.latestStoryAt.localeCompare(a.latestStoryAt));

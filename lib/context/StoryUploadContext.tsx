@@ -19,7 +19,7 @@ export type StoryUploadPhase =
 
 export interface UploadJob {
   files:     File[];
-  caption:   string;
+  captions:  string[];
   mediaType: "photo" | "video" | "mixed";
   clipStart: number;
   clipEnd:   number;
@@ -162,18 +162,19 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
       let photoStoryIds: number[] = [];
       if (photos.length > 0) {
         patch({ uploadPct: 10 });
-        const photoResults = await Promise.all(photos.map((photo) => {
+        const photoResults: any[] = [];
+        for (const photo of photos) {
           const fileIdx = job.files.indexOf(photo);
           const cta = job.ctaData?.[fileIdx] ?? null;
           const fd = new FormData();
           fd.append("file", photo);
           fd.append("mediaType", "photo");
-          if (job.caption) fd.append("caption", job.caption);
+          if (job.captions?.[fileIdx]) fd.append("caption", job.captions[fileIdx]);
           if (cta?.ctaType) fd.append("ctaType", cta.ctaType);
           if (cta?.ctaMessage) fd.append("ctaMessage", cta.ctaMessage);
           if (cta?.ctaPositionY != null) fd.append("ctaPositionY", String(cta.ctaPositionY));
           fd.append("displayOrder", String(fileIdx));
-          return new Promise<any>((resolve, reject) => {
+          const result = await new Promise<any>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.upload.onprogress = (e) => {
               if (!e.lengthComputable || cancelledRef.current) return;
@@ -194,7 +195,8 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
             xhr.open("POST", "/api/stories/init");
             xhr.send(fd);
           });
-        }));
+          photoResults.push(result);
+        }
 
         if (cancelledRef.current) return;
         photoStoryIds = photoResults.map((d) => d.storyId).filter(Boolean);
@@ -222,7 +224,7 @@ export function StoryUploadProvider({ children }: { children: React.ReactNode })
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({
             mediaType:    "video",
-            caption:      job.caption,
+            caption:      job.captions?.[job.files.findIndex(f => f.type.startsWith("video/"))] ?? "",
             ctaType:      job.ctaData?.[job.files.findIndex(f => f.type.startsWith("video/"))]?.ctaType      ?? null,
             ctaMessage:   job.ctaData?.[job.files.findIndex(f => f.type.startsWith("video/"))]?.ctaMessage   ?? null,
             ctaPositionY: job.ctaData?.[job.files.findIndex(f => f.type.startsWith("video/"))]?.ctaPositionY ?? 0.75,

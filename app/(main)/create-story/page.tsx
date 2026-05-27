@@ -126,8 +126,8 @@ export default function CreateStoryPage() {
             setCtaTypeForSlide={state.setCtaTypeForSlide}
             setCtaMessageForSlide={state.setCtaMessageForSlide}
             setCtaPositionForSlide={state.setCtaPositionForSlide}
-            caption={state.caption}
-            setCaption={state.setCaption}
+            getCaptionForSlide={state.getCaptionForSlide}
+            setCaptionForSlide={state.setCaptionForSlide}
             captionFocus={state.captionFocus}
             setCaptionFocus={state.setCaptionFocus}
             isMuted={state.isMuted}

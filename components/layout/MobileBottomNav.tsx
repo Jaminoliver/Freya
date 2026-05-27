@@ -113,13 +113,13 @@ border: "none",
         src={viewer.avatar_url}
         alt="profile"
         style={{
-          width: "26px", height: "26px", borderRadius: "50%", objectFit: "cover",
+          width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover",
           border: moreOpen ? "2px solid #A78BFA" : "2px solid #8888AA",
         }}
       />
     ) : (
       <div style={{
-        width: "26px", height: "26px", borderRadius: "50%", objectFit: "cover",
+        width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover",
         border: moreOpen ? "2px solid #A78BFA" : "2px solid #8888AA",
         background: "linear-gradient(135deg, #8B5CF6, #EC4899)",
         display: "flex", alignItems: "center", justifyContent: "center",

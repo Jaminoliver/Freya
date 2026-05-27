@@ -16,7 +16,8 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
   const [duration,     setDuration]     = useState(0);
   const [currentTime,  setCurrentTime]  = useState(0);
   const [preview,      setPreview]      = useState<string | null>(null);
-  const [picked,       setPicked]       = useState(false);
+  const [showSaved,    setShowSaved]    = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [aspectRatio,  setAspectRatio]  = useState<string>("16/9");
   const [isPortrait,   setIsPortrait]   = useState(false);
 
@@ -26,31 +27,9 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  const captureFrame = useCallback(() => {
-    const video  = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return null;
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.95);
-  }, []);
+  
 
   const handleSeeked = useCallback(() => {
-    const frame = captureFrame();
-    if (frame) setPreview(frame);
-  }, [captureFrame]);
-
-  const handleScrub = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const t = parseFloat(e.target.value);
-    setCurrentTime(t);
-    setPicked(false);
-    if (videoRef.current) videoRef.current.currentTime = t;
-  }, []);
-
-  const handlePick = useCallback(() => {
     const video  = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
@@ -61,11 +40,25 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
     setPreview(dataUrl);
-    setPicked(true);
     canvas.toBlob((blob) => {
       if (blob) onPicked(blob, dataUrl);
     }, "image/jpeg", 0.95);
   }, [onPicked]);
+
+  const handleScrub = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const t = parseFloat(e.target.value);
+    setCurrentTime(t);
+    setShowSaved(false);
+    if (videoRef.current) videoRef.current.currentTime = t;
+  }, []);
+
+  const handleScrubEnd = useCallback(() => {
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    setShowSaved(true);
+    savedTimer.current = setTimeout(() => setShowSaved(false), 1500);
+  }, []);
+
+ 
 
   const formatTime = (t: number) => {
     const m = Math.floor(t / 60);
@@ -108,24 +101,27 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
       {/* Applied badge */}
-      {picked && (
+      {showSaved && (
         <span style={{
           fontSize: "13px", color: "#22C55E",
           display: "flex", alignItems: "center", gap: "4px",
+          animation: "fadeOut 1.5s ease forwards",
         }}>
-          <Check size={14} /> Applied
+          <Check size={14} /> Saved
         </span>
       )}
+      <style>{`@keyframes fadeOut { 0%,60%{opacity:1} 100%{opacity:0} }`}</style>
 
       {/* Preview */}
       <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
         <div style={{
           width:        isPortrait ? "min(100%, 200px)" : "100%",
           aspectRatio,
+          maxHeight: "40svh",
           borderRadius: "12px",
           overflow:     "hidden",
           backgroundColor: "#0D0D18",
-          outline:      picked ? "2px solid #8B5CF6" : "none",
+          outline:      showSaved ? "2px solid #8B5CF6" : "none",
           outlineOffset: "-2px",
           transition:   "outline 0.2s",
           position:     "relative",
@@ -134,7 +130,7 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
             <img
               src={preview}
               alt="Thumbnail preview"
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
             />
           ) : (
             <div style={{
@@ -173,6 +169,8 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
             step={0.01}
             value={currentTime}
             onChange={handleScrub}
+            onMouseUp={handleScrubEnd}
+            onTouchEnd={handleScrubEnd}
             style={{
               width: "100%", accentColor: "#8B5CF6",
               cursor: "pointer", height: "4px",
@@ -184,30 +182,7 @@ export function ThumbnailPicker({ file, onPicked }: ThumbnailPickerProps) {
           </div>
         </div>
 
-        <button
-          onClick={handlePick}
-          disabled={!preview}
-          style={{
-            width: "100%",
-            padding: "11px",
-            borderRadius: "10px",
-            border: "none",
-            backgroundColor: picked ? "rgba(34,197,94,0.1)" : "rgba(139,92,246,0.1)",
-            color: picked ? "#22C55E" : "#8B5CF6",
-            fontSize: "14px",              /* ← bigger */
-            fontWeight: 600,
-            cursor: preview ? "pointer" : "default",
-            fontFamily: "inherit",
-            transition: "all 0.15s",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "6px",
-            opacity: preview ? 1 : 0.4,
-          }}
-        >
-          {picked ? <><Check size={16} /> Using this frame</> : "Set as cover"}  {/* ← bigger icon */}
-        </button>
+        
       </div>
     </div>
   );

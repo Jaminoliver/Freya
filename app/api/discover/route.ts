@@ -308,7 +308,7 @@ const likedPostIds = new Set<number>();
           username: creator.username,
           display_name: creator.display_name,
           avatar_url: creator.avatar_url,
-          thumbnail_url: video.bunny_video_id ? `https://vz-8bc100f4-3c0.b-cdn.net/${video.bunny_video_id}/thumbnail.jpg` : video.thumbnail_url,
+          thumbnail_url: video.thumbnail_url ?? (video.bunny_video_id ? `https://vz-8bc100f4-3c0.b-cdn.net/${video.bunny_video_id}/thumbnail.jpg` : null),
           bunny_video_id: video.bunny_video_id,
           like_count: video.like_count,
           comment_count: video.comment_count,

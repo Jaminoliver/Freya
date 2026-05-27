@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { User, Bookmark, Settings, Wallet, HelpCircle, LogOut, X, Sparkles, Bell } from "lucide-react";
+import { User, Bookmark, Settings, Wallet, HelpCircle, LogOut, X, Banknote, Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAppStore } from "@/lib/store/appStore";
@@ -98,7 +98,7 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1C1C2E")}
           onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
         >
-          <Sparkles size={20} color="#8B5CF6" strokeWidth={1.8} />
+          <Banknote size={20} color="#8B5CF6" strokeWidth={1.8} />
           <span style={{ fontSize: "15px", color: "#8B5CF6", fontWeight: 500 }}>Become a Creator</span>
         </button>}
 

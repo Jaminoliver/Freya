@@ -61,7 +61,9 @@ interface Options {
 export function useStoryUploadState({ onClose, onUploadStart }: Options) {
   const [phase,         setPhase]         = useState<Phase>("pick");
   const [selected,      setSelected]      = useState<SelectedFile[]>([]);
-  const [caption,       setCaption]       = useState("");
+  const [captionMap,    setCaptionMap]    = useState<Record<number, string>>({});
+const getCaptionForSlide = useCallback((i: number) => captionMap[i] ?? "", [captionMap]);
+const setCaptionForSlide = useCallback((i: number, val: string) => setCaptionMap((p) => ({ ...p, [i]: val })), []);
   const [error,         setError]         = useState<string | null>(null);
   const [captionFocus,  setCaptionFocus]  = useState(false);
   const [carouselIdx,   setCarouselIdx]   = useState(0);
@@ -196,7 +198,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
     const mediaType  = hasVideo && hasPhoto ? "mixed" : hasVideo ? "video" : "photo";
     onUploadStart({
       files:        selected.map((s) => s.file),
-      caption:      caption.trim(),
+      captions:     selected.map((_, i) => captionMap[i]?.trim() ?? ""),
       mediaType:    mediaType as any,
       clipStart,
       clipEnd: clipEndVal,
@@ -207,7 +209,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
       }),
     });
     onClose();
-  }, [selected, caption, clipStart, clipEnd, isMuted, ctaMap, onUploadStart, onClose]);
+  }, [selected, captionMap, clipStart, clipEnd, isMuted, ctaMap, onUploadStart, onClose]);
 
   const handleSendText = useCallback(async () => {
     if (!textContent.trim() || textPosting) return;
@@ -237,7 +239,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
 
   const reset = useCallback(() => {
     selected.forEach((s) => URL.revokeObjectURL(s.previewUrl));
-    setSelected([]); setCaption(""); setError(null);
+    setSelected([]); setCaptionMap({}); setError(null);
     setThumbnails([]); setClipStart(0); setClipEnd(0); setPhase("pick");
     setTextContent(""); setCtaMap({});
   }, [selected]);
@@ -252,7 +254,7 @@ export function useStoryUploadState({ onClose, onUploadStart }: Options) {
   return {
     phase, setPhase,
     selected, setSelected,
-    caption, setCaption,
+    getCaptionForSlide, setCaptionForSlide,
     error, setError,
     captionFocus, setCaptionFocus,
     carouselIdx, setCarouselIdx,

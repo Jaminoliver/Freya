@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { X, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   type Phase,
@@ -16,8 +16,8 @@ interface StoryPreviewPhaseProps {
   setCtaTypeForSlide:    (i: number, t: "subscribe" | null) => void;
   setCtaMessageForSlide: (i: number, m: string) => void;
   setCtaPositionForSlide:(i: number, n: number) => void;
-  caption:          string;
-  setCaption:       (s: string) => void;
+  getCaptionForSlide: (i: number) => string;
+  setCaptionForSlide: (i: number, val: string) => void;
   captionFocus:     boolean;
   setCaptionFocus:  (b: boolean) => void;
   isMuted:          boolean;
@@ -36,7 +36,7 @@ interface StoryPreviewPhaseProps {
 export default function StoryPreviewPhase({
   selected, carouselIdx, setCarouselIdx,
   getCtaForSlide, setCtaTypeForSlide, setCtaMessageForSlide, setCtaPositionForSlide,
-  caption, setCaption, captionFocus, setCaptionFocus,
+  getCaptionForSlide, setCaptionForSlide, captionFocus, setCaptionFocus,
   isMuted, setIsMuted, toolbarOpen, setToolbarOpen,
   clipStart, clipEnd, setPhase, handleSend,
   ctaDragRef, ctaPosRef, ctaCardRef,
@@ -50,6 +50,16 @@ export default function StoryPreviewPhase({
   const [showOverlay, setShowOverlay] = useState(false);
   const overlayTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
+
+  const prevCarouselIdx = useRef(carouselIdx);
+  useEffect(() => {
+    const prev = prevCarouselIdx.current;
+    if (prev !== carouselIdx) {
+      const prevVid = videoRefs.current.get(prev);
+      if (prevVid) { prevVid.pause(); prevVid.muted = true; }
+      prevCarouselIdx.current = carouselIdx;
+    }
+  }, [carouselIdx]);
 
   const togglePlayPause = useCallback((idx: number) => {
     const vid = videoRefs.current.get(idx);
@@ -287,17 +297,17 @@ export default function StoryPreviewPhase({
         )}
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <div style={{
-            flex:1, background: captionFocus || (ctaType ? ctaMessage : caption) ? "rgba(255,255,255,0.08)" : "transparent",
-            backdropFilter: captionFocus || (ctaType ? ctaMessage : caption) ? "blur(20px)" : "none",
-            WebkitBackdropFilter: captionFocus || (ctaType ? ctaMessage : caption) ? "blur(20px)" : "none",
+            flex:1, background: captionFocus || (ctaType ? ctaMessage : getCaptionForSlide(carouselIdx)) ? "rgba(255,255,255,0.08)" : "transparent",
+            backdropFilter: captionFocus || (ctaType ? ctaMessage : getCaptionForSlide(carouselIdx)) ? "blur(20px)" : "none",
+            WebkitBackdropFilter: captionFocus || (ctaType ? ctaMessage : getCaptionForSlide(carouselIdx)) ? "blur(20px)" : "none",
             borderRadius:30, padding:"11px 18px",
-            border: captionFocus ? "1px solid rgba(139,92,246,0.6)" : (ctaType ? ctaMessage : caption) ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.45)",
+            border: captionFocus ? "1px solid rgba(139,92,246,0.6)" : (ctaType ? ctaMessage : getCaptionForSlide(carouselIdx)) ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(255,255,255,0.45)",
             transition:"all 0.25s", boxShadow: captionFocus ? "0 2px 16px rgba(0,0,0,0.25)" : "none",
           }}>
             <input
               className="sum-caption"
-              value={ctaType ? ctaMessage : caption}
-              onChange={(e) => ctaType ? setCtaMessage(e.target.value.slice(0, 80)) : setCaption(e.target.value)}
+              value={ctaType ? ctaMessage : getCaptionForSlide(carouselIdx)}
+              onChange={(e) => ctaType ? setCtaMessage(e.target.value.slice(0, 80)) : setCaptionForSlide(carouselIdx, e.target.value)}
               onFocus={() => setCaptionFocus(true)}
               onBlur={() => setCaptionFocus(false)}
               placeholder={ctaType ? "Add message for fans…" : "Add a caption…"}

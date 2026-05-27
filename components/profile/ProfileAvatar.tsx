@@ -307,12 +307,12 @@ export default function ProfileAvatar({
             src={avatarUrl ?? undefined}
             alt={displayName ?? "?"}
             size={96}
-            hasStory={hasStory || isStoryUploading}
+            hasStory={hasStory || (isEditable && isStoryUploading)}
             hasUnviewed={hasUnviewed}
             onClick={handleAvatarClick}
             borderColor="#0A0A0F"
           />
-          {isStoryUploading && (
+          {isEditable && isStoryUploading && (
             <>
               <div style={{ position: "absolute", inset: -4, borderRadius: "50%", border: "3px solid transparent", borderTop: "3px solid #8B5CF6", borderRight: "3px solid #EC4899", animation: "spin 1s linear infinite", pointerEvents: "none", zIndex: 20 }} />
               <div
