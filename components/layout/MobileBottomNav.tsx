@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useNav } from "@/lib/hooks/useNav";
 import { useUnreadConversationCount } from "@/app/(main)/messages/page";
@@ -11,10 +11,21 @@ import { useGuestGuard } from "@/lib/hooks/useGuestGuard";
 export function MobileBottomNav() {
   const pathname     = usePathname();
   const { navigate } = useNav();
-  const { viewer } = useAppStore(); // add this line
+  const { viewer } = useAppStore();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [tappedHref, setTappedHref] = useState<string | null>(null);
   const guard = useGuestGuard();
   const unreadCount = useUnreadConversationCount();
+
+  useEffect(() => { setTappedHref(null); }, [pathname]);
+
+  const isActive = (href: string) =>
+    tappedHref === href || (!tappedHref && pathname === href);
+
+  const tap = (href: string, fn?: () => void) => {
+    setTappedHref(href);
+    fn ? fn() : navigate(href);
+  };
 
   const inChat = pathname.startsWith("/messages/");
   if (inChat || pathname === "/create-story") return null;
@@ -73,13 +84,13 @@ border: "none",
   if (pathname === "/dashboard") {
     window.scrollTo({ top: 0, behavior: "smooth" });
   } else {
-    navigate("/dashboard");
+    tap("/dashboard");
   }
-}} style={btn(pathname === "/dashboard")}>
+}} style={btn(isActive("/dashboard"))}>
   <House size={25} strokeWidth={pathname === "/dashboard" ? 2.2 : 1.8} />
 </button>
 
-       <button onClick={guard(() => navigate("/messages"))} style={{ ...btn(pathname === "/messages"), position: "relative" }}>
+       <button onClick={guard(() => tap("/messages"))} style={{ ...btn(isActive("/messages")), position: "relative" }}>
   <div style={{ position: "relative", display: "inline-flex" }}>
     <MessagesSquare size={25} strokeWidth={pathname === "/messages" ? 2.2 : 1.8} />
     {unreadCount > 0 && (
@@ -97,13 +108,13 @@ border: "none",
   </div>
 </button>
 
-<button onClick={() => navigate("/explore")} style={btn(pathname === "/explore")}>
-  <Search size={25} strokeWidth={pathname === "/explore" ? 2.2 : 1.8} />
+<button onClick={() => tap("/explore")} style={btn(isActive("/explore"))}>
+  <Search size={25} strokeWidth={isActive("/explore") ? 2.2 : 1.8} />
 
 </button>
 
-<button onClick={guard(() => navigate("/subscriptions"))} style={btn(pathname === "/subscriptions")}>
-  <Crown size={25} strokeWidth={pathname === "/subscriptions" ? 2.2 : 1.8} />
+<button onClick={guard(() => tap("/subscriptions"))} style={btn(isActive("/subscriptions"))}>
+  <Crown size={25} strokeWidth={isActive("/subscriptions") ? 2.2 : 1.8} />
 </button>
 
 <button onClick={guard(() => setMoreOpen(true))} style={btn(moreOpen)}>

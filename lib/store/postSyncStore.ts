@@ -1,11 +1,13 @@
 import type { PollData } from "@/components/feed/PollDisplay";
 
 type PostSyncEvent = {
-  postId:        string;
-  liked:         boolean;
-  like_count:    number;
+  postId:         string;
+  liked:          boolean;
+  like_count:     number;
   comment_count?: number;
-  poll_data?:    PollData;
+  poll_data?:     PollData;
+  saved_post?:    boolean;
+  saved_creator?: boolean;
 };
 
 type CommentLikeSyncEvent = {
@@ -34,6 +36,8 @@ const cache = new Map<string, {
   like_count:     number;
   comment_count?: number;
   poll_data?:     PollData;
+  saved_post?:    boolean;
+  saved_creator?: boolean;
 }>();
 
 const commentCache = new Map<string, {
@@ -55,6 +59,8 @@ export const postSyncStore = {
       like_count:    event.like_count,
       comment_count: event.comment_count,
       poll_data:     event.poll_data,
+      saved_post:    event.saved_post,
+      saved_creator: event.saved_creator,
     });
     queueMicrotask(() => listeners.forEach((fn) => fn(event)));
   },

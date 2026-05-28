@@ -1,7 +1,7 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
-import { useRef, useState, useEffect, Suspense } from "react";
+import { usePathname } from "next/navigation";
+import { useRef, useState, useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { RightPanel } from "@/components/layout/RightPanel";
@@ -10,23 +10,9 @@ import { PostUploadProvider } from "@/lib/context/PostUploadContext";
 import { StoryUploadProvider } from "@/lib/context/StoryUploadContext";
 import UploadProgressBar from "@/components/layout/UploadProgressBar";
 import { AppStoreProvider } from "@/lib/providers/AppStoreProvider";
-import PageLoader from "@/components/ui/PageLoader";
 import SplashScreen from "@/components/ui/SplashScreen";
-import { useVisibilitySplash } from "@/lib/hooks/useVisibilitySplash";
 import { useAppStore } from "@/lib/store/appStore";
 import { AuthModal } from "@/components/auth/modal/AuthModal";
-
-function NavigationWatcher() {
-  const pathname      = usePathname();
-  const searchParams  = useSearchParams();
-  const setNavigating = useAppStore((s) => s.setNavigating);
-
-  useEffect(() => {
-    setNavigating(false);
-  }, [pathname, searchParams, setNavigating]);
-
-  return null;
-}
 
 function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -59,8 +45,6 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const ticking     = useRef(false);
   const mainRef     = useRef<HTMLElement>(null);
 
-  const { showSplash: showVisibilitySplash, dismissVisibilitySplash } = useVisibilitySplash();
-
   useEffect(() => {
     const handler = (e: ErrorEvent) => {
       fetch("/api/log-error", {
@@ -78,8 +62,6 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
     window.addEventListener("error", handler);
     return () => window.removeEventListener("error", handler);
   }, []);
-
-  const showAnySplash = initialSplash || showVisibilitySplash;
 
   useEffect(() => {
     const el = isWindowScrollPage ? window : mainRef.current;
@@ -115,15 +97,6 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
         <SplashScreen onDone={() => setInitialSplash(false)} />
       )}
 
-      {/* 5-min away return splash */}
-      {!initialSplash && showVisibilitySplash && (
-        <SplashScreen onDone={dismissVisibilitySplash} />
-      )}
-
-      <PageLoader />
-      <Suspense fallback={null}>
-        <NavigationWatcher />
-      </Suspense>
       <Sidebar />
       <MobileHeader headerVisible={headerVisible} />
 

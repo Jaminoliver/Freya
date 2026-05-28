@@ -5,7 +5,7 @@ import {
   Home, MessageCircle, Bell, Wallet,
   User, Plus, BadgeCheck, CreditCard, MoreHorizontal,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useAppStore } from "@/lib/store/appStore";
@@ -48,13 +48,17 @@ export function Sidebar() {
   const unreadMessageCount      = useUnreadConversationCount();
   const unreadNotificationCount = useUnreadNotificationCount();
 
+  const [tappedHref, setTappedHref] = useState<string | null>(null);
+  useEffect(() => { setTappedHref(null); }, [pathname]);
+
   const isActive = (href: string) =>
-    pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
+    tappedHref === href ||
+    (!tappedHref && (pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"))));
 
   const [moreOpen, setMoreOpen] = useState(false);
   const guard = useGuestGuard();
 
-  const handleNav = (href: string) => navigate(href);
+  const handleNav = (href: string) => { setTappedHref(href); navigate(href); };
 
   return (
     <>

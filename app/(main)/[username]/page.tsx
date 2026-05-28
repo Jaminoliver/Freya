@@ -228,17 +228,11 @@ function ProfilePageInner() {
     }
   }, [updateProfile]);
 
-  const [viewerReady, setViewerReady] = React.useState(() => !!globalViewer);
+  const [viewerReady, setViewerReady] = React.useState(true);
 
   React.useEffect(() => {
     if (globalViewer) setViewerReady(true);
   }, [globalViewer]);
-
-  React.useEffect(() => {
-    if (viewerReady) return;
-    const t = setTimeout(() => setViewerReady(true), 1500);
-    return () => clearTimeout(t);
-  }, [viewerReady]);
 
   React.useEffect(() => {
     if (!viewerReady) return;

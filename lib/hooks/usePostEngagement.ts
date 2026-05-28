@@ -200,34 +200,45 @@ export function usePostEngagement({
     const next = !savedPost;
     setSavedPost(next);
     updateFeedPost(postId, { saved: next });
+    postSyncStore.emit({ postId, liked, like_count: likeCount, saved_post: next });
     try {
       const res = await fetch("/api/saved/posts", {
         method:  next ? "POST" : "DELETE",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ post_id: postId }),
       });
-      if (!res.ok) { setSavedPost(!next); updateFeedPost(postId, { saved: !next }); }
+      if (!res.ok) {
+        setSavedPost(!next);
+        updateFeedPost(postId, { saved: !next });
+        postSyncStore.emit({ postId, liked, like_count: likeCount, saved_post: !next });
+      }
     } catch {
       setSavedPost(!next);
       updateFeedPost(postId, { saved: !next });
+      postSyncStore.emit({ postId, liked, like_count: likeCount, saved_post: !next });
     }
-  }, [savedPost, postId, updateFeedPost]);
+  }, [savedPost, postId, liked, likeCount, updateFeedPost]);
 
   const handleSaveCreator = React.useCallback(async () => {
     const next = !savedCreator;
     setSavedCreator(next);
     clearProfile(creatorId);
+    postSyncStore.emit({ postId, liked, like_count: likeCount, saved_creator: next });
     try {
       const res = await fetch("/api/saved/creators", {
         method:  next ? "POST" : "DELETE",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ creator_id: creatorId }),
       });
-      if (!res.ok) { setSavedCreator(!next); }
+      if (!res.ok) {
+        setSavedCreator(!next);
+        postSyncStore.emit({ postId, liked, like_count: likeCount, saved_creator: !next });
+      }
     } catch {
       setSavedCreator(!next);
+      postSyncStore.emit({ postId, liked, like_count: likeCount, saved_creator: !next });
     }
-  }, [savedCreator, creatorId, clearProfile]);
+  }, [savedCreator, creatorId, postId, liked, likeCount, clearProfile]);
 
   return {
     // state

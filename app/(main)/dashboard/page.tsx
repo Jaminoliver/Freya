@@ -107,7 +107,14 @@ function adaptPost(p: FeedPost) {
 function mergeSync(p: FeedPost): FeedPost {
   const cached = postSyncStore.get(String(p.id));
   if (!cached) return p;
-  return { ...p, liked: cached.liked, like_count: cached.like_count, comment_count: cached.comment_count ?? p.comment_count };
+  return {
+    ...p,
+    liked:         cached.liked,
+    like_count:    cached.like_count,
+    comment_count: cached.comment_count  ?? p.comment_count,
+    saved_post:    cached.saved_post     ?? p.saved_post,
+    saved_creator: cached.saved_creator  ?? p.saved_creator,
+  };
 }
 
 function parseCursors(raw: string | undefined | null): FeedCursors | null {
