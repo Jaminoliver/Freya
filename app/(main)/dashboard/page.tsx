@@ -7,10 +7,10 @@ import StoryViewer from "@/components/story/StoryViewer";
 import { FeedSkeleton } from "@/components/loadscreen/FeedSkeleton";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import { FeedSuggestions } from "@/components/feed/FeedSuggestions";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, staleTimes } from "@/lib/query/keys";
 import type { PollData } from "@/components/feed/PollDisplay";
-import type { CreatorStoryGroup } from "@/components/story/StoryBar";
+import { type CreatorStoryGroup, applyLocalViewed } from "@/components/story/StoryBar";
 import type { User } from "@/lib/types/profile";
 
 const SCROLL_KEY       = "home_feed_scroll";
@@ -167,6 +167,24 @@ export default function HomePage() {
       lastPage.hasMore
         ? { subOffset: lastPage.nextSubOffset ?? 0, freshOffset: lastPage.nextFreshOffset ?? 0, hotOffset: lastPage.nextHotOffset ?? 0 }
         : undefined,
+    staleTime: staleTimes.feed,
+  });
+
+  const storiesFromFeed = data?.pages?.[0]?.stories ?? null;
+const { data: storiesData, isLoading: storiesLoading } = useQuery({
+  queryKey: ["stories"],
+  enabled: storiesFromFeed === null,
+    queryFn: async () => {
+      const res  = await fetch("/api/stories");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load stories");
+      const fetchedGroups: CreatorStoryGroup[] = applyLocalViewed(data.groups ?? []);
+      const visibleGroups = fetchedGroups.slice(0, 3);
+      for (const g of visibleGroups) {
+        if (g.latestThumbnail) { const img = new Image(); img.src = g.latestThumbnail; }
+      }
+      return fetchedGroups;
+    },
     staleTime: staleTimes.feed,
   });
 
@@ -389,7 +407,7 @@ export default function HomePage() {
       )}
 
       <div style={{ padding: "0 16px", backgroundColor: "#0A0A0F" }}>
-        <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} />
+        <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} initialGroups={storiesFromFeed ?? storiesData} storiesLoading={storiesFromFeed ? false : storiesLoading} />
       </div>
 
       <div style={{ padding: "0 0 40px", minHeight: "200px" }}>

@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import type { ApiPost } from "@/components/profile/PostRow";
+import { getQueryClient } from "@/lib/providers/QueryProvider";
 
 const STALE_MS          = 20 * 1000; // 20s — instant SPA nav, fresh on hard refresh
-const FEED_KEY          = "freya_feed_cache";
 const PROFILES_KEY      = "freya_profiles_cache";
 const CONTENT_FEEDS_KEY = "freya_content_feeds_cache";
 const VIEWER_KEY        = "freya_viewer_cache";
@@ -19,18 +19,6 @@ function loadViewerFromStorage(): Viewer | null {
 function saveViewerToStorage(viewer: Viewer | null) {
   if (typeof window === "undefined") return;
   try { if (viewer) sessionStorage.setItem(VIEWER_KEY, JSON.stringify(viewer)); else sessionStorage.removeItem(VIEWER_KEY); } catch {}
-}
-function loadFeedFromStorage(): FeedEntry | null {
-  if (typeof window === "undefined") return null;
-  try { const raw = sessionStorage.getItem(FEED_KEY); if (!raw) return null; const entry = JSON.parse(raw) as FeedEntry; if (isStale(entry.fetchedAt)) { sessionStorage.removeItem(FEED_KEY); return null; } return entry; } catch { return null; }
-}
-function saveFeedToStorage(entry: FeedEntry) {
-  if (typeof window === "undefined") return;
-  try { sessionStorage.setItem(FEED_KEY, JSON.stringify(entry)); } catch {}
-}
-function clearFeedFromStorage() {
-  if (typeof window === "undefined") return;
-  try { sessionStorage.removeItem(FEED_KEY); } catch {}
 }
 function loadProfilesFromStorage(): Record<string, ProfileEntry> {
   if (typeof window === "undefined") return {};
@@ -50,7 +38,6 @@ function saveContentFeedsToStorage(feeds: Record<string, ContentFeedEntry>) {
 }
 
 export interface Viewer { id: string; username: string; display_name: string; avatar_url: string | null; role: string; }
-export interface FeedEntry { posts: any[]; nextCursor: string | null; fetchedAt: number; }
 export interface ProfileEntry {
   viewer: any;
   profile: any;
@@ -88,10 +75,6 @@ interface AppStore {
   viewer: Viewer | null;
   viewerFetchedAt: number | null;
   setViewer: (viewer: Viewer | null) => void;
-  feed: FeedEntry | null;
-  setFeed: (entry: FeedEntry) => void;
-  updateFeedPost: (postId: string, patch: Partial<any>) => void;
-  clearFeed: () => void;
   profiles: Record<string, ProfileEntry>;
   setProfile: (username: string, entry: ProfileEntry) => void;
   updateProfile: (username: string, patch: Partial<ProfileEntry>) => void;
@@ -102,8 +85,6 @@ interface AppStore {
   storyUpload: StoryUploadState;
   setStoryUpload: (patch: Partial<StoryUploadState>) => void;
   resetStoryUpload: () => void;
-  isNavigating: boolean;
-  setNavigating: (val: boolean) => void;
   settingsPanel: string | null;
   setSettingsPanel: (panel: string | null) => void;
   authModalOpen: boolean;
@@ -119,22 +100,6 @@ export const useAppStore = create<AppStore>((set) => ({
   viewerFetchedAt: null,
   setViewer: (viewer) => { saveViewerToStorage(viewer); set({ viewer, viewerFetchedAt: viewer ? Date.now() : null }); },
 
-  feed: loadFeedFromStorage(),
-  setFeed: (entry) => { saveFeedToStorage(entry); set({ feed: entry }); },
-  updateFeedPost: (postId, patch) => set((s) => {
-    if (!s.feed) return s;
-    const idx = s.feed.posts.findIndex((p) => String(p.id) === postId);
-    if (idx === -1) return s;
-    const posts = [...s.feed.posts]; posts[idx] = { ...posts[idx], ...patch };
-    const updated = { ...s.feed, posts };
-    // NOTE: intentionally NOT calling saveFeedToStorage here.
-    // This fires on every like/comment sync — serializing the full feed
-    // to sessionStorage each time blocks the main thread on low-end phones.
-    // The in-memory Zustand store is sufficient for SPA navigation.
-    return { feed: updated };
-  }),
-  clearFeed: () => { clearFeedFromStorage(); set({ feed: null }); },
-
   profiles: loadProfilesFromStorage(),
   setProfile: (username, entry) => set((s) => { const profiles = { ...s.profiles, [username]: entry }; saveProfilesToStorage(profiles); return { profiles }; }),
   updateProfile: (username, patch) => set((s) => { const profiles = { ...s.profiles, [username]: { ...s.profiles[username], ...patch } }; saveProfilesToStorage(profiles); return { profiles }; }),
@@ -148,8 +113,6 @@ export const useAppStore = create<AppStore>((set) => ({
   setStoryUpload: (patch) => set((s) => ({ storyUpload: { ...s.storyUpload, ...patch } })),
   resetStoryUpload: () => set({ storyUpload: DEFAULT_STORY_UPLOAD }),
 
-  isNavigating: false,
-  setNavigating: (val) => set({ isNavigating: val }),
   settingsPanel: null,
   setSettingsPanel: (panel) => set({ settingsPanel: panel }),
 
@@ -161,7 +124,6 @@ export const useAppStore = create<AppStore>((set) => ({
   clearAll: () => {
     if (typeof window !== "undefined") {
       try {
-        sessionStorage.removeItem(FEED_KEY);
         sessionStorage.removeItem(PROFILES_KEY);
         sessionStorage.removeItem(CONTENT_FEEDS_KEY);
         sessionStorage.removeItem(VIEWER_KEY);
@@ -170,13 +132,14 @@ export const useAppStore = create<AppStore>((set) => ({
         sessionStorage.removeItem("home_spotlight_scroll");
         sessionStorage.removeItem("home_feed_slides");
       } catch {}
+      // Clear TanStack Query cache (owns all server state)
+      getQueryClient().clear();
       // Notify module-level caches (ContentFeed, FeedSuggestions, PostCard viewer)
       window.dispatchEvent(new Event("freya:clear-caches"));
     }
     set({
       viewer: null,
       viewerFetchedAt: null,
-      feed: null,
       profiles: {},
       contentFeeds: {},
       storyUpload: DEFAULT_STORY_UPLOAD,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, AlertCircle, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/lib/store/appStore";
@@ -49,6 +50,8 @@ export interface CreatorStoryGroup {
 interface StoryBarProps {
   onOpenViewer?:   (groups: CreatorStoryGroup[], startIndex: number) => void;
   externalGroups?: CreatorStoryGroup[];
+  initialGroups?:  CreatorStoryGroup[];
+  storiesLoading?: boolean;
 }
 
 function Avatar({ src, name, size = 64 }: { src: string | null; name: string; size?: number }) {
@@ -92,7 +95,7 @@ export function addLocalViewed(id: number) {
     sessionStorage.setItem(VIEWED_KEY, JSON.stringify([...s]));
   } catch {}
 }
-function applyLocalViewed(groups: CreatorStoryGroup[]): CreatorStoryGroup[] {
+export function applyLocalViewed(groups: CreatorStoryGroup[]): CreatorStoryGroup[] {
   const viewed = getLocalViewed();
   if (viewed.size === 0) return groups;
   return groups.map((g) => {
@@ -105,7 +108,7 @@ function allProcessing(group: CreatorStoryGroup): boolean {
   return group.items.length > 0 && group.items.every((s) => s.isProcessing);
 }
 
-export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
+export function StoryBar({ onOpenViewer, externalGroups, initialGroups, storiesLoading }: StoryBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft,  setCanScrollLeft]  = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -125,8 +128,9 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
   } = useStoryUpload();
 
   const [orderedGroups, setOrderedGroups] = useState<CreatorStoryGroup[]>([]);
-  const [loading,       setLoading]       = useState(true);
   const [uploadOpen,    setUploadOpen]    = useState(false);
+  const queryClient = useQueryClient();
+  const loading = storiesLoading ?? false;
 
   const uploadPhaseRef = useRef(uploadPhase);
   useEffect(() => { uploadPhaseRef.current = uploadPhase; }, [uploadPhase]);
@@ -174,31 +178,13 @@ export function StoryBar({ onOpenViewer, externalGroups }: StoryBarProps) {
     return [...unviewed, ...viewed];
   }, []);
 
-  const fetchStories = useCallback(async () => {
-    try {
-      const res  = await fetch("/api/stories");
-      const data = await res.json();
-      if (res.ok && data.groups) {
-        const fetchedGroups: CreatorStoryGroup[] = applyLocalViewed(data.groups);
-        setOrderedGroups(sortGroups(fetchedGroups));
+  const fetchStories = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["stories"] });
+  }, [queryClient]);
 
-        // ── OPTIMIZED: Only preload first 3 visible card thumbnails ──────
-        // Previously preloaded ALL avatars, thumbnails, story photos, and
-        // HLS video manifests on page load — competing with feed media
-        // on slow Nigerian connections.
-        const visibleGroups = fetchedGroups.slice(0, 3);
-        for (const g of visibleGroups) {
-          if (g.latestThumbnail) { const img = new Image(); img.src = g.latestThumbnail; }
-        }
-      }
-    } catch (err) {
-      console.error("[StoryBar] fetch stories error:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [sortGroups]);
-
-  useEffect(() => { fetchStories(); }, [fetchStories]);
+  useEffect(() => {
+    if (initialGroups) setOrderedGroups(sortGroups(initialGroups));
+  }, [initialGroups, sortGroups]);
 
   const prevPhaseRef = useRef(uploadPhase);
   useEffect(() => {
