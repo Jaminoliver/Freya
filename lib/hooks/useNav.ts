@@ -1,21 +1,18 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useTransition, useCallback } from "react";
+import { useCallback } from "react";
 
 export function useNav() {
   const router   = useRouter();
   const pathname = usePathname();
-  const [, startTransition] = useTransition();
 
   const navigate = useCallback(
     (href: string) => {
       if (href === pathname) return;
-      startTransition(() => {
-        router.push(href);
-      });
+      router.push(href);
     },
-    [router, pathname, startTransition]
+    [router, pathname]
   );
 
   return { navigate };
