@@ -1,3 +1,13 @@
+export const staleTimes = {
+  feed:          2 * 60 * 1000,  // 2 min
+  subscriptions: 4 * 60 * 1000,  // 4 min
+  wallet:        4 * 60 * 1000,  // 4 min
+  profile:       4 * 60 * 1000,  // 4 min
+  notifications: 2 * 60 * 1000,  // 2 min
+  explore:       6 * 60 * 1000,  // 6 min
+  saved:         4 * 60 * 1000,  // 4 min
+} as const;
+
 export const queryKeys = {
   feed:          ()                 => ["feed"]                  as const,
   profile:       (username: string) => ["profile", username]    as const,

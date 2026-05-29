@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys, staleTimes } from "@/lib/query/keys";
 import { SubscriptionsHeader } from "@/components/subscription/SubscriptionsHeader";
 import { MoreHorizontal, Rows3, LayoutGrid } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -25,51 +27,43 @@ function preloadImages(urls: string[]): void {
 }
 
 export default function SubscriptionsPage() {
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [revealed,      setRevealed]      = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: subscriptions = [], isLoading, refetch } = useQuery({
+    queryKey: queryKeys.subscriptions(),
+    queryFn:  async () => {
+      const res  = await fetch("/api/subscriptions/mine");
+      const data = await res.json();
+      const subs: Subscription[] = data.subscriptions ?? [];
+      const urls: string[] = [];
+      for (const s of subs.slice(0, 6)) {
+        if (s.banner_url) urls.push(s.banner_url);
+        if (s.avatar_url) urls.push(s.avatar_url);
+      }
+      preloadImages(urls);
+      return subs;
+    },
+    staleTime: staleTimes.subscriptions,
+  });
+
   const [filter,        setFilter]        = useState<FilterKey>("all");
   const [query,         setQuery]         = useState("");
   const [view,          setView]          = useState<CardView>("detailed");
 
   const handleFavouriteChange = useCallback((id: number, next: boolean) => {
-    setSubscriptions((prev) =>
-      prev.map((s) => s.id === id ? { ...s, isFavourite: next } : s)
+    queryClient.setQueryData(queryKeys.subscriptions(), (prev: Subscription[] | undefined) =>
+      (prev ?? []).map((s) => s.id === id ? { ...s, isFavourite: next } : s)
     );
-  }, []);
+  }, [queryClient]);
 
   const handleStatusChange = useCallback((id: number, status: SubscriptionStatus) => {
-    setSubscriptions((prev) =>
-      prev.map((s) => s.id === id ? { ...s, status } : s)
+    queryClient.setQueryData(queryKeys.subscriptions(), (prev: Subscription[] | undefined) =>
+      (prev ?? []).map((s) => s.id === id ? { ...s, status } : s)
     );
-  }, []);
+  }, [queryClient]);
 
   const [tipOpen,    setTipOpen]    = useState(false);
   const [tipCreator, setTipCreator] = useState<User | null>(null);
-
-  const fetchSubscriptions = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res  = await fetch("/api/subscriptions/mine");
-      const data = await res.json();
-      if (data.subscriptions) {
-        setSubscriptions(data.subscriptions);
-        const urls: string[] = [];
-        for (const s of data.subscriptions.slice(0, 6)) {
-          if (s.banner_url) urls.push(s.banner_url);
-          if (s.avatar_url) urls.push(s.avatar_url);
-        }
-        preloadImages(urls);
-      }
-    } catch (err) {
-      console.error("[SubscriptionsPage]", err);
-    } finally {
-      setLoading(false);
-      requestAnimationFrame(() => setRevealed(true));
-    }
-  }, []);
-
-  useEffect(() => { fetchSubscriptions(); }, [fetchSubscriptions]);
 
   const handleTip = useCallback((creatorId: string) => {
     const sub = subscriptions.find((s) => s.creatorId === creatorId);
@@ -239,19 +233,17 @@ export default function SubscriptionsPage() {
 
           {/* Grid / list */}
           <div style={{ padding: "0 18px 28px" }}>
-            {loading ? (
+            {isLoading ? (
               <SubscriptionsSkeleton count={6} />
             ) : (
-              <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
-                <SubscriptionList
+              <SubscriptionList
                   subscriptions={filtered}
                   view={view}
-                  onRefresh={fetchSubscriptions}
+                  onRefresh={refetch}
                   onFavouriteChange={handleFavouriteChange}
                   onStatusChange={handleStatusChange}
                   onTip={handleTip}
                 />
-              </div>
             )}
           </div>
 

@@ -2,17 +2,16 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient }   from "@tanstack/react-query";
+import { queryKeys, staleTimes }      from "@/lib/query/keys";
 import WalletTab from "@/components/wallet/WalletTab";
 import CardsTab from "@/components/wallet/CardsTab";
 import TransactionsTab from "@/components/wallet/TransactionsTab";
 import { WalletSkeleton } from "@/components/loadscreen/WalletSkeleton";
 import { Transaction } from "@/components/wallet/TransactionItem";
 import { SavedCard } from "@/lib/types/checkout";
-import { useAppStore, isStale } from "@/lib/store/appStore";
 
 type Tab = "wallet" | "cards" | "history";
-
-const CACHE_KEY = "__wallet__";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "wallet",  label: "Wallet"  },
@@ -97,46 +96,32 @@ function PaymentBanner({ status, onDismiss }: { status: "success" | "failed"; on
 function WalletContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-
-  const { contentFeeds, setContentFeed } = useAppStore();
+  const queryClient  = useQueryClient();
 
   const [activeTab,     setActiveTab]     = useState<Tab>("wallet");
   const [autoRecharge,  setAutoRecharge]  = useState(false);
-  const [balance,       setBalance]       = useState(0);
-  const [transactions,  setTransactions]  = useState<Transaction[]>([]);
-  const [cards,         setCards]         = useState<SavedCard[]>([]);
-  const [loading,       setLoading]       = useState(true);  // always true on server — safe
-  const [revealed,      setRevealed]      = useState(false); // always false on server — safe
   const [redirecting,   setRedirecting]   = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "failed" | null>(null);
 
-  useEffect(() => {
-    const ref = searchParams.get("ref");
-    if (ref) { setPaymentStatus("success"); router.replace("/wallet"); }
-  }, [searchParams, router]);
-
-  const fetchWalletData = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: queryKeys.wallet(),
+    queryFn:  async () => {
       const [balanceRes, txRes, cardsRes] = await Promise.all([
         fetch("/api/wallet/balance"),
         fetch("/api/wallet/transactions"),
         fetch("/api/wallet/cards"),
       ]);
-
-      let newBalance = 0;
-      let newTx: Transaction[] = [];
-      let newCards: SavedCard[] = [];
+      let balance      = 0;
+      let transactions: Transaction[] = [];
+      let cards: SavedCard[]          = [];
 
       if (balanceRes.ok) {
-        const data = await balanceRes.json();
-        newBalance = data.balanceNaira;
-        setBalance(newBalance);
+        const d = await balanceRes.json();
+        balance = d.balanceNaira;
       }
-
       if (txRes.ok) {
         const { transactions: txData } = await txRes.json();
-        newTx = txData.map((t: {
+        transactions = txData.map((t: {
           id: string; category: string; amount: number;
           amountNaira: number; provider: string; description: string; date: string; type: string;
         }) => ({
@@ -148,55 +133,29 @@ function WalletContent() {
           date:     new Date(t.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
           status:   "completed" as const,
         }));
-        setTransactions(newTx);
       }
-
       if (cardsRes.ok) {
-        const data = await cardsRes.json();
-        newCards = data.cards;
-        setCards(newCards);
+        const d = await cardsRes.json();
+        cards = d.cards;
       }
+      return { balance, transactions, cards };
+    },
+    staleTime: staleTimes.wallet,
+  });
 
-      setContentFeed(CACHE_KEY, {
-        posts:     [{ balance: newBalance, transactions: newTx, cards: newCards }] as any,
-        media:     [],
-        fetchedAt: Date.now(),
-      });
+  const balance      = data?.balance      ?? 0;
+  const transactions = data?.transactions ?? [];
+  const cards        = data?.cards        ?? [];
 
-    } catch (err) {
-      console.error("[WalletPage] Failed to fetch wallet data:", err);
-    } finally {
-      setLoading(false);
-      requestAnimationFrame(() => setRevealed(true));
-    }
-  }, [setContentFeed]);
-
-  // Hydrate from cache or fetch — runs only on client
   useEffect(() => {
-    const cached = contentFeeds[CACHE_KEY];
-    const fresh  = cached && !isStale(cached.fetchedAt);
-
-    if (fresh) {
-      const cachedData = cached.posts[0] as unknown as {
-        balance: number; transactions: Transaction[]; cards: SavedCard[];
-      };
-      if (cachedData) {
-        setBalance(cachedData.balance ?? 0);
-        setTransactions(cachedData.transactions ?? []);
-        setCards(cachedData.cards ?? []);
-      }
-      setLoading(false);
-      requestAnimationFrame(() => setRevealed(true));
-      return;
-    }
-
-    fetchWalletData();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const ref = searchParams.get("ref");
+    if (ref) { setPaymentStatus("success"); router.replace("/wallet"); }
+  }, [searchParams, router]);
 
   const handlePaymentConfirmed = useCallback(async () => {
-    await fetchWalletData(true);
+    await refetch();
     setPaymentStatus("success");
-  }, [fetchWalletData]);
+  }, [refetch]);
 
   async function handleTopUp(amount: number, cardId?: number) {
     try {
@@ -212,7 +171,7 @@ function WalletContent() {
         window.location.href = data.authorizationUrl;
       } else {
         setRedirecting(false);
-        await fetchWalletData(true);
+        await refetch();
         setPaymentStatus("success");
       }
     } catch {
@@ -229,7 +188,7 @@ function WalletContent() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardId }),
       });
-      await fetchWalletData(true);
+      await refetch();
     } catch { /* silent */ }
   }
 
@@ -239,7 +198,7 @@ function WalletContent() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cardId }),
       });
-      await fetchWalletData(true);
+      await refetch();
     } catch { /* silent */ }
   }
 
@@ -283,10 +242,10 @@ function WalletContent() {
             <PaymentBanner status={paymentStatus} onDismiss={() => setPaymentStatus(null)} />
           )}
 
-          {loading && <WalletSkeleton tab={activeTab} />}
+          {isLoading && <WalletSkeleton tab={activeTab} />}
 
-          {!loading && (
-            <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
+          {!isLoading && (
+            <div>
               {activeTab === "wallet" && (
                 <WalletTab
                   balance={balance}

@@ -2,9 +2,10 @@
 "use client";
 
 import * as React from "react";
-import { postSyncStore } from "@/lib/store/postSyncStore";
-import { useAppStore } from "@/lib/store/appStore";
-import { useGuestGuard } from "@/lib/hooks/useGuestGuard";
+import { useQueryClient }    from "@tanstack/react-query";
+import { queryKeys }         from "@/lib/query/keys";
+import { useAppStore }       from "@/lib/store/appStore";
+import { useGuestGuard }     from "@/lib/hooks/useGuestGuard";
 
 interface UsePostEngagementOptions {
   postId:               string;
@@ -36,8 +37,23 @@ export function usePostEngagement({
   const [commentsFetched, setCommentsFetched] = React.useState(false);
   const [savedPost,       setSavedPost]       = React.useState(initialSavedPost);
   const [savedCreator,    setSavedCreator]    = React.useState(initialSavedCreator);
-  const { updateFeedPost, clearProfile } = useAppStore();
+  const { clearProfile } = useAppStore();
+  const queryClient = useQueryClient();
   const guard = useGuestGuard();
+
+  // ── Helper: update this post in the feed cache ─────────────────────────
+  const updateFeedCache = React.useCallback((updater: (p: any) => any) => {
+    queryClient.setQueryData(queryKeys.feed(), (old: any) => {
+      if (!old) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page: any) => ({
+          ...page,
+          posts: page.posts.map((p: any) => String(p.id) === postId ? updater(p) : p),
+        })),
+      };
+    });
+  }, [queryClient, postId]);
 
   // ── Refs for stable access in callbacks (fixes stale closures) ─────────
   const isLiking     = React.useRef(false);
@@ -47,17 +63,6 @@ export function usePostEngagement({
 
   React.useEffect(() => { likedRef.current     = liked;     }, [liked]);
   React.useEffect(() => { likeCountRef.current = likeCount; }, [likeCount]);
-
-  // ── Sync with postSyncStore so state stays consistent across cards ─────
-  React.useEffect(() => {
-    const unsub = postSyncStore.subscribe((event) => {
-      if (event.postId !== postId) return;
-      setLiked(event.liked);
-      setLikeCount(event.like_count);
-      if (event.comment_count !== undefined) setCommentCount(event.comment_count);
-    });
-    return unsub;
-  }, [postId]);
 
   // ── Reset state if the underlying post changes (card reuse in virtualization) ──
   React.useEffect(() => {
@@ -79,7 +84,7 @@ export function usePostEngagement({
 
     setLiked(newLiked);
     setLikeCount(newCount);
-    postSyncStore.emit({ postId, liked: newLiked, like_count: newCount, comment_count: commentCount });
+    updateFeedCache((p) => ({ ...p, liked: newLiked, like_count: newCount }));
 
     try {
       const res  = await fetch(`/api/posts/${postId}/like`, { method: "POST" });
@@ -87,20 +92,20 @@ export function usePostEngagement({
       if (res.ok) {
         setLiked(data.liked);
         setLikeCount(data.like_count);
-        postSyncStore.emit({ postId, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
+        updateFeedCache((p) => ({ ...p, liked: data.liked, like_count: data.like_count }));
         onLikeSuccess?.(postId);
       } else {
         setLiked(wasLiked);
         setLikeCount(oldCount);
-        postSyncStore.emit({ postId, liked: wasLiked, like_count: oldCount, comment_count: commentCount });
+        updateFeedCache((p) => ({ ...p, liked: wasLiked, like_count: oldCount }));
       }
     } catch {
       setLiked(wasLiked);
       setLikeCount(oldCount);
-      postSyncStore.emit({ postId, liked: wasLiked, like_count: oldCount, comment_count: commentCount });
+      updateFeedCache((p) => ({ ...p, liked: wasLiked, like_count: oldCount }));
     }
     isLiking.current = false;
-  }, [postId, liked, likeCount, commentCount, onLikeSuccess]);
+  }, [postId, liked, likeCount, commentCount, onLikeSuccess, updateFeedCache]);
 
   const handleDoubleTapLike = React.useCallback(async () => {
     if (liked || isLiking.current) return;
@@ -109,7 +114,7 @@ export function usePostEngagement({
 
     setLiked(true);
     setLikeCount(oldCount + 1);
-    postSyncStore.emit({ postId, liked: true, like_count: oldCount + 1, comment_count: commentCount });
+    updateFeedCache((p) => ({ ...p, liked: true, like_count: oldCount + 1 }));
 
     try {
       const res  = await fetch(`/api/posts/${postId}/like`, { method: "POST" });
@@ -117,20 +122,20 @@ export function usePostEngagement({
       if (res.ok) {
         setLiked(data.liked);
         setLikeCount(data.like_count);
-        postSyncStore.emit({ postId, liked: data.liked, like_count: data.like_count, comment_count: commentCount });
+        updateFeedCache((p) => ({ ...p, liked: data.liked, like_count: data.like_count }));
         onLikeSuccess?.(postId);
       } else {
         setLiked(false);
         setLikeCount(oldCount);
-        postSyncStore.emit({ postId, liked: false, like_count: oldCount, comment_count: commentCount });
+        updateFeedCache((p) => ({ ...p, liked: false, like_count: oldCount }));
       }
     } catch {
       setLiked(false);
       setLikeCount(oldCount);
-      postSyncStore.emit({ postId, liked: false, like_count: oldCount, comment_count: commentCount });
+      updateFeedCache((p) => ({ ...p, liked: false, like_count: oldCount }));
     }
     isLiking.current = false;
-  }, [postId, liked, likeCount, commentCount, onLikeSuccess]);
+  }, [postId, liked, likeCount, commentCount, onLikeSuccess, updateFeedCache]);
 
   const prefetchRef = React.useRef<HTMLDivElement>(null);
 
@@ -179,28 +184,27 @@ export function usePostEngagement({
     });
     setCommentCount((c) => {
       const newCount = c + 1;
-      postSyncStore.emit({ postId: id, liked: likedRef.current, like_count: likeCountRef.current, comment_count: newCount });
+      updateFeedCache((p) => ({ ...p, comment_count: newCount }));
       return newCount;
     });
     if (!parent_comment_id) {
       const d = await fetch(`/api/posts/${id}/comments`).then((r) => r.json());
       if (d.comments) setComments(d.comments);
     }
-  }, []);
+  }, [updateFeedCache]);
 
   const handleDeleteComment = React.useCallback(() => {
     setCommentCount((c) => {
       const newCount = Math.max(0, c - 1);
-      postSyncStore.emit({ postId, liked: likedRef.current, like_count: likeCountRef.current, comment_count: newCount });
+      updateFeedCache((p) => ({ ...p, comment_count: newCount }));
       return newCount;
     });
-  }, [postId]);
+  }, [postId, updateFeedCache]);
 
   const handleSavePost = React.useCallback(async () => {
     const next = !savedPost;
     setSavedPost(next);
-    updateFeedPost(postId, { saved: next });
-    postSyncStore.emit({ postId, liked, like_count: likeCount, saved_post: next });
+    updateFeedCache((p) => ({ ...p, saved_post: next }));
     try {
       const res = await fetch("/api/saved/posts", {
         method:  next ? "POST" : "DELETE",
@@ -209,21 +213,19 @@ export function usePostEngagement({
       });
       if (!res.ok) {
         setSavedPost(!next);
-        updateFeedPost(postId, { saved: !next });
-        postSyncStore.emit({ postId, liked, like_count: likeCount, saved_post: !next });
+        updateFeedCache((p) => ({ ...p, saved_post: !next }));
       }
     } catch {
       setSavedPost(!next);
-      updateFeedPost(postId, { saved: !next });
-      postSyncStore.emit({ postId, liked, like_count: likeCount, saved_post: !next });
+      updateFeedCache((p) => ({ ...p, saved_post: !next }));
     }
-  }, [savedPost, postId, liked, likeCount, updateFeedPost]);
+  }, [savedPost, postId, updateFeedCache]);
 
   const handleSaveCreator = React.useCallback(async () => {
     const next = !savedCreator;
     setSavedCreator(next);
     clearProfile(creatorId);
-    postSyncStore.emit({ postId, liked, like_count: likeCount, saved_creator: next });
+    updateFeedCache((p) => ({ ...p, saved_creator: next }));
     try {
       const res = await fetch("/api/saved/creators", {
         method:  next ? "POST" : "DELETE",
@@ -232,13 +234,13 @@ export function usePostEngagement({
       });
       if (!res.ok) {
         setSavedCreator(!next);
-        postSyncStore.emit({ postId, liked, like_count: likeCount, saved_creator: !next });
+        updateFeedCache((p) => ({ ...p, saved_creator: !next }));
       }
     } catch {
       setSavedCreator(!next);
-      postSyncStore.emit({ postId, liked, like_count: likeCount, saved_creator: !next });
+      updateFeedCache((p) => ({ ...p, saved_creator: !next }));
     }
-  }, [savedCreator, creatorId, postId, liked, likeCount, clearProfile]);
+  }, [savedCreator, creatorId, postId, clearProfile, updateFeedCache]);
 
   return {
     // state

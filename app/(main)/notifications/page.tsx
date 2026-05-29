@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useQuery, useQueryClient }               from "@tanstack/react-query";
+import { queryKeys, staleTimes }                  from "@/lib/query/keys";
 import { useRouter }                         from "next/navigation";
 import { MoreVertical }                      from "lucide-react";
 import { NotificationsHeader }               from "@/components/notifications/NotificationsHeader";
@@ -34,35 +36,28 @@ function parseReferenceId(raw?: string | null): Record<string, string> | null {
 export default function NotificationsPage() {
   const router = useRouter();
   const { viewer } = useAppStore();
+  const queryClient = useQueryClient();
 
   const [filter,        setFilter]        = useState<NotificationFilterTab>("all");
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [loading,       setLoading]       = useState(true);
   const [userId,        setUserId]        = useState<string | null>(null);
   const [dropdownOpen,  setDropdownOpen]  = useState(false);
   const [dropdownPos,   setDropdownPos]   = useState({ x: 0, y: 0 });
   const dotsBtnRef = useRef<HTMLButtonElement>(null);
 
-  const fetchNotifications = useCallback(async (tab: NotificationFilterTab) => {
-    setLoading(true);
-    try {
-      const res  = await fetch(`/api/notifications?tab=${tab}`);
+  const { data: notifications = [], isLoading } = useQuery({
+    queryKey: queryKeys.notifications(filter),
+    queryFn:  async () => {
+      const res  = await fetch(`/api/notifications?tab=${filter}`);
       const data = await res.json();
       if (res.ok) {
-        const items: NotificationItem[] = (data.notifications ?? []).map(
-          (n: NotificationItem) => ({ ...n, createdAt: timeAgo(n.createdAt) })
-        );
-        setNotifications(items);
+        return (data.notifications ?? []).map((n: NotificationItem) => ({
+          ...n, createdAt: timeAgo(n.createdAt),
+        })) as NotificationItem[];
       }
-    } catch (err) {
-      console.error("Failed to fetch notifications:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { initNotificationStore(); }, []);
-  useEffect(() => { fetchNotifications(filter); }, [filter, fetchNotifications]);
+      return [] as NotificationItem[];
+    },
+    staleTime: staleTimes.notifications,
+  });
 
   useEffect(() => {
     getAuthenticatedBrowserClient().then((supabase) => {
@@ -75,15 +70,18 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (!userId) return;
     const unsub = subscribeToNotifications(userId, (newNotif) => {
-      setNotifications((prev) => [{ ...newNotif, createdAt: "Just now" }, ...prev]);
+      queryClient.setQueryData(
+        queryKeys.notifications(filter),
+        (prev: NotificationItem[] | undefined) => [{ ...newNotif, createdAt: "Just now" }, ...(prev ?? [])]
+      );
     });
     return unsub;
-  }, [userId]);
+  }, [userId, filter, queryClient]);
 
   const handleSelect = useCallback(async (item: NotificationItem) => {
     if (item.isUnread) {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === item.id ? { ...n, isUnread: false } : n))
+      queryClient.setQueryData(queryKeys.notifications(filter), (prev: NotificationItem[] | undefined) =>
+        (prev ?? []).map((n) => (n.id === item.id ? { ...n, isUnread: false } : n))
       );
       decrementUnreadCount();
       await fetch(`/api/notifications/${item.id}/read`, { method: "PATCH" });
@@ -120,20 +118,22 @@ export default function NotificationsPage() {
   }, [router]);
 
   const handleMarkAllRead = useCallback(async () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
+    queryClient.setQueryData(queryKeys.notifications(filter), (prev: NotificationItem[] | undefined) =>
+      (prev ?? []).map((n) => ({ ...n, isUnread: false }))
+    );
     resetUnreadCount();
     await fetch("/api/notifications/read-all", { method: "PATCH" });
-  }, []);
+  }, [filter, queryClient]);
 
   const handleDeleteAll = useCallback(async () => {
-    setNotifications([]);
+    queryClient.setQueryData(queryKeys.notifications(filter), () => [] as NotificationItem[]);
     resetUnreadCount();
     await fetch("/api/notifications/delete-all", { method: "DELETE" });
-  }, []);
+  }, [filter, queryClient]);
 
   const handleRefresh = useCallback(async () => {
-    await fetchNotifications(filter);
-  }, [filter, fetchNotifications]);
+    await queryClient.invalidateQueries({ queryKey: queryKeys.notifications(filter) });
+  }, [filter, queryClient]);
 
   const handleOpenDropdown = () => {
     if (dotsBtnRef.current) {
@@ -207,7 +207,7 @@ export default function NotificationsPage() {
               role={viewer?.role as "fan" | "creator" | undefined}
             />
           </div>
-          {loading ? (
+          {isLoading ? (
             <NotificationsSkeleton count={10} />
           ) : (
             <NotificationsList

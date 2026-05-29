@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams }               from "next/navigation";
+import { useQuery, useQueryClient }                 from "@tanstack/react-query";
+import { queryKeys, staleTimes }                    from "@/lib/query/keys";
 import { ArrowLeft, Grid3X3, List, EyeOff, Eye, Trash2 } from "lucide-react";
 import { SavedSkeleton } from "@/components/loadscreen/SavedSkeleton";
 import SavedPostGrid     from "@/components/saved/SavedPostGrid";
@@ -18,6 +20,7 @@ type Tab = "posts" | "creators" | "unlocked";
 function SavedPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient  = useQueryClient();
 
   const [activeTab,        setActiveTab]        = useState<Tab>(() => {
     const t = searchParams.get("tab");
@@ -29,17 +32,48 @@ function SavedPageInner() {
     return h === "1";
   });
   const [viewMode,         setViewMode]         = useState<"grid" | "feed">("grid");
-  const [savedPosts,       setSavedPosts]       = useState<SavedPost[]>([]);
-  const [savedCreators,    setSavedCreators]    = useState<SavedCreator[]>([]);
-  const [unlockedVisible,  setUnlockedVisible]  = useState<UnlockedItem[]>([]);
-  const [unlockedHidden,   setUnlockedHidden]   = useState<UnlockedItem[]>([]);
-  const [loadingPosts,     setLoadingPosts]     = useState(true);
-  const [loadingCreators,  setLoadingCreators]  = useState(true);
-  const [loadingUnlocked,  setLoadingUnlocked]  = useState(true);
-  const [loadingHidden,    setLoadingHidden]    = useState(false);
   const [selectMode,       setSelectMode]       = useState(false);
   const [selectedIds,      setSelectedIds]      = useState<Set<string>>(new Set());
   const [openPost,         setOpenPost]         = useState<{ id: string; sourceIsMessage: boolean } | null>(null);
+
+  const { data: savedPosts = [],    isLoading: loadingPosts }    = useQuery({
+    queryKey: queryKeys.saved("posts"),
+    queryFn:  async () => {
+      const r = await fetch("/api/saved/posts");
+      const d = await r.json();
+      return (d.posts ?? []) as SavedPost[];
+    },
+    staleTime: staleTimes.saved,
+  });
+
+  const { data: savedCreators = [], isLoading: loadingCreators } = useQuery({
+    queryKey: queryKeys.saved("creators"),
+    queryFn:  async () => {
+      const r = await fetch("/api/saved/creators");
+      const d = await r.json();
+      return (d.creators ?? []) as SavedCreator[];
+    },
+    staleTime: staleTimes.saved,
+  });
+
+  const { data: unlockedData, isLoading: loadingUnlocked } = useQuery({
+    queryKey: queryKeys.saved("unlocked"),
+    queryFn:  async () => {
+      const [visibleRes, hiddenRes] = await Promise.all([
+        fetch("/api/saved/unlocked"),
+        fetch("/api/saved/unlocked?hidden=1"),
+      ]);
+      const [visibleD, hiddenD] = await Promise.all([visibleRes.json(), hiddenRes.json()]);
+      return {
+        visible: (visibleD.unlocked ?? []) as UnlockedItem[],
+        hidden:  (hiddenD.unlocked  ?? []) as UnlockedItem[],
+      };
+    },
+    staleTime: staleTimes.saved,
+  });
+
+  const unlockedVisible = unlockedData?.visible ?? [];
+  const unlockedHidden  = unlockedData?.hidden  ?? [];
 
   useEffect(() => {
     const onPop = () => { if (hiddenView) setHiddenView(false); };
@@ -51,58 +85,25 @@ function SavedPageInner() {
     router.replace(`/saved?tab=${activeTab}`);
   }, []);
 
-  // ── Fetch helpers ─────────────────────────────────────────────────────────
-  const fetchVisibleUnlocked = useCallback(() => {
-    return fetch("/api/saved/unlocked")
-      .then((r) => r.json())
-      .then((d) => { setUnlockedVisible(d.unlocked ?? []); })
-      .catch(() => { setUnlockedVisible([]); });
-  }, []);
-
-  const fetchHiddenUnlocked = useCallback(() => {
-    return fetch("/api/saved/unlocked?hidden=1")
-      .then((r) => r.json())
-      .then((d) => { setUnlockedHidden(d.unlocked ?? []); })
-      .catch(() => { setUnlockedHidden([]); });
-  }, []);
-
-  // ── Initial loads ─────────────────────────────────────────────────────────
+  // ── post-unsaved event ────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: Event) => {
       const { postId } = (e as CustomEvent).detail;
-      setSavedPosts((prev) => prev.filter((p) => p.id !== postId));
+      queryClient.setQueryData(queryKeys.saved("posts"), (prev: SavedPost[] | undefined) =>
+        (prev ?? []).filter((p) => p.id !== postId)
+      );
     };
     window.addEventListener("post-unsaved", handler);
     return () => window.removeEventListener("post-unsaved", handler);
-  }, []);
-
-  useEffect(() => {
-    console.log("[SavedPage] fetching posts — page mounted");
-    fetch("/api/saved/posts")
-      .then((r) => r.json())
-      .then((d) => { if (d.posts) setSavedPosts(d.posts); })
-      .catch(() => {})
-      .finally(() => setLoadingPosts(false));
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/saved/creators")
-      .then((r) => r.json())
-      .then((d) => { if (d.creators) setSavedCreators(d.creators); })
-      .catch(() => {})
-      .finally(() => setLoadingCreators(false));
-  }, []);
-
-  useEffect(() => {
-    setLoadingUnlocked(true);
-    Promise.all([fetchVisibleUnlocked(), fetchHiddenUnlocked()])
-      .finally(() => setLoadingUnlocked(false));
-  }, [fetchVisibleUnlocked, fetchHiddenUnlocked]);
+  }, [queryClient]);
 
   // ── Hide / Unhide ─────────────────────────────────────────────────────────
   const handleHide = useCallback(async (picked: UnlockedItem[]) => {
     const pickedIds = new Set(picked.map((p) => p.unlock_id));
-    setUnlockedVisible((prev) => prev.filter((i) => !pickedIds.has(i.unlock_id)));
+    queryClient.setQueryData(queryKeys.saved("unlocked"), (prev: typeof unlockedData | undefined) => ({
+      visible: (prev?.visible ?? []).filter((i) => !pickedIds.has(i.unlock_id)),
+      hidden:  prev?.hidden ?? [],
+    }));
     try {
       await fetch("/api/saved/unlocked/hide", {
         method:  "PATCH",
@@ -112,15 +113,18 @@ function SavedPageInner() {
           hidden: true,
         }),
       });
-      void fetchHiddenUnlocked();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.saved("unlocked") });
     } catch {
-      void fetchVisibleUnlocked();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.saved("unlocked") });
     }
-  }, [fetchVisibleUnlocked, fetchHiddenUnlocked]);
+  }, [queryClient, unlockedData]);
 
   const handleUnhide = useCallback(async (picked: UnlockedItem[]) => {
     const pickedIds = new Set(picked.map((p) => p.unlock_id));
-    setUnlockedHidden((prev) => prev.filter((i) => !pickedIds.has(i.unlock_id)));
+    queryClient.setQueryData(queryKeys.saved("unlocked"), (prev: typeof unlockedData | undefined) => ({
+      visible: prev?.visible ?? [],
+      hidden:  (prev?.hidden ?? []).filter((i) => !pickedIds.has(i.unlock_id)),
+    }));
     try {
       await fetch("/api/saved/unlocked/hide", {
         method:  "PATCH",
@@ -130,21 +134,23 @@ function SavedPageInner() {
           hidden: false,
         }),
       });
-      void fetchVisibleUnlocked();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.saved("unlocked") });
     } catch {
-      void fetchHiddenUnlocked();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.saved("unlocked") });
     }
-  }, [fetchVisibleUnlocked, fetchHiddenUnlocked]);
+  }, [queryClient, unlockedData]);
 
   // Auto-return to main view if hidden list empties out — but only after unlocked data has loaded
   useEffect(() => {
-    if (hiddenView && unlockedHidden.length === 0 && !loadingHidden && !loadingUnlocked) {
+    if (hiddenView && unlockedHidden.length === 0 && !loadingUnlocked) {
       setHiddenView(false);
     }
-  }, [hiddenView, unlockedHidden.length, loadingHidden, loadingUnlocked]);
+  }, [hiddenView, unlockedHidden.length, loadingUnlocked]);
 
   const handleUnsavePosts = useCallback(async (ids: string[]) => {
-    setSavedPosts((prev) => prev.filter((p) => !ids.includes(p.id)));
+    queryClient.setQueryData(queryKeys.saved("posts"), (prev: SavedPost[] | undefined) =>
+      (prev ?? []).filter((p) => !ids.includes(p.id))
+    );
     await Promise.allSettled(
       ids.map((id) =>
         fetch("/api/saved/posts", {
@@ -154,10 +160,12 @@ function SavedPageInner() {
         })
       )
     );
-  }, []);
+  }, [queryClient]);
 
   const handleUnsaveCreator = useCallback(async (id: string) => {
-    setSavedCreators((prev) => prev.filter((c) => c.id !== id));
+    queryClient.setQueryData(queryKeys.saved("creators"), (prev: SavedCreator[] | undefined) =>
+      (prev ?? []).filter((c) => c.id !== id)
+    );
     try {
       await fetch("/api/saved/creators", {
         method:  "DELETE",
@@ -165,7 +173,7 @@ function SavedPageInner() {
         body:    JSON.stringify({ creator_id: id }),
       });
     } catch {}
-  }, []);
+  }, [queryClient]);
 
   const handleToggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {

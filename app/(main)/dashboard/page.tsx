@@ -7,8 +7,8 @@ import StoryViewer from "@/components/story/StoryViewer";
 import { FeedSkeleton } from "@/components/loadscreen/FeedSkeleton";
 import CheckoutModal from "@/components/checkout/CheckoutModal";
 import { FeedSuggestions } from "@/components/feed/FeedSuggestions";
-import { postSyncStore } from "@/lib/store/postSyncStore";
-import { useAppStore, isStale } from "@/lib/store/appStore";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys, staleTimes } from "@/lib/query/keys";
 import type { PollData } from "@/components/feed/PollDisplay";
 import type { CreatorStoryGroup } from "@/components/story/StoryBar";
 import type { User } from "@/lib/types/profile";
@@ -104,19 +104,6 @@ function adaptPost(p: FeedPost) {
   };
 }
 
-function mergeSync(p: FeedPost): FeedPost {
-  const cached = postSyncStore.get(String(p.id));
-  if (!cached) return p;
-  return {
-    ...p,
-    liked:         cached.liked,
-    like_count:    cached.like_count,
-    comment_count: cached.comment_count  ?? p.comment_count,
-    saved_post:    cached.saved_post     ?? p.saved_post,
-    saved_creator: cached.saved_creator  ?? p.saved_creator,
-  };
-}
-
 function parseCursors(raw: string | undefined | null): FeedCursors | null {
   if (!raw) return null;
   try {
@@ -136,15 +123,9 @@ function saveSlides(m: Record<string, number>) { try { sessionStorage.setItem(SL
 function loadSlides(): Record<string, number>  { try { return JSON.parse(sessionStorage.getItem(SLIDES_KEY) ?? "{}"); } catch { return {}; } }
 
 export default function HomePage() {
-  const { feed, setFeed, updateFeedPost } = useAppStore();
+  const queryClient = useQueryClient();
 
-  const [posts,       setPosts]       = useState<FeedPost[]>([]);
-  const [apiLoading,  setApiLoading]  = useState(true);
-  const [nextCursors, setNextCursors] = useState<FeedCursors | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error,       setError]       = useState<string | null>(null);
-  const [slideMap,    setSlideMap]    = useState<Record<string, number>>({});
-
+  const [slideMap, setSlideMap] = useState<Record<string, number>>({});
   const [subscribedCreatorIds, setSubscribedCreatorIds] = useState<Set<string>>(new Set());
 
   const [ppvOpen,    setPpvOpen]    = useState(false);
@@ -157,17 +138,50 @@ export default function HomePage() {
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const [externalGroups,  setExternalGroups]  = useState<CreatorStoryGroup[]>([]);
 
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+    error,
+  } = useInfiniteQuery({
+    queryKey: queryKeys.feed(),
+    queryFn:  async ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (pageParam) {
+        const c = pageParam as FeedCursors;
+        params.set("subOffset",   String(c.subOffset));
+        params.set("freshOffset", String(c.freshOffset));
+        params.set("hotOffset",   String(c.hotOffset));
+      }
+      const qs  = params.toString();
+      const url = `/api/posts/feed${qs ? `?${qs}` : ""}`;
+      const res = await fetch(url);
+      const d   = await res.json();
+      if (!res.ok) throw new Error(d.error || "Failed to load feed");
+      return d;
+    },
+    initialPageParam: null as FeedCursors | null,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore
+        ? { subOffset: lastPage.nextSubOffset ?? 0, freshOffset: lastPage.nextFreshOffset ?? 0, hotOffset: lastPage.nextHotOffset ?? 0 }
+        : undefined,
+    staleTime: staleTimes.feed,
+  });
+
+  const posts: FeedPost[] = useMemo(
+    () => (data?.pages ?? []).flatMap((page) => page.posts as FeedPost[]),
+    [data?.pages]
+  );
+
   useEffect(() => { setSlideMap(loadSlides()); }, []);
 
   const scrollRestoredRef = useRef(false);
   const sentinelRef       = useRef<HTMLDivElement>(null);
-  const nextCursorsRef    = useRef<FeedCursors | null>(null);
-  const loadingMoreRef    = useRef(false);
   const postsRef          = useRef<FeedPost[]>(posts);
 
-  useEffect(() => { nextCursorsRef.current = nextCursors; }, [nextCursors]);
-  useEffect(() => { loadingMoreRef.current = loadingMore; }, [loadingMore]);
-  useEffect(() => { postsRef.current       = posts;       }, [posts]);
+  useEffect(() => { postsRef.current = posts; }, [posts]);
 
   // ── Scroll save ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -191,7 +205,7 @@ export default function HomePage() {
 
   // ── Scroll restore (double rAF for reliable paint timing) ──────────────
   useEffect(() => {
-    if (apiLoading || scrollRestoredRef.current) return;
+    if (isLoading || scrollRestoredRef.current) return;
     scrollRestoredRef.current = true;
     const saved = loadScroll();
     if (saved > 0) {
@@ -201,115 +215,24 @@ export default function HomePage() {
         });
       });
     }
-  }, [apiLoading]);
+  }, [isLoading]);
 
   const handleSlideChange = useCallback((postId: string, index: number) => {
     setSlideMap((prev) => { const next = { ...prev, [postId]: index }; saveSlides(next); return next; });
   }, []);
-
-  // ── Fetch ──────────────────────────────────────────────────────────────
-  const fetchFeed = useCallback(async (cursors?: FeedCursors) => {
-    try {
-      const params = new URLSearchParams();
-      if (cursors) {
-        params.set("subOffset",   String(cursors.subOffset));
-        params.set("freshOffset", String(cursors.freshOffset));
-params.set("hotOffset",   String(cursors.hotOffset));
-      }
-      const qs  = params.toString();
-      const url = `/api/posts/feed${qs ? `?${qs}` : ""}`;
-      const res = await fetch(url);
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Failed to load feed");
-        setApiLoading(false);
-        setLoadingMore(false);
-        return;
-      }
-
-      const merged: FeedPost[] = data.posts.map(mergeSync);
-      const newCursors: FeedCursors | null = data.hasMore
-        ? { subOffset: data.nextSubOffset ?? 0, freshOffset: data.nextFreshOffset ?? 0, hotOffset: data.nextHotOffset ?? 0 }
-
-        : null;
-
-      if (cursors) {
-        // Paginated append — use functional updater to avoid stale ref
-        setPosts((prev) => {
-          const updated = [...prev, ...merged];
-          setFeed({
-            posts:     updated,
-            nextCursor: newCursors ? JSON.stringify(newCursors) : "",
-            fetchedAt:  Date.now(),
-          });
-          return updated;
-        });
-        setNextCursors(newCursors);
-        setLoadingMore(false);
-      } else {
-        // Fresh load
-        setPosts(merged);
-        setNextCursors(newCursors);
-        setTimeout(() => {
-          setFeed({
-            posts:     merged,
-            nextCursor: newCursors ? JSON.stringify(newCursors) : "",
-            fetchedAt:  Date.now(),
-          });
-        }, 0);
-        setApiLoading(false);
-      }
-    } catch {
-      setError("Failed to load feed");
-      setApiLoading(false);
-      setLoadingMore(false);
-    }
-  }, [setFeed]);
-
-  // ── Initial load (use cache if fresh) ─────────────────────────────────
-  useEffect(() => {
-  if (feed && !isStale(feed.fetchedAt) && feed.posts.length > 0) {
-    // Show cache instantly for SPA nav
-    const merged = feed.posts.map(mergeSync);
-    setPosts(merged);
-    setNextCursors(parseCursors(feed.nextCursor));
-    setApiLoading(false);
-    // Always revalidate in background — mirrors subscriptions page
-    fetchFeed();
-    return;
-  }
-  fetchFeed();
-}, []);
 
   // ── Infinite scroll ────────────────────────────────────────────────────
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && nextCursorsRef.current && !loadingMoreRef.current) {
-        loadingMoreRef.current = true;
-        setLoadingMore(true);
-        fetchFeed(nextCursorsRef.current);
+      if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
       }
     }, { rootMargin: "600px" });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [fetchFeed, apiLoading]);
-
-  // ── Post sync ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    return postSyncStore.subscribe((event) => {
-      setPosts((prev) =>
-        prev.map((p) =>
-          String(p.id) === event.postId
-            ? { ...p, liked: event.liked, like_count: event.like_count, comment_count: event.comment_count ?? p.comment_count }
-            : p
-        )
-      );
-      updateFeedPost(event.postId, { liked: event.liked, like_count: event.like_count, comment_count: event.comment_count });
-    });
-  }, [updateFeedPost]);
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage, isLoading]);
 
   // ── PPV unlock ─────────────────────────────────────────────────────────
   const handleUnlock = useCallback((postId: string) => {
@@ -332,23 +255,38 @@ params.set("hotOffset",   String(cursors.hotOffset));
       const res  = await fetch(`/api/posts/${ppvPostId}`);
       const data = await res.json();
       if (res.ok && data.post) {
-        setPosts((prev) => prev.map((p) => {
-          if (p.id !== ppvPostId) return p;
+        queryClient.setQueryData(queryKeys.feed(), (old: any) => {
+          if (!old) return old;
           return {
-            ...p,
-            locked:     false,
-            can_access: true,
-            media:      (data.post.media ?? []).map((m: any) => ({
-              ...m,
-              locked: false,
+            ...old,
+            pages: old.pages.map((page: any) => ({
+              ...page,
+              posts: page.posts.map((p: FeedPost) => {
+                if (p.id !== ppvPostId) return p;
+                return {
+                  ...p, locked: false, can_access: true,
+                  media: (data.post.media ?? []).map((m: any) => ({ ...m, locked: false })),
+                };
+              }),
             })),
           };
-        }));
+        });
       }
     } catch {
-      setPosts((prev) => prev.map((p) => p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p));
+      queryClient.setQueryData(queryKeys.feed(), (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            posts: page.posts.map((p: FeedPost) =>
+              p.id === ppvPostId ? { ...p, locked: false, can_access: true } : p
+            ),
+          })),
+        };
+      });
     }
-  }, [ppvPostId]);
+  }, [ppvPostId, queryClient]);
 
   // ── Stories ────────────────────────────────────────────────────────────
   const handleOpenViewer = useCallback((groups: CreatorStoryGroup[], startIndex: number) => {
@@ -382,10 +320,8 @@ params.set("hotOffset",   String(cursors.hotOffset));
 
   // ── Retry handler ──────────────────────────────────────────────────────
   const handleRetry = useCallback(() => {
-    setError(null);
-    setApiLoading(true);
-    fetchFeed();
-  }, [fetchFeed]);
+    queryClient.invalidateQueries({ queryKey: queryKeys.feed() });
+  }, [queryClient]);
 
   // ── Memoized feed items ────────────────────────────────────────────────
   const feedItems = useMemo(() => {
@@ -457,12 +393,12 @@ params.set("hotOffset",   String(cursors.hotOffset));
       </div>
 
       <div style={{ padding: "0 0 40px", minHeight: "200px" }}>
-        {apiLoading && <FeedSkeleton count={5} />}
-        {!apiLoading && (
+        {isLoading && <FeedSkeleton count={5} />}
+        {!isLoading && (
           <>
             {error && (
               <div style={{ textAlign: "center", padding: "48px 24px" }}>
-                <p style={{ color: "#6B6B8A", fontSize: "14px", marginBottom: "16px" }}>{error}</p>
+                <p style={{ color: "#6B6B8A", fontSize: "14px", marginBottom: "16px" }}>{(error as Error).message}</p>
                 <button
                   onClick={handleRetry}
                   style={{
@@ -483,12 +419,12 @@ params.set("hotOffset",   String(cursors.hotOffset));
             )}
             {feedItems}
             <div ref={sentinelRef} style={{ height: "1px", marginTop: "1px" }} />
-            {loadingMore && (
+            {isFetchingNextPage && (
               <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
                 <div className="feed-spinner" />
               </div>
             )}
-            {!nextCursors && !loadingMore && posts.length > 0 && (
+            {!hasNextPage && !isFetchingNextPage && posts.length > 0 && (
               <div style={{ textAlign: "center", padding: "24px", color: "#4A4A6A", fontSize: "13px" }}>
                 You&apos;re all caught up ✓
               </div>

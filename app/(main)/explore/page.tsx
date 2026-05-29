@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys, staleTimes } from "@/lib/query/keys";
 import { CreatorGrid, type GridItem } from "@/components/explore/CreatorGrid";
 import { FeaturedStrip } from "@/components/explore/FeaturedStrip";
 import type { StripCreator } from "@/components/explore/CreatorCard";
@@ -22,55 +24,50 @@ const SORT_TO_FILTER: Record<SortOption, string> = {
 };
 
 export default function ExplorePage() {
-  const [stripCreators, setStripCreators] = useState<StripCreator[]>([]);
-  const [gridItems, setGridItems]         = useState<GridItem[]>([]);
-  const [cursor, setCursor]               = useState<string | null>(null);
-  const [loading, setLoading]             = useState(true);
-  const [loadingMore, setLoadingMore]     = useState(false);
-  const [hasMore, setHasMore]             = useState(true);
   const [sort, setSort]                   = useState<SortOption>("most_liked");
   const [dropdownOpen, setDropdownOpen]   = useState(false);
   const [followMap, setFollowMap]         = useState<Record<string, boolean>>({});
+  const [extraItems, setExtraItems]       = useState<GridItem[]>([]);
+  const [cursor, setCursor]               = useState<string | null>(null);
+  const [loadingMore, setLoadingMore]     = useState(false);
+  const [hasMore, setHasMore]             = useState(false);
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.explore(SORT_TO_FILTER[sort]),
+    queryFn:  async () => {
+      const filter = SORT_TO_FILTER[sort];
+      const res    = await fetch(`/api/discover?filter=${filter}`);
+      return res.json();
+    },
+    staleTime: staleTimes.explore,
+  });
+
+  const stripCreators: StripCreator[] = data?.strip ?? [];
+  const gridItems: GridItem[]         = [...(data?.grid ?? []), ...extraItems];
+
+  // Sync cursor/hasMore/extraItems when query data changes (sort change)
   useEffect(() => {
-    let cancelled = false;
+    setExtraItems([]);
+    setDropdownOpen(false);
+    setCursor(data?.nextCursor ?? null);
+    setHasMore(!!data?.nextCursor);
+  }, [data]);
 
-    const run = async () => {
-      setLoading(true);
-      setGridItems([]);
-      setCursor(null);
-      setHasMore(true);
-      setDropdownOpen(false);
-
-      try {
-        const filter = SORT_TO_FILTER[sort];
-        const res    = await fetch(`/api/discover?filter=${filter}`);
-        const data   = await res.json();
-        if (cancelled) return;
-
-        const grid = data.grid ?? [];
-        setStripCreators(data.strip ?? []);
-        setGridItems(grid);
-        setCursor(data.nextCursor ?? null);
-        setHasMore(!!data.nextCursor);
-
-        const creatorIds = [...new Set<string>(grid.filter((i: GridItem) => i.type === "video").map((i: GridItem) => (i as any).creator_id).filter((id: unknown): id is string => typeof id === "string"))];
-        if (creatorIds.length) {
-          import("@/lib/utils/follow").then(({ checkIsFollowingBulk }) => {
-            checkIsFollowingBulk(creatorIds).then((map) => setFollowMap(map)).catch(() => {});
-          });
-        }
-      } catch (err) {
-        console.error("[ExplorePage] fetch error:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    run();
-    return () => { cancelled = true; };
-  }, [sort]);
+  // Load followMap when base grid changes
+  useEffect(() => {
+    const grid = data?.grid ?? [];
+    const creatorIds = [...new Set<string>(
+      grid
+        .filter((i: GridItem) => i.type === "video")
+        .map((i: GridItem) => (i as any).creator_id)
+        .filter((id: unknown): id is string => typeof id === "string")
+    )];
+    if (creatorIds.length) {
+      import("@/lib/utils/follow").then(({ checkIsFollowingBulk }) => {
+        checkIsFollowingBulk(creatorIds).then((map) => setFollowMap(map)).catch(() => {});
+      });
+    }
+  }, [data?.grid]);
 
   // ── Load more ──────────────────────────────────────────────────────────────
   const handleLoadMore = useCallback(async () => {
@@ -82,7 +79,7 @@ export default function ExplorePage() {
       const res    = await fetch(`/api/discover?filter=${filter}&cursor=${cursor}`);
       const data   = await res.json();
 
-      setGridItems((prev) => [...prev, ...(data.grid ?? [])]);
+      setExtraItems((prev) => [...prev, ...(data.grid ?? [])]);
       setCursor(data.nextCursor ?? null);
       setHasMore(!!data.nextCursor);
     } catch (err) {
@@ -139,7 +136,7 @@ export default function ExplorePage() {
       <div style={{ padding: "16px 12px 80px" }}>
 
         {/* Featured strip */}
-        {!loading && stripCreators.length > 0 && (
+        {!isLoading && stripCreators.length > 0 && (
           <FeaturedStrip creators={stripCreators} />
         )}
 
@@ -202,7 +199,7 @@ export default function ExplorePage() {
           </div>
         </div>
 
-        {loading ? (
+        {isLoading ? (
   <ExploreSkeleton gridCount={8} />
 ) : (
           <CreatorGrid
