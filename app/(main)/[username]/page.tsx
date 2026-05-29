@@ -11,7 +11,9 @@ import type { ProfileSkeletonContext } from "@/components/loadscreen/ProfileSkel
 import type { User, Subscription } from "@/lib/types/profile";
 import type { CheckoutType, SubscriptionTier } from "@/lib/types/checkout";
 import type { ApiPost } from "@/components/profile/PostRow";
-import { useAppStore, isStale } from "@/lib/store/appStore";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys, staleTimes } from "@/lib/query/keys";
+import { useAppStore } from "@/lib/store/appStore";
 import { useUpload } from "@/lib/context/UploadContext";
 import { postSyncStore } from "@/lib/store/postSyncStore";
 import { startConversation } from "@/app/(main)/messages/page";
@@ -37,7 +39,6 @@ function ProfilePageInner() {
   const fromFanList  = searchParams.get("from") === "fans";
 
   const {
-    profiles,
     setProfile: setStoreProfile,
     updateProfile,
     clearProfile,
@@ -48,7 +49,6 @@ function ProfilePageInner() {
 
   const [viewer,                setViewer]                = React.useState<User | null>(null);
   const [profile,               setProfile]               = React.useState<User | null>(null);
-  const [subscription,          setSubscription]          = React.useState<Subscription | null>(null);
   const [isSubscribed,          setIsSubscribed]          = React.useState(false);
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(null);
   const [subscriptionId,        setSubscriptionId]        = React.useState<number | undefined>(undefined);
@@ -159,248 +159,164 @@ function ProfilePageInner() {
     }
   }, [profile, router, messageLoading]);
 
-  const fetchSubscriptionStatus = React.useCallback(async (creatorId: string) => {
-    try {
-      const res  = await fetch(`/api/subscriptions/status?creatorId=${creatorId}`);
-      const data = await res.json();
-      setIsSubscribed(!!data.active);
-      setSubscriptionPeriodEnd(data.currentPeriodEnd ?? null);
-      setSubscriptionId(data.subscriptionId ?? undefined);
-      setPricePaid(data.pricePaid ?? undefined);
-      setSelectedTier(data.selectedTier ?? undefined);
-    } catch (err) {
-      console.error("[Profile] Failed to fetch subscription status:", err);
-    }
-  }, []);
-
-  const refreshPosts = React.useCallback(async (creatorUsername: string) => {
-    try {
-      const res  = await fetch(`/api/posts/creator/${creatorUsername}`, { cache: "no-store" });
-      const data = await res.json();
-      if (res.ok) {
-        const freshPosts: ApiPost[] = data.posts || [];
-        setApiPosts(freshPosts);
-        updateProfile(creatorUsername, { apiPosts: freshPosts });
-        setFeedRefreshKey((k) => k + 1);
-      }
-    } catch (err) {
-      console.error("[ProfilePage] refreshPosts error:", err);
-    }
-  }, [updateProfile]);
+  const queryClient = useQueryClient();
 
   // ── Keep refs in sync so the realtime channel can call them safely ────────
-  React.useEffect(() => { profileRef.current      = profile; },               [profile]);
-  React.useEffect(() => { refreshPostsRef.current = refreshPosts; },           [refreshPosts]);
-  React.useEffect(() => { fetchSubRef.current     = fetchSubscriptionStatus; }, [fetchSubscriptionStatus]);
+  React.useEffect(() => { profileRef.current = profile; }, [profile]);
 
-  const backgroundRevalidate = React.useCallback(async (creatorId: string, creatorUsername: string) => {
-    try {
-      const [subRes, postsRes] = await Promise.allSettled([
-        fetch(`/api/subscriptions/status?creatorId=${creatorId}`),
-        fetch(`/api/posts/creator/${creatorUsername}`),
-      ]);
-      if (subRes.status === "fulfilled" && subRes.value.ok) {
-        const data = await subRes.value.json();
-        const subscribedVal   = !!data.active;
-        const periodEndVal    = data.currentPeriodEnd ?? null;
-        const pricePaidVal    = data.pricePaid ?? undefined;
-        const selectedTierVal = data.selectedTier ?? undefined;
-        setIsSubscribed(subscribedVal);
-        setSubscriptionPeriodEnd(periodEndVal);
-        setPricePaid(pricePaidVal);
-        setSelectedTier(selectedTierVal);
-        updateProfile(creatorUsername, {
-          isSubscribed: subscribedVal,
-          subscriptionPeriodEnd: periodEndVal,
-          pricePaid: pricePaidVal,
-          selectedTier: selectedTierVal,
-        });
-      }
-      if (postsRes.status === "fulfilled" && postsRes.value.ok) {
-        const data = await postsRes.value.json();
-        const freshPosts: ApiPost[] = data.posts || [];
-        setApiPosts(freshPosts);
-        updateProfile(creatorUsername, { apiPosts: freshPosts });
-        setFeedRefreshKey((k) => k + 1);
-      }
-    } catch (err) {
-      console.error("[ProfilePage] backgroundRevalidate error:", err);
-    }
-  }, [updateProfile]);
+  // ── profileQuery: fetch profile from Supabase ─────────────────────────────
+  const profileQuery = useQuery({
+    queryKey: queryKeys.profile(username),
+    queryFn: async () => {
+      const supabase = createClient();
+      const result   = await supabase
+        .from("profiles")
+        .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
+        .eq("username", username)
+        .single();
+      if (result.error) throw result.error;
+      const raw = result.data;
+      const user: User & { _likes_count?: number } = {
+        ...raw,
+        subscriptionPrice: raw.subscription_price ?? 0,
+        bundlePricing: {
+          threeMonths: raw.bundle_price_3_months ?? undefined,
+          sixMonths:   raw.bundle_price_6_months ?? undefined,
+        },
+        _likes_count: raw.likes_count ?? 0,
+      };
+      return user;
+    },
+    staleTime: staleTimes.profile,
+    enabled: !!username,
+  });
 
-  const [viewerReady, setViewerReady] = React.useState(true);
+  // ── subStatusQuery: fetch subscription status ─────────────────────────────
+  const viewerData   = globalViewer as User | null;
+  const profileData  = profileQuery.data ?? null;
+  const isOwnProfile = !!viewerData && !!profileData && viewerData.id === profileData.id;
+  const isCreator    = profileData?.role === "creator";
+
+  const subStatusQuery = useQuery({
+    queryKey: [...queryKeys.profile(username), "subStatus"],
+    queryFn: async () => {
+      const res  = await fetch(`/api/subscriptions/status?creatorId=${profileData!.id}`);
+      const data = await res.json();
+      return data;
+    },
+    staleTime: staleTimes.subscriptions,
+    enabled: isCreator && !isOwnProfile && !!viewerData,
+  });
+
+  // ── postsQuery: fetch creator posts ──────────────────────────────────────
+  const postsQuery = useQuery({
+    queryKey: [...queryKeys.profile(username), "posts"],
+    queryFn: async () => {
+      const res  = await fetch(`/api/posts/creator/${username}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load posts");
+      return (data.posts || []) as ApiPost[];
+    },
+    staleTime: staleTimes.profile,
+    enabled: !!profileData,
+  });
+
+  // ── Sync query results into local state ───────────────────────────────────
+  React.useEffect(() => {
+    if (!profileQuery.data) return;
+    const p = profileQuery.data;
+    setProfile(p);
+    profileIdRef.current = p.id;
+    setTotalLikes((p as any)._likes_count ?? 0);
+    if (viewerData) { setViewer(viewerData); viewerIdRef.current = viewerData.id; }
+  }, [profileQuery.data, viewerData]);
 
   React.useEffect(() => {
-    if (globalViewer) setViewerReady(true);
-  }, [globalViewer]);
+    if (!subStatusQuery.data) return;
+    const d = subStatusQuery.data;
+    setIsSubscribed(!!d.active);
+    setSubscriptionPeriodEnd(d.currentPeriodEnd ?? null);
+    setSubscriptionId(d.subscriptionId ?? undefined);
+    setPricePaid(d.pricePaid ?? undefined);
+    setSelectedTier(d.selectedTier ?? undefined);
+  }, [subStatusQuery.data]);
 
   React.useEffect(() => {
-    if (!viewerReady) return;
+    if (!postsQuery.data) return;
+    const posts = postsQuery.data.map((p) => {
+      const synced = postSyncStore.get(String(p.id));
+      if (!synced) return p;
+      return { ...p, liked: synced.liked, like_count: synced.like_count };
+    });
+    setApiPosts(posts);
+    setFeedRefreshKey((k) => k + 1);
+  }, [postsQuery.data]);
 
-    setFanSubscription(null);
+  // ── fanSubscription fetch (creator viewing fan) ───────────────────────────
+  React.useEffect(() => {
+    if (!profileData || !viewerData) return;
+    const ownProfile  = viewerData.id === profileData.id;
+    const viewerIsCreator = viewerData.role === "creator";
+    if (!viewerIsCreator || ownProfile) return;
+    fetch(`/api/fans/subscription?fanId=${profileData.id}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.subscription) setFanSubscription(d.subscription); })
+      .catch(() => {});
+  }, [profileData?.id, viewerData?.id]);
 
-    const cached = profiles[username];
-    const fresh  = cached && !isStale(cached.fetchedAt);
+  // ── followStatus fetch ────────────────────────────────────────────────────
+  React.useEffect(() => {
+    if (!profileData || !viewerData || isOwnProfile) return;
+    checkIsFollowing(profileData.id)
+      .then((val) => setIsFollowing(val as boolean))
+      .catch(() => {});
+  }, [profileData?.id, viewerData?.id, isOwnProfile]);
 
-    if (fresh) {
-      if (cached.viewer)  { setViewer(cached.viewer);   viewerIdRef.current  = cached.viewer.id; }
-      if (cached.profile) { setProfile(cached.profile); profileIdRef.current = cached.profile.id; }
-      setApiPosts((cached.apiPosts ?? []).map((p) => {
-        const synced = postSyncStore.get(String(p.id));
-        if (!synced) return p;
-        return { ...p, liked: synced.liked, like_count: synced.like_count };
-      }));
-      setIsSubscribed(cached.isSubscribed ?? false);
-      setSubscriptionPeriodEnd(cached.subscriptionPeriodEnd ?? null);
-      setPricePaid(cached.pricePaid ?? undefined);
-      setSelectedTier(cached.selectedTier ?? undefined);
-      setIsFollowing(cached.isFollowing ?? false);
-      setTotalLikes(cached.totalLikes ?? 0);
-      if (cached.fanSubscription) setFanSubscription(cached.fanSubscription);
+  // ── Derive loading + revealed states ─────────────────────────────────────
+  const derivedLoading = profileQuery.isLoading || postsQuery.isLoading;
+
+  React.useEffect(() => {
+    if (!derivedLoading) {
       setApiLoading(false);
       requestAnimationFrame(() => setRevealed(true));
-
-      if (cached.profile?.role === "creator" && cached.viewer?.id !== cached.profile.id) {
-        backgroundRevalidate(cached.profile.id, cached.profile.username);
-      }
-      return;
     }
+  }, [derivedLoading]);
 
-    const fetchData = async () => {
-      try {
-        const supabase    = createClient();
-        const viewerData: User | null = (globalViewer as any) ?? null;
+  React.useEffect(() => {
+    if (profileQuery.isError) setFetchError(true);
+  }, [profileQuery.isError]);
 
-        const profileResult = await supabase
-          .from("profiles")
-          .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
-          .eq("username", username)
-          .single();
-
-        const profileRaw = profileResult.data ?? null;
-
-        if (viewerData) {
-          setViewer(viewerData);
-          viewerIdRef.current = viewerData.id;
-        }
-
-        let enriched: User | null            = null;
-        let likesCount                       = 0;
-        let followingVal                     = false;
-        let subscribedVal                    = false;
-        let periodEndVal: string | null      = null;
-        let pricePaidVal: number | undefined  = undefined;
-        let selectedTierVal: string | undefined = undefined;
-        let fetchedPosts: ApiPost[]          = [];
-        let fanSubData: Subscription | null  = null;
-
-        if (profileRaw) {
-          profileIdRef.current = profileRaw.id;
-          enriched = {
-            ...(profileRaw as User),
-            subscriptionPrice: profileRaw.subscription_price ?? 0,
-            bundlePricing: {
-              threeMonths: profileRaw.bundle_price_3_months ?? undefined,
-              sixMonths:   profileRaw.bundle_price_6_months ?? undefined,
-            },
-          };
-          setProfile(enriched);
-          likesCount = profileRaw.likes_count ?? 0;
-          setTotalLikes(likesCount);
-
-          const userId       = viewerData?.id ?? null;
-          const isOwnProfile = userId === profileRaw.id;
-          const isCreator    = profileRaw.role === "creator";
-
-          if (isCreator) {
-            const [subRes, followRes, postsRes, fanSubRes] = await Promise.allSettled([
-              !isOwnProfile && userId
-                ? fetch(`/api/subscriptions/status?creatorId=${profileRaw.id}`)
-                : Promise.resolve(null),
-              !isOwnProfile && userId
-                ? checkIsFollowing(profileRaw.id)
-                : Promise.resolve(false),
-              fetch(`/api/posts/creator/${profileRaw.username}`),
-              viewerData?.role === "creator" && !isOwnProfile && userId
-                ? fetch(`/api/fans/subscription?fanId=${profileRaw.id}`)
-                : Promise.resolve(null),
-            ]);
-
-            if (subRes.status === "fulfilled" && subRes.value instanceof Response && subRes.value.ok) {
-              const data = await subRes.value.json();
-              subscribedVal   = !!data.active;
-              periodEndVal    = data.currentPeriodEnd ?? null;
-              pricePaidVal    = data.pricePaid ?? undefined;
-              selectedTierVal = data.selectedTier ?? undefined;
-              setIsSubscribed(subscribedVal);
-              setSubscriptionPeriodEnd(periodEndVal);
-              setPricePaid(pricePaidVal);
-              setSelectedTier(selectedTierVal);
-            }
-            if (followRes.status === "fulfilled") {
-              followingVal = followRes.value as boolean;
-              setIsFollowing(followingVal);
-            }
-            if (postsRes.status === "fulfilled" && postsRes.value instanceof Response && postsRes.value.ok) {
-              const data = await postsRes.value.json();
-              fetchedPosts = (data.posts || []).map((p: any) => {
-                const synced = postSyncStore.get(String(p.id));
-                if (!synced) return p;
-                return { ...p, liked: synced.liked, like_count: synced.like_count };
-              });
-              setApiPosts(fetchedPosts);
-            }
-            if (fanSubRes.status === "fulfilled" && fanSubRes.value instanceof Response && fanSubRes.value.ok) {
-              const data = await fanSubRes.value.json();
-              if (data.subscription) {
-                fanSubData = data.subscription;
-                setFanSubscription(data.subscription);
-              }
-            }
-          } else {
-            const [fanPostsRes, fanSubRes2] = await Promise.allSettled([
-              fetch(`/api/posts/creator/${profileRaw.username}`),
-              viewerData?.role === "creator" && !isOwnProfile && userId
-                ? fetch(`/api/fans/subscription?fanId=${profileRaw.id}`)
-                : Promise.resolve(null),
-            ]);
-            if (fanPostsRes.status === "fulfilled" && fanPostsRes.value instanceof Response && fanPostsRes.value.ok) {
-              const data = await fanPostsRes.value.json();
-              fetchedPosts = data.posts || [];
-              setApiPosts(fetchedPosts);
-            }
-            if (fanSubRes2.status === "fulfilled" && fanSubRes2.value instanceof Response && fanSubRes2.value.ok) {
-              const data = await fanSubRes2.value.json();
-              if (data.subscription) {
-                fanSubData = data.subscription;
-                setFanSubscription(data.subscription);
-              }
-            }
-          }
-        }
-
-        setStoreProfile(username, {
-          viewer: viewerData, profile: enriched, totalLikes: likesCount,
-          tierId: undefined,
-          isFollowing: followingVal,
-          isSubscribed: subscribedVal, subscriptionPeriodEnd: periodEndVal,
-          pricePaid: pricePaidVal,
-          selectedTier: selectedTierVal,
-          apiPosts: fetchedPosts, fetchedAt: Date.now(),
-          fanSubscription: fanSubData ?? undefined,
-        });
-      } catch (err) {
-        console.error("[ProfilePage] fetchData UNCAUGHT ERROR:", err);
-        setFetchError(true);
-      } finally {
-        setApiLoading(false);
-        requestAnimationFrame(() => setRevealed(true));
-      }
-    };
-
-    fetchData();
+  // ── Persist to appStore for backward-compat (removed in Phase 11) ─────────
+  React.useEffect(() => {
+    if (!profileQuery.data || postsQuery.isLoading) return;
+    setStoreProfile(username, {
+      viewer:               viewerData,
+      profile:              profileQuery.data,
+      totalLikes:           (profileQuery.data as any)._likes_count ?? 0,
+      tierId:               undefined,
+      isFollowing,
+      isSubscribed,
+      subscriptionPeriodEnd,
+      pricePaid,
+      selectedTier,
+      apiPosts,
+      fetchedAt:            Date.now(),
+      fanSubscription:      fanSubscription ?? undefined,
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username, viewerReady, globalViewer]);
+  }, [profileQuery.data, postsQuery.data, isSubscribed]);
+
+  const refreshPosts = React.useCallback(async (creatorUsername: string) => {
+    await queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(creatorUsername), "posts"] });
+  }, [queryClient]);
+
+  const fetchSubscriptionStatus = React.useCallback(async (_creatorId: string) => {
+    await queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "subStatus"] });
+  }, [queryClient, username]);
+
+  // ── Keep refs in sync ────────────────────────────────────────────────────
+  React.useEffect(() => { refreshPostsRef.current = refreshPosts; },           [refreshPosts]);
+  React.useEffect(() => { fetchSubRef.current     = fetchSubscriptionStatus; }, [fetchSubscriptionStatus]);
 
   React.useEffect(() => {
     if (!profile || !viewer || viewer.id !== profile.id) return;
@@ -410,8 +326,10 @@ function ProfilePageInner() {
       if (u.phase === "done" && prev !== "done") shouldRefresh = true;
       prevUploadPhases.current[u.id] = u.phase;
     }
-    if (shouldRefresh) refreshPosts(profile.username);
-  }, [uploads, profile, viewer, refreshPosts]);
+    if (shouldRefresh) {
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(profile.username), "posts"] });
+    }
+  }, [uploads, profile, viewer, queryClient]);
 
   const prevUploadPhases = React.useRef<Record<string, string>>({});
 
@@ -427,29 +345,11 @@ function ProfilePageInner() {
       .on("postgres_changes", {
         event: "*", schema: "public", table: "subscriptions",
         filter: `fan_id=eq.${fanId}`,
-      }, async (payload: any) => {
+      }, (payload: any) => {
         const row = payload.new;
-
-        if (row?.creator_id === creatorId && row?.status === "active") {
-          setIsSubscribed(true);
-          setSubscriptionPeriodEnd(row.current_period_end ?? null);
-          clearProfile(username);
-          const currentProfile = profileRef.current;
-          if (currentProfile?.username) {
-            await fetchSubRef.current?.(creatorId);
-            await refreshPostsRef.current?.(currentProfile.username);
-          }
-        }
-
-        if (row?.creator_id === creatorId && (row?.status === "cancelled" || row?.status === "expired")) {
-          setIsSubscribed(false);
-          clearProfile(username);
-          const currentProfile = profileRef.current;
-          if (currentProfile?.username) {
-            await fetchSubRef.current?.(creatorId);
-            await refreshPostsRef.current?.(currentProfile.username);
-          }
-        }
+        if (row?.creator_id !== creatorId) return;
+        queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "subStatus"] });
+        queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "posts"] });
       })
       .subscribe();
 
@@ -458,13 +358,8 @@ function ProfilePageInner() {
       .on("postgres_changes", {
         event: "UPDATE", schema: "public", table: "profiles",
         filter: `id=eq.${creatorId}`,
-      }, (payload: any) => {
-        const updated = payload.new;
-        setProfile((prev) => prev
-          ? { ...prev, subscriber_count: updated.subscriber_count, likes_count: updated.likes_count }
-          : prev
-        );
-        setTotalLikes(updated.likes_count ?? 0);
+      }, () => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.profile(username) });
       })
       .subscribe();
 
@@ -478,22 +373,20 @@ function ProfilePageInner() {
   const handleSubscriptionSuccess = React.useCallback(async () => {
     setIsSubscribed(true);
     updateProfile(username, { isSubscribed: true });
-    if (profile) {
-      try { await fetchSubscriptionStatus(profile.id); } catch (e) { console.error(e); }
-      try { await refreshPosts(profile.username); }     catch (e) { console.error(e); }
-    }
+    await queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "subStatus"] });
+    await queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "posts"] });
     clearProfile(username);
-  }, [profile, fetchSubscriptionStatus, refreshPosts, username, clearProfile, updateProfile]);
+  }, [username, clearProfile, updateProfile, queryClient]);
 
   const handleCancelled = React.useCallback(async () => {
     if (profile) {
       setIsSubscribed(false);
       updateProfile(username, { isSubscribed: false });
       clearProfile(username);
-      try { await fetchSubscriptionStatus(profile.id); } catch (e) { console.error(e); }
-      try { await refreshPosts(profile.username); }     catch (e) { console.error(e); }
+      await queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "subStatus"] });
+      await queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "posts"] });
     }
-  }, [profile, fetchSubscriptionStatus, refreshPosts, username, clearProfile, updateProfile]);
+  }, [profile, username, clearProfile, updateProfile, queryClient]);
 
   const handleFollow = async () => {
     if (!viewer) { openAuthModal(); return; }
@@ -515,7 +408,6 @@ function ProfilePageInner() {
     finally { setFollowLoading(false); }
   };
 
-  const isOwnProfile             = viewer?.id === profile?.id;
   const isCreatorViewingFan      = viewer?.role === "creator" && profile?.role === "fan" && !isOwnProfile;
   const isCreatorViewingDualRole = viewer?.role === "creator" && profile?.role === "creator" && !isOwnProfile && !!fanSubscription;
   const isViewingCreator         = profile?.role === "creator" && !isOwnProfile && !isCreatorViewingFan;

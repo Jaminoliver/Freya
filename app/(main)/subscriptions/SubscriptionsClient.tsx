@@ -1,0 +1,244 @@
+"use client";
+
+import { useState, useMemo, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys, staleTimes } from "@/lib/query/keys";
+import { SubscriptionsHeader } from "@/components/subscription/SubscriptionsHeader";
+import { MoreHorizontal, Rows3, LayoutGrid } from "lucide-react";
+import dynamic from "next/dynamic";
+import { SubscriptionList } from "@/components/subscription/SubscriptionList";
+import { SubscriptionFilterTabs } from "@/components/subscription/SubscriptionFilterTabs";
+import { SubscriptionSearchBar } from "@/components/subscription/SubscriptionSearchBar";
+import { FavouritesRail } from "@/components/subscription/FavouritesRail";
+import { SubscriptionsSkeleton } from "@/components/loadscreen/SubscriptionsSkeleton";
+import type { CardView, Subscription, SubscriptionStatus } from "@/lib/types/subscription";
+import type { User } from "@/lib/types/profile";
+
+const CheckoutModal = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
+
+type FilterKey = "all" | "active" | "expired" | "attention" | "starred";
+
+function preloadImages(urls: string[]): void {
+  for (const url of urls) {
+    if (!url) continue;
+    const img = new Image();
+    img.src = url;
+  }
+}
+
+export default function SubscriptionsClient() {
+  const queryClient = useQueryClient();
+
+  const { data: subscriptions = [], isLoading, refetch } = useQuery({
+    queryKey: queryKeys.subscriptions(),
+    queryFn:  async () => {
+      const res  = await fetch("/api/subscriptions/mine");
+      const data = await res.json();
+      const subs: Subscription[] = data.subscriptions ?? [];
+      const urls: string[] = [];
+      for (const s of subs.slice(0, 6)) {
+        if (s.banner_url) urls.push(s.banner_url);
+        if (s.avatar_url) urls.push(s.avatar_url);
+      }
+      preloadImages(urls);
+      return subs;
+    },
+    staleTime: staleTimes.subscriptions,
+  });
+
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [query,  setQuery]  = useState("");
+  const [view,   setView]   = useState<CardView>("detailed");
+
+  const handleFavouriteChange = useCallback((id: number, next: boolean) => {
+    queryClient.setQueryData(queryKeys.subscriptions(), (prev: Subscription[] | undefined) =>
+      (prev ?? []).map((s) => s.id === id ? { ...s, isFavourite: next } : s)
+    );
+  }, [queryClient]);
+
+  const handleStatusChange = useCallback((id: number, status: SubscriptionStatus) => {
+    queryClient.setQueryData(queryKeys.subscriptions(), (prev: Subscription[] | undefined) =>
+      (prev ?? []).map((s) => s.id === id ? { ...s, status } : s)
+    );
+  }, [queryClient]);
+
+  const [tipOpen,    setTipOpen]    = useState(false);
+  const [tipCreator, setTipCreator] = useState<User | null>(null);
+
+  const handleTip = useCallback((creatorId: string) => {
+    const sub = subscriptions.find((s) => s.creatorId === creatorId);
+    if (!sub) return;
+    setTipCreator({
+      id:           sub.creatorId,
+      username:     sub.username,
+      display_name: sub.creatorName,
+      avatar_url:   sub.avatar_url,
+      banner_url:   sub.banner_url,
+      is_verified:  sub.isVerified,
+    } as unknown as User);
+    setTipOpen(true);
+  }, [subscriptions]);
+
+  const counts = useMemo(() => ({
+    all:       subscriptions.length,
+    active:    subscriptions.filter((s) => s.status === "active").length,
+    expired:   subscriptions.filter((s) => s.status === "expired").length,
+    attention: subscriptions.filter((s) => s.status === "attention").length,
+    starred:   subscriptions.filter((s) => s.isFavourite).length,
+  }), [subscriptions]);
+
+  const filteredByStatus = useMemo(() => {
+    if (filter === "all")     return subscriptions;
+    if (filter === "starred") return subscriptions.filter((s) => s.isFavourite);
+    return subscriptions.filter((s) => s.status === filter);
+  }, [subscriptions, filter]);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    if (!q) return filteredByStatus;
+    return filteredByStatus.filter((s) =>
+      s.creatorName.toLowerCase().includes(q) ||
+      s.username.toLowerCase().includes(q)
+    );
+  }, [filteredByStatus, query]);
+
+  const favourites = useMemo(
+    () => subscriptions.filter((s) => s.isFavourite),
+    [subscriptions]
+  );
+
+  const handleSearch = useCallback((q: string) => setQuery(q), []);
+
+  return (
+    <>
+      <style>{`
+        .subs-desktop-header { display: flex; }
+        @media (max-width: 767px) {
+          .subs-desktop-header { display: none !important; }
+        }
+      `}</style>
+
+      {tipCreator && (
+        <CheckoutModal
+          isOpen={tipOpen}
+          onClose={() => setTipOpen(false)}
+          type="tips"
+          creator={tipCreator}
+          monthlyPrice={0}
+          autoCloseOnSuccess
+        />
+      )}
+
+      <div className="subs-outer" style={{ width: "100%", backgroundColor: "#0A0A0F", fontFamily: "'Inter', sans-serif", paddingBottom: "calc(64px + env(safe-area-inset-bottom))" }}>
+        <div>
+          <SubscriptionsHeader />
+
+          <div
+            className="subs-desktop-header"
+            style={{
+              alignItems: "center", justifyContent: "space-between",
+              padding: "0 18px", height: "56px",
+              backgroundColor: "var(--background)",
+            }}
+          >
+            <span style={{ fontSize: "22px", fontWeight: 800, color: "#8B5CF6", letterSpacing: "-0.5px", fontFamily: "'Inter', sans-serif" }}>
+              Subscriptions
+            </span>
+            <button aria-label="More" style={{ background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", padding: "8px", borderRadius: "8px" }}>
+              <MoreHorizontal size={22} strokeWidth={1.8} />
+            </button>
+          </div>
+
+          <div style={{
+            padding: "12px 16px",
+            backgroundColor: "var(--background)",
+            position: "sticky", top: 0, zIndex: 10,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+            transition: "box-shadow 0.25s ease",
+          }}>
+            <p style={{
+              fontSize: "11px", fontWeight: 600, color: "#4A4A6A",
+              letterSpacing: "0.06em", textTransform: "uppercase",
+              fontFamily: "'Inter', sans-serif", margin: "0 0 10px",
+            }}>
+              MANAGE YOUR CREATORS
+            </p>
+            <SubscriptionFilterTabs
+              active={filter}
+              counts={counts}
+              onChange={(v) => setFilter(v as FilterKey)}
+            />
+          </div>
+
+          <div style={{ marginTop: "14px" }}>
+            <SubscriptionSearchBar onSearch={handleSearch} />
+          </div>
+
+          {filter === "all" && favourites.length > 0 && !query && (
+            <div style={{ marginTop: "18px" }}>
+              <FavouritesRail favourites={favourites} />
+            </div>
+          )}
+
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "18px 18px 12px",
+          }}>
+            <span style={{ fontSize: "16px", color: "#A3A3C2", fontWeight: 600 }}>
+              {filtered.length} {filtered.length === 1 ? "creator" : "creators"}
+            </span>
+            <div style={{
+              display: "flex", gap: "2px",
+              backgroundColor: "#1A1A2A", border: "1px solid #2A2A3D",
+              borderRadius: "10px", padding: "3px",
+            }}>
+              <button
+                onClick={() => setView("detailed")}
+                aria-label="1 per row"
+                style={{
+                  width: "30px", height: "26px", borderRadius: "7px",
+                  border: "none", cursor: "pointer",
+                  backgroundColor: view === "detailed" ? "#8B5CF6" : "transparent",
+                  color:           view === "detailed" ? "#fff"    : "#6B6B8A",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.15s",
+                }}
+              >
+                <Rows3 size={13} strokeWidth={2} />
+              </button>
+              <button
+                onClick={() => setView("compact")}
+                aria-label="2 per row"
+                style={{
+                  width: "30px", height: "26px", borderRadius: "7px",
+                  border: "none", cursor: "pointer",
+                  backgroundColor: view === "compact" ? "#8B5CF6" : "transparent",
+                  color:           view === "compact" ? "#fff"    : "#6B6B8A",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.15s",
+                }}
+              >
+                <LayoutGrid size={13} strokeWidth={2} />
+              </button>
+            </div>
+          </div>
+
+          <div style={{ padding: "0 18px 28px" }}>
+            {isLoading ? (
+              <SubscriptionsSkeleton count={6} />
+            ) : (
+              <SubscriptionList
+                subscriptions={filtered}
+                view={view}
+                onRefresh={refetch}
+                onFavouriteChange={handleFavouriteChange}
+                onStatusChange={handleStatusChange}
+                onTip={handleTip}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
