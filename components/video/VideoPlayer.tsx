@@ -403,7 +403,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
 
         portal.addEventListener("touchend", (ev) => {
           const delta = ev.changedTouches[0].clientY - swipeStartY;
-          if (delta > 120) {
+          if (delta > 120 && !seekingRef.current) {
             exitFakeFullscreen();
           } else {
             // Spring back
