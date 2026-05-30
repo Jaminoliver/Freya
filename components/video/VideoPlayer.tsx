@@ -776,6 +776,16 @@ export default function VideoPlayer({
     return parseFloat(aspectRatio) < 1;
   })();
 
+  const isTallPortrait = (() => {
+    if (fillParent && knownWidth && knownHeight) return knownWidth / knownHeight <= 0.6;
+    if (!aspectRatio) return false;
+    if (aspectRatio.includes("/")) {
+      const parts = aspectRatio.split("/");
+      return Number(parts[0]) / Number(parts[1]) <= 0.6;
+    }
+    return parseFloat(aspectRatio) <= 0.6;
+  })();
+
   const useRawFallback = processingStatus !== "completed" && !!rawVideoUrl;
   const posterSrc      = (!posterError && thumbnailUrl) ? thumbnailUrl : bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "";
 
@@ -1154,7 +1164,6 @@ export default function VideoPlayer({
 
         {!showPoster && !hasError && (
           <>
-            {console.log('[VP] controls', { isMobile, bottomOffset, isPortrait, objectFit })}
             <VideoControls
               videoRef={videoRef}
               containerRef={containerRef}
@@ -1162,7 +1171,7 @@ export default function VideoPlayer({
               onToggleMute={handleToggleMute}
               onFirstPlay={() => setHasStarted(true)}
               isMobile={isMobile}
-              isPortrait={isPortrait || objectFit === "cover"}
+              isPortrait={isTallPortrait || objectFit === "cover"}
               bottomOffset={bottomOffset}
               isPlaying={isPlaying}
               fullscreenTopLeft={fullscreenTopLeft}
