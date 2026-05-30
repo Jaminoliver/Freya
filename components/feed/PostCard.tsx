@@ -454,6 +454,7 @@ function PostCardInner({
               initialSlide={initialSlide}
               onSlideChange={(index) => onSlideChange?.(post.id, index)}
               autoplayOnVisible={autoplayOnVisible}
+              creatorHandle={post.creator.username}
             />
             </div>
           </VisibilityGate>

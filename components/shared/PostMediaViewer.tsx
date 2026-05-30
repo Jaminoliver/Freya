@@ -36,6 +36,7 @@ interface PostMediaViewerProps {
   maxHeight?:           string;
   autoplayOnVisible?:   boolean;
   fullscreenTopLeft?:   boolean;
+  creatorHandle?:       string;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -278,6 +279,7 @@ export default function PostMediaViewer({
   maxHeight = "85svh",
   autoplayOnVisible = false,
   fullscreenTopLeft = false,
+  creatorHandle,
 }: PostMediaViewerProps) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
@@ -495,6 +497,7 @@ export default function PostMediaViewer({
               fullscreenTopLeft={fullscreenTopLeft}
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}
+              creatorHandle={creatorHandle}
             />
           </div>
           {isUnlockedPPV && <UnlockedPPVBadge />}

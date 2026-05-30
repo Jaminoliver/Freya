@@ -652,6 +652,7 @@ interface VideoPlayerProps {
   fullscreenTopLeft?: boolean;
   knownWidth?:        number | null;
   knownHeight?:       number | null;
+  creatorHandle?:     string;
 }
 
 export default function VideoPlayer({
@@ -669,6 +670,7 @@ export default function VideoPlayer({
   fullscreenTopLeft = false,
   knownWidth        = null,
   knownHeight       = null,
+  creatorHandle,
 }: VideoPlayerProps) {
   const videoRef       = React.useRef<HTMLVideoElement | null>(null);
   const containerRef   = React.useRef<HTMLDivElement | null>(null);
@@ -1110,6 +1112,20 @@ export default function VideoPlayer({
         )}
 
         {/* Custom controls — only shown after poster is dismissed */}
+        {creatorHandle && (
+          <div style={{
+            position: "absolute", bottom: 8, right: 12,
+            zIndex: 12, pointerEvents: "none",
+            fontSize: "12px", fontWeight: 600,
+            color: "rgba(255,255,255,0.7)",
+            fontFamily: "'Inter', sans-serif",
+            textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+            letterSpacing: "0.02em",
+          }}>
+            {creatorHandle}@Fréya.com
+          </div>
+        )}
+
         {!showPoster && !hasError && (
           <>
             {console.log('[VP] controls', { isMobile, bottomOffset, isPortrait, objectFit })}
