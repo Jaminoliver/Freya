@@ -336,8 +336,12 @@ export default function ContentFeed({
 
   
 
-  const renderPostRow = (post: ApiPost, index?: number) => (
-    <div key={post.id} style={{ margin: "10px 12px", borderRadius: "14px", overflow: "hidden" }}>
+  const renderPostRow = (post: ApiPost, index?: number) => {
+    const firstM = post.media?.[0];
+    const rawR = firstM?.aspect_ratio ?? (firstM?.width && firstM?.height ? firstM.width / firstM.height : 0);
+    const isLandscape = rawR > 1;
+    return (
+    <div key={post.id} style={{ margin: isLandscape ? "10px 0" : "10px 12px", borderRadius: isLandscape ? "0" : "14px", overflow: "hidden" }}>
       {index === 0 && (
         <div style={{
           height: "1px",
@@ -351,7 +355,8 @@ export default function ContentFeed({
         onDelete={handleDeletePost} onImageClick={(p, index) => { console.log("[ContentFeed] onImageClick called", { postId: p.id, index }); onImageClick?.(p, index); }} onPPVUpdated={handlePPVUpdated}
       />
     </div>
-  );
+    );
+  };
 
   const renderGridPost = (post: ApiPost) => {
     const m      = post.media?.[0];
