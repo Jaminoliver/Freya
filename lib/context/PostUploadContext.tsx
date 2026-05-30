@@ -157,6 +157,21 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
   // ── Persist to session ─────────────────────────────────────────────────────
   useEffect(() => { savePersisted(uploads); }, [uploads]);
 
+  // ── Warn before leaving when upload is active ──────────────────────────────
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const hasActive = uploads.some(
+        (u) => u.phase === "uploading" || u.phase === "processing" || u.phase === "paused"
+      );
+      if (hasActive) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [uploads]);
+
   // ── Network online/offline detection ───────────────────────────────────────
   useEffect(() => {
     const goOffline = () => {
@@ -329,7 +344,8 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
           endpoint:    tusEndpoint,
           chunkSize:   10 * 1024 * 1024, // 10 MB chunks — faster than 5 MB on good connections
           retryDelays: [0, 3000, 5000, 10000, 20000],
-          storeFingerprintForResuming: false,
+          storeFingerprintForResuming: true,
+          removeFingerprintOnSuccess: true,
           headers: {
             AuthorizationSignature: signature,
             AuthorizationExpire:    String(expireTime),
@@ -382,7 +398,16 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
         });
 
         tusInstances.current[uploadId] = upload;
-        upload.start();
+        // Resume from previous upload if available (e.g. after page refresh)
+        upload.findPreviousUploads().then((previousUploads) => {
+          if (previousUploads.length > 0) {
+            upload.resumeFromPreviousUpload(previousUploads[0]);
+          }
+          upload.start();
+        }).catch(() => {
+          // If findPreviousUploads fails, just start fresh
+          upload.start();
+        });
       });
 
       delete tusInstances.current[uploadId];
@@ -448,7 +473,7 @@ if (!silent) {
     const uploadId = `upload_${Date.now()}_${Math.random()}`;
     if (!silent) {
       setUploads((prev) => [...prev, {
-        id: uploadId, fileName: file.name, progress: 0, phase: "uploading",
+        id: uploadId, fileName: title || file.name, progress: 0, phase: "uploading",
         file, _title: title, _onMediaId: onMediaId, _onError: onError,
         _thumbnailBlob: thumbnailBlob,
       }]);

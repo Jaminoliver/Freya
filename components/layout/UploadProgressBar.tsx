@@ -432,6 +432,25 @@ export default function UploadProgressBar() {
             </button>
           </div>
 
+          {/* Stay on page warning — video uploading */}
+          {(primary.phase === "uploading" || primary.phase === "paused") && !primary._isPhoto && !primary._isMultiPhoto && !primary._isText && !primary._isPoll && !primary._isMessage && (
+            <div style={{
+              marginTop: 8,
+              padding: "6px 10px",
+              borderRadius: 8,
+              backgroundColor: "rgba(245,158,11,0.08)",
+              border: "1px solid rgba(245,158,11,0.25)",
+              fontSize: 11,
+              color: "#F59E0B",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+            }}>
+              ⚠️ Stay on site — leaving might cancel your upload
+            </div>
+          )}
+
           {/* Progress bar */}
           {primary.phase !== "done" && <ProgressBar item={primary} />}
 

@@ -214,7 +214,7 @@ function CreatePostContent() {
 
         startVideoUpload({
           file:          videoFile,
-          title:         caption || videoFile.name,
+          title:         caption || "Video",
           thumbnailBlob: thumbnailBlob ?? undefined,
           onMediaId: async (mediaId) => {
             videoMediaId = mediaId;
@@ -232,7 +232,7 @@ function CreatePostContent() {
       if (videoFile) {
         startVideoUpload({
           file:          videoFile,
-          title:         caption || videoFile.name,
+          title:         caption || "Video",
           thumbnailBlob: thumbnailBlob ?? undefined,
           onMediaId: async (mediaId) => {
             try { await createPost([mediaId]); invalidateProfileCache(); }
