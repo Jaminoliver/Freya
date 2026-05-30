@@ -383,6 +383,7 @@ const [isHolding,    setIsHolding]    = React.useState(false);
         let swipeStartY = 0;
 
         portal.addEventListener("touchstart", (ev) => {
+          if (seekingRef.current) return;
           swipeStartY = ev.touches[0].clientY;
           container.style.transition = "none";
         }, { passive: true });
@@ -390,6 +391,7 @@ const [isHolding,    setIsHolding]    = React.useState(false);
         portal.addEventListener("touchmove", (ev) => {
           const delta = ev.touches[0].clientY - swipeStartY;
           if (delta <= 0) return; // scroll-up does nothing
+          if (seekingRef.current) return; // seeking — don't swipe-dismiss
           ev.preventDefault();   // lock page scroll behind portal
 
           const progress  = Math.min(delta / 320, 1);
@@ -715,7 +717,7 @@ export default function VideoPlayer({
   const [isPlaying,         setIsPlaying]         = React.useState(false);
   const [isFakeFullscreen,  setIsFakeFullscreen]  = React.useState(false);
 
-  const slowTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slowTimer    = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
     const check = () => setIsMobile(!window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -1084,9 +1086,13 @@ export default function VideoPlayer({
           }}
           onPause={() => { setIsPlaying(false); }}
           onEnded={() => { setIsPlaying(false); }}
+          onSeeking={() => {
+            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
+            setIsBuffering(false);
+          }}
           onWaiting={() => {
             if (bufferTimer.current) clearTimeout(bufferTimer.current);
-            bufferTimer.current = setTimeout(() => setIsBuffering(true), 300);
+            bufferTimer.current = setTimeout(() => setIsBuffering(true), 800);
           }}
           onPlaying={() => {
             if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
@@ -1171,7 +1177,7 @@ export default function VideoPlayer({
               onToggleMute={handleToggleMute}
               onFirstPlay={() => setHasStarted(true)}
               isMobile={isMobile}
-              isPortrait={isTallPortrait || objectFit === "cover"}
+              isPortrait={(isTallPortrait || objectFit === "cover") && !isFakeFullscreen}
               bottomOffset={bottomOffset}
               isPlaying={isPlaying}
               fullscreenTopLeft={fullscreenTopLeft}
