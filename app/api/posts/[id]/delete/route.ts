@@ -26,6 +26,23 @@ export async function POST(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    const { data: mediaFiles } = await service
+      .from("post_media")
+      .select("file_url")
+      .eq("post_id", postId);
+
+    if (mediaFiles && mediaFiles.length > 0) {
+      await Promise.allSettled(
+        mediaFiles.map(({ file_url }) => {
+          const filePath = new URL(file_url).pathname;
+          return fetch(`https://storage.bunnycdn.com/${process.env.BUNNY_STORAGE_ZONE}${filePath}`, {
+            method: "DELETE",
+            headers: { AccessKey: process.env.BUNNY_API_KEY! },
+          });
+        })
+      );
+    }
+
     // Soft-delete the post — keep media rows so unlockers retain access
     await service
       .from("posts")

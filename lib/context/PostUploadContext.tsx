@@ -392,6 +392,12 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ event: "tus_error", videoId, message: err.message, responseBody: body }),
   }).catch(() => {});
+  // Delete the ghost Bunny video created during init
+  fetch("/api/upload/video/cleanup", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ videoId }),
+  }).catch(() => {});
   const isNetwork = responseCode === "n/a" || String(responseCode) === "0";
   reject(new Error(isNetwork ? "Network error — check your connection and retry" : `Upload failed: ${err.message} — ${body}`));
 },
