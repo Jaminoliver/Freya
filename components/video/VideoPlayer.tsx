@@ -727,7 +727,7 @@ export default function VideoPlayer({
   // Mobile-only: watch container size and recompute how far controls must shift up
   // so they sit at the bottom of the actual painted video, not the container edge.
   React.useEffect(() => {
-    // if (!isMobile) return; // temp: test in emulator
+    if (fillParent) { setBottomOffset(0); return; }
     const container = containerRef.current;
     if (!container) return;
 
@@ -761,7 +761,7 @@ export default function VideoPlayer({
       ro.disconnect();
       container.removeEventListener("loadedmetadata", onMeta, true);
     };
-  }, [isMobile, videoRef]);
+  }, [isMobile, videoRef, knownWidth, knownHeight]);
 
   const aspectRatio = fillParent ? null : (externalRatio ?? internalRatio);
   const isPortrait  = (() => {
