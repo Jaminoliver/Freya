@@ -321,7 +321,7 @@ export default function PostRow({
       {viewerMedia.length > 0 && (() => {
         const firstM = viewerMedia[0];
         const rawR = firstM?.aspectRatio ?? (firstM?.width && firstM?.height ? firstM.width / firstM.height : 0);
-        const isLandscapeVideo = firstM?.type === "video" && rawR > 1;
+        const isLandscapeVideo = rawR > 1;
         return (
         <div style={{ marginTop: "12px", margin: isLandscapeVideo ? "6px 0" : isMobileView ? "6px 4px" : "6px 12px", borderRadius: isLandscapeVideo ? "0" : "14px", border: isLandscapeVideo ? "none" : "1px solid #1E1E2E", overflow: "hidden", clipPath: isLandscapeVideo ? "none" : "inset(0 round 14px)" }}>
         <PostMediaViewer

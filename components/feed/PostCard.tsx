@@ -435,7 +435,7 @@ function PostCardInner({
         })();
 
         const rawR = firstMedia?.aspectRatio ?? (firstMedia?.width && firstMedia?.height ? firstMedia.width / firstMedia.height : 0);
-        const isLandscapeVideo = firstMedia?.type === "video" && rawR > 1;
+        const isLandscapeVideo = rawR > 1;
         return (
           <VisibilityGate
             aspectRatio={placeholderRatio}
