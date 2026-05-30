@@ -586,7 +586,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           onMouseUp={handleSeekMouseUp}
           onTouchStart={handleSeekTouchStart}
           onTouchEnd={handleSeekTouchEnd}
-          style={{ position: "absolute", bottom: bottomOffset, left: 0, right: 0, height: "20px", display: "flex", alignItems: "flex-end", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 12, boxSizing: "border-box", opacity: 1, pointerEvents: "auto" }}
+          style={{ position: "absolute", bottom: 200, left: 0, right: 0, height: "20px", display: "flex", alignItems: "flex-end", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 12, boxSizing: "border-box", opacity: 1, pointerEvents: "auto" }}
         >
           <div style={{ position: "relative", width: "100%", height: "3px", backgroundColor: "rgba(255,255,255,0.35)", overflow: "visible", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" }}>
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.5)" }} />
