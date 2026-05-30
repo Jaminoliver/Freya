@@ -544,7 +544,7 @@ export default function PostMediaViewer({
           />
           {creatorHandle && (
             <div style={{
-              position: "absolute", top: 12, left: 12,
+              position: "absolute", top: 0, left: 8,
               zIndex: 12, pointerEvents: "none",
               fontSize: "12px", fontWeight: 600,
               color: "rgba(255,255,255,0.7)",
@@ -607,7 +607,7 @@ export default function PostMediaViewer({
         {isUnlockedPPV && <UnlockedPPVBadge />}
         {creatorHandle && (
           <div style={{
-            position: "absolute", top: 12, left: 12,
+            position: "absolute", top: 0, left: 8,
             zIndex: 12, pointerEvents: "none",
             fontSize: "12px", fontWeight: 600,
             color: "rgba(255,255,255,0.7)",

@@ -532,7 +532,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
       {/* X button — only visible in fake fullscreen */}
       {isFakeFullscreen && (
         <button
-          style={{ position: "absolute", top: 12, left: 12, zIndex: 15, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
+          style={{ position: "absolute", top: 8, left: 12, zIndex: 15, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
           onClick={handleFullscreen}
           onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }}
           aria-label="Exit fullscreen"
@@ -1114,7 +1114,7 @@ export default function VideoPlayer({
         {/* Custom controls — only shown after poster is dismissed */}
         {creatorHandle && (
           <div style={{
-            position: "absolute", top: 12, left: 12,
+            position: "absolute", top: 0, left: 8,
             zIndex: 12, pointerEvents: "none",
             fontSize: "12px", fontWeight: 600,
             color: "rgba(255,255,255,0.7)",
