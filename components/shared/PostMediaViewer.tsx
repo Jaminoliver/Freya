@@ -533,14 +533,29 @@ export default function PostMediaViewer({
 
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%" }}>
-        <ImageCarousel
-          media={carouselMedia}
-          onImageClick={(index) => onSingleTap?.(index)}
-          initialIndex={initialSlide}
-          onSlideChange={onSlideChange}
-          containerRatio={tallestRatio}
-          isUnlockedPPV={isUnlockedPPV}
-        />
+        <div style={{ position: "relative", width: "100%" }}>
+          <ImageCarousel
+            media={carouselMedia}
+            onImageClick={(index) => onSingleTap?.(index)}
+            initialIndex={initialSlide}
+            onSlideChange={onSlideChange}
+            containerRatio={tallestRatio}
+            isUnlockedPPV={isUnlockedPPV}
+          />
+          {creatorHandle && (
+            <div style={{
+              position: "absolute", bottom: 4, right: 12,
+              zIndex: 12, pointerEvents: "none",
+              fontSize: "12px", fontWeight: 600,
+              color: "rgba(255,255,255,0.7)",
+              fontFamily: "'Inter', sans-serif",
+              textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+              letterSpacing: "0.02em",
+            }}>
+              {creatorHandle}@Fréya.com
+            </div>
+          )}
+        </div>
       </DoubleTapLike>
     );
   }
@@ -590,6 +605,19 @@ export default function PostMediaViewer({
         />
 
         {isUnlockedPPV && <UnlockedPPVBadge />}
+        {creatorHandle && (
+          <div style={{
+            position: "absolute", bottom: 4, right: 12,
+            zIndex: 12, pointerEvents: "none",
+            fontSize: "12px", fontWeight: 600,
+            color: "rgba(255,255,255,0.7)",
+            fontFamily: "'Inter', sans-serif",
+            textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+            letterSpacing: "0.02em",
+          }}>
+            {creatorHandle}@Fréya.com
+          </div>
+        )}
       </div>
     </DoubleTapLike>
   );

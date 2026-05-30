@@ -5,14 +5,16 @@ import { Plus, X, Play, GripVertical } from "lucide-react";
 
 /* ── constants ──────────────────────────────────────────────────────────────── */
 
-const MAX_FILES      = 10;
-const MAX_SIZE_BYTES = 3 * 1024 * 1024 * 1024; // 3 GB
+const MAX_IMAGES     = 3;
+const MAX_VIDEOS     = 1;
+const MAX_SIZE_BYTES     = 2 * 1024 * 1024 * 1024; // 2 GB
+const MAX_VIDEO_DURATION = 60 * 60; // 60 minutes in seconds
 
 const ACCEPTED_TYPES = [
   "image/jpeg", "image/png", "image/webp", "image/gif",
   "video/mp4", "video/quicktime", "video/webm",
 ];
-const ACCEPT_STRING = ACCEPTED_TYPES.join(",");
+// Accept string is computed dynamically in the component based on current files
 
 /* ── props ──────────────────────────────────────────────────────────────────── */
 
@@ -27,6 +29,33 @@ function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const url   = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.src     = url;
+
+    const cleanup = () => URL.revokeObjectURL(url);
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timeout reading video duration"));
+    }, 8000);
+
+    video.onloadedmetadata = () => {
+      clearTimeout(timer);
+      cleanup();
+      resolve(video.duration);
+    };
+    video.onerror = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error("Could not read video duration"));
+    };
+  });
 }
 
 /* ── component ─────────────────────────────────────────────────────────────── */
@@ -44,6 +73,17 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const [dropHover, setDropHover] = useState(false);
+
+  // Dynamic accept: once user has images, only accept images; video only accepts video
+  const hasExistingImages = files.some((f) => f.type.startsWith("image/"));
+  const hasExistingVideo  = files.some((f) => f.type.startsWith("video/"));
+  const dynamicAccept = hasExistingImages
+    ? "image/jpeg,image/png,image/webp,image/gif"
+    : hasExistingVideo
+    ? "" // no more files allowed — video is solo
+    : ACCEPTED_TYPES.join(",");
+
+  const existingImagesCount = files.filter((f) => f.type.startsWith("image/")).length;
 
   const [error, setError] = useState<string | null>(null);
 
@@ -92,34 +132,86 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
 
   /* ── add files ──────────────────────────────────────────────────────────── */
 
-  const addFiles = useCallback((incoming: FileList | null) => {
+  const addFiles = useCallback(async (incoming: FileList | null) => {
     if (!incoming) return;
     setError(null);
 
     const arr = Array.from(incoming);
 
+    // 1. Format + size check
     for (const f of arr) {
       if (!ACCEPTED_TYPES.includes(f.type)) {
         setError(`"${f.name}" is not a supported format.`);
         return;
       }
       if (f.size > MAX_SIZE_BYTES) {
-        setError(`"${f.name}" exceeds the 3 GB limit.`);
+        setError(`"${f.name}" exceeds the 2 GB limit.`);
         return;
       }
     }
 
-    const total = files.length + arr.length;
-    if (total > MAX_FILES) {
-      setError(`You can add up to ${MAX_FILES} files.`);
+    // 2. Duration check for videos (async, before anything is added)
+    for (const f of arr) {
+      if (f.type.startsWith("video/")) {
+        try {
+          const duration = await getVideoDuration(f);
+          if (duration > MAX_VIDEO_DURATION) {
+            const mins = Math.floor(duration / 60);
+            setError(`Video is ${mins} min — max allowed is 60 min.`);
+            return;
+          }
+        } catch {
+          setError("Could not verify video length. Please try a shorter video.");
+          return;
+        }
+      }
+    }
+
+    const existingImages = files.filter((f) => f.type.startsWith("image/"));
+    const existingVideos = files.filter((f) => f.type.startsWith("video/"));
+    const incomingImages = arr.filter((f) => f.type.startsWith("image/"));
+    const incomingVideos = arr.filter((f) => f.type.startsWith("video/"));
+
+    // 2. Block mixed selection in the incoming batch itself
+    if (incomingImages.length > 0 && incomingVideos.length > 0) {
+      setError("You can't mix images and videos in one post.");
       return;
     }
 
-    const existingVideos = files.filter((f) => f.type.startsWith("video/")).length;
-    const incomingVideos = arr.filter((f) => f.type.startsWith("video/")).length;
-    if (existingVideos + incomingVideos > 1) {
-      setError("You can add up to 1 video per post.");
+    // 3. Block adding video when images already exist
+    if (incomingVideos.length > 0 && existingImages.length > 0) {
+      setError("Remove your images before adding a video.");
       return;
+    }
+
+    // 4. Block adding images when video already exists
+    if (incomingImages.length > 0 && existingVideos.length > 0) {
+      setError("Remove your video before adding images.");
+      return;
+    }
+
+    // 5. Image count limit
+    if (incomingImages.length > 0) {
+      if (existingImages.length >= MAX_IMAGES) {
+        setError(`You can add up to ${MAX_IMAGES} images per post.`);
+        return;
+      }
+      if (existingImages.length + incomingImages.length > MAX_IMAGES) {
+        setError(`You can add up to ${MAX_IMAGES} images. You have ${existingImages.length}, so only ${MAX_IMAGES - existingImages.length} more allowed.`);
+        return;
+      }
+    }
+
+    // 6. Video count limit
+    if (incomingVideos.length > 0) {
+      if (existingVideos.length >= MAX_VIDEOS) {
+        setError("You can only add 1 video per post.");
+        return;
+      }
+      if (incomingVideos.length > MAX_VIDEOS) {
+        setError("You can only add 1 video per post.");
+        return;
+      }
     }
 
     onChange([...files, ...arr]);
@@ -234,7 +326,7 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
             <div style={{
               fontSize: "13px", color: "#6B6B8A", marginTop: "4px", /* ← bigger */
             }}>
-              JPG, PNG, GIF, MP4, MOV · Up to {MAX_FILES} files
+              1 video or up to 3 images · JPG, PNG, GIF, MP4, MOV
             </div>
           </div>
         </div>
@@ -243,7 +335,7 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
           ref={inputRef}
           type="file"
           multiple
-          accept={ACCEPT_STRING}
+          accept={dynamicAccept}
           style={{ display: "none" }}
           onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
         />
@@ -270,7 +362,9 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <span style={{ fontSize: "14px", color: "#D4D4E8", fontWeight: 500 }}>  {/* ← whiter */}
-          {files.length}/{MAX_FILES} files
+          {hasExistingVideo
+            ? "1/1 video"
+            : `${existingImagesCount}/${MAX_IMAGES} images`}
         </span>
         {files.length > 1 && (
           <span style={{ fontSize: "12px", color: "#8A8AA0" }}>           {/* ← whiter */}
@@ -411,7 +505,7 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
         })}
 
         {/* Add more button */}
-        {files.length < MAX_FILES && (
+        {!hasExistingVideo && existingImagesCount < MAX_IMAGES && (
           <div
             onClick={() => inputRef.current?.click()}
             style={{
@@ -443,7 +537,7 @@ export function MediaUploader({ files, onChange }: MediaUploaderProps) {
         ref={inputRef}
         type="file"
         multiple
-        accept={ACCEPT_STRING}
+        accept={dynamicAccept}
         style={{ display: "none" }}
         onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
       />

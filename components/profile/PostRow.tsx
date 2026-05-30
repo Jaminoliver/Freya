@@ -330,6 +330,7 @@ export default function PostRow({
           onDoubleTap={engagement.handleDoubleTapLike}
           onSingleTap={handleSingleTap}
           onUnlock={() => onUnlock?.(String(post.id))}
+          creatorHandle={post.profiles.username}
         />
         </div>
       )}
