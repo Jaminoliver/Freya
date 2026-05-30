@@ -585,7 +585,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           onTouchEnd={handleSeekTouchEnd}
           style={{ position: "absolute", bottom: bottomOffset, left: 0, right: 0, height: "20px", display: "flex", alignItems: "flex-end", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 12, boxSizing: "border-box", opacity: 1, pointerEvents: "auto" }}
         >
-          <div style={{ position: "relative", width: "100%", height: "3px", backgroundColor: "rgba(255,255,255,0.35)", overflow: "visible" }}>
+          <div style={{ position: "relative", width: "100%", height: "3px", backgroundColor: "rgba(255,255,255,0.35)", overflow: "visible", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" }}>
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.5)" }} />
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${progress}%`, background: "linear-gradient(to right, #8B5CF6, #EC4899)" }}>
               <div className="vp-seek-thumb" />
@@ -633,7 +633,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
           
 
-          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: "0.02em", minWidth: "80px", opacity: seeking ? 1 : 0, transition: "opacity 0.3s ease" }}>
+          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: "0.02em", minWidth: "80px", opacity: seeking ? 1 : 0, transition: "opacity 0.3s ease", textShadow: "0 1px 6px rgba(0,0,0,0.95), 0 0 12px rgba(0,0,0,0.8)" }}>
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
 
