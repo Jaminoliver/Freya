@@ -544,13 +544,15 @@ export default function PostMediaViewer({
           />
           {creatorHandle && (
             <div style={{
-              position: "absolute", top: 0, left: 8,
+              position: "absolute", top: 0, left: 0,
               zIndex: 12, pointerEvents: "none",
               fontSize: "12px", fontWeight: 600,
-              color: "rgba(255,255,255,0.7)",
+              color: "rgba(255,255,255,0.9)",
               fontFamily: "'Inter', sans-serif",
-              textShadow: "0 1px 4px rgba(0,0,0,0.8)",
               letterSpacing: "0.02em",
+              background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 100%)",
+              width: "100%",
+              padding: "2px 8px 20px",
             }}>
               {creatorHandle}@Fréya.com
             </div>
@@ -607,13 +609,15 @@ export default function PostMediaViewer({
         {isUnlockedPPV && <UnlockedPPVBadge />}
         {creatorHandle && (
           <div style={{
-            position: "absolute", top: 0, left: 8,
+            position: "absolute", top: 0, left: 0,
             zIndex: 12, pointerEvents: "none",
             fontSize: "12px", fontWeight: 600,
-            color: "rgba(255,255,255,0.7)",
+            color: "rgba(255,255,255,0.9)",
             fontFamily: "'Inter', sans-serif",
-            textShadow: "0 1px 4px rgba(0,0,0,0.8)",
             letterSpacing: "0.02em",
+            background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 100%)",
+            width: "100%",
+            padding: "2px 8px 20px",
           }}>
             {creatorHandle}@Fréya.com
           </div>
