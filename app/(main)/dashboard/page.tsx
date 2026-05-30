@@ -347,11 +347,14 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
     posts.forEach((post, index) => {
       const showBanner   = !post.is_subscribed && !post.is_renewal;
       const subPrice     = post.profiles?.subscription_price ?? undefined;
+      const firstM = post.media?.[0];
+      const rawR = firstM?.aspect_ratio ?? (firstM?.width && firstM?.height ? firstM.width / firstM.height : 0);
+      const isLandscape = rawR > 1;
       items.push(
   <div key={post.id} style={{
-    margin: "10px 12px",
-    borderRadius: "14px",
-    overflow: "hidden",
+    margin: isLandscape ? "0" : "10px 12px",
+    borderRadius: isLandscape ? "0" : "14px",
+    overflow: isLandscape ? "visible" : "hidden",
   }}>
     {index === 0 && (
       <div style={{
