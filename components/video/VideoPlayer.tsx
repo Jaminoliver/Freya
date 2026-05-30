@@ -1114,7 +1114,7 @@ export default function VideoPlayer({
         {/* Custom controls — only shown after poster is dismissed */}
         {creatorHandle && (
           <div style={{
-            position: "absolute", bottom: 8, right: 12,
+            position: "absolute", bottom: bottomOffset + 8, right: 12,
             zIndex: 12, pointerEvents: "none",
             fontSize: "12px", fontWeight: 600,
             color: "rgba(255,255,255,0.7)",
