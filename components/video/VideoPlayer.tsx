@@ -84,6 +84,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
   const [buffered,     setBuffered]     = React.useState(0);
   const [visible,      setVisible]      = React.useState(true);
   const [seeking,      setSeeking]      = React.useState(false);
+const [isHolding,    setIsHolding]    = React.useState(false);
   const [isFullscreen,     setIsFullscreen]     = React.useState(false);
   const [isFakeFullscreen, setIsFakeFullscreen] = React.useState(false);
 
@@ -494,7 +495,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           console.log('[VPC] touchStart — wasPlaying:', wasPlaying, 't:', Date.now());
           (e.currentTarget as HTMLDivElement).dataset.touchStart  = String(Date.now());
           (e.currentTarget as HTMLDivElement).dataset.wasPlaying  = String(wasPlaying);
-          if (wasPlaying) v.pause();   // press-and-hold pause
+          if (wasPlaying) { v.pause(); setIsHolding(true); }
         }}
         onTouchEnd={(e) => {
           e.preventDefault();
@@ -520,6 +521,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
             // Long press release — resume if it was playing before
             if (wasPlaying) v.play().catch(() => {});
           }
+          setIsHolding(false);
           console.log('[VPC] calling showControls at t:', Date.now());
           showControls();
         }}
@@ -571,7 +573,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
       </button>
 
       {/* Play indicator — shows when paused, hides when playing */}
-      {!playing && (
+      {!playing && !isHolding && (
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 8, pointerEvents: "none" }}>
           <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><polygon points="5,3 19,12 5,21"/></svg>
         </div>
