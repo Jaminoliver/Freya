@@ -1,12 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/subscriptions",
-      "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-orphaned-media",
-      "schedule": "*/15 * * * *"
-    }
-  ]
-}
+{"crons":[{"path":"/api/cron/subscriptions","schedule":"0 0 * * *"},{"path":"/api/cron/cleanup-orphaned-media","schedule":"*/15 * * * *"}]}
