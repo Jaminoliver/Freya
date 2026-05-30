@@ -444,15 +444,14 @@ export default function PostMediaViewer({
   const isMobileView = typeof window !== "undefined" && window.innerWidth < 430;
 
   if (isVideo) {
-    const videoRatio = (() => {
-      if (first?.aspectRatio != null && first.aspectRatio > 0) {
-        return Math.min(Math.max(first.aspectRatio, 9 / 16), 1.91);
-      }
-      if (first?.width && first?.height) {
-        return Math.min(Math.max(first.width / first.height, 9 / 16), 1.91);
-      }
+    const rawVideoRatio = (() => {
+      if (first?.aspectRatio != null && first.aspectRatio > 0) return first.aspectRatio;
+      if (first?.width && first?.height) return first.width / first.height;
       return ratio;
     })();
+
+    const videoRatio  = Math.min(Math.max(rawVideoRatio, 9 / 16), 1.91);
+    const isLandscape = rawVideoRatio > 1;
 
     const blurSrc = first.bunnyVideoId
       ? getBunnyThumbnail(first.bunnyVideoId)
@@ -465,7 +464,7 @@ export default function PostMediaViewer({
             width:                "100%",
             position:             "relative",
             aspectRatio:          String(videoRatio),
-            maxHeight:            "85svh",
+            maxHeight:            isLandscape ? "none" : "85svh",
             backgroundColor:      "#000",
             backgroundImage:      blurSrc ? `url(${blurSrc})` : undefined,
             backgroundSize:       "cover",

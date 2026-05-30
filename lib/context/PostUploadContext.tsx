@@ -239,7 +239,7 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
 
   const startPolling = useCallback((uploadId: string, mediaId: number, videoId?: string) => {
     let attempts = 0;
-    const MAX    = 60;
+    const MAX    = 200;
     pollTimers.current[uploadId] = setInterval(async () => {
       attempts++;
       try {
@@ -267,7 +267,7 @@ export function PostUploadProvider({ children }: { children: React.ReactNode }) 
           updateUpload(uploadId, { phase: "error", error: "Processing timed out" });
         }
       } catch {}
-    }, 3000);
+    }, 5000);
   }, [updateUpload, checkWatermark, scheduleAutoDismiss]);
 
   // ── Dismiss (actually aborts the upload) ───────────────────────────────────
@@ -442,7 +442,7 @@ if (!silent) {
       } else {
         const vaultId = completeData.vaultItemId ?? null;
         let attempts = 0;
-        const MAX = 60;
+        const MAX = 200;
         const silentPoll = setInterval(async () => {
           attempts++;
           try {
@@ -455,7 +455,7 @@ if (!silent) {
           } catch {
             if (attempts >= MAX) { clearInterval(silentPoll); onVaultItemId?.(vaultId); }
           }
-        }, 3000);
+        }, 5000);
       }
 
     } catch (err) {
