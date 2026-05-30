@@ -27,18 +27,28 @@ export async function POST(
     }
 
     const { data: mediaFiles } = await service
-      .from("post_media")
-      .select("file_url")
+      .from("media")
+      .select("file_url, bunny_video_id")
       .eq("post_id", postId);
 
     if (mediaFiles && mediaFiles.length > 0) {
       await Promise.allSettled(
-        mediaFiles.map(({ file_url }) => {
-          const filePath = new URL(file_url).pathname;
-          return fetch(`https://storage.bunnycdn.com/${process.env.BUNNY_STORAGE_ZONE}${filePath}`, {
-            method: "DELETE",
-            headers: { AccessKey: process.env.BUNNY_API_KEY! },
-          });
+        mediaFiles.map(async ({ file_url, bunny_video_id }) => {
+          try {
+            if (bunny_video_id) {
+              await fetch(
+                `https://video.bunnycdn.com/library/${process.env.BUNNY_STREAM_LIBRARY_ID}/videos/${bunny_video_id}`,
+                { method: "DELETE", headers: { AccessKey: process.env.BUNNY_STREAM_API_KEY! } }
+              );
+            } else if (file_url) {
+              const cleanUrl = file_url.split("#")[0];
+              const filePath = new URL(cleanUrl).pathname;
+              await fetch(
+                `https://storage.bunnycdn.com/${process.env.BUNNY_STORAGE_ZONE}${filePath}`,
+                { method: "DELETE", headers: { AccessKey: process.env.BUNNY_STORAGE_API_KEY! } }
+              );
+            }
+          } catch {}
         })
       );
     }

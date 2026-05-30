@@ -144,6 +144,35 @@ export async function DELETE(
   const now = new Date().toISOString();
 
   if (forEveryone) {
+    // Delete message media from Bunny before soft-deleting
+    const { data: messages } = await supabase
+      .from("messages")
+      .select("id")
+      .eq("conversation_id", conversationId);
+
+    const messageIds = (messages ?? []).map((m: any) => m.id);
+
+    if (messageIds.length > 0) {
+      const { data: msgMedia } = await supabase
+        .from("message_media")
+        .select("url")
+        .in("message_id", messageIds);
+
+      if (msgMedia && msgMedia.length > 0) {
+        await Promise.allSettled(
+          msgMedia.map(async ({ url }) => {
+            try {
+              const filePath = new URL(url).pathname;
+              await fetch(
+                `https://storage.bunnycdn.com/${process.env.BUNNY_STORAGE_ZONE}${filePath}`,
+                { method: "DELETE", headers: { AccessKey: process.env.BUNNY_STORAGE_API_KEY! } }
+              );
+            } catch {}
+          })
+        );
+      }
+    }
+
     await supabase
       .from("conversations")
       .update({

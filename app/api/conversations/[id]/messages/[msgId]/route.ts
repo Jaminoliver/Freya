@@ -249,7 +249,7 @@ export async function DELETE(
   // Fetch the message
   const { data: message } = await supabase
     .from("messages")
-    .select("id, sender_id, conversation_id")
+    .select("id, sender_id, conversation_id, is_ppv")
     .eq("id", messageId)
     .eq("conversation_id", conversationId)
     .single();
@@ -287,6 +287,42 @@ export async function DELETE(
   // deleteFor === "everyone" — only the sender can do this
   if (message.sender_id !== user.id) {
     return NextResponse.json({ error: "Only the sender can delete for everyone" }, { status: 403 });
+  }
+
+  // Delete media from Bunny for non-PPV messages
+  if (!message.is_ppv) {
+    const { data: msgMedia } = await supabase
+      .from("message_media")
+      .select("url")
+      .eq("message_id", messageId);
+
+    if (msgMedia && msgMedia.length > 0) {
+      await Promise.allSettled(
+        msgMedia.map(async ({ url }) => {
+          try {
+            const cleanUrl = url.split("#")[0];
+            const parsed = new URL(cleanUrl);
+            if (parsed.hostname.endsWith(".b-cdn.net") && cleanUrl.includes("/playlist.m3u8")) {
+              // Bunny Stream video — extract video ID from path
+              const videoId = parsed.pathname.split("/").filter(Boolean)[0];
+              if (videoId) {
+                await fetch(
+                  `https://video.bunnycdn.com/library/${process.env.BUNNY_STREAM_LIBRARY_ID}/videos/${videoId}`,
+                  { method: "DELETE", headers: { AccessKey: process.env.BUNNY_STREAM_API_KEY! } }
+                );
+              }
+            } else {
+              // Bunny Storage file
+              const filePath = parsed.pathname;
+              await fetch(
+                `https://storage.bunnycdn.com/${process.env.BUNNY_STORAGE_ZONE}${filePath}`,
+                { method: "DELETE", headers: { AccessKey: process.env.BUNNY_STORAGE_API_KEY! } }
+              );
+            }
+          } catch {}
+        })
+      );
+    }
   }
 
   const { error } = await supabase

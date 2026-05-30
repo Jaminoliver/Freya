@@ -162,7 +162,7 @@ export function MessageActionModal({
     { icon: <Copy         size={15} strokeWidth={1.6} />, label: "Copy",                danger: false, action: () => { onCopy();                triggerClose(); } },
     { icon: <CheckSquare  size={15} strokeWidth={1.6} />, label: "Select",              danger: false, action: () => { triggerClose(); setTimeout(() => onSelect?.(message.id), 300); } },
     { icon: <Trash2       size={15} strokeWidth={1.6} />, label: "Delete for me",       danger: true,  action: () => { onDeleteForMe();       triggerClose(); } },
-    ...(isOwn ? [{
+    ...(isOwn && message.type !== "ppv" ? [{
       icon: <Trash2 size={15} strokeWidth={1.6} />, label: "Delete for everyone", danger: true,
       action: () => { onDeleteForEveryone(); triggerClose(); },
     }] : []),
