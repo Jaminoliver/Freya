@@ -434,6 +434,8 @@ function PostCardInner({
           return 1;
         })();
 
+        const rawR = firstMedia?.aspectRatio ?? (firstMedia?.width && firstMedia?.height ? firstMedia.width / firstMedia.height : 0);
+        const isLandscapeVideo = firstMedia?.type === "video" && rawR > 1;
         return (
           <VisibilityGate
             aspectRatio={placeholderRatio}
@@ -444,7 +446,7 @@ function PostCardInner({
               ) : null
             }
           >
-            <div style={{ marginTop: "12px", margin: isMobileView ? "10px 4px" : "10px 12px", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
+            <div style={{ marginTop: "12px", margin: isLandscapeVideo ? "10px 0" : isMobileView ? "10px 4px" : "10px 12px", borderRadius: isLandscapeVideo ? "0" : "14px", border: isLandscapeVideo ? "none" : "1px solid #1E1E2E", overflow: "hidden", clipPath: isLandscapeVideo ? "none" : "inset(0 round 14px)" }}>
             <PostMediaViewer
               media={normalizedMedia} isLocked={post.isLocked} price={post.price}
               isPPV={post.is_ppv} isUnlockedPPV={post.is_ppv && !post.isLocked}
