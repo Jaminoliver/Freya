@@ -97,6 +97,20 @@ export async function POST(
   } catch (err) {
     console.error("[media upload] error:", err);
     await supabase.from("messages").delete().eq("id", message.id);
+    if (mediaUrls.length > 0) {
+      await Promise.allSettled(
+        mediaUrls.map((url) => {
+          try {
+            const cleanUrl = url.split("#")[0];
+            const filePath = new URL(cleanUrl).pathname;
+            return fetch(
+              `https://storage.bunnycdn.com/${process.env.BUNNY_STORAGE_ZONE}${filePath}`,
+              { method: "DELETE", headers: { AccessKey: process.env.BUNNY_STORAGE_API_KEY! } }
+            );
+          } catch { return Promise.resolve(); }
+        })
+      );
+    }
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 
