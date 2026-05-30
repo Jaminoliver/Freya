@@ -33,10 +33,6 @@ function parseReferenceId(raw?: string | null): Record<string, string> | null {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
-const SCROLL_KEY = "notifications_scroll";
-function saveScroll(y: number)  { try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {} }
-function loadScroll(): number   { try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; } }
-
 export default function NotificationsClient() {
   const router = useRouter();
   const { viewer } = useAppStore();
@@ -46,7 +42,7 @@ export default function NotificationsClient() {
   const [userId,        setUserId]        = useState<string | null>(null);
   const [dropdownOpen,  setDropdownOpen]  = useState(false);
   const [dropdownPos,   setDropdownPos]   = useState({ x: 0, y: 0 });
-  const dotsBtnRef = useRef<HTMLButtonElement>(null);
+  const dotsBtnRef        = useRef<HTMLButtonElement>(null);
   const scrollRestoredRef = useRef(false);
 
   const { data: notifications = [], isLoading } = useQuery({
@@ -63,6 +59,32 @@ export default function NotificationsClient() {
     },
     staleTime: staleTimes.notifications,
   });
+
+  // Invalidate on mount — catches notifications that arrived while away
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.notifications(filter) });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Scroll save/restore ──────────────────────────────────────────────────
+  useEffect(() => {
+    let rafId: number | null = null;
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => { sessionStorage.setItem("notifications_scroll", String(window.scrollY)); rafId = null; });
+    };
+    const onVis = () => { if (document.visibilityState === "hidden") sessionStorage.setItem("notifications_scroll", String(window.scrollY)); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("visibilitychange", onVis);
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("visibilitychange", onVis); };
+  }, []);
+
+  useEffect(() => {
+    if (isLoading || scrollRestoredRef.current) return;
+    scrollRestoredRef.current = true;
+    const saved = Number(sessionStorage.getItem("notifications_scroll") ?? 0);
+    if (saved > 0) requestAnimationFrame(() => window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior }));
+  }, [isLoading]);
 
   useEffect(() => {
     getAuthenticatedBrowserClient().then((supabase) => {
@@ -82,31 +104,6 @@ export default function NotificationsClient() {
     });
     return unsub;
   }, [userId, filter, queryClient]);
-
-  // ── Scroll save/restore ────────────────────────────────────────────────────
-  useEffect(() => {
-    let rafId: number | null = null;
-    const onScroll = () => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => { saveScroll(window.scrollY); rafId = null; });
-    };
-    const onVis = () => { if (document.visibilityState === "hidden") saveScroll(window.scrollY); };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("visibilitychange", onVis);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("visibilitychange", onVis);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isLoading || scrollRestoredRef.current) return;
-    scrollRestoredRef.current = true;
-    const saved = loadScroll();
-    if (saved > 0) requestAnimationFrame(() => {
-      window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
-    });
-  }, [isLoading]);
 
   const handleSelect = useCallback(async (item: NotificationItem) => {
     if (item.isUnread) {
