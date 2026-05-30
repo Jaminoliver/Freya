@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys, staleTimes } from "@/lib/query/keys";
 import { CreatorGrid, type GridItem } from "@/components/explore/CreatorGrid";
@@ -23,6 +23,10 @@ const SORT_TO_FILTER: Record<SortOption, string> = {
   most_subscribed: "most_subscribed",
 };
 
+const SCROLL_KEY = "explore_scroll";
+function saveScroll(y: number)  { try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {} }
+function loadScroll(): number   { try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; } }
+
 export default function ExploreClient() {
   const [sort, setSort]                   = useState<SortOption>("most_liked");
   const [dropdownOpen, setDropdownOpen]   = useState(false);
@@ -31,6 +35,7 @@ export default function ExploreClient() {
   const [cursor, setCursor]               = useState<string | null>(null);
   const [loadingMore, setLoadingMore]     = useState(false);
   const [hasMore, setHasMore]             = useState(false);
+  const scrollRestoredRef                 = useRef(false);
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.explore(SORT_TO_FILTER[sort]),
@@ -68,6 +73,31 @@ export default function ExploreClient() {
       });
     }
   }, [data?.grid]);
+
+  // ── Scroll save/restore ────────────────────────────────────────────────────
+  useEffect(() => {
+    let rafId: number | null = null;
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => { saveScroll(window.scrollY); rafId = null; });
+    };
+    const onVis = () => { if (document.visibilityState === "hidden") saveScroll(window.scrollY); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isLoading || scrollRestoredRef.current) return;
+    scrollRestoredRef.current = true;
+    const saved = loadScroll();
+    if (saved > 0) requestAnimationFrame(() => {
+      window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
+    });
+  }, [isLoading]);
 
   // ── Load more ──────────────────────────────────────────────────────────────
   const handleLoadMore = useCallback(async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient }   from "@tanstack/react-query";
 import { queryKeys, staleTimes }      from "@/lib/query/keys";
@@ -93,6 +93,10 @@ function PaymentBanner({ status, onDismiss }: { status: "success" | "failed"; on
   );
 }
 
+const SCROLL_KEY = "wallet_scroll";
+function saveScroll(y: number)  { try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {} }
+function loadScroll(): number   { try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; } }
+
 function WalletContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
@@ -102,6 +106,7 @@ function WalletContent() {
   const [autoRecharge,  setAutoRecharge]  = useState(false);
   const [redirecting,   setRedirecting]   = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "failed" | null>(null);
+  const scrollRestoredRef                 = useRef(false);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: queryKeys.wallet(),
@@ -151,6 +156,31 @@ function WalletContent() {
     const ref = searchParams.get("ref");
     if (ref) { setPaymentStatus("success"); router.replace("/wallet"); }
   }, [searchParams, router]);
+
+  // ── Scroll save/restore ────────────────────────────────────────────────────
+  useEffect(() => {
+    let rafId: number | null = null;
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => { saveScroll(window.scrollY); rafId = null; });
+    };
+    const onVis = () => { if (document.visibilityState === "hidden") saveScroll(window.scrollY); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isLoading || scrollRestoredRef.current) return;
+    scrollRestoredRef.current = true;
+    const saved = loadScroll();
+    if (saved > 0) requestAnimationFrame(() => {
+      window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
+    });
+  }, [isLoading]);
 
   const handlePaymentConfirmed = useCallback(async () => {
     await refetch();

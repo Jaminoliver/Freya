@@ -1,8 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser, createServiceSupabaseClient } from "@/lib/supabase/server";
+import { signBunnyUrl } from "@/lib/utils/bunny";
 import type { StripCreator } from "@/components/explore/CreatorCard";
 import type { VideoTileData } from "@/components/explore/VideoTile";
 import type { IdentityCardData } from "@/components/explore/IdentityCard";
+
+const STREAM_CDN_HOST = process.env.BUNNY_STREAM_CDN_HOSTNAME ?? "vz-8bc100f4-3c0.b-cdn.net";
+
+function extractBunnyPath(url: string | null): string | null {
+  if (!url) return null;
+  try { return new URL(url).pathname; }
+  catch { return url.startsWith("/") ? url : `/${url}`; }
+}
+
+function freshThumbnail(thumbnailUrl: string | null, bunnyVideoId: string | null): string | null {
+  if (thumbnailUrl) {
+    try {
+      const host = new URL(thumbnailUrl).host;
+      if (host === STREAM_CDN_HOST) return thumbnailUrl; // permanent stream URL — use as-is
+      const path = extractBunnyPath(thumbnailUrl);
+      if (path) return signBunnyUrl(path); // photo CDN — re-sign
+    } catch {
+      const path = extractBunnyPath(thumbnailUrl);
+      if (path) return signBunnyUrl(path);
+    }
+  }
+  if (bunnyVideoId) return `https://${STREAM_CDN_HOST}/${bunnyVideoId}/thumbnail.jpg`;
+  return null;
+}
 
 type FilterId =
   | "all"
@@ -188,7 +213,7 @@ const likedPostIds = new Set<number>();
             post_id: Number(post.id),
             like_count: post.like_count ?? 0,
             comment_count: post.comment_count ?? 0,
-            thumbnail_url: videoM.thumbnail_url,
+            thumbnail_url: freshThumbnail(videoM.thumbnail_url, videoM.bunny_video_id),
             bunny_video_id: videoM.bunny_video_id,
             duration_seconds: videoM.duration_seconds,
             caption: post.caption ?? null,
@@ -308,7 +333,7 @@ const likedPostIds = new Set<number>();
           username: creator.username,
           display_name: creator.display_name,
           avatar_url: creator.avatar_url,
-          thumbnail_url: video.thumbnail_url ?? (video.bunny_video_id ? `https://vz-8bc100f4-3c0.b-cdn.net/${video.bunny_video_id}/thumbnail.jpg` : null),
+          thumbnail_url: freshThumbnail(video.thumbnail_url, video.bunny_video_id),
           bunny_video_id: video.bunny_video_id,
           like_count: video.like_count,
           comment_count: video.comment_count,

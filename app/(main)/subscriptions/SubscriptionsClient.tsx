@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, staleTimes } from "@/lib/query/keys";
 import { SubscriptionsHeader } from "@/components/subscription/SubscriptionsHeader";
@@ -26,8 +26,13 @@ function preloadImages(urls: string[]): void {
   }
 }
 
+const SCROLL_KEY = "subscriptions_scroll";
+function saveScroll(y: number)  { try { sessionStorage.setItem(SCROLL_KEY, String(y)); } catch {} }
+function loadScroll(): number   { try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; } }
+
 export default function SubscriptionsClient() {
   const queryClient = useQueryClient();
+  const scrollRestoredRef = useRef(false);
 
   const { data: subscriptions = [], isLoading, refetch } = useQuery({
     queryKey: queryKeys.subscriptions(),
@@ -78,6 +83,31 @@ export default function SubscriptionsClient() {
     } as unknown as User);
     setTipOpen(true);
   }, [subscriptions]);
+
+  // ── Scroll save/restore ────────────────────────────────────────────────────
+  useEffect(() => {
+    let rafId: number | null = null;
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => { saveScroll(window.scrollY); rafId = null; });
+    };
+    const onVis = () => { if (document.visibilityState === "hidden") saveScroll(window.scrollY); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isLoading || scrollRestoredRef.current) return;
+    scrollRestoredRef.current = true;
+    const saved = loadScroll();
+    if (saved > 0) requestAnimationFrame(() => {
+      window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior });
+    });
+  }, [isLoading]);
 
   const counts = useMemo(() => ({
     all:       subscriptions.length,

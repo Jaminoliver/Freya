@@ -14,6 +14,9 @@ import { useConversations } from "@/app/(main)/messages/page";
 import { useAppStore } from "@/lib/store/appStore";
 import type { Conversation, FilterTab } from "@/lib/types/messages";
 
+// Module-level cache — survives re-renders, cleared on tab close
+let cachedBootstrap: { archivedCount: number; favouriteIds: number[] } | null = null;
+
 interface Person {
   id:          string;
   name:        string;
@@ -46,7 +49,8 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
   const [searchOpen,       setSearchOpen]       = useState(false);
   const [searchQuery,      setSearchQuery]      = useState("");
   const [favouritedIds,    setFavouritedIds]    = useState<Set<number>>(new Set());
-  const [archivedCount,    setArchivedCount]    = useState(0);
+  const [archivedCount,    setArchivedCount]    = useState(() => cachedBootstrap?.archivedCount ?? 0);
+  const [bootstrapReady,   setBootstrapReady]   = useState(() => cachedBootstrap !== null);
   const [newMessageOpen,   setNewMessageOpen]   = useState(false);
 
   // Preloaded data for NewMessagePanel
@@ -136,7 +140,9 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
         if (data.archivedCount !== undefined) setArchivedCount(data.archivedCount);
         if (data.subscriptions) setNmCreators(data.subscriptions.map((s: any) => ({ id: s.creatorId, name: s.creatorName, username: s.username, avatar_url: s.avatar_url ?? null, is_verified: s.isVerified ?? false, role: "creator" })));
         if (data.fans) setNmFans(data.fans.map((f: any) => ({ id: f.id, name: f.display_name || f.username, username: f.username, avatar_url: f.avatar_url ?? null, is_verified: false, role: "fan" })));
+        cachedBootstrap = { archivedCount: data.archivedCount ?? 0, favouriteIds: data.favouriteIds ?? [] };
         setNmLoading(false);
+        setBootstrapReady(true);
       } catch {}
     };
     fetchBootstrap();
@@ -357,7 +363,7 @@ export function MessagesSidebar({ conversations, activeId, onSelect, onNewConver
             </button>
           )}
 
-          {loading ? (
+          {loading || !bootstrapReady ? (
             <MessagesSkeleton count={12} />
           ) : (
             <ConversationList
