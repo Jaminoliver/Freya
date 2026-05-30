@@ -102,8 +102,8 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
     hideTimer.current = setTimeout(() => {
       const video = videoRef.current;
       console.log('[VPC] timer fired — paused:', video?.paused, 't:', Date.now());
-      if (video && !video.paused) setVisible(false);
-      else console.log('[VPC] timer fired but paused — skip hide');
+      if (video && !video.paused && !seekingRef.current) setVisible(false);
+      else console.log('[VPC] timer fired but paused or seeking — skip hide');
     }, 1500);
   }, [videoRef]);
 
@@ -452,9 +452,9 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           background: #8B5CF6;
           box-shadow: 0 0 0 3px rgba(139,92,246,0.35);
           pointer-events: none;
+          opacity: 0; transition: opacity 0.15s ease;
         }
-        .vp-progress-bar:active .vp-seek-thumb,
-        .vp-progress-bar:hover .vp-seek-thumb { width: 16px; height: 16px; }
+        .vp-seeking .vp-seek-thumb { opacity: 1; }
         .vp-center-flash {
           position: absolute; top: 50%; left: 50%;
           transform: translate(-50%,-50%) scale(0.6);
@@ -572,6 +572,26 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         </div>
       )}
 
+      {/* Seekbar — mobile only, pinned to absolute bottom */}
+      {isMobile && (
+        <div
+          ref={progressRef}
+          className={`vp-progress-bar${seeking ? " vp-seeking" : ""}`}
+          onMouseDown={handleSeekMouseDown}
+          onMouseUp={handleSeekMouseUp}
+          onTouchStart={handleSeekTouchStart}
+          onTouchEnd={handleSeekTouchEnd}
+          style={{ position: "absolute", bottom: bottomOffset, left: 0, right: 0, height: "20px", display: "flex", alignItems: "flex-end", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 12, boxSizing: "border-box", opacity: 1, pointerEvents: "auto" }}
+        >
+          <div style={{ position: "relative", width: "100%", height: "3px", backgroundColor: "rgba(255,255,255,0.35)", overflow: "visible" }}>
+            <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.5)" }} />
+            <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${progress}%`, background: "linear-gradient(to right, #8B5CF6, #EC4899)" }}>
+              <div className="vp-seek-thumb" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bottom controls overlay */}
       <div
         className="vp-controls-bar"
@@ -582,22 +602,22 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           opacity:       visible ? 1 : 0,
           pointerEvents: visible ? "auto" : "none",
           transition:    "opacity 0.25s ease",
-          background:    isFakeFullscreen ? "none" : "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 70%, transparent 100%)",
-          padding:       "24px 12px 10px",
+          background:    "none",
+          padding:       "24px 12px 0px",
           display:       "flex",
           flexDirection: "column",
           gap:           "6px",
         }}
       >
-        {/* Seek bar */}
+        {/* Seek bar — desktop only, mobile gets absolute bottom seekbar */}
         <div
-          ref={progressRef}
-          className="vp-progress-bar"
-          onMouseDown={handleSeekMouseDown}
-          onMouseUp={handleSeekMouseUp}
-          onTouchStart={handleSeekTouchStart}
-          onTouchEnd={handleSeekTouchEnd}
-          style={{ position: "relative", width: "100%", height: "20px", display: "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 11, paddingRight: "8px", boxSizing: "border-box" }}
+          ref={isMobile ? undefined : progressRef}
+          className={`vp-progress-bar${seeking ? " vp-seeking" : ""}`}
+          onMouseDown={isMobile ? undefined : handleSeekMouseDown}
+          onMouseUp={isMobile ? undefined : handleSeekMouseUp}
+          onTouchStart={isMobile ? undefined : handleSeekTouchStart}
+          onTouchEnd={isMobile ? undefined : handleSeekTouchEnd}
+          style={{ position: "relative", width: "100%", height: "20px", display: isMobile ? "none" : "flex", alignItems: "center", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 11, paddingRight: "8px", boxSizing: "border-box" }}
         >
           <div style={{ position: "relative", width: "100%", height: "4px", borderRadius: "2px", backgroundColor: "rgba(255,255,255,0.25)", overflow: "visible" }}>
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.35)", borderRadius: "2px" }} />
@@ -609,15 +629,9 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
 
         {/* Bottom row: play + time + fullscreen */}
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <button style={{ ...btnStyle }} onClick={handlePlayPause} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handlePlayPause(e); }} aria-label={playing ? "Pause" : "Play"}>
-            {playing ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg>
-            )}
-          </button>
+          
 
-          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: "0.02em", minWidth: "80px" }}>
+          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, letterSpacing: "0.02em", minWidth: "80px", opacity: seeking ? 1 : 0, transition: "opacity 0.3s ease" }}>
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
 
@@ -963,7 +977,7 @@ export default function VideoPlayer({
   } : {
     width:          "100%",
     position:       "relative",
-    overflow:       "hidden",
+    overflow:       "visible",
     display:        "flex",
     alignItems:     "center",
     justifyContent: "center",
