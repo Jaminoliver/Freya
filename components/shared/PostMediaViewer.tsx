@@ -546,7 +546,7 @@ export default function PostMediaViewer({
             <div style={{
               position: "absolute", top: 0, left: 0,
               zIndex: 12, pointerEvents: "none",
-              fontSize: "12px", fontWeight: 600,
+              fontSize: "14px", fontWeight: 600,
               color: "rgba(255,255,255,0.9)",
               fontFamily: "'Inter', sans-serif",
               letterSpacing: "0.02em",
@@ -611,7 +611,7 @@ export default function PostMediaViewer({
           <div style={{
             position: "absolute", top: 0, left: 0,
             zIndex: 12, pointerEvents: "none",
-            fontSize: "12px", fontWeight: 600,
+            fontSize: "14px", fontWeight: 600,
             color: "rgba(255,255,255,0.9)",
             fontFamily: "'Inter', sans-serif",
             letterSpacing: "0.02em",
