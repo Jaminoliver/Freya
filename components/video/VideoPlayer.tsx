@@ -71,11 +71,12 @@ interface ControlsProps {
   isMobile?:     boolean;
   isPortrait?:   boolean;
   bottomOffset?: number;
-  isPlaying?:         boolean;
-  fullscreenTopLeft?: boolean;
+  isPlaying?:              boolean;
+  fullscreenTopLeft?:      boolean;
+  onFakeFullscreenChange?: (v: boolean) => void;
 }
 
-function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait, bottomOffset = 0, isPlaying: isPlayingProp = false, fullscreenTopLeft = false }: ControlsProps) {
+function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstPlay, isMobile, isPortrait, bottomOffset = 0, isPlaying: isPlayingProp = false, fullscreenTopLeft = false, onFakeFullscreenChange }: ControlsProps) {
   const [playing,      setPlaying]      = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash,  setCenterFlash]  = React.useState<"play"|"pause"|null>(null);
   const [currentTime,  setCurrentTime]  = React.useState(0);
@@ -85,6 +86,8 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
   const [seeking,      setSeeking]      = React.useState(false);
   const [isFullscreen,     setIsFullscreen]     = React.useState(false);
   const [isFakeFullscreen, setIsFakeFullscreen] = React.useState(false);
+
+  React.useEffect(() => { onFakeFullscreenChange?.(isFakeFullscreen); }, [isFakeFullscreen, onFakeFullscreenChange]);
 
   const hideTimer             = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressRef           = React.useRef<HTMLDivElement>(null);
@@ -707,7 +710,8 @@ export default function VideoPlayer({
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
   const [isMuted,      setIsMuted]      = React.useState(() => getSavedMute());
   const [isMobile,     setIsMobile]     = React.useState(false);
-  const [isPlaying,    setIsPlaying]    = React.useState(false);
+  const [isPlaying,         setIsPlaying]         = React.useState(false);
+  const [isFakeFullscreen,  setIsFakeFullscreen]  = React.useState(false);
 
   const slowTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1139,7 +1143,7 @@ export default function VideoPlayer({
             letterSpacing: "0.02em",
             background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 100%)",
             width: "100%",
-            padding: "2px 8px 20px",
+            padding: isFakeFullscreen ? "2px 8px 20px 60px" : "2px 8px 20px",
           }}>
             {creatorHandle}@Fréya.com
           </div>
@@ -1159,6 +1163,7 @@ export default function VideoPlayer({
               bottomOffset={bottomOffset}
               isPlaying={isPlaying}
               fullscreenTopLeft={fullscreenTopLeft}
+              onFakeFullscreenChange={setIsFakeFullscreen}
             />
           </>
         )}
