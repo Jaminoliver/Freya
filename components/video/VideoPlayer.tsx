@@ -736,8 +736,9 @@ export default function VideoPlayer({
       const vw = knownWidth  || video.videoWidth;
       const vh = knownHeight || video.videoHeight;
       if (!vw || !vh) return;
-      const containerW = container.offsetWidth;
-      const containerH = container.offsetHeight;
+      const el = fillParent ? (container.parentElement ?? container) : container;
+      const containerW = el.offsetWidth;
+      const containerH = el.offsetHeight;
       const videoRatio = vw / vh;
       const elemRatio  = containerW / containerH;
       const renderedH  = elemRatio > videoRatio ? containerH : containerW / videoRatio;
@@ -764,6 +765,7 @@ export default function VideoPlayer({
 
   const aspectRatio = fillParent ? null : (externalRatio ?? internalRatio);
   const isPortrait  = (() => {
+    if (fillParent && knownWidth && knownHeight) return knownHeight > knownWidth;
     if (!aspectRatio) return false;
     if (aspectRatio.includes("/")) {
       const parts = aspectRatio.split("/");
