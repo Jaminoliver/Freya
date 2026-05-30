@@ -32,8 +32,8 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
 
   const handleNav = (href: string) => {
     if (href === "#") return;
-    onClose();
     navigate(href);
+    onClose();
   };
 
   const navItems = [
