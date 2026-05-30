@@ -727,7 +727,6 @@ export default function VideoPlayer({
   // Mobile-only: watch container size and recompute how far controls must shift up
   // so they sit at the bottom of the actual painted video, not the container edge.
   React.useEffect(() => {
-    if (fillParent) { setBottomOffset(0); return; }
     const container = containerRef.current;
     if (!container) return;
 
