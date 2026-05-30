@@ -10,8 +10,7 @@ import { NotificationFilterTabs }            from "@/components/notifications/No
 import { NotificationsList }                 from "@/components/notifications/NotificationsList";
 import { NotificationsSettingsModal }        from "@/components/notifications/NotificationsSettingsModal";
 import { NotificationsSkeleton }             from "@/components/loadscreen/NotificationsSkeleton";
-import { subscribeToNotifications }          from "@/lib/notifications/realtime";
-import { getAuthenticatedBrowserClient }     from "@/lib/supabase/browserClient";
+
 import { decrementUnreadCount, resetUnreadCount, initNotificationStore } from "@/lib/notifications/store";
 import { useAppStore }                       from "@/lib/store/appStore";
 import type { NotificationItem, NotificationFilterTab } from "@/lib/types/notifications";
@@ -39,7 +38,6 @@ export default function NotificationsClient() {
   const queryClient = useQueryClient();
 
   const [filter,        setFilter]        = useState<NotificationFilterTab>("all");
-  const [userId,        setUserId]        = useState<string | null>(null);
   const [dropdownOpen,  setDropdownOpen]  = useState(false);
   const [dropdownPos,   setDropdownPos]   = useState({ x: 0, y: 0 });
   const dotsBtnRef        = useRef<HTMLButtonElement>(null);
@@ -86,24 +84,9 @@ export default function NotificationsClient() {
     if (saved > 0) requestAnimationFrame(() => window.scrollTo({ top: saved, behavior: "instant" as ScrollBehavior }));
   }, [isLoading]);
 
-  useEffect(() => {
-    getAuthenticatedBrowserClient().then((supabase) => {
-      supabase.auth.getSession().then(({ data }: { data: { session: { user: { id: string } } | null } }) => {
-        if (data.session?.user.id) setUserId(data.session.user.id);
-      });
-    });
-  }, []);
+  
 
-  useEffect(() => {
-    if (!userId) return;
-    const unsub = subscribeToNotifications(userId, (newNotif) => {
-      queryClient.setQueryData(
-        queryKeys.notifications(filter),
-        (prev: NotificationItem[] | undefined) => [{ ...newNotif, createdAt: "Just now" }, ...(prev ?? [])]
-      );
-    });
-    return unsub;
-  }, [userId, filter, queryClient]);
+ 
 
   const handleSelect = useCallback(async (item: NotificationItem) => {
     if (item.isUnread) {

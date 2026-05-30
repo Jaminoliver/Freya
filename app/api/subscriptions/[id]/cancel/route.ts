@@ -56,7 +56,7 @@ export async function POST(
         await Promise.all([
           serviceSupabase.from("notifications").insert({
             user_id:      sub.creator_id,
-            type:         "subscription",
+            type:         "subscription_cancelled",
             role:         "creator",
             actor_id:     user.id,
             actor_name:   fanProfile.data?.display_name ?? fanProfile.data?.username ?? "Someone",

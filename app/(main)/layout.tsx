@@ -12,7 +12,12 @@ import UploadProgressBar from "@/components/layout/UploadProgressBar";
 import { AppStoreProvider } from "@/lib/providers/AppStoreProvider";
 import SplashScreen from "@/components/ui/SplashScreen";
 import { useAppStore } from "@/lib/store/appStore";
-import { AuthModal } from "@/components/auth/modal/AuthModal";
+import { AuthModal }        from "@/components/auth/modal/AuthModal";
+import { useQueryClient }   from "@tanstack/react-query";
+import { queryKeys }        from "@/lib/query/keys";
+import { subscribeToNotifications } from "@/lib/notifications/realtime";
+import { getAuthenticatedBrowserClient } from "@/lib/supabase/browserClient";
+import type { NotificationItem } from "@/lib/types/notifications";
 
 function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -40,6 +45,26 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const noTopbar = (!isDashboard && !isExplore) || isPostPage || isNotifications;
 
   const [headerVisible, setHeaderVisible] = useState(true);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    getAuthenticatedBrowserClient().then((supabase) => {
+      supabase.auth.getSession().then(({ data }: any) => {
+        const uid = data.session?.user?.id;
+        if (!uid) return;
+        unsub = subscribeToNotifications(uid, (newNotif) => {
+          (["all", "creators", "transactions"] as const).forEach((tab) => {
+            queryClient.setQueryData(
+              queryKeys.notifications(tab),
+              (prev: NotificationItem[] | undefined) => [{ ...newNotif, createdAt: "Just now" }, ...(prev ?? [])]
+            );
+          });
+        });
+      });
+    });
+    return () => unsub?.();
+  }, [queryClient]);
   const [initialSplash, setInitialSplash] = useState(true);
   const lastScrollY = useRef(0);
   const ticking     = useRef(false);
