@@ -586,7 +586,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
           onMouseUp={handleSeekMouseUp}
           onTouchStart={handleSeekTouchStart}
           onTouchEnd={handleSeekTouchEnd}
-          style={{ position: "absolute", bottom: bottomOffset + (isPortrait ? 60 : 0), left: 0, right: 0, height: "20px", display: "flex", alignItems: "flex-end", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 12, boxSizing: "border-box", opacity: 1, pointerEvents: "auto" }}
+          style={{ position: "absolute", bottom: bottomOffset + (isPortrait ? 35 : 0), left: 0, right: 0, height: "20px", display: "flex", alignItems: "flex-end", cursor: "pointer", WebkitTapHighlightColor: "transparent", touchAction: "none", zIndex: 12, boxSizing: "border-box", opacity: 1, pointerEvents: "auto" }}
         >
           <div style={{ position: "relative", width: "100%", height: "3px", backgroundColor: "rgba(255,255,255,0.35)", overflow: "visible", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" }}>
             <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${bufPct}%`, backgroundColor: "rgba(255,255,255,0.5)" }} />
@@ -602,7 +602,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
         className="vp-controls-bar"
         style={{
           position:      "absolute",
-          bottom:        bottomOffset + 8 + (isPortrait ? 60 : 0), left: 0, right: 0,
+          bottom:        bottomOffset + 8 + (isPortrait ? 35 : 0), left: 0, right: 0,
           zIndex:        10,
           opacity:       visible ? 1 : 0,
           pointerEvents: visible ? "auto" : "none",
@@ -645,7 +645,7 @@ function VideoControls({ videoRef, containerRef, isMuted, onToggleMute, onFirstP
       </div>
 
       
-      <button style={{ ...btnStyle, position: "absolute", bottom: bottomOffset + 8 + (isPortrait ? 60 : 0), right: 4, zIndex: 15, pointerEvents: "auto", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" }} onClick={handleFullscreen} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }} aria-label={isFakeFullscreen || isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+      <button style={{ ...btnStyle, position: "absolute", bottom: bottomOffset + 8 + (isPortrait ? 35 : 0), right: 4, zIndex: 15, pointerEvents: "auto", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" }} onClick={handleFullscreen} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleFullscreen(e); }} aria-label={isFakeFullscreen || isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
         {(isFullscreen || isFakeFullscreen) ? (
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
         ) : (
