@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { User, Bookmark, Settings, Wallet, HelpCircle, LogOut, X, Banknote, Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/Avatar";
@@ -27,13 +27,13 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
       console.error("[MoreDrawer] Logout failed:", err);
       setLoggingOut(false);
     }
-    onClose();
+    handleClose();
   };
 
   const handleNav = (href: string) => {
     if (href === "#") return;
     navigate(href);
-    onClose();
+    handleClose();
   };
 
   const navItems = [
@@ -44,23 +44,34 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
     { label: "Wallet",        icon: Wallet,   href: "/wallet"        },
   ];
 
-  if (!isOpen) return null;
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) setVisible(true);
+  }, [isOpen]);
+
+  const handleClose = () => {
+    setVisible(false);
+    setTimeout(() => onClose(), 250);
+  };
+
+  if (!isOpen && !visible) return null;
 
   return (
     <>
       <div
-        onClick={onClose}
+        onClick={handleClose}
         style={{ position: "fixed", inset: 0, zIndex: 200, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", animation: "fadeIn 0.2s ease" }}
       />
 
       <div
-        style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 201, backgroundColor: "#0A0A0F", borderTop: "1px solid #2A2A3D", borderRadius: "20px 20px 0 0", padding: "12px 0 32px", animation: "slideUp 0.25s ease", fontFamily: "'Inter', sans-serif", maxWidth: "480px", margin: "0 auto" }}
+        style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 201, backgroundColor: "#0A0A0F", borderTop: "1px solid #2A2A3D", borderRadius: "20px 20px 0 0", padding: "12px 0 32px", animation: visible && isOpen ? "slideUp 0.25s ease" : "slideDown 0.25s ease forwards", fontFamily: "'Inter', sans-serif", maxWidth: "480px", margin: "0 auto" }}
       >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
           <div style={{ width: "36px", height: "4px", borderRadius: "2px", backgroundColor: "#2A2A3D" }} />
         </div>
 
-        <button onClick={onClose} style={{ position: "absolute", top: "16px", right: "16px", background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex" }}>
+        <button onClick={handleClose} style={{ position: "absolute", top: "16px", right: "16px", background: "none", border: "none", cursor: "pointer", color: "#6B6B8A", display: "flex" }}>
           <X size={20} />
         </button>
 
@@ -125,7 +136,8 @@ export function MoreDrawer({ isOpen, onClose }: MoreDrawerProps) {
 
       <style>{`
         @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes slideUp   { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes slideDown { from { transform: translateY(0); } to { transform: translateY(100%); } }
         @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.4} }
       `}</style>
     </>
