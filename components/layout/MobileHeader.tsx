@@ -223,6 +223,8 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [plusOpen,   setPlusOpen]   = useState(false);
+  const [mounted,    setMounted]    = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
   if (searchOpen) document.body.classList.add("search-open");
   else document.body.classList.remove("search-open");
@@ -350,7 +352,9 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
       >
         {/* Default bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: "100%", opacity: searchOpen ? 0 : 1, transform: searchOpen ? "translateY(-10px)" : "translateY(0)", transition: "all 0.2s ease", pointerEvents: searchOpen ? "none" : "auto", position: "absolute", inset: 0 }}>
-  {!viewer ? (
+  {!mounted ? (
+    <div style={{ width: "46px" }} />
+  ) : !viewer ? (
     <button
       onClick={() => openAuthModal()}
       style={{

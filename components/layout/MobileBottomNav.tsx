@@ -14,6 +14,8 @@ export function MobileBottomNav() {
   const { viewer } = useAppStore();
   const [moreOpen, setMoreOpen] = useState(false);
   const [tappedHref, setTappedHref] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const guard = useGuestGuard();
   const unreadCount = useUnreadConversationCount();
 
@@ -118,7 +120,7 @@ border: "none",
 </button>
 
 <button onClick={guard(() => setMoreOpen(true))} style={btn(moreOpen)}>
-  {viewer ? (
+  {mounted && viewer ? (
     viewer.avatar_url ? (
       <img
         src={viewer.avatar_url}

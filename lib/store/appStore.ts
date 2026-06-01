@@ -74,7 +74,9 @@ export interface StoryUploadState {
 interface AppStore {
   viewer: Viewer | null;
   viewerFetchedAt: number | null;
+  viewerReady: boolean;
   setViewer: (viewer: Viewer | null) => void;
+  setViewerReady: (ready: boolean) => void;
   profiles: Record<string, ProfileEntry>;
   setProfile: (username: string, entry: ProfileEntry) => void;
   updateProfile: (username: string, patch: Partial<ProfileEntry>) => void;
@@ -96,9 +98,11 @@ interface AppStore {
 const DEFAULT_STORY_UPLOAD: StoryUploadState = { phase: "idle", uploadPct: 0, compressPct: 0, error: null, storyId: null };
 
 export const useAppStore = create<AppStore>((set) => ({
-  viewer: null,
+  viewer: loadViewerFromStorage(),
   viewerFetchedAt: null,
+  viewerReady: loadViewerFromStorage() !== null,
   setViewer: (viewer) => { saveViewerToStorage(viewer); set({ viewer, viewerFetchedAt: viewer ? Date.now() : null }); },
+  setViewerReady: (ready) => set({ viewerReady: ready }),
 
   profiles: loadProfilesFromStorage(),
   setProfile: (username, entry) => set((s) => { const profiles = { ...s.profiles, [username]: entry }; saveProfilesToStorage(profiles); return { profiles }; }),
@@ -140,6 +144,7 @@ export const useAppStore = create<AppStore>((set) => ({
     set({
       viewer: null,
       viewerFetchedAt: null,
+      viewerReady: false,
       profiles: {},
       contentFeeds: {},
       storyUpload: DEFAULT_STORY_UPLOAD,

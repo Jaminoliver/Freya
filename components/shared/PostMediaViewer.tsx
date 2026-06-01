@@ -35,8 +35,11 @@ interface PostMediaViewerProps {
   onSlideChange?:       (index: number) => void;
   maxHeight?:           string;
   autoplayOnVisible?:   boolean;
+  preWarmVideoId?:      string | null;
   fullscreenTopLeft?:   boolean;
-  creatorHandle?:       string;
+  creatorHandle?:        string;
+  disableMobileShrink?:  boolean;
+  onOpenFullscreen?:     (videoId: string, currentTime: number) => void;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -213,7 +216,6 @@ function SubscribeButton({ label, badge, onClick }: {
         e.currentTarget.style.animationPlayState = "running";
       }}
     >
-      {/* Sweep shine */}
       <span style={{
         position:     "absolute",
         top:          0,
@@ -225,8 +227,6 @@ function SubscribeButton({ label, badge, onClick }: {
         animation:    "pmv-sweep 2.5s ease-in-out infinite",
         pointerEvents:"none",
       }} />
-
-      {/* Lock icon + label */}
       <span style={{
         fontSize:   "13px",
         fontWeight: 700,
@@ -243,8 +243,6 @@ function SubscribeButton({ label, badge, onClick }: {
         </svg>
         {label}
       </span>
-
-      {/* Badge */}
       {badge && (
         <span style={{
           fontSize:   "11px",
@@ -264,7 +262,9 @@ function SubscribeButton({ label, badge, onClick }: {
 }
 
 // ── PostMediaViewer ──────────────────────────────────────────────────────────
-export default function PostMediaViewer({
+import type { VideoPlayerHandle } from "@/components/video/VideoPlayer";
+
+export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(function PostMediaViewer({
   media,
   isLocked,
   isUnlockedPPV = false,
@@ -278,9 +278,12 @@ export default function PostMediaViewer({
   onSlideChange,
   maxHeight = "85svh",
   autoplayOnVisible = false,
+  preWarmVideoId    = null,
   fullscreenTopLeft = false,
   creatorHandle,
-}: PostMediaViewerProps) {
+  disableMobileShrink = false,
+  onOpenFullscreen,
+}: PostMediaViewerProps, ref) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
   const isMultiImg = !isVideo && media.length > 1;
@@ -303,9 +306,8 @@ export default function PostMediaViewer({
       ? (first.bunnyVideoId ? getBunnyThumbnail(first.bunnyVideoId) : first.thumbnailUrl ?? undefined)
       : (first.thumbnailUrl ?? first.url ?? undefined);
 
-    // PPV locked — show price and unlock button (unchanged)
-    const isPPVLocked      = isPPV && price != null && price > 0;
-    const displayPrice     = isPPVLocked ? price! / 100 : 0;
+    const isPPVLocked  = isPPV && price != null && price > 0;
+    const displayPrice = isPPVLocked ? price! / 100 : 0;
 
     return (
       <div style={{ position: "relative", overflow: "hidden", width: "100%" }}>
@@ -318,15 +320,12 @@ export default function PostMediaViewer({
           backgroundColor: "#0A0A0F",
           overflow:        "hidden",
         }}>
-          {/* BlurHash */}
           {first.blurHash && (
             <BlurHashCanvas
               hash={first.blurHash}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }}
             />
           )}
-
-          {/* Blurred thumbnail */}
           {blurSrc && (
             <img
               src={blurSrc}
@@ -344,16 +343,12 @@ export default function PostMediaViewer({
               }}
             />
           )}
-
-          {/* Dark overlay */}
           <div style={{
             position:   "absolute",
             inset:      0,
             zIndex:     2,
             background: "linear-gradient(to bottom, rgba(10,10,15,0.3) 0%, rgba(10,10,15,0.65) 100%)",
           }} />
-
-          {/* Lock UI */}
           <div style={{
             position:       "absolute",
             inset:          0,
@@ -364,7 +359,6 @@ export default function PostMediaViewer({
             justifyContent: "center",
             gap:            "16px",
           }}>
-            {/* Lock icon circle */}
             <div style={{
               width:           "56px",
               height:          "56px",
@@ -379,8 +373,6 @@ export default function PostMediaViewer({
             }}>
               <Lock size={22} color="#A78BFA" strokeWidth={2} />
             </div>
-
-            {/* ── PPV locked ── */}
             {isPPVLocked ? (
               <>
                 <div style={{ textAlign: "center" }}>
@@ -412,7 +404,6 @@ export default function PostMediaViewer({
                 />
               </>
             ) : (
-              // ── Subscription locked ──
               <>
                 <div style={{ textAlign: "center" }}>
                   <div style={{
@@ -450,8 +441,12 @@ export default function PostMediaViewer({
       return ratio;
     })();
 
+    const isPortrait  = rawVideoRatio < 1;
     const videoRatio  = Math.min(Math.max(rawVideoRatio, 9 / 16), 1.91);
-    const isLandscape = rawVideoRatio > 1;
+
+    // X-style: portrait videos on mobile sit in a narrower container (left-aligned)
+    // Width shrinks → height naturally follows the same ratio → nothing cropped
+    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "72%" : "100%";
 
     const blurSrc = first.bunnyVideoId
       ? getBunnyThumbnail(first.bunnyVideoId)
@@ -459,12 +454,13 @@ export default function PostMediaViewer({
 
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
+        <div style={{ width: containerWidth, borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
         <div
           style={{
             width:                "100%",
             position:             "relative",
-            aspectRatio:          String(videoRatio),
-            maxHeight:            isLandscape ? "none" : "85svh",
+            aspectRatio:          !isMobileView && isPortrait ? "4 / 3" : String(videoRatio),
+            overflow:             "hidden",
             backgroundColor:      "#000",
             backgroundImage:      blurSrc ? `url(${blurSrc})` : undefined,
             backgroundSize:       "cover",
@@ -484,6 +480,7 @@ export default function PostMediaViewer({
           )}
           <div style={{ position: "relative", zIndex: 2, width: "100%", height: "100%" }}>
             <VideoPlayer
+              ref={ref}
               bunnyVideoId={first.bunnyVideoId ?? null}
               thumbnailUrl={first.thumbnailUrl ?? null}
               processingStatus={first.processingStatus ?? null}
@@ -491,15 +488,22 @@ export default function PostMediaViewer({
               fillParent={true}
               hideInternalBlur={true}
               blurHash={first.blurHash}
-              objectFit={isMobileView && videoRatio < 0.6 ? "cover" : "contain"}
+              objectFit={isMobileView && isPortrait ? "cover" : "contain"}
               autoplayOnVisible={autoplayOnVisible}
+              preWarmOnly={!!(preWarmVideoId && preWarmVideoId === first.bunnyVideoId)}
               fullscreenTopLeft={fullscreenTopLeft}
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}
               creatorHandle={creatorHandle}
+              onOpenFullscreen={(currentTime: number) =>
+                first.bunnyVideoId
+                  ? onOpenFullscreen?.(first.bunnyVideoId, currentTime)
+                  : undefined
+              }
             />
           </div>
           {isUnlockedPPV && <UnlockedPPVBadge />}
+        </div>
         </div>
       </DoubleTapLike>
     );
@@ -532,7 +536,7 @@ export default function PostMediaViewer({
 
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%" }}>
-        <div style={{ position: "relative", width: "100%" }}>
+        <div style={{ position: "relative", width: "100%", borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
           <ImageCarousel
             media={carouselMedia}
             onImageClick={(index) => onSingleTap?.(index)}
@@ -561,7 +565,7 @@ export default function PostMediaViewer({
     );
   }
 
- // ── Single image ──────────────────────────────────────────────────────────
+  // ── Single image ──────────────────────────────────────────────────────────
   const imageRatio = (() => {
     if (first?.aspectRatio != null && first.aspectRatio > 0) {
       return Math.min(Math.max(first.aspectRatio, 0.4), 1.91);
@@ -582,6 +586,9 @@ export default function PostMediaViewer({
           maxHeight:            "85svh",
           backgroundColor:      "#0A0A0F",
           overflow:             "hidden",
+          borderRadius:         "14px",
+          border:               "1px solid #1E1E2E",
+          clipPath:             "inset(0 round 14px)",
           backgroundImage:      first.url ? `url(${first.url})` : undefined,
           backgroundSize:       "cover",
           backgroundPosition:   "center",
@@ -604,7 +611,6 @@ export default function PostMediaViewer({
           eager
           style={{ width: "100%", height: "100%", objectFit: isMobileView ? "cover" : "contain", display: "block" }}
         />
-
         {isUnlockedPPV && <UnlockedPPVBadge />}
         {creatorHandle && (
           <div style={{
@@ -624,4 +630,4 @@ export default function PostMediaViewer({
       </div>
     </DoubleTapLike>
   );
-}
+});

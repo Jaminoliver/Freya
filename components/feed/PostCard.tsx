@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, memo, useRef } from "react";
+import type { VideoPlayerHandle } from "@/components/video/VideoPlayer";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, MoreHorizontal } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -36,7 +37,8 @@ const StoryViewer       = dynamic(() => import("@/components/story/StoryViewer")
 const CheckoutModal     = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
 const Lightbox          = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
 const ReportModal       = dynamic(() => import("@/components/messages/ReportModal").then((m) => ({ default: m.ReportModal })), { ssr: false });
-const BlockConfirmModal = dynamic(() => import("@/components/ui/BlockConfirmModal"), { ssr: false });
+const BlockConfirmModal        = dynamic(() => import("@/components/ui/BlockConfirmModal"), { ssr: false });
+const VideoPlayerFullscreen    = dynamic(() => import("@/components/video/VideoPlayerFullscreen").then((m) => ({ default: m.VideoPlayerFullscreen })), { ssr: false });
 
 interface MediaItem {
   type:              "image" | "video";
@@ -105,6 +107,7 @@ function PostCardInner({
   initialSavedCreator = false,
   eager = false,
   autoplayOnVisible = false,
+  preWarmVideoId = null,
 }: {
   post:                  Post;
   onLike?:               (postId: string) => void;
@@ -120,6 +123,7 @@ function PostCardInner({
   initialSavedCreator?:  boolean;
   eager?:                boolean;
   autoplayOnVisible?:    boolean;
+  preWarmVideoId?:       string | null;
 }) {
   const { navigate } = useNav();
   const router  = useRouter();
@@ -165,7 +169,14 @@ function PostCardInner({
   const [restrictConfirm,   setRestrictConfirm]   = useState(false);
   const [unrestrictConfirm, setUnrestrictConfirm] = useState(false);
 
-  const [pollData, setPollData] = useState<PollData | null>(post.poll ?? null);
+  const [pollData,             setPollData]             = useState<PollData | null>(post.poll ?? null);
+  const videoPlayerRef = useRef<VideoPlayerHandle | null>(null);
+  const [fsHls,                setFsHls]                = useState<any>(null);
+  const [fsVideoId,            setFsVideoId]            = useState<string | null>(null);
+  const [fsInitialTime,        setFsInitialTime]        = useState(0);
+  const [fsMuted,              setFsMuted]              = useState(() => {
+    try { return localStorage.getItem("vp_muted") === "true"; } catch { return false; }
+  });
 
   const { isBlocked, isRestricted, block, unblock, restrict, unrestrict, fetchStatus } = useBlockRestrict({ userId: post.creator.id });
 
@@ -372,6 +383,36 @@ function PostCardInner({
         <Lightbox post={lightboxPost} allPosts={[lightboxPost]} initialMediaIndex={lightboxMediaIdx} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
       )}
 
+      {fsVideoId && (
+        <VideoPlayerFullscreen
+          bunnyVideoId={fsVideoId}
+          thumbnailUrl={post.media.find((m) => m.bunnyVideoId === fsVideoId)?.thumbnailUrl ?? null}
+          aspectRatio={post.media.find((m) => m.bunnyVideoId === fsVideoId)?.aspectRatio ?? null}
+          width={post.media.find((m) => m.bunnyVideoId === fsVideoId)?.width ?? null}
+          height={post.media.find((m) => m.bunnyVideoId === fsVideoId)?.height ?? null}
+          postId={Number(post.id)}
+          caption={post.caption}
+          likeCount={engagement.likeCount}
+          liked={engagement.liked}
+          commentCount={engagement.commentCount}
+          creatorId={post.creator.id}
+          username={post.creator.username}
+          displayName={post.creator.name}
+          avatarUrl={post.creator.avatar_url}
+          isMuted={fsMuted}
+          onMuteChange={setFsMuted}
+          onClose={(time: number) => {
+            setFsVideoId(null);
+            requestAnimationFrame(() => {
+              setFsHls(null);
+              videoPlayerRef.current?.resume(time);
+            });
+          }}
+          initialTime={fsInitialTime}
+          existingHls={fsHls}
+        />
+      )}
+
       {reportOpen && (
         <ReportModal context="user" username={post.creator.username} reportedUserId={post.creator.id} onClose={() => setReportOpen(false)} onBlockUser={block} />
       )}
@@ -446,8 +487,9 @@ function PostCardInner({
               ) : null
             }
           >
-            <div style={{ marginTop: "12px", margin: isLandscapeVideo ? "10px 0" : isMobileView ? "10px 4px" : "10px 12px", borderRadius: isLandscapeVideo ? "0" : "14px", border: isLandscapeVideo ? "none" : "1px solid #1E1E2E", overflow: "hidden", clipPath: isLandscapeVideo ? "none" : "inset(0 round 14px)" }}>
+            <div style={{ marginTop: "12px", margin: isMobileView ? "10px 4px" : "10px 12px" }}>
             <PostMediaViewer
+              ref={videoPlayerRef}
               media={normalizedMedia} isLocked={post.isLocked} price={post.price}
               isPPV={post.is_ppv} isUnlockedPPV={post.is_ppv && !post.isLocked}
               onDoubleTap={engagement.handleDoubleTapLike}
@@ -456,7 +498,14 @@ function PostCardInner({
               initialSlide={initialSlide}
               onSlideChange={(index) => onSlideChange?.(post.id, index)}
               autoplayOnVisible={autoplayOnVisible}
+              preWarmVideoId={preWarmVideoId}
               creatorHandle={post.creator.username}
+              onOpenFullscreen={(videoId, currentTime) => {
+                try { const m = localStorage.getItem("vp_muted"); setFsMuted(m === "true"); } catch {}
+                setFsHls(videoPlayerRef.current?.getHls() ?? null);
+                setFsInitialTime(currentTime);
+                setFsVideoId(videoId);
+              }}
             />
             </div>
           </VisibilityGate>
@@ -505,6 +554,7 @@ export const PostCard = memo(PostCardInner, (prev, next) => {
   if (prev.is_renewal           !== next.is_renewal)           return false;
   if (prev.eager                !== next.eager)                return false;
   if (prev.autoplayOnVisible    !== next.autoplayOnVisible)    return false;
+  if (prev.preWarmVideoId       !== next.preWarmVideoId)       return false;
   return true;
 });
 

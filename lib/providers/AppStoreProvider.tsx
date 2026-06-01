@@ -24,7 +24,7 @@ async function fetchProfileById(userId: string, accessToken: string) {
 }
 
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
-  const { setViewer, clearAll } = useAppStore();
+  const { setViewer, clearAll, setViewerReady } = useAppStore();
   const fetchingRef = useRef<string | null>(null);
 
   // Hydrate viewer from sessionStorage synchronously before first paint.
@@ -75,6 +75,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         console.error("[AppStoreProvider] profile fetch failed:", err);
         // Keep existing cached viewer on error — don't wipe it
       } finally {
+        setViewerReady(true);
         fetchingRef.current = null;
       }
     };
@@ -90,6 +91,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           // Next login on the same tab would show the old user's feed.
           const hadViewer = !!useAppStore.getState().viewer;
           clearAll();
+          setViewerReady(true);
 
           if (event === "SIGNED_OUT" && hadViewer) {
             window.location.href = "/login";

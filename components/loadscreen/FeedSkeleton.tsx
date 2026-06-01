@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+
 // ─────────────────────────────────────────────
 //  FeedSkeleton — Instagram-style shimmer cards
 //  Mirrors PostCard layout exactly:
@@ -116,9 +118,15 @@ function FeedSkeletonCard() {
 }
 
 export function FeedSkeleton({ count = 5 }: { count?: number }) {
+  React.useEffect(() => {
+    const el = document.createElement("style");
+    el.textContent = SHIMMER_KEYFRAMES;
+    document.head.appendChild(el);
+    return () => { document.head.removeChild(el); };
+  }, []);
+
   return (
     <>
-      <style>{SHIMMER_KEYFRAMES}</style>
       {Array.from({ length: count }).map((_, i) => (
         <FeedSkeletonCard key={i} />
       ))}

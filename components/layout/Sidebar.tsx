@@ -56,6 +56,8 @@ export function Sidebar() {
     (!tappedHref && (pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"))));
 
   const [moreOpen, setMoreOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const guard = useGuestGuard();
 
   const handleNav = (href: string) => { setTappedHref(href); navigate(href); };
@@ -92,7 +94,7 @@ export function Sidebar() {
             );
           })}
 
-          {username !== null && (() => {
+          {mounted && username && (() => {
             const href   = `/${username}`;
             const active = isActive(href);
             return (
@@ -116,7 +118,7 @@ export function Sidebar() {
             More
           </button>
 
-          {!viewer && (
+          {mounted && !viewer && (
             <button
               onClick={() => openAuthModal()}
               style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "13px 16px", borderRadius: "30px", border: "1.5px solid #1F1F2A", cursor: "pointer", background: "#141420", color: "#F1F5F9", fontSize: "15px", fontWeight: 500, marginTop: "16px", fontFamily: "'Inter', sans-serif" }}
@@ -124,7 +126,7 @@ export function Sidebar() {
               Log in
             </button>
           )}
-          {viewer?.role === "creator" && <button onClick={() => handleNav("/create")}
+          {mounted && viewer?.role === "creator" && <button onClick={() => handleNav("/create")}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "13px 16px", borderRadius: "30px", border: "none", cursor: "pointer", background: "linear-gradient(to right, #8B5CF6, #EC4899)", color: "#fff", fontSize: "15px", fontWeight: 700, marginTop: "16px", transition: "opacity 0.15s ease", fontFamily: "'Inter', sans-serif" }}
             onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}

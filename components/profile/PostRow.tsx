@@ -20,7 +20,6 @@ import { PollDisplay } from "@/components/feed/PollDisplay";
 
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
 import { useAppStore } from "@/lib/store/appStore";
-import { createClient } from "@/lib/supabase/client";
 import { useRelativeTimestamp } from "@/lib/hooks/useRelativeTimestamp";
 import { usePostEngagement } from "@/lib/hooks/usePostEngagement";
 
@@ -28,7 +27,8 @@ import type { LightboxPost } from "@/components/profile/Lightbox";
 import type { PollData } from "@/components/feed/PollDisplay";
 
 const StoryViewer    = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
-const CheckoutModal  = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
+const CheckoutModal          = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
+const VideoPlayerFullscreen  = dynamic(() => import("@/components/video/VideoPlayerFullscreen").then((m) => ({ default: m.VideoPlayerFullscreen })), { ssr: false });
 
 export interface ApiPost {
   id:              number;
@@ -77,7 +77,7 @@ export interface ApiPost {
 export default function PostRow({
   post, isOwnProfile, isSubscribed,
   onLike, onComment, onTip, onUnlock,
-  viewer, onDelete, onImageClick, onPPVUpdated,
+  viewer, onDelete, onImageClick, onPPVUpdated, autoplayOnVisible = false, preWarmVideoId = null,
 }: {
   post:          ApiPost;
   isOwnProfile?: boolean;
@@ -87,9 +87,11 @@ export default function PostRow({
   onTip?:        (id: string) => void;
   onUnlock?:     (id: string) => void;
   viewer:        { id: string; username: string; display_name: string; avatar_url: string } | null;
-  onDelete?:     (id: string) => void;
-  onImageClick?: (post: LightboxPost, index: number) => void;
-  onPPVUpdated?: (id: string, priceKobo: number) => void;
+  onDelete?:          (id: string) => void;
+  onImageClick?:      (post: LightboxPost, index: number) => void;
+  onPPVUpdated?:      (id: string, priceKobo: number) => void;
+  autoplayOnVisible?: boolean;
+  preWarmVideoId?:    string | null;
 }) {
   const router = useRouter();
   const openAuthModal = useAppStore((s) => s.openAuthModal);
@@ -117,6 +119,13 @@ export default function PostRow({
   const [subToMsgMonthly,  setSubToMsgMonthly]  = React.useState(0);
   const [creatorSheetOpen, setCreatorSheetOpen] = React.useState(false);
   const [pollData,         setPollData]         = React.useState<PollData | null>(post.poll ?? null);
+  const [fsVideoId,        setFsVideoId]        = React.useState<string | null>(null);
+  const [fsInitialTime,    setFsInitialTime]    = React.useState(0);
+  const [fsHls,            setFsHls]            = React.useState<any>(null);
+  const [fsMuted,          setFsMuted]          = React.useState(() => {
+    try { return localStorage.getItem("vp_muted") === "true"; } catch { return false; }
+  });
+  const videoPlayerRef = React.useRef<import("@/components/video/VideoPlayer").VideoPlayerHandle>(null);
   const [caption,          setCaption]          = React.useState<string | null>(post.caption);
   const [editOpen,         setEditOpen]         = React.useState(false);
   const [ppvEditOpen,      setPpvEditOpen]      = React.useState(false);
@@ -249,6 +258,36 @@ export default function PostRow({
         <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refresh(); }} />
       )}
 
+      {fsVideoId && (
+        <VideoPlayerFullscreen
+          bunnyVideoId={fsVideoId}
+          thumbnailUrl={post.media.find((m) => m.bunny_video_id === fsVideoId)?.thumbnail_url ?? null}
+          aspectRatio={post.media.find((m) => m.bunny_video_id === fsVideoId)?.aspect_ratio ?? null}
+          width={post.media.find((m) => m.bunny_video_id === fsVideoId)?.width ?? null}
+          height={post.media.find((m) => m.bunny_video_id === fsVideoId)?.height ?? null}
+          postId={post.id}
+          caption={caption}
+          likeCount={engagement.likeCount}
+          liked={engagement.liked}
+          commentCount={engagement.commentCount}
+          creatorId={post.profiles.id}
+          username={post.profiles.username}
+          displayName={post.profiles.display_name}
+          avatarUrl={post.profiles.avatar_url}
+          isMuted={fsMuted}
+          onMuteChange={setFsMuted}
+          onClose={(time: number) => {
+            setFsVideoId(null);
+            requestAnimationFrame(() => {
+              setFsHls(null);
+              videoPlayerRef.current?.resume(time);
+            });
+          }}
+          initialTime={fsInitialTime}
+          existingHls={fsHls}
+        />
+      )}
+
       {isOwnProfile && <TipDetailsSheet postId={post.id} open={tipDetailsOpen} onClose={() => setTipDetailsOpen(false)} />}
       {editOpen && <EditCaptionModal caption={caption ?? ""} onSave={handleSaveCaption} onClose={() => setEditOpen(false)} />}
       {ppvEditOpen && <EditPPVModal currentPrice={ppvPrice != null ? ppvPrice / 100 : null} onSave={handleSavePPV} onRemove={isPPV ? handleRemovePPV : undefined} onClose={() => setPpvEditOpen(false)} />}
@@ -323,8 +362,9 @@ export default function PostRow({
         const rawR = firstM?.aspectRatio ?? (firstM?.width && firstM?.height ? firstM.width / firstM.height : 0);
         const isLandscapeVideo = rawR > 1;
         return (
-        <div style={{ marginTop: "12px", margin: isLandscapeVideo ? "6px 0" : isMobileView ? "6px 4px" : "6px 12px", borderRadius: isLandscapeVideo ? "0" : "14px", border: isLandscapeVideo ? "none" : "1px solid #1E1E2E", overflow: "hidden", clipPath: isLandscapeVideo ? "none" : "inset(0 round 14px)" }}>
+        <div style={{ marginTop: "12px", margin: isLandscapeVideo ? "6px 0" : isMobileView ? "6px 4px" : "6px 12px" }}>
         <PostMediaViewer
+          ref={videoPlayerRef}
           media={viewerMedia}
           isLocked={post.locked && !isOwnProfile}
           price={ppvPrice}
@@ -334,7 +374,15 @@ export default function PostRow({
           onDoubleTap={engagement.handleDoubleTapLike}
           onSingleTap={handleSingleTap}
           onUnlock={() => onUnlock?.(String(post.id))}
+          autoplayOnVisible={autoplayOnVisible}
+          preWarmVideoId={preWarmVideoId}
           creatorHandle={post.profiles.username}
+          onOpenFullscreen={(videoId, currentTime) => {
+            try { const m = localStorage.getItem("vp_muted"); setFsMuted(m === "true"); } catch {}
+            setFsHls(videoPlayerRef.current?.getHls() ?? null);
+            setFsInitialTime(currentTime);
+            setFsVideoId(videoId);
+          }}
         />
         </div>
         );
