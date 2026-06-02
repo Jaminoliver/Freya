@@ -55,6 +55,8 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+
+
 // ── Custom Controls Overlay ───────────────────────────────────────────────────
 interface ControlsProps {
   videoRef:         React.RefObject<HTMLVideoElement | null>;
@@ -427,6 +429,7 @@ interface VideoPlayerProps {
   knownHeight?:       number | null;
   creatorHandle?:     string;
   preWarmOnly?:       boolean;
+  isFullscreenActive?: boolean;
   // Fullscreen modal props
   onOpenFullscreen?:  (currentTime: number) => void;
 }
@@ -454,7 +457,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   knownWidth        = null,
   knownHeight       = null,
   creatorHandle,
-  preWarmOnly       = false,
+  preWarmOnly         = false,
+  isFullscreenActive  = false,
   onOpenFullscreen,
 }: VideoPlayerProps, ref) {
   const videoRef       = React.useRef<HTMLVideoElement | null>(null);
@@ -463,7 +467,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const hasInitialized    = React.useRef(false);
   const bufferTimer       = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingTimer      = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isFullscreenOpen  = React.useRef(false);
 
   const [showPoster,   setShowPoster]   = React.useState(true);
   const [posterLoaded, setPosterLoaded] = React.useState(false);
@@ -563,7 +566,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   }, [fillParent, externalRatio]);
 
   const teardown = React.useCallback((force = false) => {
-    if (isFullscreenOpen.current) return;
     if (!force && !hasInitialized.current) return;
     const video = videoRef.current;
     if (!force && bunnyVideoId && watchedVideoIds.has(bunnyVideoId)) {
@@ -763,33 +765,17 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     resume: (time?: number) => {
       const video = videoRef.current;
       if (!video) return;
-      // Clear fullscreen flag only after a frame so teardown sees it still set
-      requestAnimationFrame(() => { isFullscreenOpen.current = false; });
-      const hls = hlsRef.current;
-      if (hls && video.src === "") {
-        hls.attachMedia(video);
-        hls.once("hlsManifestParsed", () => {
-          if (time !== undefined) video.currentTime = time;
-          video.muted = getSavedMute();
-          video.play().catch(() => {});
-        });
-        return;
-      }
+      setShowPoster(false);
       if (time !== undefined) video.currentTime = time;
       video.muted = getSavedMute();
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          setTimeout(() => video.play().catch(() => {}), 150);
-        });
-      }
+      video.play().catch(() => {});
     },
   }));
 
   const handleOpenFullscreen = React.useCallback(() => {
     const video = videoRef.current;
     const currentTime = video?.currentTime ?? 0;
-    isFullscreenOpen.current = true;
+    video?.pause();
     onOpenFullscreen?.(currentTime);
   }, [onOpenFullscreen]);
 
@@ -817,14 +803,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     maxHeight:      "80svh",
   };
 
-  const videoStyle: React.CSSProperties = {
-    position:  "relative",
-    zIndex:    2,
-    display:   "block",
-    width:     "100%",
-    height:    "100%",
-    objectFit: objectFit,
-  };
+  
 
   if (!bunnyVideoId) {
     return (
@@ -846,6 +825,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         @keyframes vp-dot { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1); } }
       `}</style>
 
+      
       <div
         ref={containerRef}
         data-videoplayer
@@ -886,40 +866,51 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           </div>
         )}
 
-        {/* Video element */}
-        <video
-          ref={videoRef}
-          playsInline
-          preload="none"
-          loop
-          muted={isMuted}
-          onLoadedMetadata={handleLoadedMetadata}
-          onPause={() => { setIsPlaying(false); }}
-          onEnded={() => { setIsPlaying(false); }}
-          onSeeking={() => {
-            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
-            setIsBuffering(false);
-          }}
-          onWaiting={() => {
-            if (bufferTimer.current) clearTimeout(bufferTimer.current);
-            bufferTimer.current = setTimeout(() => setIsBuffering(true), 800);
-          }}
-          onPlaying={() => {
-            if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
-            if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
-            if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
-            if (bunnyVideoId) watchedVideoIds.add(bunnyVideoId);
-            setIsBuffering(false);
-            setHasStarted(true);
-            setIsPlaying(true);
-            setShowSlowDots(false);
-            setIsLoading(false);
-            setShowPoster(false);
-            setIsAutoplaying(false);
-          }}
-          onError={() => { setHasError(true); setIsBuffering(false); }}
-          style={{ ...videoStyle, opacity: showPoster ? 0 : 1, transition: "opacity 0.25s ease" }}
-        />
+        <div style={{ position: "absolute", inset: 0, zIndex: 2 }}>
+          <video
+            ref={videoRef}
+            playsInline
+            preload="none"
+            loop
+            muted={isMuted}
+            onLoadedMetadata={handleLoadedMetadata}
+            onPause={() => { setIsPlaying(false); }}
+            onEnded={() => { setIsPlaying(false); }}
+            onSeeking={() => {
+              if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
+              setIsBuffering(false);
+            }}
+            onWaiting={() => {
+              if (bufferTimer.current) clearTimeout(bufferTimer.current);
+              bufferTimer.current = setTimeout(() => setIsBuffering(true), 800);
+            }}
+            onPlaying={() => {
+              if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
+              if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
+              if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
+              if (bunnyVideoId) watchedVideoIds.add(bunnyVideoId);
+              setIsBuffering(false);
+              setHasStarted(true);
+              setIsPlaying(true);
+              setShowSlowDots(false);
+              setIsLoading(false);
+              setShowPoster(false);
+              setIsAutoplaying(false);
+            }}
+            onError={() => { setHasError(true); setIsBuffering(false); }}
+            style={{
+              position:   "absolute",
+              inset:      0,
+              width:      "100%",
+              height:     "100%",
+              objectFit:  objectFit,
+              display:    "block",
+              zIndex:     2,
+              opacity:    showPoster ? 0 : 1,
+              transition: "opacity 0.25s ease",
+            }}
+          />
+        </div>
 
         {/* Buffering dots */}
         {(isLoading || (!showPoster && !hasError && isBuffering)) && (

@@ -401,11 +401,11 @@ function PostCardInner({
           avatarUrl={post.creator.avatar_url}
           isMuted={fsMuted}
           onMuteChange={setFsMuted}
-          onClose={(time: number) => {
+          onClose={() => {
             setFsVideoId(null);
             requestAnimationFrame(() => {
               setFsHls(null);
-              videoPlayerRef.current?.resume(time);
+              videoPlayerRef.current?.resume();
             });
           }}
           initialTime={fsInitialTime}

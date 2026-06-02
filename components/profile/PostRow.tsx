@@ -276,11 +276,12 @@ export default function PostRow({
           avatarUrl={post.profiles.avatar_url}
           isMuted={fsMuted}
           onMuteChange={setFsMuted}
-          onClose={(time: number) => {
+          onClose={() => {
             setFsVideoId(null);
             requestAnimationFrame(() => {
               setFsHls(null);
-              videoPlayerRef.current?.resume(time);
+              // resume from the known initial time if available
+              videoPlayerRef.current?.resume(fsInitialTime ?? 0);
             });
           }}
           initialTime={fsInitialTime}

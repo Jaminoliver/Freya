@@ -33,7 +33,7 @@ interface Props {
   // controls
   isMuted: boolean;
   onMuteChange: (muted: boolean) => void;
-  onClose: (currentTime: number) => void;
+  onClose: () => void;
   initialTime?: number;
   existingHls?: any;
   initialIsFollowing?: boolean;
@@ -99,7 +99,6 @@ export function VideoPlayerFullscreen({
   onMuteChange,
   onClose,
   initialTime = 0,
-  existingHls,
   initialIsFollowing = false,
   onFollowChange,
 }: Props) {
@@ -222,18 +221,6 @@ export function VideoPlayerFullscreen({
       if (initialTime > 0) video.currentTime = initialTime;
       video.play().catch(() => {});
     };
-
-    if (existingHls) {
-      hlsRef.current = existingHls;
-      existingHls.attachMedia(video);
-      existingHls.once("hlsManifestParsed", tryPlay);
-      // manifest already parsed — just play
-      if (existingHls.media) tryPlay();
-      return () => {
-        if (existingHls) existingHls.detachMedia();
-        hlsRef.current = null;
-      };
-    }
 
     (async () => {
       const Hls = (await import("hls.js")).default;
@@ -389,9 +376,8 @@ export function VideoPlayerFullscreen({
   };
 
   const handleClose = () => {
-    const video = videoRef.current;
-    const time = video?.currentTime ?? 0;
-    onClose(time);
+    if (videoRef.current) videoRef.current.pause();
+    onClose();
   };
 
   const handleProfileClick = (e: React.MouseEvent) => {
