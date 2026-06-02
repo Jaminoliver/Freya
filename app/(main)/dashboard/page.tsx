@@ -202,6 +202,32 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
     [data?.pages]
   );
 
+  const firstVideoPreloaded = useRef(false);
+
+  // Kick off HLS for the first video the moment feed data arrives
+  useEffect(() => {
+    if (!posts.length || firstVideoPreloaded.current) return;
+    firstVideoPreloaded.current = true;
+    const firstVideoPost = posts.find((p) =>
+      p.media.some((m) => m.media_type === "video" && m.bunny_video_id)
+    );
+    if (!firstVideoPost) return;
+    const videoId = firstVideoPost.media.find(
+      (m) => m.media_type === "video" && m.bunny_video_id
+    )?.bunny_video_id;
+    if (!videoId) return;
+    const conn = (navigator as any).connection;
+    const ect: string = conn?.effectiveType ?? "4g";
+    if (ect === "slow-2g" || ect === "2g") return;
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "fetch";
+    link.href = `https://vz-8bc100f4-3c0.b-cdn.net/${videoId}/playlist.m3u8`;
+    link.crossOrigin = "anonymous";
+    document.head.appendChild(link);
+    return () => { try { document.head.removeChild(link); } catch {} };
+  }, [posts]);
+
   useEffect(() => { setSlideMap(loadSlides()); }, []);
 
   const scrollRestoredRef = useRef(false);

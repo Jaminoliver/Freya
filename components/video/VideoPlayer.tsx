@@ -568,7 +568,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const video = videoRef.current;
     if (!force && bunnyVideoId && watchedVideoIds.has(bunnyVideoId)) {
       if (video) video.pause();
-      try { hlsRef.current?.pauseBuffering?.(); } catch {}
+      try { hlsRef.current?.pauseBuffering(); } catch {}
       if (slowTimer.current) { clearTimeout(slowTimer.current); slowTimer.current = null; }
       setIsBuffering(false);
       setShowSlowDots(false);
@@ -576,10 +576,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     }
     if (video) {
       video.pause();
-      try {
-        video.removeAttribute("src");
-        video.load();
-      } catch {}
     }
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch {}
@@ -631,8 +627,19 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           hls.startLevel = data.levels.length - 1;
           hls.currentLevel = data.levels.length - 1;
         });
+        if (preWarmOnly) {
+          hls.once(Hls.Events.FRAG_BUFFERED, () => {
+            try { hls.pauseBuffering(); } catch {}
+          });
+        }
+        let mediaErrorRecovered = false;
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
           if (!data?.fatal) return;
+          if (data.type === "mediaError" && !mediaErrorRecovered) {
+            mediaErrorRecovered = true;
+            hls.recoverMediaError();
+            return;
+          }
           try { hls.destroy(); } catch {}
           hlsRef.current = null;
           hasInitialized.current = false;
@@ -677,18 +684,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
     warmedVideoIds.add(bunnyVideoId);
 
-    if (preWarmOnly) {
-      initVideo().then(() => {
-        const hls = hlsRef.current;
-        if (!hls) return;
-        const Hls = hls.constructor as any;
-        hls.once(Hls.Events.MANIFEST_PARSED, () => {
-          try { hls.pauseBuffering?.(); } catch {}
-        });
-      });
-    } else {
-      initVideo();
-    }
+    initVideo();
   }, [autoplayOnVisible, preWarmOnly, bunnyVideoId, initVideo]);
 
   React.useEffect(() => {
@@ -712,7 +708,11 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             if (!hasStarted) {
               setIsAutoplaying(true);
               if (slowTimer.current) clearTimeout(slowTimer.current);
-              slowTimer.current = setTimeout(() => setShowSlowDots(true), 800);
+              const hls = hlsRef.current;
+              const alreadyBuffered = hls && hls.bufferInfo && hls.bufferInfo(0, 0.1).len > 0;
+              if (!alreadyBuffered) {
+                slowTimer.current = setTimeout(() => setShowSlowDots(true), 1500);
+              }
             }
             try { await video.play(); } catch {}
           })();
