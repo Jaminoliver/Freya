@@ -129,12 +129,7 @@ export default function HomePage() {
 
   const [slideMap, setSlideMap] = useState<Record<string, number>>({});
   const [subscribedCreatorIds, setSubscribedCreatorIds] = useState<Set<string>>(new Set());
-  const [visiblePostIndex, setVisiblePostIndex] = useState<number>(-1);
-
-  // Scroll velocity tracking — skip prewarm if user is flying through the feed
-  const lastScrollY   = useRef(0);
-  const lastScrollT   = useRef(Date.now());
-  const scrollVelocity = useRef(0); // px/ms
+  
 
   const [ppvOpen,    setPpvOpen]    = useState(false);
   const [ppvPrice,   setPpvPrice]   = useState(0);
@@ -242,12 +237,6 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
     const onScroll = () => {
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
-        const now = Date.now();
-        const dy  = Math.abs(window.scrollY - lastScrollY.current);
-        const dt  = now - lastScrollT.current;
-        scrollVelocity.current = dt > 0 ? dy / dt : 0;
-        lastScrollY.current    = window.scrollY;
-        lastScrollT.current    = now;
         saveScroll(window.scrollY);
         rafId = null;
       });
@@ -279,29 +268,6 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
     }
   }, [isLoading]);
 
-  // ── Visible post index tracker ─────────────────────────────────────────
-  // Watches each post's DOM node via IntersectionObserver to know which
-  // index is currently most visible. Used to decide prewarm window.
-  const postNodeRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const registerPostNode = useCallback((index: number, node: HTMLDivElement | null) => {
-    if (node) postNodeRefs.current.set(index, node);
-    else postNodeRefs.current.delete(index);
-  }, []);
-
-  useEffect(() => {
-    if (!posts.length) return;
-    const observers: IntersectionObserver[] = [];
-    postNodeRefs.current.forEach((node, index) => {
-      const obs = new IntersectionObserver(([entry]) => {
-        if (entry.intersectionRatio >= 0.5) {
-          setVisiblePostIndex(index);
-        }
-      }, { threshold: [0.5] });
-      obs.observe(node);
-      observers.push(obs);
-    });
-    return () => observers.forEach((o) => o.disconnect());
-  }, [posts]);
 
   const handleSlideChange = useCallback((postId: string, index: number) => {
     setSlideMap((prev) => { const next = { ...prev, [postId]: index }; saveSlides(next); return next; });
@@ -404,11 +370,6 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
     setSubscribedCreatorIds((prev) => { const next = new Set(prev); next.add(creatorId); return next; });
   }, []);
 
-  // Returns the first video bunnyVideoId for a post, or null
-  const getPostVideoId = useCallback((post: FeedPost): string | null => {
-    const vid = post.media.find((m) => m.media_type === "video" && m.bunny_video_id);
-    return vid?.bunny_video_id ?? null;
-  }, []);
 
   // ── Retry handler ──────────────────────────────────────────────────────
   const handleRetry = useCallback(() => {
@@ -416,51 +377,16 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
   }, [queryClient]);
 
   // ── Memoized feed items ────────────────────────────────────────────────
-  // Prewarm window (adaptive):
-  //   4g/wifi  → prewarm next 2 video posts ahead
-  //   3g       → prewarm next 1 video post ahead
-  //   slow/2g  → no prewarm (VideoPlayer handles this too, belt+suspenders)
-  const conn = typeof navigator !== "undefined" ? (navigator as any).connection : null;
-  const ect: string = conn?.effectiveType ?? "4g";
-  const preWarmWindow = ect === "slow-2g" || ect === "2g" ? 0 : ect === "3g" ? 1 : 2;
-
   const feedItems = useMemo(() => {
     const items: React.ReactNode[] = [];
-
-    // Build index map of video posts so we can find "Nth video ahead"
-    const videoPosts: number[] = [];
-    posts.forEach((post, i) => {
-      if (post.content_type !== "text" && post.content_type !== "poll") {
-        if (post.media.some((m) => m.media_type === "video" && m.bunny_video_id)) {
-          videoPosts.push(i);
-        }
-      }
-    });
 
     posts.forEach((post, index) => {
       const showBanner = !post.is_subscribed && !post.is_renewal;
       const subPrice   = post.profiles?.subscription_price ?? undefined;
 
-      // Is this post within the prewarm window ahead of the current visible post?
-      const videoIdx      = videoPosts.indexOf(index);
-      const visVideoIdx   = (() => {
-        // Find which video-post slot the visible post occupies
-        for (let i = videoPosts.length - 1; i >= 0; i--) {
-          if (videoPosts[i] <= visiblePostIndex) return i;
-        }
-        return -1;
-      })();
-      const isPreWarm = preWarmWindow > 0
-        && videoIdx > -1
-        && videoIdx > visVideoIdx
-        && videoIdx <= visVideoIdx + preWarmWindow
-        // Don't prewarm if user is scrolling fast (>2px/ms = flying through feed)
-        && scrollVelocity.current < 2;
-
       items.push(
         <div
           key={post.id}
-          ref={(node) => registerPostNode(index, node)}
           style={{ margin: "10px 12px", borderRadius: "14px", overflow: "hidden" }}
         >
           {index === 0 && (
@@ -481,7 +407,6 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
             initialSavedCreator={post.saved_creator ?? false}
             eager={index < 2}
             autoplayOnVisible={true}
-            preWarmVideoId={isPreWarm ? getPostVideoId(post) : null}
           />
         </div>
       );
@@ -490,7 +415,7 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
       }
     });
     return items;
-  }, [posts, slideMap, subscribedCreatorIds, visiblePostIndex, handleUnlock, handleSlideChange, handleSubscribed, registerPostNode, getPostVideoId, preWarmWindow]);
+  }, [posts, slideMap, subscribedCreatorIds, handleUnlock, handleSlideChange, handleSubscribed]);
 
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>

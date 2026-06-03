@@ -268,7 +268,7 @@ export function VideoFullscreenModal({
         hlsRef.current = hls;
         hls.loadSource(videoSrc);
         hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => { console.log("[VideoModal] HLS manifest parsed at", performance.now().toFixed(1)); tryPlay(); });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { tryPlay(); });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = videoSrc;
         video.addEventListener("loadeddata", tryPlay, { once: true });
@@ -278,7 +278,9 @@ export function VideoFullscreenModal({
     return () => {
       const v = videoRef.current;
       if (v) { v.pause(); v.src = ""; }
-      hlsRef.current?.destroy();
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+      }
       hlsRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

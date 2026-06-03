@@ -78,7 +78,7 @@ export interface ApiPost {
 export default function PostRow({
   post, isOwnProfile, isSubscribed,
   onLike, onComment, onTip, onUnlock,
-  viewer, onDelete, onImageClick, onPPVUpdated, autoplayOnVisible = false, preWarmVideoId = null,
+  viewer, onDelete, onImageClick, onPPVUpdated, autoplayOnVisible = false,
 }: {
   post:          ApiPost;
   isOwnProfile?: boolean;
@@ -92,7 +92,6 @@ export default function PostRow({
   onImageClick?:      (post: LightboxPost, index: number) => void;
   onPPVUpdated?:      (id: string, priceKobo: number) => void;
   autoplayOnVisible?: boolean;
-  preWarmVideoId?:    string | null;
 }) {
   const router = useRouter();
   const openAuthModal = useAppStore((s) => s.openAuthModal);
@@ -122,6 +121,7 @@ export default function PostRow({
   const [pollData,         setPollData]         = React.useState<PollData | null>(post.poll ?? null);
   const [fsVideoId,        setFsVideoId]        = React.useState<string | null>(null);
   const [fsInitialTime,    setFsInitialTime]    = React.useState(0);
+  const [fsExistingHls,    setFsExistingHls]    = React.useState<any>(null);
   const [fsMuted,          setFsMuted]          = React.useState(() => {
     try { return localStorage.getItem("vp_muted") === "true"; } catch { return false; }
   });
@@ -290,10 +290,12 @@ export default function PostRow({
               aspect_ratio:     fsMedia?.aspect_ratio ?? null,
             }}
             initialTime={fsInitialTime}
+            existingHls={fsExistingHls}
             isMuted={fsMuted}
             onMuteChange={setFsMuted}
             onClose={() => {
               setGlobalFullscreenOpen(false);
+              setFsExistingHls(null);
               setFsVideoId(null);
               videoPlayerRef.current?.resume(fsInitialTime);
             }}
@@ -388,11 +390,11 @@ export default function PostRow({
           onSingleTap={handleSingleTap}
           onUnlock={() => onUnlock?.(String(post.id))}
           autoplayOnVisible={autoplayOnVisible}
-          preWarmVideoId={preWarmVideoId}
           creatorHandle={post.profiles.username}
-          onOpenFullscreen={(videoId, currentTime) => {
+          onOpenFullscreen={(videoId, currentTime, hls) => {
             try { const m = localStorage.getItem("vp_muted"); setFsMuted(m === "true"); } catch {}
             setFsInitialTime(currentTime);
+            setFsExistingHls(hls ?? null);
             setFsVideoId(videoId);
             setGlobalFullscreenOpen(true);
           }}

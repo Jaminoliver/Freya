@@ -230,12 +230,7 @@ export default function ContentFeed({
   const [isMediaGridView, setIsMediaGridView] = React.useState(cached?.isMediaGridView ?? true);
   const [showSearch,      setShowSearch]      = React.useState(false);
   const [searchQuery,     setSearchQuery]     = React.useState("");
-  const [visiblePostIndex, setVisiblePostIndex] = React.useState<number>(-1);
-
-  // Scroll velocity — skip prewarm if user is flying through feed
-  const lastScrollY    = React.useRef(0);
-  const lastScrollT    = React.useRef(Date.now());
-  const scrollVelocity = React.useRef(0); // px/ms
+  
   
   const prevRefreshKey = React.useRef<number | undefined>(undefined);
   React.useEffect(() => {
@@ -299,26 +294,7 @@ export default function ContentFeed({
   const photoCount = React.useMemo(() => apiMedia.filter((m) => m.has_image).length, [apiMedia]);
   const videoCount = React.useMemo(() => apiMedia.filter((m) => m.has_video).length, [apiMedia]);
 
-  React.useEffect(() => {
-    let rafId: number | null = null;
-    const onScroll = () => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        const now = Date.now();
-        const dy  = Math.abs(window.scrollY - lastScrollY.current);
-        const dt  = now - lastScrollT.current;
-        scrollVelocity.current = dt > 0 ? dy / dt : 0;
-        lastScrollY.current    = window.scrollY;
-        lastScrollT.current    = now;
-        rafId = null;
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, []);
+  
 
   const fetchPosts = React.useCallback(async (force = false) => {
     if (!creatorUsername) return;
@@ -340,25 +316,7 @@ export default function ContentFeed({
 
   React.useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
-  // Track which post is visible to compute prewarm window
-  const postNodeRefs     = React.useRef<Map<number, HTMLDivElement>>(new Map());
-  const registerPostNode = React.useCallback((index: number, node: HTMLDivElement | null) => {
-    if (node) postNodeRefs.current.set(index, node);
-    else postNodeRefs.current.delete(index);
-  }, []);
-
-  React.useEffect(() => {
-    if (!apiPosts.length) return;
-    const observers: IntersectionObserver[] = [];
-    postNodeRefs.current.forEach((node, index) => {
-      const obs = new IntersectionObserver(([entry]) => {
-        if (entry.intersectionRatio >= 0.5) setVisiblePostIndex(index);
-      }, { threshold: [0.5] });
-      obs.observe(node);
-      observers.push(obs);
-    });
-    return () => observers.forEach((o) => o.disconnect());
-  }, [apiPosts]);
+  
 
   const handleDeletePost = (id: string) => {
     setApiPosts((prev) => {
@@ -388,43 +346,11 @@ export default function ContentFeed({
     const rawR = firstM?.aspect_ratio ?? (firstM?.width && firstM?.height ? firstM.width / firstM.height : 0);
     const isLandscape = rawR > 1;
 
-    // Adaptive prewarm window — same logic as HomePage
-    const conn = typeof navigator !== "undefined" ? (navigator as any).connection : null;
-    const ect: string = conn?.effectiveType ?? "4g";
-    const preWarmWindow = ect === "slow-2g" || ect === "2g" ? 0 : ect === "3g" ? 1 : 2;
-
-    // Build video post index list from current filtered posts
-    const allPosts = isSubscribed || isOwnProfile ? filteredPosts : [...freePosts, ...lockedPosts];
-    const videoPosts = allPosts.reduce<number[]>((acc, p, i) => {
-      if (p.content_type !== "text" && p.content_type !== "poll") {
-        if (p.media?.some((m) => m.media_type === "video" && m.bunny_video_id)) acc.push(i);
-      }
-      return acc;
-    }, []);
-
-    const postIndex  = allPosts.findIndex((p) => p.id === post.id);
-    const videoIdx   = videoPosts.indexOf(postIndex);
-    const visVideoIdx = (() => {
-      for (let i = videoPosts.length - 1; i >= 0; i--) {
-        if (videoPosts[i] <= visiblePostIndex) return i;
-      }
-      return -1;
-    })();
-
-    const isPreWarm = preWarmWindow > 0
-      && videoIdx > -1
-      && videoIdx > visVideoIdx
-      && videoIdx <= visVideoIdx + preWarmWindow
-      && scrollVelocity.current < 2;
-
-    const preWarmVideoId = isPreWarm
-      ? (firstM?.media_type === "video" ? firstM.bunny_video_id ?? null : null)
-      : null;
+    
 
     return (
       <div
         key={post.id}
-        ref={(node) => registerPostNode(postIndex, node)}
         style={{ margin: isLandscape ? "10px 0" : "10px 12px", borderRadius: isLandscape ? "0" : "14px", overflow: "hidden" }}
       >
         {index === 0 && (
@@ -437,7 +363,6 @@ export default function ContentFeed({
           onImageClick={(p, idx) => { console.log("[ContentFeed] onImageClick called", { postId: p.id, idx }); onImageClick?.(p, idx); }}
           onPPVUpdated={handlePPVUpdated}
           autoplayOnVisible={true}
-          preWarmVideoId={preWarmVideoId}
         />
       </div>
     );

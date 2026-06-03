@@ -318,7 +318,10 @@ function VideoControls({
           );
           if (held < 200 && dist < 10) {
             e.preventDefault();
-            onOpenFullscreen?.();
+            const video = videoRef.current;
+            if (!video) return;
+            if (video.paused) video.play().catch(() => {});
+            else video.pause();
           }
         }}
         onTouchCancel={() => {}}
@@ -348,8 +351,8 @@ function VideoControls({
         )}
       </button>
 
-      {/* Play indicator — desktop only */}
-      {!isMobile && !playing && !isHolding && (
+      {/* Play indicator */}
+      {!playing && !isHolding && (
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 8, pointerEvents: "none" }}>
           <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><polygon points="5,3 19,12 5,21"/></svg>
         </div>
@@ -397,10 +400,10 @@ function VideoControls({
         </div>
       </div>
 
-      {/* Fullscreen button — desktop only */}
-      {!isMobile && (
+      {/* Fullscreen button */}
+      {(
         <button
-          style={{ ...btnStyle, position: "absolute", bottom: bottomOffset + 8 + (isPortrait ? 35 : 0), right: 4, zIndex: 15, pointerEvents: "auto", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))" }}
+          style={{ position: "absolute", bottom: bottomOffset + 8 + (isPortrait ? 35 : 0), right: 8, zIndex: 15, pointerEvents: "auto", background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
           onClick={(e) => { e.stopPropagation(); onOpenFullscreen?.(); }}
           aria-label="Fullscreen"
         >
@@ -433,10 +436,9 @@ interface VideoPlayerProps {
   knownWidth?:        number | null;
   knownHeight?:       number | null;
   creatorHandle?:     string;
-  preWarmOnly?:       boolean;
   isFullscreenActive?: boolean;
   // Fullscreen modal props
-  onOpenFullscreen?:  (currentTime: number) => void;
+  onOpenFullscreen?:  (currentTime: number, hls?: any) => void;
 }
 
 export interface VideoPlayerHandle {
@@ -463,7 +465,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   knownWidth        = null,
   knownHeight       = null,
   creatorHandle,
-  preWarmOnly         = false,
   isFullscreenActive  = false,
   onOpenFullscreen,
 }: VideoPlayerProps, ref) {
@@ -485,7 +486,11 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const [isLoading,    setIsLoading]    = React.useState(false);
   const [internalRatio, setInternalRatio] = React.useState<string | null>(null);
   const [isMuted,      setIsMuted]      = React.useState(() => getSavedMute());
-  const [isMobile,     setIsMobile]     = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(() =>
+    typeof window !== "undefined"
+      ? !window.matchMedia("(hover: hover) and (pointer: fine)").matches
+      : false
+  );
   const [isPlaying,    setIsPlaying]    = React.useState(false);
   const [isAutoplaying, setIsAutoplaying] = React.useState(false);
 
@@ -577,7 +582,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const video = videoRef.current;
     if (!force && bunnyVideoId && watchedVideoIds.has(bunnyVideoId)) {
       if (video) video.pause();
-      isPausedByScroll.current = true;
       try { hlsRef.current?.pauseBuffering(); } catch {}
       if (slowTimer.current) { clearTimeout(slowTimer.current); slowTimer.current = null; }
       setIsBuffering(false);
@@ -606,6 +610,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (!video || !bunnyVideoId || hasInitialized.current) return;
     hasInitialized.current = true;
     setHasError(false);
+    console.log(`[VP:${bunnyVideoId?.slice(0,8)}] initVideo start — videoSize=${video.offsetWidth}x${video.offsetHeight}`);
+
+    // Pre-fetch manifest into browser cache before HLS.js requests it
+    try { fetch(getBunnyHLS(bunnyVideoId), { method: "GET", cache: "force-cache" }).catch(() => {}); } catch {}
 
     if (useRawFallback) {
       video.src = rawVideoUrl!;
@@ -636,15 +644,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           const level = hls.levels[data.level];
           console.log(`%c[VideoPlayer] 🎬 QUALITY → ${level.height}p (${Math.round(level.bitrate / 1000)}kbps)`, "color: #10B981; font-weight: bold");
         });
-        hls.on(Hls.Events.MANIFEST_PARSED, (_evt: any, data: any) => {
-          hls.startLevel = data.levels.length - 1;
-          hls.currentLevel = data.levels.length - 1;
-        });
-        if (preWarmOnly) {
-          hls.once(Hls.Events.FRAG_BUFFERED, () => {
-            try { hls.pauseBuffering(); } catch {}
-          });
-        }
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {});
+        
         let mediaErrorRecovered = false;
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
           if (!data?.fatal) return;
@@ -687,18 +688,20 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   }, []);
 
   React.useEffect(() => {
-    if (!autoplayOnVisible || !bunnyVideoId) return;
-    if (hasInitialized.current) return;
+    if (!bunnyVideoId) return;
     if (watchedVideoIds.has(bunnyVideoId)) return;
 
     const conn = (navigator as any).connection;
     const ect: string = conn?.effectiveType ?? "4g";
     if (ect === "slow-2g" || ect === "2g") return;
 
-    warmedVideoIds.add(bunnyVideoId);
+    // Pre-fetch manifest into browser HTTP cache immediately on mount
+    fetch(getBunnyHLS(bunnyVideoId), { method: "GET", cache: "force-cache" }).catch(() => {});
 
+    if (hasInitialized.current) return;
+    warmedVideoIds.add(bunnyVideoId);
     initVideo();
-  }, [autoplayOnVisible, preWarmOnly, bunnyVideoId, initVideo]);
+  }, [bunnyVideoId, initVideo]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -707,10 +710,12 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const observer = new IntersectionObserver(([entry]) => {
       const video = videoRef.current;
       if (!video) return;
+      console.log(`[VP:${bunnyVideoId?.slice(0,8)}] intersection ratio=${entry.intersectionRatio.toFixed(2)} hasInit=${hasInitialized.current} pausedByScroll=${isPausedByScroll.current}`);
 
       if (entry.intersectionRatio >= 0.5) {
-        if (autoplayOnVisible && !hasError) {
+        if (autoplayOnVisible && !hasError && !isMobile) {
           (async () => {
+            console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ▶ entering viewport — resumeBuffering=${!!(hlsRef.current)} needsInit=${!hasInitialized.current}`);
             if (hasInitialized.current && hlsRef.current) {
               try { hlsRef.current.resumeBuffering?.(); } catch {}
             }
@@ -720,7 +725,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             setIsMuted(muted);
             // Don't auto-resume a video the user has already scrolled past —
             // only play if this is a fresh entry (never watched) or user explicitly tapped.
-            if (isPausedByScroll.current) return;
             // Don't compete with an open fullscreen player
             if (anyFullscreenOpen) return;
             if (!hasStarted) {
@@ -787,6 +791,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       if (!video) return;
       isPausedByScroll.current = false;
       setShowPoster(false);
+      if (hlsRef.current) {
+        hlsRef.current.attachMedia(video);
+      }
       if (time !== undefined) video.currentTime = time;
       video.muted = getSavedMute();
       video.play().catch(() => {});
@@ -796,16 +803,31 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const handleOpenFullscreen = React.useCallback(() => {
     const video = videoRef.current;
     const currentTime = video?.currentTime ?? 0;
-    video?.pause();
-    isPausedByScroll.current = true; // prevent intersection observer from resuming while fullscreen is open
-    setShowPoster(true);
-    onOpenFullscreen?.(currentTime);
+    isPausedByScroll.current = true;
+    onOpenFullscreen?.(currentTime, hlsRef.current);
   }, [onOpenFullscreen]);
 
   React.useEffect(() => {
     if (!autoPlay) return;
     handlePosterPlay();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    if (!autoplayOnVisible) return;
+    const onVisibilityChange = () => {
+      const video = videoRef.current;
+      if (!video) return;
+      if (document.visibilityState === "hidden") {
+        video.pause();
+      } else {
+        if (hasInitialized.current && !isPausedByScroll.current) {
+          video.play().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [autoplayOnVisible]);
 
   const containerStyle: React.CSSProperties = fillParent ? {
     width:          "100%",
@@ -881,7 +903,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               onError={() => setPosterError(true)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
             />
-            {!isLoading && !isAutoplaying && !isMobile && (
+            {!isLoading && !isAutoplaying && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}>
                 <polygon points="5,3 19,12 5,21"/>
               </svg>
@@ -893,7 +915,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           <video
             ref={videoRef}
             playsInline
-            preload="none"
+            preload="metadata"
             loop
             muted={isMuted}
             onLoadedMetadata={handleLoadedMetadata}
@@ -912,6 +934,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
               if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
               if (bunnyVideoId) watchedVideoIds.add(bunnyVideoId);
+              console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ✅ onPlaying — videoSize=${videoRef.current?.offsetWidth}x${videoRef.current?.offsetHeight}`);
               setIsBuffering(false);
               setHasStarted(true);
               setIsPlaying(true);
@@ -920,7 +943,12 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               setShowPoster(false);
               setIsAutoplaying(false);
             }}
-            onError={() => { if (videoRef.current && videoRef.current.src === "") return; setHasError(true); setIsBuffering(false); }}
+            onError={() => {
+              if (videoRef.current && videoRef.current.src === "") return;
+              if (!hasStarted) return;
+              setHasError(true);
+              setIsBuffering(false);
+            }}
             style={{
               position:   "absolute",
               inset:      0,
@@ -936,7 +964,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         </div>
 
         {/* Buffering dots */}
-        {(isLoading || (!hasError && isBuffering) || (isAutoplaying && showPoster)) && (
+        {(isLoading || (!hasError && isBuffering)) && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
             <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#8B5CF6", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
             <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#B44DD4", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.2s" }} />

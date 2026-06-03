@@ -174,6 +174,7 @@ function PostCardInner({
   const videoPlayerRef = useRef<VideoPlayerHandle | null>(null);
   const [fsVideoId,            setFsVideoId]            = useState<string | null>(null);
   const [fsInitialTime,        setFsInitialTime]        = useState(0);
+  const [fsExistingHls,        setFsExistingHls]        = useState<any>(null);
   const [fsMuted,              setFsMuted]              = useState(() => {
     try { return localStorage.getItem("vp_muted") === "true"; } catch { return false; }
   });
@@ -408,10 +409,12 @@ function PostCardInner({
               aspect_ratio:     fsMedia?.aspectRatio ?? null,
             }}
             initialTime={fsInitialTime}
+            existingHls={fsExistingHls}
             isMuted={fsMuted}
             onMuteChange={setFsMuted}
             onClose={() => {
               setGlobalFullscreenOpen(false);
+              setFsExistingHls(null);
               setFsVideoId(null);
               videoPlayerRef.current?.resume(fsInitialTime);
             }}
@@ -469,7 +472,7 @@ function PostCardInner({
         <PollDisplay poll={pollData} postId={post.id} onVoted={(updated) => setPollData(updated)} />
       )}
 
-      {!isTextPost && !isPollPost && (() => {
+      {!isTextPost && !isPollPost && normalizedMedia.length > 0 && (() => {
         const firstMedia = normalizedMedia[0];
         const placeholderRatio = (() => {
           if (firstMedia?.aspectRatio && firstMedia.aspectRatio > 0) {
@@ -493,7 +496,7 @@ function PostCardInner({
               ) : null
             }
           >
-            <div style={{ marginTop: "12px", margin: isMobileView ? "10px 4px" : "10px 12px" }}>
+            <div style={{ margin: isLandscapeVideo ? "6px 0" : isMobileView ? "10px 4px" : "10px 12px" }}>
             <PostMediaViewer
               ref={videoPlayerRef}
               media={normalizedMedia} isLocked={post.isLocked} price={post.price}
@@ -504,11 +507,11 @@ function PostCardInner({
               initialSlide={initialSlide}
               onSlideChange={(index) => onSlideChange?.(post.id, index)}
               autoplayOnVisible={autoplayOnVisible}
-              preWarmVideoId={preWarmVideoId}
-              creatorHandle={post.creator.username}
-              onOpenFullscreen={(videoId, currentTime) => {
+creatorHandle={post.creator.username}
+              onOpenFullscreen={(videoId, currentTime, hls) => {
                 try { const m = localStorage.getItem("vp_muted"); setFsMuted(m === "true"); } catch {}
                 setFsInitialTime(currentTime);
+                setFsExistingHls(hls ?? null);
                 setFsVideoId(videoId);
                 setGlobalFullscreenOpen(true);
               }}

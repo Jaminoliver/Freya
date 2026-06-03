@@ -35,11 +35,10 @@ interface PostMediaViewerProps {
   onSlideChange?:       (index: number) => void;
   maxHeight?:           string;
   autoplayOnVisible?:   boolean;
-  preWarmVideoId?:      string | null;
   fullscreenTopLeft?:   boolean;
   creatorHandle?:        string;
   disableMobileShrink?:  boolean;
-  onOpenFullscreen?:     (videoId: string, currentTime: number) => void;
+  onOpenFullscreen?:     (videoId: string, currentTime: number, hls?: any) => void;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -278,7 +277,6 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   onSlideChange,
   maxHeight = "85svh",
   autoplayOnVisible = false,
-  preWarmVideoId    = null,
   fullscreenTopLeft = false,
   creatorHandle,
   disableMobileShrink = false,
@@ -452,7 +450,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
 
     // X-style: portrait videos on mobile sit in a narrower container (left-aligned)
     // Width shrinks → height naturally follows the same ratio → nothing cropped
-    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "72%" : "100%";
+    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "92%" : "100%";
 
     const blurSrc = first.bunnyVideoId
       ? getBunnyThumbnail(first.bunnyVideoId)
@@ -495,15 +493,14 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               hideInternalBlur={true}
               blurHash={first.blurHash}
               objectFit={isMobileView && isPortrait ? "cover" : "contain"}
-              autoplayOnVisible={autoplayOnVisible}
-              preWarmOnly={!!(preWarmVideoId && preWarmVideoId === first.bunnyVideoId)}
+              autoplayOnVisible={isMobileView ? false : autoplayOnVisible}
               fullscreenTopLeft={fullscreenTopLeft}
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}
               creatorHandle={creatorHandle}
-              onOpenFullscreen={(currentTime: number) =>
+              onOpenFullscreen={(currentTime: number, hls?: any) =>
                 first.bunnyVideoId
-                  ? onOpenFullscreen?.(first.bunnyVideoId, currentTime)
+                  ? onOpenFullscreen?.(first.bunnyVideoId, currentTime, hls)
                   : undefined
               }
             />
