@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { VideoTile, type VideoTileData } from "@/components/explore/VideoTile";
 import { IdentityCard, type IdentityCardData } from "@/components/explore/IdentityCard";
-import { VideoFullscreenModal } from "@/components/explore/VideoFullscreenModal";
+import { VideoFullscreenModal } from "@/components/shared/VideoFullscreenModal";
 
 export type GridItem = VideoTileData | IdentityCardData;
 

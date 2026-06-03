@@ -936,7 +936,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         </div>
 
         {/* Buffering dots */}
-        {(isLoading || (!showPoster && !hasError && isBuffering)) && (
+        {(isLoading || (!hasError && isBuffering) || (isAutoplaying && showPoster)) && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
             <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#8B5CF6", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
             <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#B44DD4", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.2s" }} />
@@ -944,14 +944,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           </div>
         )}
 
-        {/* Slow-loading dots */}
-        {showSlowDots && showPoster && (
-          <div style={{ position: "absolute", left: 0, right: 0, bottom: "16px", zIndex: 11, display: "flex", justifyContent: "center", gap: "6px", pointerEvents: "none" }}>
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#8B5CF6", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s",   boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#B44DD4", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.2s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#EC4899", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.4s", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
-          </div>
-        )}
+        
 
         {/* Mute button visible on poster */}
         {showPoster && (

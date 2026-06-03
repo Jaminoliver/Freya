@@ -257,7 +257,7 @@ export function VideoFullscreenModal({
     video.muted = isMuted;
 
     const tryPlay = () => {
-      if (initialTime > 0) video.currentTime = initialTime;
+      video.currentTime = initialTime;
       video.play().catch(() => {});
     };
 
@@ -276,6 +276,8 @@ export function VideoFullscreenModal({
     })();
 
     return () => {
+      const v = videoRef.current;
+      if (v) { v.pause(); v.src = ""; }
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };

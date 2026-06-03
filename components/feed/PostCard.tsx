@@ -39,7 +39,7 @@ const CheckoutModal     = dynamic(() => import("@/components/checkout/CheckoutMo
 const Lightbox          = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
 const ReportModal       = dynamic(() => import("@/components/messages/ReportModal").then((m) => ({ default: m.ReportModal })), { ssr: false });
 const BlockConfirmModal        = dynamic(() => import("@/components/ui/BlockConfirmModal"), { ssr: false });
-const VideoPlayerFullscreen    = dynamic(() => import("@/components/video/VideoPlayerFullscreen").then((m) => ({ default: m.VideoPlayerFullscreen })), { ssr: false });
+const VideoFullscreenModal     = dynamic(() => import("@/components/shared/VideoFullscreenModal").then((m) => ({ default: m.VideoFullscreenModal })), { ssr: false });
 
 interface MediaItem {
   type:              "image" | "video";
@@ -172,7 +172,6 @@ function PostCardInner({
 
   const [pollData,             setPollData]             = useState<PollData | null>(post.poll ?? null);
   const videoPlayerRef = useRef<VideoPlayerHandle | null>(null);
-  const [fsHls,                setFsHls]                = useState<any>(null);
   const [fsVideoId,            setFsVideoId]            = useState<string | null>(null);
   const [fsInitialTime,        setFsInitialTime]        = useState(0);
   const [fsMuted,              setFsMuted]              = useState(() => {
@@ -384,42 +383,41 @@ function PostCardInner({
         <Lightbox post={lightboxPost} allPosts={[lightboxPost]} initialMediaIndex={lightboxMediaIdx} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
       )}
 
-      {fsVideoId && (
-        <VideoPlayerFullscreen
-          bunnyVideoId={fsVideoId}
-          thumbnailUrl={post.media.find((m) => m.bunnyVideoId === fsVideoId)?.thumbnailUrl ?? null}
-          aspectRatio={post.media.find((m) => m.bunnyVideoId === fsVideoId)?.aspectRatio ?? null}
-          width={post.media.find((m) => m.bunnyVideoId === fsVideoId)?.width ?? null}
-          height={post.media.find((m) => m.bunnyVideoId === fsVideoId)?.height ?? null}
-          postId={Number(post.id)}
-          caption={post.caption}
-          likeCount={engagement.likeCount}
-          liked={engagement.liked}
-          commentCount={engagement.commentCount}
-          creatorId={post.creator.id}
-          username={post.creator.username}
-          displayName={post.creator.name}
-          avatarUrl={post.creator.avatar_url}
-          isMuted={fsMuted}
-          onMuteChange={setFsMuted}
-          onClose={(lastTime) => {
-            setGlobalFullscreenOpen(false);
-            setFsVideoId(null);
-            requestAnimationFrame(() => {
-              // Re-attach the borrowed HLS instance back to the preview video
-              const hls = fsHls;
-              const previewVideo = (videoPlayerRef.current as any)?._videoEl as HTMLVideoElement | undefined;
-              if (hls && previewVideo) {
-                hls.attachMedia(previewVideo);
-              }
-              setFsHls(null);
-              videoPlayerRef.current?.resume(lastTime);
-            });
-          }}
-          initialTime={fsInitialTime}
-          existingHls={fsHls}
-        />
-      )}
+      {fsVideoId && (() => {
+        const fsMedia = post.media.find((m) => m.bunnyVideoId === fsVideoId);
+        return (
+          <VideoFullscreenModal
+            data={{
+              type:             "video",
+              post_id:          Number(post.id),
+              creator_id:       post.creator.id,
+              username:         post.creator.username,
+              display_name:     post.creator.name,
+              avatar_url:       post.creator.avatar_url ?? null,
+              thumbnail_url:    fsMedia?.thumbnailUrl ?? null,
+              bunny_video_id:   fsVideoId,
+              like_count:       engagement.likeCount,
+              likes_count:      engagement.likeCount,
+              liked:            engagement.liked,
+              comment_count:    engagement.commentCount,
+              subscriber_count: 0,
+              duration_seconds: null,
+              caption:          post.caption ?? null,
+              width:            fsMedia?.width ?? null,
+              height:           fsMedia?.height ?? null,
+              aspect_ratio:     fsMedia?.aspectRatio ?? null,
+            }}
+            initialTime={fsInitialTime}
+            isMuted={fsMuted}
+            onMuteChange={setFsMuted}
+            onClose={() => {
+              setGlobalFullscreenOpen(false);
+              setFsVideoId(null);
+              videoPlayerRef.current?.resume(fsInitialTime);
+            }}
+          />
+        );
+      })()}
 
       {reportOpen && (
         <ReportModal context="user" username={post.creator.username} reportedUserId={post.creator.id} onClose={() => setReportOpen(false)} onBlockUser={block} />
@@ -510,7 +508,6 @@ function PostCardInner({
               creatorHandle={post.creator.username}
               onOpenFullscreen={(videoId, currentTime) => {
                 try { const m = localStorage.getItem("vp_muted"); setFsMuted(m === "true"); } catch {}
-                setFsHls(videoPlayerRef.current?.getHls() ?? null);
                 setFsInitialTime(currentTime);
                 setFsVideoId(videoId);
                 setGlobalFullscreenOpen(true);
