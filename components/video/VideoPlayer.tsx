@@ -307,6 +307,7 @@ function VideoControls({
       container.classList.remove("vp-portal-active");
       container.removeEventListener("transitionend", onDone);
       setIsFakeFullscreen(false);
+      videoRef.current?.play().catch(() => {});
     };
     container.addEventListener("transitionend", onDone);
   }, [containerRef]);
@@ -381,10 +382,7 @@ function VideoControls({
           );
           if (held < 200 && dist < 10) {
             e.preventDefault();
-            const video = videoRef.current;
-            if (!video) return;
-            if (video.paused) { video.play().catch(() => {}); flashCenter("play"); }
-            else { video.pause(); flashCenter("pause"); }
+            onOpenFullscreen?.();
           }
         }}
         onTouchCancel={() => {}}
@@ -394,12 +392,7 @@ function VideoControls({
 
      
 
-      {/* Play indicator */}
-      {!playing && !isHolding && (
-        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 8, pointerEvents: "none" }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><polygon points="5,3 19,12 5,21"/></svg>
-        </div>
-      )}
+      {/* Play indicator removed — autoplay handles start */}
 
       {/* Seekbar — desktop only */}
       <div
@@ -1255,7 +1248,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               onError={() => setPosterError(true)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
             />
-            {!isLoading && !isAutoplaying && (
+            {!isLoading && !isAutoplaying && !autoplayOnVisible && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}>
                 <polygon points="5,3 19,12 5,21"/>
               </svg>
@@ -1371,6 +1364,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             bottomOffset={bottomOffset}
             isPlaying={isPlaying}
             fullscreenTopLeft={fullscreenTopLeft}
+            onOpenFullscreen={() => containerRef.current?.querySelector<HTMLButtonElement>("[aria-label='Fullscreen']")?.click()}
             displayName={displayName}
             username={username}
             avatarUrl={avatarUrl}
