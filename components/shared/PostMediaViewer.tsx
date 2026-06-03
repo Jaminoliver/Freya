@@ -38,7 +38,10 @@ interface PostMediaViewerProps {
   fullscreenTopLeft?:   boolean;
   creatorHandle?:        string;
   disableMobileShrink?:  boolean;
-  onOpenFullscreen?:     (videoId: string, currentTime: number, hls?: any) => void;
+  displayName?:          string;
+  username?:             string;
+  avatarUrl?:            string | null;
+  caption?:              string | null;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -280,7 +283,10 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   fullscreenTopLeft = false,
   creatorHandle,
   disableMobileShrink = false,
-  onOpenFullscreen,
+  displayName,
+  username,
+  avatarUrl,
+  caption,
 }: PostMediaViewerProps, ref) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
@@ -450,7 +456,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
 
     // X-style: portrait videos on mobile sit in a narrower container (left-aligned)
     // Width shrinks → height naturally follows the same ratio → nothing cropped
-    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "92%" : "100%";
+    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "85%" : "100%";
 
     const blurSrc = first.bunnyVideoId
       ? getBunnyThumbnail(first.bunnyVideoId)
@@ -498,11 +504,10 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}
               creatorHandle={creatorHandle}
-              onOpenFullscreen={(currentTime: number, hls?: any) =>
-                first.bunnyVideoId
-                  ? onOpenFullscreen?.(first.bunnyVideoId, currentTime, hls)
-                  : undefined
-              }
+              displayName={displayName}
+              username={username}
+              avatarUrl={avatarUrl}
+              caption={caption}
             />
           </div>
           {isUnlockedPPV && <UnlockedPPVBadge />}

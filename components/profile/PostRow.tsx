@@ -20,7 +20,6 @@ import { PollDisplay } from "@/components/feed/PollDisplay";
 
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
 import { useAppStore } from "@/lib/store/appStore";
-import { setGlobalFullscreenOpen } from "@/components/video/VideoPlayer";
 import { useRelativeTimestamp } from "@/lib/hooks/useRelativeTimestamp";
 import { usePostEngagement } from "@/lib/hooks/usePostEngagement";
 
@@ -29,7 +28,6 @@ import type { PollData } from "@/components/feed/PollDisplay";
 
 const StoryViewer    = dynamic(() => import("@/components/story/StoryViewer"), { ssr: false });
 const CheckoutModal          = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
-const VideoFullscreenModal   = dynamic(() => import("@/components/shared/VideoFullscreenModal").then((m) => ({ default: m.VideoFullscreenModal })), { ssr: false });
 
 export interface ApiPost {
   id:              number;
@@ -119,12 +117,7 @@ export default function PostRow({
   const [subToMsgMonthly,  setSubToMsgMonthly]  = React.useState(0);
   const [creatorSheetOpen, setCreatorSheetOpen] = React.useState(false);
   const [pollData,         setPollData]         = React.useState<PollData | null>(post.poll ?? null);
-  const [fsVideoId,        setFsVideoId]        = React.useState<string | null>(null);
-  const [fsInitialTime,    setFsInitialTime]    = React.useState(0);
-  const [fsExistingHls,    setFsExistingHls]    = React.useState<any>(null);
-  const [fsMuted,          setFsMuted]          = React.useState(() => {
-    try { return localStorage.getItem("vp_muted") === "true"; } catch { return false; }
-  });
+  
   const videoPlayerRef = React.useRef<import("@/components/video/VideoPlayer").VideoPlayerHandle>(null);
   const [caption,          setCaption]          = React.useState<string | null>(post.caption);
   const [editOpen,         setEditOpen]         = React.useState(false);
@@ -265,43 +258,7 @@ export default function PostRow({
         <StoryViewer groups={[storyGroup]} startGroupIndex={0} onClose={() => { setStoryViewerOpen(false); refresh(); }} />
       )}
 
-      {fsVideoId && (() => {
-        const fsMedia = post.media.find((m) => m.bunny_video_id === fsVideoId);
-        return (
-          <VideoFullscreenModal
-            data={{
-              type:             "video",
-              post_id:          post.id,
-              creator_id:       post.profiles.id,
-              username:         post.profiles.username,
-              display_name:     post.profiles.display_name,
-              avatar_url:       post.profiles.avatar_url ?? null,
-              thumbnail_url:    fsMedia?.thumbnail_url ?? null,
-              bunny_video_id:   fsVideoId,
-              like_count:       engagement.likeCount,
-              likes_count:      engagement.likeCount,
-              liked:            engagement.liked,
-              comment_count:    engagement.commentCount,
-              subscriber_count: post.profiles.subscription_price != null ? 0 : 0,
-              duration_seconds: null,
-              caption:          caption ?? null,
-              width:            fsMedia?.width ?? null,
-              height:           fsMedia?.height ?? null,
-              aspect_ratio:     fsMedia?.aspect_ratio ?? null,
-            }}
-            initialTime={fsInitialTime}
-            existingHls={fsExistingHls}
-            isMuted={fsMuted}
-            onMuteChange={setFsMuted}
-            onClose={() => {
-              setGlobalFullscreenOpen(false);
-              setFsExistingHls(null);
-              setFsVideoId(null);
-              videoPlayerRef.current?.resume(fsInitialTime);
-            }}
-          />
-        );
-      })()}
+      
 
       {isOwnProfile && <TipDetailsSheet postId={post.id} open={tipDetailsOpen} onClose={() => setTipDetailsOpen(false)} />}
       {editOpen && <EditCaptionModal caption={caption ?? ""} onSave={handleSaveCaption} onClose={() => setEditOpen(false)} />}
@@ -391,13 +348,10 @@ export default function PostRow({
           onUnlock={() => onUnlock?.(String(post.id))}
           autoplayOnVisible={autoplayOnVisible}
           creatorHandle={post.profiles.username}
-          onOpenFullscreen={(videoId, currentTime, hls) => {
-            try { const m = localStorage.getItem("vp_muted"); setFsMuted(m === "true"); } catch {}
-            setFsInitialTime(currentTime);
-            setFsExistingHls(hls ?? null);
-            setFsVideoId(videoId);
-            setGlobalFullscreenOpen(true);
-          }}
+          displayName={post.profiles.display_name ?? post.profiles.username}
+          username={post.profiles.username}
+          avatarUrl={post.profiles.avatar_url ?? null}
+          caption={caption}
         />
         </div>
         );

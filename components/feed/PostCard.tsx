@@ -3,7 +3,6 @@
 
 import { useState, useEffect, useCallback, memo, useRef } from "react";
 import type { VideoPlayerHandle } from "@/components/video/VideoPlayer";
-import { setGlobalFullscreenOpen } from "@/components/video/VideoPlayer";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, MoreHorizontal } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -39,7 +38,6 @@ const CheckoutModal     = dynamic(() => import("@/components/checkout/CheckoutMo
 const Lightbox          = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
 const ReportModal       = dynamic(() => import("@/components/messages/ReportModal").then((m) => ({ default: m.ReportModal })), { ssr: false });
 const BlockConfirmModal        = dynamic(() => import("@/components/ui/BlockConfirmModal"), { ssr: false });
-const VideoFullscreenModal     = dynamic(() => import("@/components/shared/VideoFullscreenModal").then((m) => ({ default: m.VideoFullscreenModal })), { ssr: false });
 
 interface MediaItem {
   type:              "image" | "video";
@@ -172,12 +170,6 @@ function PostCardInner({
 
   const [pollData,             setPollData]             = useState<PollData | null>(post.poll ?? null);
   const videoPlayerRef = useRef<VideoPlayerHandle | null>(null);
-  const [fsVideoId,            setFsVideoId]            = useState<string | null>(null);
-  const [fsInitialTime,        setFsInitialTime]        = useState(0);
-  const [fsExistingHls,        setFsExistingHls]        = useState<any>(null);
-  const [fsMuted,              setFsMuted]              = useState(() => {
-    try { return localStorage.getItem("vp_muted") === "true"; } catch { return false; }
-  });
 
   const { isBlocked, isRestricted, block, unblock, restrict, unrestrict, fetchStatus } = useBlockRestrict({ userId: post.creator.id });
 
@@ -384,43 +376,7 @@ function PostCardInner({
         <Lightbox post={lightboxPost} allPosts={[lightboxPost]} initialMediaIndex={lightboxMediaIdx} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
       )}
 
-      {fsVideoId && (() => {
-        const fsMedia = post.media.find((m) => m.bunnyVideoId === fsVideoId);
-        return (
-          <VideoFullscreenModal
-            data={{
-              type:             "video",
-              post_id:          Number(post.id),
-              creator_id:       post.creator.id,
-              username:         post.creator.username,
-              display_name:     post.creator.name,
-              avatar_url:       post.creator.avatar_url ?? null,
-              thumbnail_url:    fsMedia?.thumbnailUrl ?? null,
-              bunny_video_id:   fsVideoId,
-              like_count:       engagement.likeCount,
-              likes_count:      engagement.likeCount,
-              liked:            engagement.liked,
-              comment_count:    engagement.commentCount,
-              subscriber_count: 0,
-              duration_seconds: null,
-              caption:          post.caption ?? null,
-              width:            fsMedia?.width ?? null,
-              height:           fsMedia?.height ?? null,
-              aspect_ratio:     fsMedia?.aspectRatio ?? null,
-            }}
-            initialTime={fsInitialTime}
-            existingHls={fsExistingHls}
-            isMuted={fsMuted}
-            onMuteChange={setFsMuted}
-            onClose={() => {
-              setGlobalFullscreenOpen(false);
-              setFsExistingHls(null);
-              setFsVideoId(null);
-              videoPlayerRef.current?.resume(fsInitialTime);
-            }}
-          />
-        );
-      })()}
+     
 
       {reportOpen && (
         <ReportModal context="user" username={post.creator.username} reportedUserId={post.creator.id} onClose={() => setReportOpen(false)} onBlockUser={block} />
@@ -507,14 +463,11 @@ function PostCardInner({
               initialSlide={initialSlide}
               onSlideChange={(index) => onSlideChange?.(post.id, index)}
               autoplayOnVisible={autoplayOnVisible}
-creatorHandle={post.creator.username}
-              onOpenFullscreen={(videoId, currentTime, hls) => {
-                try { const m = localStorage.getItem("vp_muted"); setFsMuted(m === "true"); } catch {}
-                setFsInitialTime(currentTime);
-                setFsExistingHls(hls ?? null);
-                setFsVideoId(videoId);
-                setGlobalFullscreenOpen(true);
-              }}
+              creatorHandle={post.creator.username}
+              displayName={post.creator.name}
+              username={post.creator.username}
+              avatarUrl={post.creator.avatar_url ?? null}
+              caption={post.caption ?? null}
             />
             </div>
           </VisibilityGate>

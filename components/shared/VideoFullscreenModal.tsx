@@ -481,6 +481,55 @@ export function VideoFullscreenModal({
           touchAction: "none",
         }}
       >
+        {/* Close button — top left */}
+        <button
+          onClick={(e) => { e.stopPropagation(); handleClose(); }}
+          style={{
+            position: "absolute", top: 12, left: 12, zIndex: 10001,
+            background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%",
+            width: 44, height: 44, display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: "pointer",
+            backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent",
+            transition: "background 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.65)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.45)")}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+
+        {/* Mute — top right */}
+        <button
+          onClick={toggleMute}
+          style={{
+            position: "absolute", top: 12, right: 12, zIndex: 10001,
+            background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%",
+            width: 44, height: 44, display: "flex", alignItems: "center",
+            justifyContent: "center", cursor: "pointer",
+            backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent",
+            transition: "background 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.65)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.45)")}
+        >
+          {isMuted ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <line x1="23" y1="9" x2="17" y2="15" />
+              <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            </svg>
+          )}
+        </button>
+
         <div
           className="vfm-inner"
           ref={innerRef}
@@ -510,55 +559,6 @@ export function VideoFullscreenModal({
             }
           }}
         >
-
-          {/* Close button — top left */}
-          <button
-            onClick={(e) => { e.stopPropagation(); handleClose(); }}
-            style={{
-              position: "absolute", top: 12, left: 12, zIndex: 10001,
-              background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%",
-              width: 44, height: 44, display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "pointer",
-              backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent",
-              transition: "background 0.2s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.65)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.45)")}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-
-          {/* Mute — top right */}
-          <button
-            onClick={toggleMute}
-            style={{
-              position: "absolute", top: 12, right: 12, zIndex: 10001,
-              background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%",
-              width: 44, height: 44, display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "pointer",
-              backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent",
-              transition: "background 0.2s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.65)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.45)")}
-          >
-            {isMuted ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <line x1="23" y1="9" x2="17" y2="15" />
-                <line x1="17" y1="9" x2="23" y2="15" />
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-              </svg>
-            )}
-          </button>
 
           {/* Thumbnail — visible until first frame plays */}
           {!isVideoReady && data.thumbnail_url && (

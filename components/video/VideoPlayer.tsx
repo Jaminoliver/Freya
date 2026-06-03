@@ -73,8 +73,12 @@ interface ControlsProps {
   isPortrait?:      boolean;
   bottomOffset?:    number;
   isPlaying?:       boolean;
-  fullscreenTopLeft?: boolean;
-  onOpenFullscreen?: () => void;
+  fullscreenTopLeft?:      boolean;
+  onOpenFullscreen?:       () => void;
+  displayName?:            string;
+  username?:               string;
+  avatarUrl?:              string | null;
+  caption?:                string | null;
 }
 
 function VideoControls({
@@ -89,6 +93,10 @@ function VideoControls({
   isPlaying: isPlayingProp = false,
   fullscreenTopLeft = false,
   onOpenFullscreen,
+  displayName,
+  username,
+  avatarUrl,
+  caption,
 }: ControlsProps) {
   const [playing,     setPlaying]     = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash, setCenterFlash] = React.useState<"play" | "pause" | null>(null);
@@ -100,8 +108,16 @@ function VideoControls({
   const [isHolding,   setIsHolding]   = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
-  const hideTimer   = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const progressRef = React.useRef<HTMLDivElement>(null);
+  const hideTimer             = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressRef           = React.useRef<HTMLDivElement>(null);
+  const portalRef             = React.useRef<HTMLDivElement | null>(null);
+  const overlayRootRef        = React.useRef<any>(null);
+  const originalParent        = React.useRef<Element | null>(null);
+  const originalNextSibling   = React.useRef<ChildNode | null>(null);
+  const origRadiusRef         = React.useRef<string>("");
+  const originalSizeRef       = React.useRef<{ width: string; height: string }>({ width: "", height: "" });
+  const seekingRef            = React.useRef(false);
+  const [isFakeFullscreen, setIsFakeFullscreen] = React.useState(false);
 
   // ── Auto-hide controls ────────────────────────────────────────────────
   const showControls = React.useCallback(() => {
@@ -181,8 +197,6 @@ function VideoControls({
     setCurrentTime(fraction * duration);
   }, [videoRef, duration]);
 
-  const seekingRef = React.useRef(false);
-
   const handleSeekMouseDown = React.useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -249,6 +263,54 @@ function VideoControls({
     }
   }, [seeking, handleSeekMouseMove, showControls]);
 
+  const exitFakeFullscreen = React.useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const first   = container.getBoundingClientRect();
+    const parent  = originalParent.current;
+    const sibling = originalNextSibling.current;
+    container.style.willChange      = "transform";
+    container.style.transformOrigin = "top left";
+    Object.assign(container.style, { width: originalSizeRef.current.width, height: originalSizeRef.current.height, transition: "none" });
+    if (parent) {
+      if (sibling) parent.insertBefore(container, sibling);
+      else parent.appendChild(container);
+    }
+    const last   = container.getBoundingClientRect();
+    const dx     = first.left - last.left;
+    const dy     = first.top  - last.top;
+    const scaleX = first.width  / last.width;
+    const scaleY = first.height / last.height;
+    container.style.transform    = `translate(${dx}px,${dy}px) scale(${scaleX},${scaleY})`;
+    container.style.borderRadius = "0px";
+    if (portalRef.current) {
+      portalRef.current.style.transition      = "background-color 280ms cubic-bezier(0.4,0,0.2,1)";
+      portalRef.current.style.backgroundColor = "rgba(0,0,0,0)";
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        container.style.transition   = "transform 280ms cubic-bezier(0.4,0,0.2,1), border-radius 280ms cubic-bezier(0.4,0,0.2,1)";
+        container.style.transform    = "none";
+        container.style.borderRadius = origRadiusRef.current || "";
+      });
+    });
+    const onDone = (ev: TransitionEvent) => {
+      if (ev.propertyName !== "transform") return;
+      container.style.willChange      = "";
+      container.style.transformOrigin = "";
+      container.style.transition      = "";
+      overlayRootRef.current?.unmount();
+      overlayRootRef.current = null;
+      portalRef.current?.remove();
+      portalRef.current = null;
+      document.body.style.overflow = "";
+      container.classList.remove("vp-portal-active");
+      container.removeEventListener("transitionend", onDone);
+      setIsFakeFullscreen(false);
+    };
+    container.addEventListener("transitionend", onDone);
+  }, [containerRef]);
+
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufPct   = duration > 0 ? (buffered   / duration) * 100 : 0;
 
@@ -296,7 +358,7 @@ function VideoControls({
 
       {/* Tap zone — tap to open fullscreen on mobile, play/pause on desktop */}
       <div
-        style={{ position: "absolute", inset: 0, zIndex: 4, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none" }}
+        style={{ position: "absolute", inset: 0, zIndex: 4, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none", touchAction: "manipulation" }}
         onClick={(e) => {
           if ((e as any).pointerType === "touch") return;
           handlePlayPause(e);
@@ -309,6 +371,7 @@ function VideoControls({
           (e.currentTarget as HTMLDivElement).dataset.touchStartY = String(touch.clientY);
         }}
         onTouchEnd={(e) => {
+          if ((e.target as HTMLElement).closest("button")) return;
           e.stopPropagation();
           const target = e.currentTarget as HTMLDivElement;
           const held = Date.now() - Number(target.dataset.touchStart ?? 0);
@@ -320,8 +383,8 @@ function VideoControls({
             e.preventDefault();
             const video = videoRef.current;
             if (!video) return;
-            if (video.paused) video.play().catch(() => {});
-            else video.pause();
+            if (video.paused) { video.play().catch(() => {}); flashCenter("play"); }
+            else { video.pause(); flashCenter("pause"); }
           }
         }}
         onTouchCancel={() => {}}
@@ -329,27 +392,7 @@ function VideoControls({
         onMouseUp={handleSeekMouseUp}
       />
 
-      {/* Top-right mute button — always visible */}
-      <button
-        className="vp-mute-btn"
-        style={{ position: "absolute", top: 12, right: 12, zIndex: 15, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
-        onClick={(e) => { e.stopPropagation(); onToggleMute(); }}
-        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onToggleMute(); }}
-        aria-label={isMuted ? "Unmute" : "Mute"}
-      >
-        {isMuted ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-            <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-          </svg>
-        )}
-      </button>
+     
 
       {/* Play indicator */}
       {!playing && !isHolding && (
@@ -401,10 +444,316 @@ function VideoControls({
       </div>
 
       {/* Fullscreen button */}
-      {(
+      {!isFullscreen && !isFakeFullscreen && (
         <button
           style={{ position: "absolute", bottom: bottomOffset + 8 + (isPortrait ? 35 : 0), right: 8, zIndex: 15, pointerEvents: "auto", background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
-          onClick={(e) => { e.stopPropagation(); onOpenFullscreen?.(); }}
+          onClick={async (e) => {
+            e.stopPropagation();
+            const container = containerRef.current;
+            if (!container) return;
+
+            originalParent.current      = container.parentElement;
+            originalNextSibling.current = container.nextSibling;
+            const first      = container.getBoundingClientRect();
+            const origRadius = getComputedStyle(container).borderRadius;
+            origRadiusRef.current   = origRadius;
+            originalSizeRef.current = { width: container.style.width, height: container.style.height };
+
+            container.style.willChange      = "transform";
+            container.style.transformOrigin = "top left";
+
+            const portal = document.createElement("div");
+            Object.assign(portal.style, {
+              position: "fixed", inset: "0", zIndex: "9999",
+              backgroundColor: "rgba(0,0,0,0)",
+              transition: "background-color 340ms cubic-bezier(0.4,0,0.2,1)",
+            });
+            document.body.appendChild(portal);
+            portalRef.current = portal;
+
+            Object.assign(container.style, { width: "100%", height: "100%", transition: "none" });
+            container.classList.add("vp-portal-active");
+            portal.appendChild(container);
+
+            // X button — on portal, outside container
+            const xBtn = document.createElement("button");
+            xBtn.style.cssText = "position:absolute;top:12px;left:12px;z-index:10001;background:rgba(0,0,0,0.45);border:none;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);-webkit-tap-highlight-color:transparent;";
+            xBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+            xBtn.addEventListener("click", (ev) => { ev.stopPropagation(); exitFakeFullscreen(); });
+            xBtn.addEventListener("touchend", (ev) => { ev.preventDefault(); ev.stopPropagation(); exitFakeFullscreen(); });
+            portal.appendChild(xBtn);
+
+            // Mute button — on portal, outside container
+            const muteBtn = document.createElement("button");
+            const getMuteIcon = (muted: boolean) => muted
+              ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`
+              : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
+            muteBtn.style.cssText = "position:absolute;top:12px;right:12px;z-index:10001;background:rgba(0,0,0,0.45);border:none;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);-webkit-tap-highlight-color:transparent;";
+            muteBtn.innerHTML = getMuteIcon(getSavedMute());
+            muteBtn.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              const next = !getSavedMute();
+              const video = videoRef.current;
+              if (video) video.muted = next;
+              saveMute(next);
+              muteBtn.innerHTML = getMuteIcon(next);
+            });
+            muteBtn.addEventListener("touchend", (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const next = !getSavedMute();
+              const video = videoRef.current;
+              if (video) video.muted = next;
+              saveMute(next);
+              muteBtn.innerHTML = getMuteIcon(next);
+            });
+            portal.appendChild(muteBtn);
+
+            // Inject overlay
+            const overlayDiv = document.createElement("div");
+            overlayDiv.style.cssText = "position:absolute;inset:0;z-index:20;pointer-events:auto;";
+            portal.appendChild(overlayDiv);
+            const ReactDOMClient = (await import("react-dom/client")).default;
+            const React2 = (await import("react")).default;
+            const initials = (displayName?.[0] ?? username?.[0] ?? "?").toUpperCase();
+            overlayRootRef.current = ReactDOMClient.createRoot(overlayDiv);
+            const video = videoRef.current;
+            function FullscreenOverlay() {
+              const [currentTime, setCurrentTime] = React2.useState(video?.currentTime ?? 0);
+              const [duration,    setDuration]    = React2.useState(video?.duration ?? 0);
+              const [isSeeking,   setIsSeeking]   = React2.useState(false);
+              const [captionExpanded, setCaptionExpanded] = React2.useState(false);
+              const seekBarRef    = React2.useRef<HTMLDivElement>(null);
+              const wasPlayingRef = React2.useRef(false);
+              const isSeekingRef  = React2.useRef(false);
+              const durationRef   = React2.useRef(duration);
+
+              React2.useEffect(() => { durationRef.current = duration; }, [duration]);
+
+              React2.useEffect(() => {
+                if (!video) return;
+                const onTime = () => { if (!isSeekingRef.current) setCurrentTime(video.currentTime); };
+                const onMeta = () => setDuration(video.duration);
+                video.addEventListener("timeupdate", onTime);
+                video.addEventListener("loadedmetadata", onMeta);
+                if (video.duration) setDuration(video.duration);
+                return () => {
+                  video.removeEventListener("timeupdate", onTime);
+                  video.removeEventListener("loadedmetadata", onMeta);
+                };
+              }, []);
+
+              const getSeekFraction = React2.useCallback((clientX: number) => {
+                const bar = seekBarRef.current;
+                if (!bar) return 0;
+                const rect = bar.getBoundingClientRect();
+                return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+              }, []);
+
+              const handleSeekPointerDown = React2.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                wasPlayingRef.current = !video?.paused;
+                isSeekingRef.current = true;
+                setIsSeeking(true);
+                const t = getSeekFraction(e.clientX) * durationRef.current;
+                setCurrentTime(t);
+                if (video) video.currentTime = t;
+              }, [getSeekFraction]);
+
+              const handleSeekPointerMove = React2.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                e.stopPropagation();
+                const t = getSeekFraction(e.clientX) * durationRef.current;
+                setCurrentTime(t);
+                if (video) video.currentTime = t;
+              }, [getSeekFraction]);
+
+              const handleSeekPointerUp = React2.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+                e.stopPropagation();
+                isSeekingRef.current = false;
+                setIsSeeking(false);
+                if (wasPlayingRef.current) video?.play().catch(() => {});
+              }, []);
+
+              React2.useEffect(() => {
+                const bar = seekBarRef.current;
+                if (!bar) return;
+                const onTouchStart = (e: TouchEvent) => {
+                  wasPlayingRef.current = !video?.paused;
+                  isSeekingRef.current = true;
+                  setIsSeeking(true);
+                  const t = getSeekFraction(e.touches[0].clientX) * durationRef.current;
+                  setCurrentTime(t);
+                  if (video) video.currentTime = t;
+                };
+                const onTouchMove = (e: TouchEvent) => {
+                  if (!isSeekingRef.current) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const t = getSeekFraction(e.touches[0].clientX) * durationRef.current;
+                  setCurrentTime(t);
+                  if (video) video.currentTime = t;
+                };
+                const onTouchEnd = () => {
+                  isSeekingRef.current = false;
+                  setIsSeeking(false);
+                  if (wasPlayingRef.current) video?.play().catch(() => {});
+                };
+                bar.addEventListener("touchstart", onTouchStart, { passive: true });
+                bar.addEventListener("touchmove",  onTouchMove,  { passive: false });
+                bar.addEventListener("touchend",   onTouchEnd,   { passive: true });
+                return () => {
+                  bar.removeEventListener("touchstart", onTouchStart);
+                  bar.removeEventListener("touchmove",  onTouchMove);
+                  bar.removeEventListener("touchend",   onTouchEnd);
+                };
+              }, [getSeekFraction]);
+
+              const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+              const formatT = (s: number) => {
+                if (!isFinite(s) || s < 0) return "0:00";
+                const m = Math.floor(s / 60);
+                const sec = Math.floor(s % 60);
+                return `${m}:${sec.toString().padStart(2, "0")}`;
+              };
+
+              return React2.createElement(React2.Fragment, null,
+                // bottom gradient
+                React2.createElement("div", { style: { position: "absolute", bottom: 0, left: 0, right: 0, height: "280px", background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)", pointerEvents: "none", zIndex: 1 } }),
+
+                // unified bottom stack
+                React2.createElement("div", {
+                  style: { position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 16, display: "flex", flexDirection: "column", padding: "0 12px" },
+                  onClick: (e: any) => e.stopPropagation(),
+                },
+                  // avatar row
+                  React2.createElement("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" } },
+                    React2.createElement("div", { style: { width: "44px", height: "44px", borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "2px solid rgba(255,255,255,0.3)" } },
+                      avatarUrl
+                        ? React2.createElement("img", { src: avatarUrl, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } })
+                        : React2.createElement("div", { style: { width: "100%", height: "100%", background: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "16px", fontWeight: 700 } }, initials)
+                    ),
+                    React2.createElement("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } },
+                      React2.createElement("span", { style: { fontSize: "15px", fontWeight: 700, color: "#fff", fontFamily: "'Inter',sans-serif" } }, displayName ?? username ?? ""),
+                      React2.createElement("span", { style: { fontSize: "13px", color: "rgba(255,255,255,0.55)", fontFamily: "'Inter',sans-serif" } }, username ? `@${username}` : "")
+                    )
+                  ),
+
+                  // caption
+                  caption && React2.createElement("p", {
+                    onClick: (e: any) => { e.stopPropagation(); setCaptionExpanded((x: boolean) => !x); },
+                    style: {
+                      margin: "0 0 8px 0", fontSize: 14, lineHeight: "1.4",
+                      color: "rgba(255,255,255,0.9)", fontFamily: "'Inter',sans-serif",
+                      wordBreak: "break-word", cursor: "pointer",
+                      overflow: "hidden",
+                      display: "-webkit-box",
+                      WebkitBoxOrient: "vertical",
+                      WebkitLineClamp: captionExpanded ? 999 : 2,
+                    } as any
+                  }, caption),
+
+                  // timer
+                  isSeeking && React2.createElement("div", {
+                    style: { fontSize: 12, color: "rgba(255,255,255,0.9)", fontFamily: "'Inter',sans-serif", fontWeight: 600, marginBottom: 2, paddingLeft: 2 }
+                  }, `${formatT(currentTime)} / ${formatT(duration)}`),
+
+                  // seek bar
+                  React2.createElement("div", {
+                    ref: seekBarRef,
+                    "data-seekbar": "1",
+                    onPointerDown: handleSeekPointerDown,
+                    onPointerMove: handleSeekPointerMove,
+                    onPointerUp:   handleSeekPointerUp,
+                    onPointerCancel: handleSeekPointerUp,
+                    style: { position: "relative", width: "100%", height: "44px", display: "flex", alignItems: "center", touchAction: "none", cursor: "pointer", boxSizing: "border-box", marginBottom: "4px" },
+                  },
+                    React2.createElement("div", { style: { position: "relative", width: "100%", height: isSeeking ? "4px" : "2px", borderRadius: "2px", background: "rgba(255,255,255,0.25)", transition: "height 0.15s ease" } },
+                      React2.createElement("div", { style: { position: "absolute", left: 0, top: 0, height: "100%", width: `${progress}%`, background: "#fff", borderRadius: "2px" } }),
+                      isSeeking && React2.createElement("div", { style: { position: "absolute", top: "50%", left: `${progress}%`, transform: "translate(-50%,-50%)", width: "13px", height: "13px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)", pointerEvents: "none" } })
+                    )
+                  )
+                )
+              );
+            }
+            overlayRootRef.current.render(React2.createElement(FullscreenOverlay));
+
+            const last   = container.getBoundingClientRect();
+            const dx     = first.left - last.left;
+            const dy     = first.top  - last.top;
+            const scaleX = first.width  / last.width;
+            const scaleY = first.height / last.height;
+            container.style.transform    = `translate(${dx}px,${dy}px) scale(${scaleX},${scaleY})`;
+            container.style.borderRadius = origRadius;
+
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                container.style.transition   = "transform 340ms cubic-bezier(0.4,0,0.2,1), border-radius 340ms cubic-bezier(0.4,0,0.2,1)";
+                container.style.transform    = "none";
+                container.style.borderRadius = "0px";
+                portal.style.backgroundColor = "rgba(0,0,0,1)";
+              });
+            });
+
+            const onDone = (ev: TransitionEvent) => {
+              if (ev.propertyName !== "transform") return;
+              container.style.willChange = "";
+              container.removeEventListener("transitionend", onDone);
+            };
+            container.addEventListener("transitionend", onDone);
+
+            portal.addEventListener("wheel", (ev) => ev.preventDefault(), { passive: false });
+
+            let swipeStartY = 0;
+            let swipeStartTarget: EventTarget | null = null;
+            portal.addEventListener("touchstart", (ev) => {
+              swipeStartY = ev.touches[0].clientY;
+              swipeStartTarget = ev.target;
+              container.style.transition = "none";
+            }, { passive: true });
+            portal.addEventListener("touchmove", (ev) => {
+              const bar = portal.querySelector("[data-seekbar]");
+              if (bar && bar.contains(ev.target as Node)) return;
+              const delta = ev.touches[0].clientY - swipeStartY;
+              if (delta <= 0 || seekingRef.current) return;
+              ev.preventDefault();
+              const prog = Math.min(delta / 320, 1);
+              container.style.transform    = `translateY(${delta * 0.55}px) scale(${1 - prog * 0.07})`;
+              container.style.borderRadius = `${prog * 20}px`;
+              portal.style.backgroundColor = `rgba(0,0,0,${Math.max(0, 1 - prog * 0.65)})`;
+            }, { passive: false });
+            portal.addEventListener("touchend", (ev) => {
+              const delta = ev.changedTouches[0].clientY - swipeStartY;
+              const startedOnInteractive = (swipeStartTarget as HTMLElement)?.closest?.("button, [data-seekbar]");
+              if (delta > 120 && !seekingRef.current) {
+                exitFakeFullscreen();
+              } else if (Math.abs(delta) < 10 && !seekingRef.current) {
+                const tgt = ev.target as HTMLElement;
+                const isInteractive = tgt.closest("button, [data-seekbar]") || startedOnInteractive;
+                if (!isInteractive) {
+                  const vid = videoRef.current;
+                  if (vid) { if (vid.paused) vid.play().catch(() => {}); else vid.pause(); }
+                }
+                container.style.transition   = "transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 280ms ease";
+                container.style.transform    = "none";
+                container.style.borderRadius = "0px";
+                portal.style.transition      = "background-color 280ms ease";
+                portal.style.backgroundColor = "rgba(0,0,0,1)";
+              } else {
+                container.style.transition   = "transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 280ms ease";
+                container.style.transform    = "none";
+                container.style.borderRadius = "0px";
+                portal.style.transition      = "background-color 280ms ease";
+                portal.style.backgroundColor = "rgba(0,0,0,1)";
+              }
+            }, { passive: true });
+
+            (portal as any)._savedScroll = window.scrollY;
+            document.body.style.overflow = "hidden";
+            setIsFakeFullscreen(true);
+          }}
           aria-label="Fullscreen"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -415,6 +764,8 @@ function VideoControls({
           </svg>
         </button>
       )}
+
+      
     </>
   );
 }
@@ -435,10 +786,11 @@ interface VideoPlayerProps {
   fullscreenTopLeft?: boolean;
   knownWidth?:        number | null;
   knownHeight?:       number | null;
-  creatorHandle?:     string;
-  isFullscreenActive?: boolean;
-  // Fullscreen modal props
-  onOpenFullscreen?:  (currentTime: number, hls?: any) => void;
+  creatorHandle?:  string;
+  displayName?:    string;
+  username?:       string;
+  avatarUrl?:      string | null;
+  caption?:        string | null;
 }
 
 export interface VideoPlayerHandle {
@@ -465,8 +817,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   knownWidth        = null,
   knownHeight       = null,
   creatorHandle,
-  isFullscreenActive  = false,
-  onOpenFullscreen,
+  displayName,
+  username,
+  avatarUrl,
+  caption,
 }: VideoPlayerProps, ref) {
   const videoRef       = React.useRef<HTMLVideoElement | null>(null);
   const containerRef   = React.useRef<HTMLDivElement | null>(null);
@@ -644,7 +998,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           const level = hls.levels[data.level];
           console.log(`%c[VideoPlayer] 🎬 QUALITY → ${level.height}p (${Math.round(level.bitrate / 1000)}kbps)`, "color: #10B981; font-weight: bold");
         });
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {});
+        hls.on(Hls.Events.MANIFEST_PARSED, (_evt: any, data: any) => {
+          hls.currentLevel = data.levels.length - 1;
+        });
         
         let mediaErrorRecovered = false;
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
@@ -773,11 +1129,11 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const handleToggleMute = React.useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    const next = !isMuted;
+    const next = !getSavedMute();
     video.muted = next;
     setIsMuted(next);
     saveMute(next);
-  }, [isMuted]);
+  }, []);
 
   React.useImperativeHandle(ref, () => ({
     pause: () => videoRef.current?.pause(),
@@ -800,12 +1156,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     },
   }));
 
-  const handleOpenFullscreen = React.useCallback(() => {
-    const video = videoRef.current;
-    const currentTime = video?.currentTime ?? 0;
-    isPausedByScroll.current = true;
-    onOpenFullscreen?.(currentTime, hlsRef.current);
-  }, [onOpenFullscreen]);
+  
 
   React.useEffect(() => {
     if (!autoPlay) return;
@@ -868,6 +1219,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         @keyframes spin   { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes vp-dot { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1); } }
+        .vp-portal-active [data-creator-watermark] { font-size: 17px !important; padding: 2px 8px 20px 64px !important; }
       `}</style>
 
       
@@ -975,11 +1327,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         
 
         {/* Mute button visible on poster */}
-        {showPoster && (
-          <button
+        <button
             style={{ position: "absolute", top: 12, right: 12, zIndex: 6, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
-            onClick={(e) => { e.stopPropagation(); const next = !isMuted; setIsMuted(next); saveMute(next); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); const next = !isMuted; setIsMuted(next); saveMute(next); }}
+            onClick={(e) => { e.stopPropagation(); handleToggleMute(); }}
+            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleMute(); }}
             aria-label={isMuted ? "Unmute" : "Mute"}
           >
             {isMuted ? (
@@ -988,20 +1339,19 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
             )}
           </button>
-        )}
 
         {/* Creator handle overlay */}
         {creatorHandle && (
-          <div style={{
+          <div data-creator-watermark style={{
             position: "absolute", top: 0, left: 0,
             zIndex: 12, pointerEvents: "none",
-            fontSize: "14px", fontWeight: 600,
+            fontSize: "13px", fontWeight: 600,
             color: "rgba(255,255,255,0.9)",
             fontFamily: "'Inter', sans-serif",
             letterSpacing: "0.02em",
             background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 100%)",
             width: "100%",
-            padding: "2px 8px 20px",
+            padding: "2px 8px 20px 8px",
           }}>
             {creatorHandle}@Fréya.com
           </div>
@@ -1020,7 +1370,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             bottomOffset={bottomOffset}
             isPlaying={isPlaying}
             fullscreenTopLeft={fullscreenTopLeft}
-            onOpenFullscreen={handleOpenFullscreen}
+            displayName={displayName}
+            username={username}
+            avatarUrl={avatarUrl}
+            caption={caption}
           />
         )}
 
