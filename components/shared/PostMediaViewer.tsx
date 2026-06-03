@@ -499,7 +499,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               hideInternalBlur={true}
               blurHash={first.blurHash}
               objectFit={isMobileView && isPortrait ? "cover" : "contain"}
-              autoplayOnVisible={isMobileView ? false : autoplayOnVisible}
+              autoplayOnVisible={autoplayOnVisible}
               fullscreenTopLeft={fullscreenTopLeft}
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}

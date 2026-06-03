@@ -1069,7 +1069,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       console.log(`[VP:${bunnyVideoId?.slice(0,8)}] intersection ratio=${entry.intersectionRatio.toFixed(2)} hasInit=${hasInitialized.current} pausedByScroll=${isPausedByScroll.current}`);
 
       if (entry.intersectionRatio >= 0.5) {
-        if (autoplayOnVisible && !hasError && !isMobile) {
+        if (autoplayOnVisible && !hasError) {
           (async () => {
             console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ▶ entering viewport — resumeBuffering=${!!(hlsRef.current)} needsInit=${!hasInitialized.current}`);
             if (hasInitialized.current && hlsRef.current) {
