@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, memo, useRef } from "react";
 import type { VideoPlayerHandle } from "@/components/video/VideoPlayer";
+import { setGlobalFullscreenOpen } from "@/components/video/VideoPlayer";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, MoreHorizontal } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -401,11 +402,18 @@ function PostCardInner({
           avatarUrl={post.creator.avatar_url}
           isMuted={fsMuted}
           onMuteChange={setFsMuted}
-          onClose={() => {
+          onClose={(lastTime) => {
+            setGlobalFullscreenOpen(false);
             setFsVideoId(null);
             requestAnimationFrame(() => {
+              // Re-attach the borrowed HLS instance back to the preview video
+              const hls = fsHls;
+              const previewVideo = (videoPlayerRef.current as any)?._videoEl as HTMLVideoElement | undefined;
+              if (hls && previewVideo) {
+                hls.attachMedia(previewVideo);
+              }
               setFsHls(null);
-              videoPlayerRef.current?.resume();
+              videoPlayerRef.current?.resume(lastTime);
             });
           }}
           initialTime={fsInitialTime}
@@ -505,6 +513,7 @@ function PostCardInner({
                 setFsHls(videoPlayerRef.current?.getHls() ?? null);
                 setFsInitialTime(currentTime);
                 setFsVideoId(videoId);
+                setGlobalFullscreenOpen(true);
               }}
             />
             </div>

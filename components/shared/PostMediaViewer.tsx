@@ -432,7 +432,13 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   }
 
   // ── Video ────────────────────────────────────────────────────────────────
-  const isMobileView = typeof window !== "undefined" && window.innerWidth < 430;
+  const [isMobileView, setIsMobileView] = React.useState(false);
+  React.useEffect(() => {
+    const check = () => setIsMobileView(window.innerWidth < 430);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   if (isVideo) {
     const rawVideoRatio = (() => {

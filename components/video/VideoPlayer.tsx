@@ -18,6 +18,11 @@ const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
 const watchedVideoIds = new Set<string>();
 const warmedVideoIds  = new Set<string>();
 
+// Shared across every VideoPlayer instance on the page.
+// When any fullscreen is open, all intersection observers skip auto-play.
+let anyFullscreenOpen = false;
+export function setGlobalFullscreenOpen(open: boolean) { anyFullscreenOpen = open; }
+
 export function getBunnyThumbnail(videoId: string) {
   return `https://${BUNNY_PULL_ZONE}/${videoId}/thumbnail.jpg`;
 }
@@ -438,6 +443,7 @@ export interface VideoPlayerHandle {
   pause: () => void;
   getHls: () => any;
   getCurrentTime: () => number;
+  _videoEl: HTMLVideoElement | null;
   resume: (time?: number) => void;
 }
 
@@ -467,6 +473,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const hasInitialized    = React.useRef(false);
   const bufferTimer       = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingTimer      = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPausedByScroll  = React.useRef(false); // prevents scrolled-past videos from auto-resuming
 
   const [showPoster,   setShowPoster]   = React.useState(true);
   const [posterLoaded, setPosterLoaded] = React.useState(false);
@@ -570,6 +577,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const video = videoRef.current;
     if (!force && bunnyVideoId && watchedVideoIds.has(bunnyVideoId)) {
       if (video) video.pause();
+      isPausedByScroll.current = true;
       try { hlsRef.current?.pauseBuffering(); } catch {}
       if (slowTimer.current) { clearTimeout(slowTimer.current); slowTimer.current = null; }
       setIsBuffering(false);
@@ -578,6 +586,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     }
     if (video) {
       video.pause();
+      if (force || !(bunnyVideoId && watchedVideoIds.has(bunnyVideoId))) {
+        video.src = ""; // silence audio — do NOT call video.load() here, it fires onError
+      }
     }
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch {}
@@ -707,6 +718,11 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             const muted = getSavedMute();
             video.muted = muted;
             setIsMuted(muted);
+            // Don't auto-resume a video the user has already scrolled past —
+            // only play if this is a fresh entry (never watched) or user explicitly tapped.
+            if (isPausedByScroll.current) return;
+            // Don't compete with an open fullscreen player
+            if (anyFullscreenOpen) return;
             if (!hasStarted) {
               setIsAutoplaying(true);
               if (slowTimer.current) clearTimeout(slowTimer.current);
@@ -739,6 +755,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   }, [fillParent, externalRatio]);
 
   const handlePosterPlay = React.useCallback(async () => {
+    isPausedByScroll.current = false; // user explicitly re-engaged
     if (loadingTimer.current) clearTimeout(loadingTimer.current);
     loadingTimer.current = setTimeout(() => setIsLoading(true), 300);
     const video = videoRef.current;
@@ -762,9 +779,13 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     pause: () => videoRef.current?.pause(),
     getHls: () => hlsRef.current,
     getCurrentTime: () => videoRef.current?.currentTime ?? 0,
+    // Exposed so PostCard/PostRow can re-attach the borrowed HLS instance
+    // back to this video element after fullscreen closes.
+    _videoEl: videoRef.current,
     resume: (time?: number) => {
       const video = videoRef.current;
       if (!video) return;
+      isPausedByScroll.current = false;
       setShowPoster(false);
       if (time !== undefined) video.currentTime = time;
       video.muted = getSavedMute();
@@ -776,6 +797,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const video = videoRef.current;
     const currentTime = video?.currentTime ?? 0;
     video?.pause();
+    isPausedByScroll.current = true; // prevent intersection observer from resuming while fullscreen is open
+    setShowPoster(true);
     onOpenFullscreen?.(currentTime);
   }, [onOpenFullscreen]);
 
@@ -897,7 +920,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               setShowPoster(false);
               setIsAutoplaying(false);
             }}
-            onError={() => { setHasError(true); setIsBuffering(false); }}
+            onError={() => { if (videoRef.current && videoRef.current.src === "") return; setHasError(true); setIsBuffering(false); }}
             style={{
               position:   "absolute",
               inset:      0,

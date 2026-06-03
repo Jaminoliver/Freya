@@ -20,6 +20,7 @@ import { PollDisplay } from "@/components/feed/PollDisplay";
 
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
 import { useAppStore } from "@/lib/store/appStore";
+import { setGlobalFullscreenOpen } from "@/components/video/VideoPlayer";
 import { useRelativeTimestamp } from "@/lib/hooks/useRelativeTimestamp";
 import { usePostEngagement } from "@/lib/hooks/usePostEngagement";
 
@@ -215,9 +216,16 @@ export default function PostRow({
     else handleOpenFanSheet();
   };
 
-  const isTextPost   = post.content_type === "text";
-  const isPollPost   = post.content_type === "poll";
-  const isMobileView = typeof window !== "undefined" && window.innerWidth < 430;
+  const [isMobileView, setIsMobileView] = React.useState(false);
+  React.useEffect(() => {
+    const check = () => setIsMobileView(window.innerWidth < 430);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const isTextPost = post.content_type === "text";
+  const isPollPost = post.content_type === "poll";
 
   // ── Header right slot: PPV badge (own profile only) + more button ──────
   const rightSlot = (
@@ -276,12 +284,17 @@ export default function PostRow({
           avatarUrl={post.profiles.avatar_url}
           isMuted={fsMuted}
           onMuteChange={setFsMuted}
-          onClose={() => {
+          onClose={(lastTime) => {
+            setGlobalFullscreenOpen(false);
             setFsVideoId(null);
             requestAnimationFrame(() => {
+              const hls = fsHls;
+              const previewVideo = (videoPlayerRef.current as any)?._videoEl as HTMLVideoElement | undefined;
+              if (hls && previewVideo) {
+                hls.attachMedia(previewVideo);
+              }
               setFsHls(null);
-              // resume from the known initial time if available
-              videoPlayerRef.current?.resume(fsInitialTime ?? 0);
+              videoPlayerRef.current?.resume(lastTime);
             });
           }}
           initialTime={fsInitialTime}
@@ -383,6 +396,7 @@ export default function PostRow({
             setFsHls(videoPlayerRef.current?.getHls() ?? null);
             setFsInitialTime(currentTime);
             setFsVideoId(videoId);
+            setGlobalFullscreenOpen(true);
           }}
         />
         </div>

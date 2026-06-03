@@ -33,7 +33,7 @@ interface Props {
   // controls
   isMuted: boolean;
   onMuteChange: (muted: boolean) => void;
-  onClose: () => void;
+  onClose: (lastTime: number) => void;
   initialTime?: number;
   existingHls?: any;
   initialIsFollowing?: boolean;
@@ -99,6 +99,7 @@ export function VideoPlayerFullscreen({
   onMuteChange,
   onClose,
   initialTime = 0,
+  existingHls,
   initialIsFollowing = false,
   onFollowChange,
 }: Props) {
@@ -194,7 +195,12 @@ export function VideoPlayerFullscreen({
 
   useEffect(() => {
     const t = requestAnimationFrame(() => setMounted(true));
-    slowDotsTimerRef.current = setTimeout(() => setShowSlowDots(true), 800);
+    // Only start the slow-loading timer when there is no existing HLS instance.
+    // When existingHls is provided the video is already buffered and will be
+    // ready in ~1 frame, so dots would be a false alarm.
+    if (!existingHls) {
+      slowDotsTimerRef.current = setTimeout(() => setShowSlowDots(true), 800);
+    }
     return () => {
       cancelAnimationFrame(t);
       if (slowDotsTimerRef.current) clearTimeout(slowDotsTimerRef.current);
@@ -218,18 +224,31 @@ export function VideoPlayerFullscreen({
     video.muted = isMuted;
 
     const tryPlay = () => {
-      if (initialTime > 0) video.currentTime = initialTime;
+      // Always restore position — even when initialTime is 0
+      video.currentTime = initialTime;
       video.play().catch(() => {});
     };
 
     (async () => {
       const Hls = (await import("hls.js")).default;
       if (Hls.isSupported()) {
-        const hls = new Hls({ startLevel: -1, capLevelToPlayerSize: false });
-        hlsRef.current = hls;
-        hls.loadSource(videoSrc);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => { tryPlay(); });
+        if (existingHls) {
+          // Reuse already-loaded HLS instance: no manifest reload, no stutter
+          existingHls.attachMedia(video);
+          hlsRef.current = existingHls;
+          video.addEventListener("canplay", () => {
+            setIsVideoReady(true);
+            if (slowDotsTimerRef.current) { clearTimeout(slowDotsTimerRef.current); slowDotsTimerRef.current = null; }
+            setShowSlowDots(false);
+            tryPlay();
+          }, { once: true });
+        } else {
+          const hls = new Hls({ startLevel: -1, capLevelToPlayerSize: false });
+          hlsRef.current = hls;
+          hls.loadSource(videoSrc);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => { tryPlay(); });
+        }
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = videoSrc;
         video.addEventListener("loadeddata", tryPlay, { once: true });
@@ -237,7 +256,18 @@ export function VideoPlayerFullscreen({
     })();
 
     return () => {
-      hlsRef.current?.destroy();
+      const v = videoRef.current;
+      if (v) {
+        v.pause();
+        v.src = "";
+        v.load(); // flush buffered audio — prevents ghost audio on unmount
+      }
+      if (!existingHls) {
+        hlsRef.current?.destroy();
+      } else {
+        // Detach so parent can re-attach to preview video on close
+        hlsRef.current?.detachMedia();
+      }
       hlsRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -376,8 +406,9 @@ export function VideoPlayerFullscreen({
   };
 
   const handleClose = () => {
+    const lastTime = videoRef.current?.currentTime ?? initialTime;
     if (videoRef.current) videoRef.current.pause();
-    onClose();
+    onClose(lastTime);
   };
 
   const handleProfileClick = (e: React.MouseEvent) => {
