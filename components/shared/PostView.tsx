@@ -468,7 +468,7 @@ export default function PostView({ postId, sourceIsMessage, onBack }: PostViewPr
         const isLandscapeVideo = rawR > 1;
         return (
         <div style={{ margin: isLandscapeVideo ? "10px 0" : "10px 12px", borderRadius: isLandscapeVideo ? "0" : "14px", border: isLandscapeVideo ? "none" : "1px solid #1E1E2E", clipPath: isLandscapeVideo ? "none" : "inset(0 round 14px)" }}>
-          <PostMediaViewer media={normalizedMedia} isLocked={post.locked} price={post.ppv_price} isPPV={post.is_ppv} isFreeSubscription={(post.profiles?.subscription_price ?? 0) === 0} isUnlockedPPV={post.is_ppv && !post.locked} onDoubleTap={handleDoubleTapLike} onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }} onUnlock={openUnlock} fullscreenTopLeft={true} creatorHandle={post.profiles?.username} disableMobileShrink />
+          <PostMediaViewer media={normalizedMedia} isLocked={post.locked} price={post.ppv_price} isPPV={post.is_ppv} isFreeSubscription={(post.profiles?.subscription_price ?? 0) === 0} isUnlockedPPV={post.is_ppv && !post.locked} onDoubleTap={handleDoubleTapLike} onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }} onUnlock={openUnlock} fullscreenTopLeft={true} creatorHandle={post.profiles?.username} disableMobileShrink displayName={post.profiles?.display_name ?? post.profiles?.username} username={post.profiles?.username} avatarUrl={post.profiles?.avatar_url ?? null} caption={post.caption ?? null} />
         </div>
         );
       })()}

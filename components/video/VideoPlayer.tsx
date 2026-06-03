@@ -446,7 +446,7 @@ function VideoControls({
       {/* Fullscreen button */}
       {!isFullscreen && !isFakeFullscreen && (
         <button
-          style={{ position: "absolute", bottom: bottomOffset + 8 + (isPortrait ? 35 : 0), right: 8, zIndex: 15, pointerEvents: "auto", background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
+          style={{ position: "absolute", bottom: 12, right: 12, zIndex: 15, pointerEvents: "auto", background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
           onClick={async (e) => {
             e.stopPropagation();
             const container = containerRef.current;
@@ -1218,7 +1218,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       <style>{`
         @keyframes spin   { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes vp-dot { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1); } }
+        @keyframes vp-dot { 0%, 60%, 100% { opacity: 0.25; transform: scale(0.75); } 30% { opacity: 1; transform: scale(1.15); } }
         .vp-portal-active [data-creator-watermark] { font-size: 17px !important; padding: 2px 8px 20px 64px !important; }
       `}</style>
 
@@ -1318,9 +1318,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         {/* Buffering dots */}
         {(isLoading || (!hasError && isBuffering)) && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#8B5CF6", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
-            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#B44DD4", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.2s" }} />
-            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#EC4899", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.4s" }} />
+            <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#8B5CF6", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
+            <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#9B4FE8", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.15s" }} />
+            <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#B44DD4", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.3s" }} />
+            <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#EC4899", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.45s" }} />
           </div>
         )}
 
@@ -1328,7 +1329,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
         {/* Mute button visible on poster */}
         <button
-            style={{ position: "absolute", top: 12, right: 12, zIndex: 6, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
+            style={{ position: "absolute", top: 12, right: 12, zIndex: 6, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
             onClick={(e) => { e.stopPropagation(); handleToggleMute(); }}
             onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleMute(); }}
             aria-label={isMuted ? "Unmute" : "Mute"}
@@ -1358,7 +1359,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         )}
 
         {/* Custom controls */}
-        {!showPoster && !hasError && (
+        {!hasError && (
           <VideoControls
             videoRef={videoRef}
             containerRef={containerRef}
