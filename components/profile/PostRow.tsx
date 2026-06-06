@@ -76,7 +76,7 @@ export interface ApiPost {
 export default function PostRow({
   post, isOwnProfile, isSubscribed,
   onLike, onComment, onTip, onUnlock,
-  viewer, onDelete, onImageClick, onPPVUpdated, autoplayOnVisible = false, eager = false,
+  viewer, onDelete, onImageClick, onPPVUpdated, eager = false,
 }: {
   post:          ApiPost;
   isOwnProfile?: boolean;
@@ -89,7 +89,6 @@ export default function PostRow({
   onDelete?:          (id: string) => void;
   onImageClick?:      (post: LightboxPost, index: number) => void;
   onPPVUpdated?:      (id: string, priceKobo: number) => void;
-  autoplayOnVisible?: boolean;
   eager?: boolean;
 }) {
   const router = useRouter();
@@ -129,15 +128,7 @@ export default function PostRow({
 
   React.useEffect(() => { setPpvPrice(post.ppv_price); setIsPPV(post.is_ppv); }, [post.ppv_price, post.is_ppv]);
 
-  React.useEffect(() => {
-    if (post.locked) return;
-    const first = post.media?.find((m) => m.media_type === "video");
-    if (!first) return;
-    const timer = setTimeout(() => {
-      videoPlayerRef.current?.resume();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [post.locked]);
+  // removed auto-resume on mount — user must tap to play
 
   React.useEffect(() => {
     setPollData(post.poll ?? null);
@@ -357,7 +348,6 @@ export default function PostRow({
           onDoubleTap={engagement.handleDoubleTapLike}
           onSingleTap={handleSingleTap}
           onUnlock={() => onUnlock?.(String(post.id))}
-          autoplayOnVisible={autoplayOnVisible}
           creatorHandle={post.profiles.username}
           displayName={post.profiles.display_name ?? post.profiles.username}
           username={post.profiles.username}

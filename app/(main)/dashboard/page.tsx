@@ -462,7 +462,6 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
             initialSavedPost={post.saved_post ?? false}
             initialSavedCreator={post.saved_creator ?? false}
             eager={index < 2}
-            autoplayOnVisible={true}
             preWarmVideoId={index === 0 ? (post.media.find((m) => m.media_type === "video" && m.bunny_video_id)?.bunny_video_id ?? null) : null}
           />
         </div>

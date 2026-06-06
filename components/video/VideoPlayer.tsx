@@ -74,6 +74,7 @@ interface ControlsProps {
   isPortrait?:      boolean;
   bottomOffset?:    number;
   isPlaying?:       boolean;
+  isStarted?:       boolean;
   fullscreenTopLeft?:      boolean;
   onOpenFullscreen?:       () => void;
   displayName?:            string;
@@ -92,6 +93,7 @@ function VideoControls({
   isPortrait,
   bottomOffset = 0,
   isPlaying: isPlayingProp = false,
+  isStarted = false,
   fullscreenTopLeft = false,
   onOpenFullscreen,
   displayName,
@@ -358,11 +360,11 @@ function VideoControls({
         .vp-mute-btn:hover { background: rgba(0,0,0,0.65); }
       `}</style>
 
-      {/* Tap zone — tap to open fullscreen on mobile, play/pause on desktop */}
+      {/* Tap zone — tap to pause/play on both mobile and desktop */}
       <div
-        style={{ position: "absolute", inset: 0, zIndex: 4, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none", touchAction: "manipulation" }}
+        style={{ position: "absolute", inset: 0, zIndex: 12, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none", touchAction: "manipulation" }}
         onClick={(e) => {
-          if ((e as any).pointerType === "touch") return;
+          if ((e.target as HTMLElement).closest("button")) return;
           handlePlayPause(e);
         }}
         onTouchStart={(e) => {
@@ -383,7 +385,7 @@ function VideoControls({
           );
           if (held < 200 && dist < 10) {
             e.preventDefault();
-            onOpenFullscreen?.();
+            handlePlayPause(e);
           }
         }}
         onTouchCancel={() => {}}
@@ -393,7 +395,14 @@ function VideoControls({
 
      
 
-      {/* Play indicator removed — autoplay handles start */}
+      {/* Play indicator — shows when paused, hidden in fake fullscreen (FullscreenOverlay has its own) */}
+      {!playing && isStarted && !isFakeFullscreen && (
+        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 6, pointerEvents: "none" }}>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)">
+            <polygon points="5,3 19,12 5,21"/>
+          </svg>
+        </div>
+      )}
 
       {/* Seekbar — desktop only */}
       <div
@@ -763,6 +772,13 @@ function VideoControls({
               }
             }, { passive: true });
 
+            portal.addEventListener("click", (ev) => {
+              const tgt = ev.target as HTMLElement;
+              if (tgt.closest("button, [data-seekbar]")) return;
+              const vid = videoRef.current;
+              if (vid) { if (vid.paused) vid.play().catch(() => {}); else vid.pause(); }
+            });
+
             (portal as any)._savedScroll = window.scrollY;
             document.body.style.overflow = "hidden";
             setIsFakeFullscreen(true);
@@ -794,8 +810,6 @@ interface VideoPlayerProps {
   hideInternalBlur?:  boolean;
   blurHash?:          string | null;
   objectFit?:         "contain" | "cover";
-  autoplayOnVisible?: boolean;
-  autoPlay?:          boolean;
   fullscreenTopLeft?: boolean;
   eager?:             boolean;
   knownWidth?:        number | null;
@@ -825,8 +839,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   hideInternalBlur = false,
   blurHash,
   objectFit = "contain",
-  autoplayOnVisible = false,
-  autoPlay          = false,
   fullscreenTopLeft = false,
   eager             = false,
   knownWidth        = null,
@@ -1070,60 +1082,22 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
     // Pre-fetch manifest into browser HTTP cache immediately on mount
     fetch(getBunnyHLS(bunnyVideoId), { method: "GET", cache: "force-cache" }).catch(() => {});
-
-    if (hasInitialized.current) return;
-    warmedVideoIds.add(bunnyVideoId);
-    initVideo();
-  }, [bunnyVideoId, initVideo]);
+  }, [bunnyVideoId]);
 
   React.useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const observer = new IntersectionObserver(([entry]) => {
-      const video = videoRef.current;
-      if (!video) return;
-      console.log(`[VP:${bunnyVideoId?.slice(0,8)}] intersection ratio=${entry.intersectionRatio.toFixed(2)} hasInit=${hasInitialized.current} pausedByScroll=${isPausedByScroll.current}`);
-
-      if (entry.intersectionRatio >= 0.5) {
-        if (autoplayOnVisible && !hasError) {
-          (async () => {
-            console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ▶ entering viewport — resumeBuffering=${!!(hlsRef.current)} needsInit=${!hasInitialized.current}`);
-            if (hasInitialized.current && hlsRef.current) {
-              try { hlsRef.current.resumeBuffering?.(); } catch {}
-            }
-            if (!hasInitialized.current) await initVideo();
-            const muted = getSavedMute();
-            video.muted = muted;
-            setIsMuted(muted);
-            // Don't auto-resume a video the user has already scrolled past —
-            // only play if this is a fresh entry (never watched) or user explicitly tapped.
-            // Don't compete with an open fullscreen player
-            if (anyFullscreenOpen) return;
-            if (!hasStarted) {
-              setIsAutoplaying(true);
-              if (slowTimer.current) clearTimeout(slowTimer.current);
-              const hls = hlsRef.current;
-              const alreadyBuffered = hls && hls.bufferInfo && hls.bufferInfo(0, 0.1).len > 0;
-              if (!alreadyBuffered) {
-                slowTimer.current = setTimeout(() => setShowSlowDots(true), 1500);
-              }
-            }
-            try { await video.play(); } catch {}
-          })();
-        }
-      } else if (entry.intersectionRatio < 0.2) {
-        if (bunnyVideoId && !watchedVideoIds.has(bunnyVideoId)) {
-          window.dispatchEvent(new CustomEvent("freya:video-skipped", { detail: { bunnyVideoId } }));
-        }
+      if (entry.intersectionRatio < 0.2) {
         teardown();
         setShowPoster(true);
       }
-    }, { threshold: [0, 0.2, 0.5, 0.75] });
+    }, { threshold: [0, 0.2] });
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, [teardown, autoplayOnVisible, isMobile, showPoster, hasError, initVideo]);
+  }, [teardown]);
 
   const handleLoadedMetadata = React.useCallback(() => {
     if (fillParent || externalRatio) return;
@@ -1180,54 +1154,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
   
 
-  React.useEffect(() => {
-    if (!autoPlay) return;
-    handlePosterPlay();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Eager autoplay: if already visible on mount, don't wait for observer tick
-  React.useEffect(() => {
-    if (!eager || !autoplayOnVisible || !bunnyVideoId) return;
-    const container = containerRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const inViewport = rect.top < window.innerHeight && rect.bottom > 0;
-    if (!inViewport) return;
-    (async () => {
-      if (!hasInitialized.current) await initVideo();
-      const video = videoRef.current;
-      if (!video) return;
-      const muted = getSavedMute();
-      video.muted = muted;
-      setIsMuted(muted);
-      try { await video.play(); } catch {}
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  React.useEffect(() => {
-    if (!autoplayOnVisible) return;
-    const onVisibilityChange = () => {
-      const video = videoRef.current;
-      const container = containerRef.current;
-      if (!video) return;
-      if (document.visibilityState === "hidden") {
-        video.pause();
-      } else {
-        if (isPausedByScroll.current) return;
-        if (!container) return;
-        const rect = container.getBoundingClientRect();
-        const inViewport = rect.top < window.innerHeight && rect.bottom > 0;
-        if (!inViewport) return;
-        if (!hasInitialized.current) {
-          initVideo().then(() => video.play().catch(() => {}));
-        } else {
-          video.play().catch(() => {});
-        }
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [autoplayOnVisible, initVideo]);
+  
 
   const containerStyle: React.CSSProperties = fillParent ? {
     width:          "100%",
@@ -1304,7 +1231,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               onError={() => setPosterError(true)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
             />
-            {!isLoading && !isAutoplaying && !autoplayOnVisible && (
+            {!isLoading && !isAutoplaying && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}>
                 <polygon points="5,3 19,12 5,21"/>
               </svg>
@@ -1440,6 +1367,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             isPortrait={(isTallPortrait || objectFit === "cover")}
             bottomOffset={bottomOffset}
             isPlaying={isPlaying}
+            isStarted={hasStarted}
             fullscreenTopLeft={fullscreenTopLeft}
             onOpenFullscreen={() => containerRef.current?.querySelector<HTMLButtonElement>("[aria-label='Fullscreen']")?.click()}
             displayName={displayName}

@@ -443,7 +443,6 @@ export default function ContentFeed({
           onDelete={handleDeletePost}
           onImageClick={(p, idx) => { console.log("[ContentFeed] onImageClick called", { postId: p.id, idx }); onImageClick?.(p, idx); }}
           onPPVUpdated={handlePPVUpdated}
-          autoplayOnVisible={true}
           eager={index === 0}
         />
       </div>

@@ -105,7 +105,6 @@ function PostCardInner({
   initialSavedPost = false,
   initialSavedCreator = false,
   eager = false,
-  autoplayOnVisible = false,
   preWarmVideoId = null,
 }: {
   post:                  Post;
@@ -121,7 +120,6 @@ function PostCardInner({
   initialSavedPost?:     boolean;
   initialSavedCreator?:  boolean;
   eager?:                boolean;
-  autoplayOnVisible?:    boolean;
   preWarmVideoId?:       string | null;
 }) {
   const { navigate } = useNav();
@@ -206,15 +204,7 @@ function PostCardInner({
     setPollData(post.poll ?? null);
   }, [post.poll]);
 
-  useEffect(() => {
-    if (post.isLocked) return;
-    const first = post.media.find((m) => m.type === "video");
-    if (!first) return;
-    const timer = setTimeout(() => {
-      videoPlayerRef.current?.resume();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [post.isLocked]);
+  // removed auto-resume on mount — user must tap to play
 
   const handleOpenSheet = useCallback(async () => {
     setSheetOpen(true);
@@ -472,7 +462,6 @@ function PostCardInner({
               onUnlock={() => onUnlock?.(post.id)}
               initialSlide={initialSlide}
               onSlideChange={(index) => onSlideChange?.(post.id, index)}
-              autoplayOnVisible={autoplayOnVisible}
               creatorHandle={post.creator.username}
               displayName={post.creator.name}
               username={post.creator.username}
@@ -525,7 +514,6 @@ export const PostCard = memo(PostCardInner, (prev, next) => {
   if (prev.initialSavedPost     !== next.initialSavedPost)     return false;
   if (prev.is_renewal           !== next.is_renewal)           return false;
   if (prev.eager                !== next.eager)                return false;
-  if (prev.autoplayOnVisible    !== next.autoplayOnVisible)    return false;
   if (prev.preWarmVideoId       !== next.preWarmVideoId)       return false;
   return true;
 });

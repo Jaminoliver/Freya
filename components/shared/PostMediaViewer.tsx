@@ -34,7 +34,6 @@ interface PostMediaViewerProps {
   initialSlide?:        number;
   onSlideChange?:       (index: number) => void;
   maxHeight?:           string;
-  autoplayOnVisible?:   boolean;
   fullscreenTopLeft?:   boolean;
   creatorHandle?:        string;
   disableMobileShrink?:  boolean;
@@ -280,7 +279,6 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   initialSlide = 0,
   onSlideChange,
   maxHeight = "85svh",
-  autoplayOnVisible = false,
   fullscreenTopLeft = false,
   creatorHandle,
   disableMobileShrink = false,
@@ -502,7 +500,6 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               hideInternalBlur={true}
               blurHash={first.blurHash}
               objectFit={isMobileView && isPortrait ? "cover" : "contain"}
-              autoplayOnVisible={autoplayOnVisible}
               fullscreenTopLeft={fullscreenTopLeft}
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}
