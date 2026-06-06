@@ -38,6 +38,7 @@ interface PostMediaViewerProps {
   fullscreenTopLeft?:   boolean;
   creatorHandle?:        string;
   disableMobileShrink?:  boolean;
+  eager?:                boolean;
   displayName?:          string;
   username?:             string;
   avatarUrl?:            string | null;
@@ -283,6 +284,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   fullscreenTopLeft = false,
   creatorHandle,
   disableMobileShrink = false,
+  eager = false,
   displayName,
   username,
   avatarUrl,
@@ -301,6 +303,14 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   const noop         = () => {};
   const doubleTap    = onDoubleTap ?? noop;
   const singleTapAt0 = () => onSingleTap?.(0);
+
+  const [isMobileView, setIsMobileView] = React.useState(false);
+  React.useEffect(() => {
+    const check = () => setIsMobileView(window.innerWidth < 430);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   if (!media.length || !first) return null;
 
@@ -435,14 +445,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
     );
   }
 
-  // ── Video ────────────────────────────────────────────────────────────────
-  const [isMobileView, setIsMobileView] = React.useState(false);
-  React.useEffect(() => {
-    const check = () => setIsMobileView(window.innerWidth < 430);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
+  
 
   if (isVideo) {
     const rawVideoRatio = (() => {
@@ -504,6 +507,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               knownWidth={first.width ?? null}
               knownHeight={first.height ?? null}
               creatorHandle={creatorHandle}
+              eager={eager}
               displayName={displayName}
               username={username}
               avatarUrl={avatarUrl}

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { decode } from "blurhash";
+import Hls from "hls.js";
 
 // ── Mute persistence ──────────────────────────────────────────────────────────
 const MUTE_KEY = "vp_muted";
@@ -777,6 +778,7 @@ interface VideoPlayerProps {
   autoplayOnVisible?: boolean;
   autoPlay?:          boolean;
   fullscreenTopLeft?: boolean;
+  eager?:             boolean;
   knownWidth?:        number | null;
   knownHeight?:       number | null;
   creatorHandle?:  string;
@@ -807,6 +809,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   autoplayOnVisible = false,
   autoPlay          = false,
   fullscreenTopLeft = false,
+  eager             = false,
   knownWidth        = null,
   knownHeight       = null,
   creatorHandle,
@@ -842,6 +845,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const [isAutoplaying, setIsAutoplaying] = React.useState(false);
 
   const slowTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const waitStartRef = React.useRef<number>(0);
+  const stallTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
     const check = () => setIsMobile(!window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -971,7 +976,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const hlsSrc = getBunnyHLS(bunnyVideoId);
 
     try {
-      const Hls = (await import("hls.js")).default;
       if (Hls.isSupported()) {
         const savedBw = Number(localStorage.getItem("hls_bw")) || 8_000_000;
         const hls = new Hls({
@@ -1031,6 +1035,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     return () => {
       if (bufferTimer.current) clearTimeout(bufferTimer.current);
       if (loadingTimer.current) clearTimeout(loadingTimer.current);
+      if (stallTimer.current) clearTimeout(stallTimer.current);
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
@@ -1089,6 +1094,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           })();
         }
       } else if (entry.intersectionRatio < 0.2) {
+        if (bunnyVideoId && !watchedVideoIds.has(bunnyVideoId)) {
+          window.dispatchEvent(new CustomEvent("freya:video-skipped", { detail: { bunnyVideoId } }));
+        }
         teardown();
         setShowPoster(true);
       }
@@ -1140,12 +1148,14 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       if (!video) return;
       isPausedByScroll.current = false;
       setShowPoster(false);
-      if (hlsRef.current) {
-        hlsRef.current.attachMedia(video);
-      }
-      if (time !== undefined) video.currentTime = time;
-      video.muted = getSavedMute();
-      video.play().catch(() => {});
+      const doPlay = async () => {
+        if (!hasInitialized.current) await initVideo();
+        if (hlsRef.current) hlsRef.current.attachMedia(video);
+        if (time !== undefined) video.currentTime = time;
+        video.muted = getSavedMute();
+        video.play().catch(() => {});
+      };
+      doPlay();
     },
   }));
 
@@ -1156,22 +1166,49 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     handlePosterPlay();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Eager autoplay: if already visible on mount, don't wait for observer tick
+  React.useEffect(() => {
+    if (!eager || !autoplayOnVisible || !bunnyVideoId) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const inViewport = rect.top < window.innerHeight && rect.bottom > 0;
+    if (!inViewport) return;
+    (async () => {
+      if (!hasInitialized.current) await initVideo();
+      const video = videoRef.current;
+      if (!video) return;
+      const muted = getSavedMute();
+      video.muted = muted;
+      setIsMuted(muted);
+      try { await video.play(); } catch {}
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   React.useEffect(() => {
     if (!autoplayOnVisible) return;
     const onVisibilityChange = () => {
       const video = videoRef.current;
+      const container = containerRef.current;
       if (!video) return;
       if (document.visibilityState === "hidden") {
         video.pause();
       } else {
-        if (hasInitialized.current && !isPausedByScroll.current) {
+        if (isPausedByScroll.current) return;
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        const inViewport = rect.top < window.innerHeight && rect.bottom > 0;
+        if (!inViewport) return;
+        if (!hasInitialized.current) {
+          initVideo().then(() => video.play().catch(() => {}));
+        } else {
           video.play().catch(() => {});
         }
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [autoplayOnVisible]);
+  }, [autoplayOnVisible, initVideo]);
 
   const containerStyle: React.CSSProperties = fillParent ? {
     width:          "100%",
@@ -1272,11 +1309,29 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             }}
             onWaiting={() => {
               if (bufferTimer.current) clearTimeout(bufferTimer.current);
-              bufferTimer.current = setTimeout(() => setIsBuffering(true), 800);
+              if (stallTimer.current) clearTimeout(stallTimer.current);
+              waitStartRef.current = Date.now();
+              bufferTimer.current = setTimeout(() => {
+                setIsBuffering(true);
+                console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ⏳ onWaiting — showing buffering dots at ${waitStartRef.current}`);
+                const video = videoRef.current;
+                if (!video) return;
+                stallTimer.current = setTimeout(() => {
+                  console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🔄 stall check at ${Date.now()} — paused=${video.paused} readyState=${video.readyState} (${Date.now() - waitStartRef.current}ms since waiting)`);
+                  if (video.readyState < 3) {
+                    console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🚨 stall detected — restarting HLS load`);
+                    try { hlsRef.current?.stopLoad(); hlsRef.current?.startLoad(-1); } catch {}
+                    video.play().catch(() => {});
+                  } else {
+                    console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ✅ stall check passed — readyState=${video.readyState}`);
+                  }
+                }, 3000);
+              }, 800);
             }}
             onPlaying={() => {
               if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
               if (slowTimer.current)   { clearTimeout(slowTimer.current);   slowTimer.current   = null; }
+              if (stallTimer.current)  { clearTimeout(stallTimer.current);  stallTimer.current  = null; }
               if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
               if (bunnyVideoId) watchedVideoIds.add(bunnyVideoId);
               console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ✅ onPlaying — videoSize=${videoRef.current?.offsetWidth}x${videoRef.current?.offsetHeight}`);
@@ -1287,6 +1342,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               setIsLoading(false);
               setShowPoster(false);
               setIsAutoplaying(false);
+              if (bunnyVideoId) {
+                window.dispatchEvent(new CustomEvent("freya:video-playing", { detail: { bunnyVideoId } }));
+              }
             }}
             onError={() => {
               if (videoRef.current && videoRef.current.src === "") return;

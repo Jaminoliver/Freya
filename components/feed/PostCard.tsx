@@ -206,6 +206,16 @@ function PostCardInner({
     setPollData(post.poll ?? null);
   }, [post.poll]);
 
+  useEffect(() => {
+    if (post.isLocked) return;
+    const first = post.media.find((m) => m.type === "video");
+    if (!first) return;
+    const timer = setTimeout(() => {
+      videoPlayerRef.current?.resume();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [post.isLocked]);
+
   const handleOpenSheet = useCallback(async () => {
     setSheetOpen(true);
     prefetchConversation();

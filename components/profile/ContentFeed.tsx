@@ -316,7 +316,88 @@ export default function ContentFeed({
 
   React.useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
+  // Prefetch manifest for first video as soon as posts are available
+  const firstVideoPreloaded = React.useRef(false);
+  React.useEffect(() => {
+    if (!apiPosts.length || firstVideoPreloaded.current) return;
+    firstVideoPreloaded.current = true;
+    const firstVideoPost = apiPosts.find((p) =>
+      p.media?.some((m) => m.media_type === "video" && m.bunny_video_id)
+    );
+    const videoId = firstVideoPost?.media?.find(
+      (m) => m.media_type === "video" && m.bunny_video_id
+    )?.bunny_video_id;
+    if (!videoId) return;
+    const conn = (navigator as any).connection;
+    const ect: string = conn?.effectiveType ?? "4g";
+    if (ect === "slow-2g" || ect === "2g") return;
+    fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${videoId}/playlist.m3u8`, {
+      method: "GET",
+      cache: "force-cache",
+    }).catch(() => {});
+    const thumbUrl = firstVideoPost?.media?.find(
+      (m) => m.media_type === "video" && m.bunny_video_id
+    )?.thumbnail_url ?? `https://vz-8bc100f4-3c0.b-cdn.net/${videoId}/thumbnail.jpg`;
+    const img = new Image();
+    img.src = thumbUrl;
+
+    // Preload thumbnails for next 9 posts
+    apiPosts.slice(0, 10).forEach((p) => {
+      const m = p.media?.find((m) => m.bunny_video_id || m.thumbnail_url);
+      if (!m) return;
+      const src = m.thumbnail_url ?? (m.bunny_video_id ? `https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/thumbnail.jpg` : null);
+      if (src) { const i = new Image(); i.src = src; }
+    });
+  }, [apiPosts]);
+
   
+
+  // Lookahead: pre-warm based on actual video playback and skip events
+  React.useEffect(() => {
+    if (!apiPosts.length) return;
+    const videoPosts = apiPosts.filter((p) =>
+      p.media?.some((m) => m.media_type === "video" && m.bunny_video_id)
+    );
+    const videoIdToIndex = new Map(
+      videoPosts.map((p, i) => [p.media?.find((m) => m.media_type === "video" && m.bunny_video_id)?.bunny_video_id, i])
+    );
+
+    const preWarm = (fromIndex: number, count: number) => {
+      const conn = (navigator as any).connection;
+      const ect: string = conn?.effectiveType ?? "4g";
+      if (ect === "slow-2g" || ect === "2g") return;
+      const ahead = ect === "3g" ? Math.min(count, 1) : count;
+      videoPosts.slice(fromIndex + 1, fromIndex + 1 + ahead).forEach((p) => {
+        const m = p.media?.find((m) => m.media_type === "video" && m.bunny_video_id);
+        if (!m?.bunny_video_id) return;
+        fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/playlist.m3u8`, {
+          method: "GET", cache: "force-cache",
+        }).catch(() => {});
+        if (m.thumbnail_url) { const img = new Image(); img.src = m.thumbnail_url; }
+      });
+    };
+
+    const onPlaying = (e: Event) => {
+      const { bunnyVideoId } = (e as CustomEvent).detail;
+      const idx = videoIdToIndex.get(bunnyVideoId);
+      if (idx === undefined) return;
+      preWarm(idx, 3);
+    };
+
+    const onSkipped = (e: Event) => {
+      const { bunnyVideoId } = (e as CustomEvent).detail;
+      const idx = videoIdToIndex.get(bunnyVideoId);
+      if (idx === undefined) return;
+      preWarm(idx, 2);
+    };
+
+    window.addEventListener("freya:video-playing", onPlaying);
+    window.addEventListener("freya:video-skipped", onSkipped);
+    return () => {
+      window.removeEventListener("freya:video-playing", onPlaying);
+      window.removeEventListener("freya:video-skipped", onSkipped);
+    };
+  }, [apiPosts]);
 
   const handleDeletePost = (id: string) => {
     setApiPosts((prev) => {
@@ -363,6 +444,7 @@ export default function ContentFeed({
           onImageClick={(p, idx) => { console.log("[ContentFeed] onImageClick called", { postId: p.id, idx }); onImageClick?.(p, idx); }}
           onPPVUpdated={handlePPVUpdated}
           autoplayOnVisible={true}
+          eager={index === 0}
         />
       </div>
     );

@@ -57,6 +57,8 @@ export default function RootLayout({
         <meta name="theme-color" content="#0A0A0F" />
         <meta name="apple-mobile-web-app-title" content="Fréya" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon.png" />
+        <link rel="preconnect" href="https://vz-8bc100f4-3c0.b-cdn.net" />
+        <link rel="dns-prefetch" href="https://vz-8bc100f4-3c0.b-cdn.net" />
       </head>
       <body className={inter.className}>
         <QueryProvider>

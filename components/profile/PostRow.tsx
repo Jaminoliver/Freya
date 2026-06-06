@@ -76,7 +76,7 @@ export interface ApiPost {
 export default function PostRow({
   post, isOwnProfile, isSubscribed,
   onLike, onComment, onTip, onUnlock,
-  viewer, onDelete, onImageClick, onPPVUpdated, autoplayOnVisible = false,
+  viewer, onDelete, onImageClick, onPPVUpdated, autoplayOnVisible = false, eager = false,
 }: {
   post:          ApiPost;
   isOwnProfile?: boolean;
@@ -90,6 +90,7 @@ export default function PostRow({
   onImageClick?:      (post: LightboxPost, index: number) => void;
   onPPVUpdated?:      (id: string, priceKobo: number) => void;
   autoplayOnVisible?: boolean;
+  eager?: boolean;
 }) {
   const router = useRouter();
   const openAuthModal = useAppStore((s) => s.openAuthModal);
@@ -127,6 +128,16 @@ export default function PostRow({
   const [isPPV,            setIsPPV]            = React.useState(post.is_ppv);
 
   React.useEffect(() => { setPpvPrice(post.ppv_price); setIsPPV(post.is_ppv); }, [post.ppv_price, post.is_ppv]);
+
+  React.useEffect(() => {
+    if (post.locked) return;
+    const first = post.media?.find((m) => m.media_type === "video");
+    if (!first) return;
+    const timer = setTimeout(() => {
+      videoPlayerRef.current?.resume();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [post.locked]);
 
   React.useEffect(() => {
     setPollData(post.poll ?? null);
@@ -352,6 +363,7 @@ export default function PostRow({
           username={post.profiles.username}
           avatarUrl={post.profiles.avatar_url ?? null}
           caption={caption}
+          eager={eager}
         />
         </div>
         );
