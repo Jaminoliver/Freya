@@ -517,6 +517,7 @@ function VideoControls({
               const [duration,    setDuration]    = React2.useState(video?.duration ?? 0);
               const [isSeeking,   setIsSeeking]   = React2.useState(false);
               const [captionExpanded, setCaptionExpanded] = React2.useState(false);
+              const [isPaused,    setIsPaused]    = React2.useState(!!(video?.paused));
               const seekBarRef    = React2.useRef<HTMLDivElement>(null);
               const wasPlayingRef = React2.useRef(false);
               const isSeekingRef  = React2.useRef(false);
@@ -526,14 +527,22 @@ function VideoControls({
 
               React2.useEffect(() => {
                 if (!video) return;
-                const onTime = () => { if (!isSeekingRef.current) setCurrentTime(video.currentTime); };
-                const onMeta = () => setDuration(video.duration);
-                video.addEventListener("timeupdate", onTime);
+                const onTime  = () => { if (!isSeekingRef.current) setCurrentTime(video.currentTime); };
+                const onMeta  = () => setDuration(video.duration);
+                const onPause = () => setIsPaused(true);
+                const onPlay  = () => setIsPaused(false);
+                video.addEventListener("timeupdate",     onTime);
                 video.addEventListener("loadedmetadata", onMeta);
+                video.addEventListener("pause",          onPause);
+                video.addEventListener("play",           onPlay);
+                video.addEventListener("playing",        onPlay);
                 if (video.duration) setDuration(video.duration);
                 return () => {
-                  video.removeEventListener("timeupdate", onTime);
+                  video.removeEventListener("timeupdate",     onTime);
                   video.removeEventListener("loadedmetadata", onMeta);
+                  video.removeEventListener("pause",          onPause);
+                  video.removeEventListener("play",           onPlay);
+                  video.removeEventListener("playing",        onPlay);
                 };
               }, []);
 
@@ -616,6 +625,16 @@ function VideoControls({
               return React2.createElement(React2.Fragment, null,
                 // bottom gradient
                 React2.createElement("div", { style: { position: "absolute", bottom: 0, left: 0, right: 0, height: "280px", background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)", pointerEvents: "none", zIndex: 1 } }),
+
+                // play/pause button — only visible when paused
+                isPaused && React2.createElement("div", {
+                  onClick: (e: any) => { e.stopPropagation(); if (video) { video.play().catch(() => {}); } },
+                  style: { position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 17, cursor: "pointer" },
+                },
+                  React2.createElement("svg", { width: 64, height: 64, viewBox: "0 0 24 24", fill: "#fff" },
+                    React2.createElement("polygon", { points: "5,3 19,12 5,21" })
+                  )
+                ),
 
                 // unified bottom stack
                 React2.createElement("div", {
