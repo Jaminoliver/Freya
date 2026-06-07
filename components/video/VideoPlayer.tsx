@@ -814,11 +814,13 @@ interface VideoPlayerProps {
   eager?:             boolean;
   knownWidth?:        number | null;
   knownHeight?:       number | null;
-  creatorHandle?:  string;
-  displayName?:    string;
-  username?:       string;
-  avatarUrl?:      string | null;
-  caption?:        string | null;
+  creatorHandle?:    string;
+  displayName?:      string;
+  username?:         string;
+  avatarUrl?:        string | null;
+  caption?:          string | null;
+  autoPlay?:         boolean;
+  hideMuteButton?:   boolean;
 }
 
 export interface VideoPlayerHandle {
@@ -827,6 +829,8 @@ export interface VideoPlayerHandle {
   getCurrentTime: () => number;
   _videoEl: HTMLVideoElement | null;
   resume: (time?: number) => void;
+  toggleMute: () => void;
+  isMuted: () => boolean;
 }
 
 const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer({
@@ -848,6 +852,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   username,
   avatarUrl,
   caption,
+  autoPlay        = false,
+  hideMuteButton  = false,
 }: VideoPlayerProps, ref) {
   const videoRef       = React.useRef<HTMLVideoElement | null>(null);
   const containerRef   = React.useRef<HTMLDivElement | null>(null);
@@ -878,6 +884,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const slowTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const waitStartRef = React.useRef<number>(0);
   const stallTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const autoPlayRef = React.useRef(autoPlay);
+  React.useEffect(() => { autoPlayRef.current = autoPlay; }, [autoPlay]);
 
   React.useEffect(() => {
     const check = () => setIsMobile(!window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -1120,6 +1129,20 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     try { await video?.play(); } catch { }
   }, [initVideo]);
 
+  React.useEffect(() => {
+    if (!autoPlayRef.current || !bunnyVideoId) return;
+    console.log(`[VP:${bunnyVideoId?.slice(0,8)}] autoPlay effect fired`);
+    const t = setTimeout(() => {
+      console.log(`[VP:${bunnyVideoId?.slice(0,8)}] autoPlay calling handlePosterPlay`);
+      handlePosterPlay().then(() => {
+        console.log(`[VP:${bunnyVideoId?.slice(0,8)}] autoPlay handlePosterPlay resolved`);
+      }).catch((err: any) => {
+        console.warn(`[VP:${bunnyVideoId?.slice(0,8)}] autoPlay handlePosterPlay error`, err);
+      });
+    }, 100);
+    return () => clearTimeout(t);
+  }, [bunnyVideoId, handlePosterPlay]);
+
   const handleToggleMute = React.useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -1133,9 +1156,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     pause: () => videoRef.current?.pause(),
     getHls: () => hlsRef.current,
     getCurrentTime: () => videoRef.current?.currentTime ?? 0,
-    // Exposed so PostCard/PostRow can re-attach the borrowed HLS instance
-    // back to this video element after fullscreen closes.
     _videoEl: videoRef.current,
+    toggleMute: () => handleToggleMute(),
+    isMuted: () => getSavedMute(),
     resume: (time?: number) => {
       const video = videoRef.current;
       if (!video) return;
@@ -1231,7 +1254,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               onError={() => setPosterError(true)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
             />
-            {!isLoading && !isAutoplaying && (
+            {!isLoading && !isAutoplaying && !autoPlay && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}>
                 <polygon points="5,3 19,12 5,21"/>
               </svg>
@@ -1325,7 +1348,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         
 
         {/* Mute button visible on poster */}
-        <button
+        {!hideMuteButton && <button
             style={{ position: "absolute", top: 12, right: 12, zIndex: 6, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
             onClick={(e) => { e.stopPropagation(); handleToggleMute(); }}
             onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleMute(); }}
@@ -1336,7 +1359,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             ) : (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
             )}
-          </button>
+          </button>}
 
         {/* Creator handle overlay */}
         {creatorHandle && (

@@ -52,7 +52,7 @@ export async function POST(
   // Look up the media rows uploaded earlier — restricted to user's own
   const { data: mediaRows, error: mediaError } = await supabase
     .from("media")
-    .select("id, file_url, thumbnail_url, media_type, bunny_video_id")
+    .select("id, file_url, thumbnail_url, media_type, bunny_video_id, processing_status, raw_video_url")
     .in("id", mediaIds)
     .eq("creator_id", user.id);
 
@@ -99,11 +99,14 @@ export async function POST(
 
   // Insert message_media rows
   const mediaInsertRows = orderedMedia.map((m, i) => ({
-    message_id:    message.id,
-    url:           m.file_url,
-    thumbnail_url: m.thumbnail_url,
-    media_type:    m.media_type === "video" ? "video" : "photo",
-    display_order: i,
+    message_id:        message.id,
+    url:               m.file_url,
+    thumbnail_url:     m.thumbnail_url,
+    media_type:        m.media_type === "video" ? "video" : "photo",
+    display_order:     i,
+    processing_status: m.processing_status ?? null,
+    bunny_video_id:    m.bunny_video_id ?? null,
+    raw_video_url:     m.raw_video_url ?? null,
   }));
 
   const { error: mmError } = await supabase.from("message_media").insert(mediaInsertRows);

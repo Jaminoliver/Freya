@@ -88,7 +88,7 @@ export async function GET(
   // Step 2: get media rows
   let mediaQuery = supabase
     .from("message_media")
-    .select("id, message_id, url, thumbnail_url, media_type, display_order")
+    .select("id, message_id, url, thumbnail_url, media_type, display_order, processing_status, bunny_video_id, raw_video_url")
     .in("message_id", messageIds)
     .order("display_order", { ascending: true });
 
@@ -130,12 +130,15 @@ export async function GET(
     const { data: fallbackRows } = await fallbackQuery;
 
     finalMedia = (fallbackRows ?? []).map((r: any) => ({
-      id:            r.id,
-      message_id:    r.id,
-      url:           r.media_url,
-      thumbnail_url: r.thumbnail_url,
-      media_type:    r.media_type,
-      display_order: 0,
+      id:                r.id,
+      message_id:        r.id,
+      url:               r.media_url,
+      thumbnail_url:     r.thumbnail_url,
+      media_type:        r.media_type,
+      display_order:     0,
+      processing_status: null,
+      bunny_video_id:    null,
+      raw_video_url:     null,
     }));
   }
 
@@ -155,13 +158,16 @@ export async function GET(
       return {
         id:           r.id,
         messageId:    r.message_id,
-        url:          isUnlocked ? (
+        url:              isUnlocked ? (
           r.url?.includes("vz-8bc100f4-3c0.b-cdn.net")
-            ? r.url  // keep as HLS playlist — LightboxVideo handles quality via hls.js
+            ? r.url
             : refreshBunnyUrl(r.url)
         ) : null,
-        thumbnailUrl: thumb,
-        mediaType:    isVideo ? "video" : "image",
+        thumbnailUrl:     thumb,
+        mediaType:        isVideo ? "video" : "image",
+        processingStatus: isVideo ? (r.processing_status ?? null) : null,
+        rawVideoUrl:      isVideo ? (r.raw_video_url ?? null) : null,
+        bunnyVideoId:     isVideo ? (r.bunny_video_id ?? null) : null,
         isPPV,
         isUnlocked,
         isSender,

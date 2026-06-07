@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
+import type { VideoPlayerHandle } from "@/components/video/VideoPlayer";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import VideoPlayer from "@/components/video/VideoPlayer";
 
 interface MediaItem {
-  url:       string;
-  type:      "image" | "video";
-  messageId: number;
+  url:              string;
+  type:             "image" | "video";
+  messageId:        number;
+  processingStatus?: string | null;
+  rawVideoUrl?:      string | null;
+  bunnyVideoId?:     string | null;
 }
 
 interface Props {
@@ -22,8 +26,10 @@ interface Props {
 export function MediaLightbox({ items, initialIndex, onClose }: Props) {
   const [index,   setIndex]   = useState(initialIndex);
   const [loading, setLoading] = useState(true);
+  const [lbMuted, setLbMuted] = useState(() => { try { return localStorage.getItem("vp_muted") === "true"; } catch { return false; } });
   const touchStartX   = useRef<number | null>(null);
   const thumbScrolled = useRef(false);
+  const vpRef         = useRef<VideoPlayerHandle | null>(null);
   const current     = items[index];
 
   const prev = useCallback(() => {
@@ -110,7 +116,7 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
         {/* Media */}
         <div
           onClick={(e) => e.stopPropagation()}
-          style={{ width: "90vw", height: "80vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}
+          style={{ width: "90vw", height: "80vh", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", isolation: "isolate" }}
         >
           {loading && current.type === "image" && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -138,14 +144,37 @@ export function MediaLightbox({ items, initialIndex, onClose }: Props) {
               style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain", borderRadius: "8px", opacity: loading ? 0 : 1, transition: "opacity 0.2s" }}
             />
           ) : (
-            <VideoPlayer
-              key={current.url}
-              bunnyVideoId={current.url.match(/b-cdn\.net\/([^/]+)\//)?.[1] ?? null}
-              fillParent
-              objectFit="contain"
-              hideInternalBlur
-              autoPlay
-            />
+            (() => {
+              const vid = current.bunnyVideoId ?? current.url.match(/b-cdn\.net\/([^/]+)\//)?.[1] ?? null;
+              return (
+                <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                  <VideoPlayer
+                      ref={vpRef}
+                      key={current.url}
+                      bunnyVideoId={vid}
+                      processingStatus={current.processingStatus ?? null}
+                      rawVideoUrl={current.rawVideoUrl ?? null}
+                      fillParent
+                      objectFit="contain"
+                      hideInternalBlur
+                      autoPlay
+                      hideMuteButton
+                    />
+                    <button
+                      style={{ position: "absolute", top: 12, right: 12, zIndex: 9999, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
+                      onClick={(e) => { e.stopPropagation(); vpRef.current?.toggleMute(); setLbMuted((m) => !m); }}
+                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); vpRef.current?.toggleMute(); setLbMuted((m) => !m); }}
+                      aria-label={lbMuted ? "Unmute" : "Mute"}
+                    >
+                      {lbMuted ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                      )}
+                    </button>
+                </div>
+              );
+            })()
           )}
         </div>
 
