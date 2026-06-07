@@ -8,7 +8,7 @@ import type { Post } from "@/lib/types/profile";
 import PostRow from "@/components/profile/PostRow";
 import type { ApiPost } from "@/components/profile/PostRow";
 import type { LightboxPost } from "@/components/profile/Lightbox";
-import { getBunnyThumbnail } from "@/components/video/VideoPlayer";
+import { getBunnyThumbnail, warmedVideoIds } from "@/components/video/VideoPlayer";
 import { useAppStore } from "@/lib/store/appStore";
 import { ContentFeedSkeleton } from "@/components/loadscreen/ContentFeedSkeleton";
 
@@ -393,9 +393,30 @@ export default function ContentFeed({
 
     window.addEventListener("freya:video-playing", onPlaying);
     window.addEventListener("freya:video-skipped", onSkipped);
+
+    const observers: IntersectionObserver[] = [];
+    videoPosts.forEach((p, i) => {
+      const m = p.media?.find((m) => m.media_type === "video" && m.bunny_video_id);
+      if (!m?.bunny_video_id) return;
+      const el = document.querySelector(`[data-postid="${p.id}"]`);
+      if (!el) return;
+      const obs = new IntersectionObserver(([entry]) => {
+        if (!entry.isIntersecting) return;
+        if (warmedVideoIds.has(m.bunny_video_id!)) return;
+        warmedVideoIds.add(m.bunny_video_id!);
+        console.log(`[PREWARM] 👁 scroll-based warming ${m.bunny_video_id!.slice(0,8)}`);
+        fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/playlist.m3u8`, { method: "GET", cache: "force-cache" }).catch(() => {});
+        preWarm(i, 2);
+        obs.disconnect();
+      }, { rootMargin: "400px" });
+      obs.observe(el);
+      observers.push(obs);
+    });
+
     return () => {
       window.removeEventListener("freya:video-playing", onPlaying);
       window.removeEventListener("freya:video-skipped", onSkipped);
+      observers.forEach((o) => o.disconnect());
     };
   }, [apiPosts]);
 
@@ -432,6 +453,7 @@ export default function ContentFeed({
     return (
       <div
         key={post.id}
+        data-postid={post.id}
         style={{ margin: isLandscape ? "10px 0" : "10px 12px", borderRadius: isLandscape ? "0" : "14px", overflow: "hidden" }}
       >
         {index === 0 && (

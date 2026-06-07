@@ -11,6 +11,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { queryKeys, staleTimes } from "@/lib/query/keys";
 import type { PollData } from "@/components/feed/PollDisplay";
 import { type CreatorStoryGroup, applyLocalViewed } from "@/components/story/StoryBar";
+import { warmedVideoIds } from "@/components/video/VideoPlayer";
 import type { User } from "@/lib/types/profile";
 import { useAppStore } from "@/lib/store/appStore";
 
@@ -245,11 +246,13 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
     const preWarm = (fromIndex: number, count: number) => {
       const conn = (navigator as any).connection;
       const ect: string = conn?.effectiveType ?? "4g";
-      if (ect === "slow-2g" || ect === "2g") return;
+      if (ect === "slow-2g" || ect === "2g") { console.log(`[PREWARM] ⛔ skipped — network too slow (${ect})`); return; }
       const ahead = ect === "3g" ? Math.min(count, 1) : count;
+      console.log(`[PREWARM] 🔥 lookahead from index=${fromIndex} count=${ahead} network=${ect}`);
       videoPosts.slice(fromIndex + 1, fromIndex + 1 + ahead).forEach((p) => {
         const m = p.media.find((m) => m.media_type === "video" && m.bunny_video_id);
         if (!m?.bunny_video_id) return;
+        console.log(`[PREWARM] 📡 warming ${m.bunny_video_id.slice(0,8)}`);
         fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/playlist.m3u8`, {
           method: "GET", cache: "force-cache",
         }).catch(() => {});
@@ -273,9 +276,30 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
 
     window.addEventListener("freya:video-playing", onPlaying);
     window.addEventListener("freya:video-skipped", onSkipped);
+
+    const observers: IntersectionObserver[] = [];
+    videoPosts.forEach((p, i) => {
+      const m = p.media.find((m) => m.media_type === "video" && m.bunny_video_id);
+      if (!m?.bunny_video_id) return;
+      const el = document.querySelector(`[data-postid="${p.id}"]`);
+      if (!el) return;
+      const obs = new IntersectionObserver(([entry]) => {
+        if (!entry.isIntersecting) return;
+        if (warmedVideoIds.has(m.bunny_video_id!)) return;
+        warmedVideoIds.add(m.bunny_video_id!);
+        console.log(`[PREWARM] 👁 scroll-based warming ${m.bunny_video_id!.slice(0,8)}`);
+        fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/playlist.m3u8`, { method: "GET", cache: "force-cache" }).catch(() => {});
+        preWarm(i, 2);
+        obs.disconnect();
+      }, { rootMargin: "400px" });
+      obs.observe(el);
+      observers.push(obs);
+    });
+
     return () => {
       window.removeEventListener("freya:video-playing", onPlaying);
       window.removeEventListener("freya:video-skipped", onSkipped);
+      observers.forEach((o) => o.disconnect());
     };
   }, [posts]);
 
@@ -443,6 +467,7 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
       items.push(
         <div
           key={post.id}
+          data-postid={post.id}
           style={{ margin: "10px 12px", borderRadius: "14px", overflow: "hidden" }}
         >
           {index === 0 && (

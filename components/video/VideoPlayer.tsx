@@ -17,7 +17,7 @@ const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
 
 // Module-level cache — survives re-mounts, cleared only on page reload
 const watchedVideoIds = new Set<string>();
-const warmedVideoIds  = new Set<string>();
+export const warmedVideoIds  = new Set<string>();
 
 // Shared across every VideoPlayer instance on the page.
 // When any fullscreen is open, all intersection observers skip auto-play.
@@ -81,6 +81,8 @@ interface ControlsProps {
   username?:               string;
   avatarUrl?:              string | null;
   caption?:                string | null;
+  isBuffering?:            boolean;
+  isLoading?:              boolean;
 }
 
 function VideoControls({
@@ -100,6 +102,8 @@ function VideoControls({
   username,
   avatarUrl,
   caption,
+  isBuffering = false,
+  isLoading = false,
 }: ControlsProps) {
   const [playing,     setPlaying]     = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash, setCenterFlash] = React.useState<"play" | "pause" | null>(null);
@@ -396,9 +400,10 @@ function VideoControls({
      
 
       {/* Play indicator — shows when paused, hidden in fake fullscreen (FullscreenOverlay has its own) */}
-      {!playing && isStarted && !isFakeFullscreen && (
+      {(() => { console.log(`[PlayBtn] playing=${playing} isStarted=${isStarted} isFakeFullscreen=${isFakeFullscreen} isBuffering=${isBuffering} isLoading=${isLoading}`); return null; })()}
+{!playing && isStarted && !isFakeFullscreen && !isBuffering && !isLoading && (
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 6, pointerEvents: "none" }}>
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)">
             <polygon points="5,3 19,12 5,21"/>
           </svg>
         </div>
@@ -1090,7 +1095,11 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (ect === "slow-2g" || ect === "2g") return;
 
     // Pre-fetch manifest into browser HTTP cache immediately on mount
-    fetch(getBunnyHLS(bunnyVideoId), { method: "GET", cache: "force-cache" }).catch(() => {});
+    console.log(`[PREWARM:${bunnyVideoId?.slice(0,8)}] 🔥 starting prewarm`);
+    const t0 = Date.now();
+    fetch(getBunnyHLS(bunnyVideoId), { method: "GET", cache: "force-cache" })
+      .then(() => console.log(`[PREWARM:${bunnyVideoId?.slice(0,8)}] ✅ done in ${Date.now()-t0}ms`))
+      .catch(() => console.log(`[PREWARM:${bunnyVideoId?.slice(0,8)}] ❌ failed`));
   }, [bunnyVideoId]);
 
   React.useEffect(() => {
@@ -1254,7 +1263,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               onError={() => setPosterError(true)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }}
             />
-            {!isLoading && !isAutoplaying && !autoPlay && (
+            {!isLoading && !isAutoplaying && !autoPlay && !isBuffering && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}>
                 <polygon points="5,3 19,12 5,21"/>
               </svg>
@@ -1280,17 +1289,31 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               if (bufferTimer.current) clearTimeout(bufferTimer.current);
               if (stallTimer.current) clearTimeout(stallTimer.current);
               waitStartRef.current = Date.now();
+              setIsBuffering(true);
               bufferTimer.current = setTimeout(() => {
-                setIsBuffering(true);
                 console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ⏳ onWaiting — showing buffering dots at ${waitStartRef.current}`);
                 const video = videoRef.current;
                 if (!video) return;
                 stallTimer.current = setTimeout(() => {
-                  console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🔄 stall check at ${Date.now()} — paused=${video.paused} readyState=${video.readyState} (${Date.now() - waitStartRef.current}ms since waiting)`);
+                  const hls = hlsRef.current;
+                  const conn = (navigator as any).connection;
+                  console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🔄 stall check — paused=${video.paused} readyState=${video.readyState} buffered=${video.buffered.length > 0 ? video.buffered.end(video.buffered.length-1).toFixed(2) : 0}s currentTime=${video.currentTime.toFixed(2)}s`);
+                  console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🌐 network — effectiveType=${conn?.effectiveType ?? "unknown"} downlink=${conn?.downlink ?? "unknown"}Mbps rtt=${conn?.rtt ?? "unknown"}ms`);
+                  console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 📦 hls — level=${hls?.currentLevel} bandwidthEstimate=${hls ? Math.round(hls.bandwidthEstimate/1000) : "n/a"}kbps`);
                   if (video.readyState < 3) {
-                    console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🚨 stall detected — restarting HLS load`);
-                    try { hlsRef.current?.stopLoad(); hlsRef.current?.startLoad(-1); } catch {}
-                    video.play().catch(() => {});
+                    if (video.readyState === 0 && hlsRef.current?.currentLevel === undefined) {
+                      console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ⚠️ HLS never attached — falling back to MP4`);
+                      try { hlsRef.current?.destroy(); } catch {}
+                      hlsRef.current = null;
+                      hasInitialized.current = false;
+                      video.src = getBunnyMP4(bunnyVideoId!, "720");
+                      video.load();
+                      video.play().catch(() => {});
+                    } else {
+                      console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🚨 stall detected — readyState=${video.readyState} — restarting HLS load`);
+                      try { hlsRef.current?.stopLoad(); hlsRef.current?.startLoad(-1); } catch {}
+                      video.play().catch(() => {});
+                    }
                   } else {
                     console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ✅ stall check passed — readyState=${video.readyState}`);
                   }
@@ -1397,6 +1420,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             username={username}
             avatarUrl={avatarUrl}
             caption={caption}
+            isBuffering={isBuffering}
+            isLoading={isLoading}
           />
         )}
 
