@@ -25,7 +25,7 @@ export const preloadedSegments = new Set<string>();
 let anyFullscreenOpen = false;
 export function setGlobalFullscreenOpen(open: boolean) { anyFullscreenOpen = open; }
 
-let activeHlsCount = 0;
+// removed
 
 export function getBunnyThumbnail(videoId: string) {
   return `https://${BUNNY_PULL_ZONE}/${videoId}/thumbnail.jpg`;
@@ -993,7 +993,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch {}
       hlsRef.current = null;
-      activeHlsCount = Math.max(0, activeHlsCount - 1);
     }
     if (slowTimer.current) { clearTimeout(slowTimer.current); slowTimer.current = null; }
     hasInitialized.current = false;
@@ -1006,8 +1005,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const video = videoRef.current;
     if (!video || !bunnyVideoId || hasInitialized.current) { console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] ⛔ initVideo blocked — video=${!!video} bunnyVideoId=${!!bunnyVideoId} hasInitialized=${hasInitialized.current}`, "color: #F87171; font-weight: bold"); return; }
     hasInitialized.current = true;
-    activeHlsCount++;
-    if (activeHlsCount > 2) { activeHlsCount--; hasInitialized.current = false; console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] ⛔ prewarm skipped — HLS cap reached`, "color: #F59E0B"); return; }
     setHasError(false);
     if (video.disableRemotePlayback !== undefined) video.disableRemotePlayback = true;
     console.log(`[VP:${bunnyVideoId?.slice(0,8)}] initVideo start — videoSize=${video.offsetWidth}x${video.offsetHeight}`);
@@ -1103,7 +1100,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
-        activeHlsCount = Math.max(0, activeHlsCount - 1);
       }
     };
   }, []);
