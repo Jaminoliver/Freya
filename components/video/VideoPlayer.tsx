@@ -1245,7 +1245,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             src={posterSrc}
             alt=""
             aria-hidden
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.45)", transform: "scale(1.1)", zIndex: 0, pointerEvents: "none", opacity: showPoster ? 0 : 1, transition: "opacity 0.2s ease" }}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.45)", transform: "scale(1.1)", zIndex: 0, pointerEvents: "none", opacity: showPoster ? 0 : 1, transition: showPoster ? "none" : "opacity 0.2s ease" }}
           />
         )}
 
@@ -1257,7 +1257,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         {(showPoster || isLoading) && (
           <div
             onClick={showPoster ? handlePosterPlay : undefined}
-            style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: showPoster ? "pointer" : "default", opacity: showPoster ? 1 : 0, transition: "opacity 0.25s ease", pointerEvents: showPoster ? "auto" : "none" }}
+            style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: showPoster ? "pointer" : "default", opacity: showPoster ? 1 : 0, transition: showPoster ? "opacity 0.25s ease" : "none", pointerEvents: showPoster ? "auto" : "none" }}
           >
             <img
               src={posterSrc}
@@ -1357,7 +1357,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               display:    "block",
               zIndex:     2,
               opacity:    showPoster ? 0 : 1,
-              transition: "opacity 0.25s ease",
+transition: showPoster ? "opacity 0.25s ease" : "none",
             }}
           />
         </div>
