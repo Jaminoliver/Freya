@@ -1317,6 +1317,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               setIsBuffering(false);
             }}
             onWaiting={() => {
+              const video = videoRef.current;
+              if (video && video.duration && (video.currentTime >= video.duration - 0.5 || video.currentTime <= 0.3)) return;
               if (bufferTimer.current) clearTimeout(bufferTimer.current);
               if (stallTimer.current) clearTimeout(stallTimer.current);
               waitStartRef.current = Date.now();
