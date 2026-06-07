@@ -84,6 +84,7 @@ interface ControlsProps {
   caption?:                string | null;
   isBuffering?:            boolean;
   isLoading?:              boolean;
+  onPosterPlay?:           () => void;
 }
 
 function VideoControls({
@@ -105,6 +106,7 @@ function VideoControls({
   caption,
   isBuffering = false,
   isLoading = false,
+  onPosterPlay,
 }: ControlsProps) {
   const [playing,     setPlaying]     = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash, setCenterFlash] = React.useState<"play" | "pause" | null>(null);
@@ -189,10 +191,10 @@ function VideoControls({
     e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) { video.play().catch(() => {}); flashCenter("play"); }
+    if (video.paused) { onPosterPlay ? onPosterPlay() : video.play().catch(() => {}); flashCenter("play"); }
     else              { video.pause(); flashCenter("pause"); }
     showControls();
-  }, [videoRef, showControls, flashCenter]);
+  }, [videoRef, showControls, flashCenter, onPosterPlay]);
 
   // ── Seek ──────────────────────────────────────────────────────────────
   const seekTo = React.useCallback((clientX: number) => {
@@ -963,6 +965,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
   const teardown = React.useCallback((force = false) => {
     if (!force && !hasInitialized.current) return;
+    console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] 🔥 teardown called — force=${force} stack=${new Error().stack?.split('\n')[2]?.trim()}`, "color: #FB923C; font-weight: bold");
     const video = videoRef.current;
     if (!force && bunnyVideoId && watchedVideoIds.has(bunnyVideoId)) {
       if (video) video.pause();
@@ -991,7 +994,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
   const initVideo = React.useCallback(async () => {
     const video = videoRef.current;
-    if (!video || !bunnyVideoId || hasInitialized.current) return;
+    if (!video || !bunnyVideoId || hasInitialized.current) { console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] ⛔ initVideo blocked — video=${!!video} bunnyVideoId=${!!bunnyVideoId} hasInitialized=${hasInitialized.current}`, "color: #F87171; font-weight: bold"); return; }
     hasInitialized.current = true;
     setHasError(false);
     console.log(`[VP:${bunnyVideoId?.slice(0,8)}] initVideo start — videoSize=${video.offsetWidth}x${video.offsetHeight}`);
@@ -1009,19 +1012,31 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
     try {
       if (Hls.isSupported()) {
-        const savedBw = Number(localStorage.getItem("hls_bw")) || 8_000_000;
+        const savedBw = Number(localStorage.getItem("hls_bw")) || 0;
+        const conn = (navigator as any).connection;
+        const downlink: number = conn?.downlink ?? 10;
+        const effectiveType: string = conn?.effectiveType ?? "4g";
+        const isSlow = downlink < 5 || effectiveType === "3g" || effectiveType === "2g" || effectiveType === "slow-2g";
+        const defaultEstimate = isSlow
+          ? 1_500_000
+          : savedBw > 0
+            ? Math.min(savedBw, 5_000_000)
+            : 3_000_000;
+        console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] 🌐 network — effectiveType=${effectiveType} downlink=${downlink}Mbps isSlow=${isSlow}`, "color: #60A5FA; font-weight: bold");
+        console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] 📊 ABR init — savedBw=${savedBw > 0 ? Math.round(savedBw/1000)+"kbps" : "none"} defaultEstimate=${Math.round(defaultEstimate/1000)}kbps testBandwidth=${!isSlow}`, "color: #60A5FA; font-weight: bold");
         const hls = new Hls({
           startLevel:             -1,
-          testBandwidth:          false,
+          testBandwidth:          !isSlow,
           capLevelToPlayerSize:   true,
           lowLatencyMode:         false,
-          abrEwmaDefaultEstimate: savedBw,
+          abrEwmaDefaultEstimate: defaultEstimate,
           abrEwmaFastVoD:         2,
           abrEwmaSlowVoD:         6,
           abrBandWidthFactor:     0.85,
           abrBandWidthUpFactor:   0.6,
-          maxBufferLength:        30,
-          maxMaxBufferLength:     60,
+          maxBufferLength:        10,
+          maxMaxBufferLength:     30,
+          backBufferLength:       30,
           maxStarvationDelay:     2,
         });
         hlsRef.current = hls;
@@ -1036,6 +1051,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         
         let mediaErrorRecovered = false;
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
+          console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] 🔴 HLS error — fatal=${data?.fatal} type=${data?.type} details=${data?.details}`, "color: #F87171; font-weight: bold");
           if (!data?.fatal) return;
           if (data.type === "mediaError" && !mediaErrorRecovered) {
             mediaErrorRecovered = true;
@@ -1050,6 +1066,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         });
         hls.loadSource(hlsSrc);
         hls.attachMedia(video);
+        console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] 🔗 attachMedia called — media=${!!hls.media} videoEl=${!!video} videoInDOM=${document.contains(video)}`, "color: #A78BFA; font-weight: bold");
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = getBunnyHLS(bunnyVideoId);
         video.load();
@@ -1068,6 +1085,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
   React.useEffect(() => {
     return () => {
+      console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] 💀 cleanup effect — unmounting, destroying HLS`, "color: #E879F9; font-weight: bold");
       if (bufferTimer.current) clearTimeout(bufferTimer.current);
       if (loadingTimer.current) clearTimeout(loadingTimer.current);
       if (stallTimer.current) clearTimeout(stallTimer.current);
@@ -1098,14 +1116,14 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.intersectionRatio < 0.2) {
-        teardown();
+        if (!isBuffering) teardown();
         setShowPoster(true);
       }
     }, { threshold: [0, 0.2] });
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, [teardown]);
+  }, [teardown, isBuffering]);
 
   const handleLoadedMetadata = React.useCallback(() => {
     if (fillParent || externalRatio) return;
@@ -1280,35 +1298,30 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               if (stallTimer.current) clearTimeout(stallTimer.current);
               waitStartRef.current = Date.now();
               setIsBuffering(true);
+              const conn2 = (navigator as any).connection;
+              const isSlow2 = (conn2?.downlink ?? 10) < 5 || ["3g","2g","slow-2g"].includes(conn2?.effectiveType ?? "");
               bufferTimer.current = setTimeout(() => {
-                console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ⏳ onWaiting — showing buffering dots at ${waitStartRef.current}`);
+                console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ⏳ onWaiting — showing buffering dots at ${waitStartRef.current} isSlow=${isSlow2}`);
                 const video = videoRef.current;
                 if (!video) return;
                 stallTimer.current = setTimeout(() => {
+                  if (watchedVideoIds.has(bunnyVideoId!)) return; // already played successfully
                   const hls = hlsRef.current;
                   const conn = (navigator as any).connection;
-                  console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🔄 stall check — paused=${video.paused} readyState=${video.readyState} buffered=${video.buffered.length > 0 ? video.buffered.end(video.buffered.length-1).toFixed(2) : 0}s currentTime=${video.currentTime.toFixed(2)}s`);
+                  console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🔄 stall check — paused=${video.paused} readyState=${video.readyState} buffered=${video.buffered.length > 0 ? video.buffered.end(video.buffered.length-1).toFixed(2) : 0}s currentTime=${video.currentTime.toFixed(2)}s hlsAlive=${!!hls} hlsMedia=${!!hls?.media} hlsLevels=${hls?.levels?.length ?? "n/a"}`);
                   console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🌐 network — effectiveType=${conn?.effectiveType ?? "unknown"} downlink=${conn?.downlink ?? "unknown"}Mbps rtt=${conn?.rtt ?? "unknown"}ms`);
                   console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 📦 hls — level=${hls?.currentLevel} bandwidthEstimate=${hls ? Math.round(hls.bandwidthEstimate/1000) : "n/a"}kbps`);
                   if (video.readyState < 3) {
-                    if (video.readyState === 0 && hlsRef.current?.currentLevel === undefined) {
-                      console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ⚠️ HLS never attached — falling back to MP4`);
-                      try { hlsRef.current?.destroy(); } catch {}
-                      hlsRef.current = null;
-                      hasInitialized.current = false;
-                      video.src = getBunnyMP4(bunnyVideoId!, "720");
-                      video.load();
-                      video.play().catch(() => {});
-                    } else {
-                      console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🚨 stall detected — readyState=${video.readyState} — restarting HLS load`);
-                      try { hlsRef.current?.stopLoad(); hlsRef.current?.startLoad(-1); } catch {}
-                      video.play().catch(() => {});
-                    }
+                    console.log(`[VP:${bunnyVideoId?.slice(0,8)}] 🚨 stall detected — readyState=${video.readyState} — restarting HLS load`);
+                    const hls2 = hlsRef.current;
+if (hls2 && hls2.media) {
+  try { hls2.stopLoad(); hls2.startLoad(-1); } catch {}
+}                    video.play().catch(() => {});
                   } else {
                     console.log(`[VP:${bunnyVideoId?.slice(0,8)}] ✅ stall check passed — readyState=${video.readyState}`);
                   }
-                }, 3000);
-              }, 800);
+                }, isSlow2 ? 8000 : 3000);
+              }, isSlow2 ? 2000 : 800);
             }}
             onPlaying={() => {
               if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
@@ -1412,6 +1425,7 @@ transition: showPoster ? "opacity 0.25s ease" : "none",
             caption={caption}
             isBuffering={isBuffering}
             isLoading={isLoading}
+            onPosterPlay={handlePosterPlay}
           />
         )}
 
