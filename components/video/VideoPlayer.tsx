@@ -370,6 +370,7 @@ function VideoControls({
         style={{ position: "absolute", inset: 0, zIndex: 12, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none", touchAction: "manipulation" }}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest("button")) return;
+          if (isMobile) return; // touch handled by onTouchEnd
           handlePlayPause(e);
         }}
         onTouchStart={(e) => {
@@ -382,6 +383,7 @@ function VideoControls({
         onTouchEnd={(e) => {
           if ((e.target as HTMLElement).closest("button")) return;
           e.stopPropagation();
+          e.preventDefault();
           const target = e.currentTarget as HTMLDivElement;
           const held = Date.now() - Number(target.dataset.touchStart ?? 0);
           const dist = Math.sqrt(
@@ -389,7 +391,6 @@ function VideoControls({
             (e.changedTouches[0].clientY - Number(target.dataset.touchStartY ?? 0)) ** 2
           );
           if (held < 200 && dist < 10) {
-            e.preventDefault();
             handlePlayPause(e);
           }
         }}
@@ -520,7 +521,7 @@ function VideoControls({
 
             // Inject overlay
             const overlayDiv = document.createElement("div");
-            overlayDiv.style.cssText = "position:absolute;inset:0;z-index:20;pointer-events:auto;";
+            overlayDiv.style.cssText = "position:absolute;inset:0;z-index:11;pointer-events:none;";
             portal.appendChild(overlayDiv);
             const ReactDOMClient = (await import("react-dom/client")).default;
             const React2 = (await import("react")).default;
@@ -644,7 +645,7 @@ function VideoControls({
                 // play/pause button — only visible when paused
                 isPaused && React2.createElement("div", {
                   onClick: (e: any) => { e.stopPropagation(); if (video) { video.play().catch(() => {}); } },
-                  style: { position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 17, cursor: "pointer" },
+                  style: { position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 17, cursor: "pointer", pointerEvents: "auto" },
                 },
                   React2.createElement("svg", { width: 64, height: 64, viewBox: "0 0 24 24", fill: "#fff" },
                     React2.createElement("polygon", { points: "5,3 19,12 5,21" })
@@ -653,7 +654,7 @@ function VideoControls({
 
                 // unified bottom stack
                 React2.createElement("div", {
-                  style: { position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 16, display: "flex", flexDirection: "column", padding: "0 12px" },
+                  style: { position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 16, display: "flex", flexDirection: "column", padding: "0 12px", pointerEvents: "auto" },
                   onClick: (e: any) => e.stopPropagation(),
                 },
                   // avatar row
@@ -754,21 +755,8 @@ function VideoControls({
             }, { passive: false });
             portal.addEventListener("touchend", (ev) => {
               const delta = ev.changedTouches[0].clientY - swipeStartY;
-              const startedOnInteractive = (swipeStartTarget as HTMLElement)?.closest?.("button, [data-seekbar]");
               if (delta > 120 && !seekingRef.current) {
                 exitFakeFullscreen();
-              } else if (Math.abs(delta) < 10 && !seekingRef.current) {
-                const tgt = ev.target as HTMLElement;
-                const isInteractive = tgt.closest("button, [data-seekbar]") || startedOnInteractive;
-                if (!isInteractive) {
-                  const vid = videoRef.current;
-                  if (vid) { if (vid.paused) vid.play().catch(() => {}); else vid.pause(); }
-                }
-                container.style.transition   = "transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 280ms ease";
-                container.style.transform    = "none";
-                container.style.borderRadius = "0px";
-                portal.style.transition      = "background-color 280ms ease";
-                portal.style.backgroundColor = "rgba(0,0,0,1)";
               } else {
                 container.style.transition   = "transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 280ms ease";
                 container.style.transform    = "none";
@@ -781,8 +769,6 @@ function VideoControls({
             portal.addEventListener("click", (ev) => {
               const tgt = ev.target as HTMLElement;
               if (tgt.closest("button, [data-seekbar]")) return;
-              const vid = videoRef.current;
-              if (vid) { if (vid.paused) vid.play().catch(() => {}); else vid.pause(); }
             });
 
             (portal as any)._savedScroll = window.scrollY;
