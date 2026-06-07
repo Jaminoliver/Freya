@@ -850,6 +850,12 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   hideMuteButton  = false,
 }: VideoPlayerProps, ref) {
   const videoRef       = React.useRef<HTMLVideoElement | null>(null);
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (getSavedMute()) video.setAttribute("muted", "");
+    video.defaultMuted = true;
+  }, []);
   const containerRef   = React.useRef<HTMLDivElement | null>(null);
   const hlsRef         = React.useRef<any>(null);
   const hasInitialized    = React.useRef(false);
@@ -997,6 +1003,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (!video || !bunnyVideoId || hasInitialized.current) { console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] ⛔ initVideo blocked — video=${!!video} bunnyVideoId=${!!bunnyVideoId} hasInitialized=${hasInitialized.current}`, "color: #F87171; font-weight: bold"); return; }
     hasInitialized.current = true;
     setHasError(false);
+    if (video.disableRemotePlayback !== undefined) video.disableRemotePlayback = true;
     console.log(`[VP:${bunnyVideoId?.slice(0,8)}] initVideo start — videoSize=${video.offsetWidth}x${video.offsetHeight}`);
 
     // Pre-fetch manifest into browser cache before HLS.js requests it
@@ -1143,6 +1150,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const savedMute = getSavedMute();
     if (video) video.muted = savedMute;
     setIsMuted(savedMute);
+    if (video) { video.setAttribute("playsinline", ""); video.setAttribute("webkit-playsinline", ""); }
     try { await video?.play(); } catch { }
   }, [initVideo]);
 
@@ -1375,7 +1383,7 @@ transition: showPoster ? "opacity 0.25s ease" : "none",
 
         {/* Mute button visible on poster */}
         {!hideMuteButton && <button
-            style={{ position: "absolute", top: 12, right: 12, zIndex: 6, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
+            style={{ position: "absolute", top: 12, right: 12, zIndex: 13, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
             onClick={(e) => { e.stopPropagation(); handleToggleMute(); }}
             onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleMute(); }}
             aria-label={isMuted ? "Unmute" : "Mute"}
