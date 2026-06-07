@@ -17,7 +17,8 @@ const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
 
 // Module-level cache — survives re-mounts, cleared only on page reload
 const watchedVideoIds = new Set<string>();
-export const warmedVideoIds  = new Set<string>();
+export const warmedVideoIds    = new Set<string>();
+export const preloadedSegments = new Set<string>();
 
 // Shared across every VideoPlayer instance on the page.
 // When any fullscreen is open, all intersection observers skip auto-play.
@@ -1026,11 +1027,16 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         const hls = new Hls({
           startLevel:             -1,
           testBandwidth:          false,
-          capLevelToPlayerSize:   false,
+          capLevelToPlayerSize:   true,
           lowLatencyMode:         false,
           abrEwmaDefaultEstimate: savedBw,
-          abrEwmaFastVoD:         3,
-          abrEwmaSlowVoD:         9,
+          abrEwmaFastVoD:         2,
+          abrEwmaSlowVoD:         6,
+          abrBandWidthFactor:     0.85,
+          abrBandWidthUpFactor:   0.6,
+          maxBufferLength:        30,
+          maxMaxBufferLength:     60,
+          maxStarvationDelay:     2,
         });
         hlsRef.current = hls;
         hls.on(Hls.Events.FRAG_LOADED, () => {
@@ -1040,9 +1046,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           const level = hls.levels[data.level];
           console.log(`%c[VideoPlayer] 🎬 QUALITY → ${level.height}p (${Math.round(level.bitrate / 1000)}kbps)`, "color: #10B981; font-weight: bold");
         });
-        hls.on(Hls.Events.MANIFEST_PARSED, (_evt: any, data: any) => {
-          hls.currentLevel = data.levels.length - 1;
-        });
+        
         
         let mediaErrorRecovered = false;
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {

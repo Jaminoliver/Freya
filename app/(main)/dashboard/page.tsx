@@ -11,7 +11,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { queryKeys, staleTimes } from "@/lib/query/keys";
 import type { PollData } from "@/components/feed/PollDisplay";
 import { type CreatorStoryGroup, applyLocalViewed } from "@/components/story/StoryBar";
-import { warmedVideoIds } from "@/components/video/VideoPlayer";
+import { warmedVideoIds, preloadedSegments } from "@/components/video/VideoPlayer";
 import type { User } from "@/lib/types/profile";
 import { useAppStore } from "@/lib/store/appStore";
 
@@ -287,8 +287,27 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
         if (!entry.isIntersecting) return;
         if (warmedVideoIds.has(m.bunny_video_id!)) return;
         warmedVideoIds.add(m.bunny_video_id!);
-        console.log(`[PREWARM] 👁 scroll-based warming ${m.bunny_video_id!.slice(0,8)}`);
+        const conn = (navigator as any).connection;
+        const ect: string = conn?.effectiveType ?? "4g";
+        console.log(`[PREWARM] 👁 scroll-based warming ${m.bunny_video_id!.slice(0,8)} network=${ect}`);
         fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/playlist.m3u8`, { method: "GET", cache: "force-cache" }).catch(() => {});
+        if (ect !== "slow-2g" && ect !== "2g" && ect !== "3g") {
+          const ahead = 3;
+          videoPosts.slice(i, i + ahead).forEach((vp) => {
+            const vm = vp.media.find((mm) => mm.media_type === "video" && mm.bunny_video_id);
+            if (!vm?.bunny_video_id) return;
+            if (preloadedSegments.has(vm.bunny_video_id)) return;
+            preloadedSegments.add(vm.bunny_video_id);
+            console.log(`[PREWARM] 📦 prefetching segment ${vm.bunny_video_id.slice(0,8)}`);
+            fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${vm.bunny_video_id}/720p/video0.ts`, { method: "GET", cache: "force-cache" }).catch(() => {});
+          });
+        } else if (ect === "3g") {
+          if (!preloadedSegments.has(m.bunny_video_id!)) {
+            preloadedSegments.add(m.bunny_video_id!);
+            console.log(`[PREWARM] 📦 prefetching segment (3g) ${m.bunny_video_id!.slice(0,8)}`);
+            fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/480p/video0.ts`, { method: "GET", cache: "force-cache" }).catch(() => {});
+          }
+        }
         preWarm(i, 2);
         obs.disconnect();
       }, { rootMargin: "400px" });
