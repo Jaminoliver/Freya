@@ -15,6 +15,8 @@ interface VisibilityGateProps {
   children:     React.ReactNode;
   /** Optional placeholder content (e.g. blurhash). Shown until gate opens. */
   placeholder?: React.ReactNode;
+  /** Called once when children are first mounted. */
+  onMount?: () => void;
 }
 
 /**
@@ -29,8 +31,11 @@ export default function VisibilityGate({
   rootMarginVH = 1.5,
   children,
   placeholder,
+  onMount,
 }: VisibilityGateProps) {
   const [mounted, setMounted] = React.useState(eager);
+  const onMountRef = React.useRef(onMount);
+  React.useEffect(() => { onMountRef.current = onMount; }, [onMount]);
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -61,6 +66,11 @@ export default function VisibilityGate({
       console.log(`%c[VisibilityGate] ⏸  GATED (placeholder shown)`, "color: #6B6B8A");
     }
   }, [eager]);
+
+  const firedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (mounted && !firedRef.current) { firedRef.current = true; onMountRef.current?.(); }
+  }, [mounted]);
 
   if (mounted) return <>{children}</>;
 

@@ -446,6 +446,13 @@ function PostCardInner({
           <VisibilityGate
             aspectRatio={placeholderRatio}
             eager={eager}
+            onMount={() => {
+              const attempt = (tries: number) => {
+                if (videoPlayerRef.current) { videoPlayerRef.current.prewarm(); return; }
+                if (tries > 0) setTimeout(() => attempt(tries - 1), 50);
+              };
+              attempt(10);
+            }}
             placeholder={
               firstMedia?.blurHash ? (
                 <BlurHashPlaceholder hash={firstMedia.blurHash} />

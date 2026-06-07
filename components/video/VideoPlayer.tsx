@@ -25,6 +25,8 @@ export const preloadedSegments = new Set<string>();
 let anyFullscreenOpen = false;
 export function setGlobalFullscreenOpen(open: boolean) { anyFullscreenOpen = open; }
 
+let activeHlsCount = 0;
+
 export function getBunnyThumbnail(videoId: string) {
   return `https://${BUNNY_PULL_ZONE}/${videoId}/thumbnail.jpg`;
 }
@@ -825,6 +827,7 @@ export interface VideoPlayerHandle {
   resume: (time?: number) => void;
   toggleMute: () => void;
   isMuted: () => boolean;
+  prewarm: () => void;
 }
 
 const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer({
@@ -990,6 +993,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch {}
       hlsRef.current = null;
+      activeHlsCount = Math.max(0, activeHlsCount - 1);
     }
     if (slowTimer.current) { clearTimeout(slowTimer.current); slowTimer.current = null; }
     hasInitialized.current = false;
@@ -1002,6 +1006,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const video = videoRef.current;
     if (!video || !bunnyVideoId || hasInitialized.current) { console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] ⛔ initVideo blocked — video=${!!video} bunnyVideoId=${!!bunnyVideoId} hasInitialized=${hasInitialized.current}`, "color: #F87171; font-weight: bold"); return; }
     hasInitialized.current = true;
+    activeHlsCount++;
+    if (activeHlsCount > 2) { activeHlsCount--; hasInitialized.current = false; console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] ⛔ prewarm skipped — HLS cap reached`, "color: #F59E0B"); return; }
     setHasError(false);
     if (video.disableRemotePlayback !== undefined) video.disableRemotePlayback = true;
     console.log(`[VP:${bunnyVideoId?.slice(0,8)}] initVideo start — videoSize=${video.offsetWidth}x${video.offsetHeight}`);
@@ -1024,11 +1030,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         const downlink: number = conn?.downlink ?? 10;
         const effectiveType: string = conn?.effectiveType ?? "4g";
         const isSlow = downlink < 5 || effectiveType === "3g" || effectiveType === "2g" || effectiveType === "slow-2g";
-        const defaultEstimate = isSlow
-          ? 1_500_000
-          : savedBw > 0
-            ? Math.min(savedBw, 5_000_000)
-            : 3_000_000;
+        const defaultEstimate = savedBw > 0
+          ? Math.min(savedBw, downlink * 1_000_000 * 0.8)
+          : downlink * 1_000_000 * 0.8;
         console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] 🌐 network — effectiveType=${effectiveType} downlink=${downlink}Mbps isSlow=${isSlow}`, "color: #60A5FA; font-weight: bold");
         console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] 📊 ABR init — savedBw=${savedBw > 0 ? Math.round(savedBw/1000)+"kbps" : "none"} defaultEstimate=${Math.round(defaultEstimate/1000)}kbps testBandwidth=${!isSlow}`, "color: #60A5FA; font-weight: bold");
         const hls = new Hls({
@@ -1096,8 +1100,11 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       if (bufferTimer.current) clearTimeout(bufferTimer.current);
       if (loadingTimer.current) clearTimeout(loadingTimer.current);
       if (stallTimer.current) clearTimeout(stallTimer.current);
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+        activeHlsCount = Math.max(0, activeHlsCount - 1);
+      }
     };
   }, []);
 
@@ -1184,6 +1191,14 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     _videoEl: videoRef.current,
     toggleMute: () => handleToggleMute(),
     isMuted: () => getSavedMute(),
+    prewarm: () => {
+      if (hasInitialized.current) return;
+      const conn = (navigator as any).connection;
+      const ect: string = conn?.effectiveType ?? "4g";
+      if (ect === "slow-2g" || ect === "2g") return;
+      console.log(`%c[VP:${bunnyVideoId?.slice(0,8)}] 🔥 prewarm() called — attaching HLS without play`, "color: #F59E0B; font-weight: bold");
+      initVideo();
+    },
     resume: (time?: number) => {
       const video = videoRef.current;
       if (!video) return;
