@@ -50,6 +50,7 @@ interface MediaItem {
   width?:            number | null;
   height?:           number | null;
   aspectRatio?:      number | null;
+  durationSeconds?:  number | null;
 }
 
 interface TaggedCreator {
@@ -280,6 +281,7 @@ function PostCardInner({
     type: m.type, url: m.url, bunnyVideoId: m.bunnyVideoId, thumbnailUrl: m.thumbnailUrl,
     processingStatus: m.processingStatus, rawVideoUrl: m.rawVideoUrl,
     blurHash: m.blurHash ?? null, width: m.width ?? null, height: m.height ?? null, aspectRatio: m.aspectRatio ?? null,
+    durationSeconds: m.durationSeconds ?? null,
   }));
 
   const lightboxPost = toLightboxPost(post);
@@ -474,6 +476,24 @@ function PostCardInner({
               username={post.creator.username}
               avatarUrl={post.creator.avatar_url ?? null}
               caption={post.caption ?? null}
+              durationSeconds={normalizedMedia[0]?.durationSeconds ?? null}
+              postData={{
+                post_id:        post.id,
+                bunny_video_id: normalizedMedia[0]?.bunnyVideoId ?? null,
+                thumbnail_url:  normalizedMedia[0]?.thumbnailUrl ?? null,
+                display_name:   post.creator.name,
+                username:       post.creator.username,
+                avatar_url:     post.creator.avatar_url ?? null,
+                creator_id:     post.creator.id,
+                caption:        post.caption ?? null,
+                like_count:     post.likes,
+                liked:          post.liked,
+                comment_count:  post.comments,
+                subscriber_count: 0,
+                aspect_ratio:   normalizedMedia[0]?.aspectRatio ?? null,
+                width:          normalizedMedia[0]?.width ?? null,
+                height:         normalizedMedia[0]?.height ?? null,
+              }}
             />
             </div>
           </VisibilityGate>

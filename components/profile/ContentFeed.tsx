@@ -416,13 +416,17 @@ export default function ContentFeed({
             if (preloadedSegments.has(vm.bunny_video_id)) return;
             preloadedSegments.add(vm.bunny_video_id);
             console.log(`[PREWARM] 📦 prefetching segment ${vm.bunny_video_id.slice(0,8)}`);
-            fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${vm.bunny_video_id}/720p/video0.ts`, { method: "GET", cache: "force-cache" }).catch(() => {});
+            const savedBw = Number(typeof localStorage !== "undefined" ? localStorage.getItem("hls_bw") : 0) || 0;
+            const dl: number = conn?.downlink ?? 10;
+            const effectiveBw = savedBw > 0 ? Math.max(savedBw, dl * 1_000_000) : dl * 1_000_000;
+            const prefetchRes = effectiveBw >= 8_000_000 ? "1080p" : effectiveBw >= 4_000_000 ? "720p" : effectiveBw >= 2_000_000 ? "480p" : "360p";
+            fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${vm.bunny_video_id}/${prefetchRes}/video0.ts`, { method: "GET", cache: "force-cache" }).catch(() => {});
           });
         } else if (ect === "3g") {
           if (!preloadedSegments.has(m.bunny_video_id!)) {
             preloadedSegments.add(m.bunny_video_id!);
             console.log(`[PREWARM] 📦 prefetching segment (3g) ${m.bunny_video_id!.slice(0,8)}`);
-            fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/480p/video0.ts`, { method: "GET", cache: "force-cache" }).catch(() => {});
+            fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/360p/video0.ts`, { method: "GET", cache: "force-cache" }).catch(() => {});
           }
         }
         preWarm(i, 2);

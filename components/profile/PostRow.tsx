@@ -70,6 +70,7 @@ export interface ApiPost {
     height?:           number | null;
     aspect_ratio?:     number | null;
     blur_hash?:        string | null;
+    duration_seconds?: number | null;
   }[];
 }
 
@@ -159,6 +160,7 @@ export default function PostRow({
       bunnyVideoId: m.bunny_video_id ?? null, thumbnailUrl: m.thumbnail_url ?? null,
       processingStatus: m.processing_status ?? null, rawVideoUrl: m.raw_video_url ?? null,
       blurHash: m.blur_hash ?? null, width: m.width ?? null, height: m.height ?? null, aspectRatio: m.aspect_ratio ?? null,
+      durationSeconds: m.duration_seconds ?? null,
     }));
   }, [post.media]);
 
@@ -354,6 +356,24 @@ export default function PostRow({
           avatarUrl={post.profiles.avatar_url ?? null}
           caption={caption}
           eager={eager}
+          durationSeconds={viewerMedia[0]?.durationSeconds ?? null}
+          postData={{
+            post_id:          String(post.id),
+            bunny_video_id:   viewerMedia[0]?.bunnyVideoId ?? null,
+            thumbnail_url:    viewerMedia[0]?.thumbnailUrl ?? null,
+            display_name:     post.profiles.display_name ?? post.profiles.username,
+            username:         post.profiles.username,
+            avatar_url:       post.profiles.avatar_url ?? null,
+            creator_id:       post.profiles.id,
+            caption:          caption ?? null,
+            like_count:       post.like_count,
+            liked:            post.liked,
+            comment_count:    post.comment_count,
+            subscriber_count: 0,
+            aspect_ratio:     viewerMedia[0]?.aspectRatio ?? null,
+            width:            viewerMedia[0]?.width ?? null,
+            height:           viewerMedia[0]?.height ?? null,
+          }}
         />
         </div>
         );

@@ -205,7 +205,7 @@ function ProfilePageInner() {
       return data;
     },
     staleTime: staleTimes.subscriptions,
-    enabled: isCreator && !isOwnProfile && !!viewerData,
+    enabled: isCreator && !isOwnProfile,
   });
 
   // ── postsQuery: fetch creator posts ──────────────────────────────────────
@@ -222,13 +222,22 @@ function ProfilePageInner() {
   });
 
   // ── Sync query results into local state ───────────────────────────────────
+  const prevViewerIdRef = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (!profileQuery.data) return;
     const p = profileQuery.data;
     setProfile(p);
     profileIdRef.current = p.id;
     setTotalLikes((p as any)._likes_count ?? 0);
-    if (viewerData) { setViewer(viewerData); viewerIdRef.current = viewerData.id; }
+    if (viewerData) {
+      setViewer(viewerData);
+      viewerIdRef.current = viewerData.id;
+      if (prevViewerIdRef.current !== viewerData.id) {
+        prevViewerIdRef.current = viewerData.id;
+        queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "subStatus"] });
+        queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "posts"] });
+      }
+    }
   }, [profileQuery.data, viewerData]);
 
   React.useEffect(() => {

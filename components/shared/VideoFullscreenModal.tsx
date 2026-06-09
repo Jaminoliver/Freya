@@ -635,7 +635,7 @@ export function VideoFullscreenModal({
             style={{
               position: "absolute",
               right: 4,
-              bottom: isMobile ? 170 : 80,
+              bottom: isMobile ? 220 : 120,
               zIndex: 10001,
               display: "flex",
               flexDirection: "column",
@@ -644,62 +644,19 @@ export function VideoFullscreenModal({
               animation: mounted ? "vfm-bar-up 0.25s ease-out 0.05s both" : "none",
             }}
           >
-            {/* Avatar + follow */}
-            <div style={{ position: "relative", marginBottom: 4 }}>
-              <button
-                onClick={handleProfileClick}
-                style={{
-                  width: 56, height: 56, borderRadius: "50%", overflow: "hidden",
-                  border: "none", padding: 0, cursor: "pointer",
-                  display: "block", WebkitTapHighlightColor: "transparent",
-                }}
-              >
-                {avatarError || !data.avatar_url ? (
-                  <div style={{ width: "100%", height: "100%", background: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16, fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
-                    {initials}
-                  </div>
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={data.avatar_url} alt={name} onError={() => setAvatarError(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                )}
-              </button>
-              {/* + / ✓ follow badge */}
-              {!isFollowing && <button
-                onClick={handleFollowToggle}
-                disabled={followLoading}
-                style={{
-                  position: "absolute", bottom: -8, left: "50%", transform: "translateX(-50%)",
-                  width: 20, height: 20, borderRadius: "50%",
-                  background: "#8B5CF6",
-                  border: "2px solid #0a0a0f",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", padding: 0,
-                  WebkitTapHighlightColor: "transparent",
-                  transition: "background 0.2s",
-                  opacity: followLoading ? 0.6 : 1,
-                }}
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>}
-            </div>
+          
 
             {/* Subscribers */}
             <button className="vfm-action-btn" onClick={handleProfileClick}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(250,192,50,0.15)" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2 18h20" /><path d="M4 18L2 8l4.5 4L12 4l5.5 8L22 8l-2 10H4z" />
-                <circle cx="12" cy="4" r="1.2" fill="#F5C842" stroke="none" />
-                <circle cx="6.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
-                <circle cx="17.5" cy="12" r="1" fill="rgba(245,200,66,0.7)" stroke="none" />
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="#F5C842" stroke="none">
+                <path d="M2 18h20" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round" /><path d="M4 18L2 8l4.5 4L12 4l5.5 8L22 8l-2 10H4z" />
               </svg>
               <span style={{ color: "#F5C842" }}>{formatCount(data.subscriber_count)}</span>
             </button>
 
             {/* Likes */}
             <button className="vfm-action-btn" onClick={handleLike}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill={liked ? "#EC4899" : "rgba(255,255,255,0.15)"} stroke={liked ? "#EC4899" : "rgba(255,255,255,0.9)"} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill={liked ? "#EC4899" : "rgba(255,255,255,0.9)"} stroke="none">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
               <span>{formatCount(likeCount)}</span>
@@ -707,7 +664,7 @@ export function VideoFullscreenModal({
 
             {/* Comments */}
             <button className="vfm-action-btn" onClick={(e) => { e.stopPropagation(); if (!viewerUserId) { openAuthModal(); return; } setCommentsOpen(true); }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.0" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" stroke="none">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
               <span>{formatCount(commentCount)}</span>
@@ -717,23 +674,73 @@ export function VideoFullscreenModal({
           <div
             style={{
               position: "absolute",
-              bottom: isMobile ? 60 : 56,
+              bottom: isMobile ? 12 : 10,
               left: 12,
               right: 76,
               zIndex: 10000,
               animation: mounted ? "vfm-bar-up 0.25s ease-out 0.05s both" : "none",
             }}
           >
-            <div onClick={handleProfileClick} style={{ cursor: "pointer", marginBottom: data.caption ? 6 : 0 }}>
-              <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {name} ›
-              </p>
-              <p style={{ margin: "2px 0 0", fontSize: 13, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                @{data.username}
-              </p>
-            </div>
-            {data.caption && (
-              <CaptionExpander caption={data.caption} />
+            {isSeeking ? (
+              <div style={{ paddingBottom: "8px" }}>
+                <span style={{ fontSize: 36, fontWeight: 700, color: "#fff", fontFamily: "'Inter',sans-serif", letterSpacing: "-0.5px", lineHeight: 1 }}>
+                  {formatTime(currentTime)}
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 400, color: "rgba(255,255,255,0.5)", fontFamily: "'Inter',sans-serif", marginLeft: "6px" }}>
+                  / {formatTime(duration)}
+                </span>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: data.caption ? 8 : 0 }}>
+                  <div style={{ position: "relative", flexShrink: 0 }}>
+                    <button
+                      onClick={handleProfileClick}
+                      style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", border: "2px solid rgba(255,255,255,0.3)", padding: 0, cursor: "pointer", display: "block", WebkitTapHighlightColor: "transparent", background: "none" }}
+                    >
+                      {avatarError || !data.avatar_url ? (
+                        <div style={{ width: "100%", height: "100%", background: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16, fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
+                          {initials}
+                        </div>
+                      ) : (
+                        <img src={data.avatar_url} alt={name} onError={() => setAvatarError(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                      )}
+                    </button>
+                    {!isFollowing && (
+                      <button
+                        onClick={handleFollowToggle}
+                        disabled={followLoading}
+                        style={{
+                          position: "absolute", bottom: 0, right: 0,
+                          width: 18, height: 18, borderRadius: "50%",
+                          background: "#8B5CF6", border: "2px solid #0a0a0f",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          cursor: "pointer", padding: 0,
+                          WebkitTapHighlightColor: "transparent",
+                          transition: "background 0.2s",
+                          opacity: followLoading ? 0.6 : 1,
+                        }}
+                      >
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  <div onClick={handleProfileClick} style={{ cursor: "pointer", minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {name}
+                    </p>
+                    <p style={{ margin: "2px 0 0", fontSize: 13, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      @{data.username}
+                    </p>
+                  </div>
+                </div>
+                {data.caption && (
+                  <CaptionExpander caption={data.caption} />
+                )}
+              </>
             )}
           </div>
 
@@ -743,27 +750,23 @@ export function VideoFullscreenModal({
               position: "absolute", bottom: 0, left: 0, right: 0,
               zIndex: 10001,
               background: "transparent",
-              padding: "0 12px 12px",
+              padding: 0,
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Timer — only visible while seeking */}
-            {isSeeking && (
-              <div style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 600, paddingTop: 6, paddingBottom: 2 }}>
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </div>
-            )}
             <div
               ref={seekBarRef}
               onPointerDown={handleSeekPointerDown}
               onPointerMove={handleSeekPointerMove}
               onPointerUp={handleSeekPointerUp}
               onPointerCancel={handleSeekPointerUp}
-              style={{ position: "relative", width: "100%", height: "44px", display: "flex", alignItems: "center", touchAction: "none", cursor: "pointer" }}
+              style={{ position: "relative", width: "100%", height: "36px", display: "flex", alignItems: "flex-end", touchAction: "none", cursor: "pointer", paddingBottom: "2px", boxSizing: "border-box" }}
             >
-              <div style={{ position: "absolute", left: 0, right: 0, height: "3px", borderRadius: "2px", background: "rgba(255,255,255,0.25)" }}>
+              <div style={{ position: "absolute", left: 0, right: 0, height: isSeeking ? "5px" : "3px", borderRadius: "2px", background: "rgba(255,255,255,0.25)", transition: "height 0.15s ease" }}>
                 <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${progress}%`, background: "rgba(255,255,255,0.95)", borderRadius: "2px" }} />
-                <div style={{ position: "absolute", top: "50%", left: `${progress}%`, transform: "translate(-50%, -50%)", width: "13px", height: "13px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
+                {isSeeking && (
+                  <div style={{ position: "absolute", top: "50%", left: `${progress}%`, transform: "translate(-50%, -50%)", width: "13px", height: "13px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
+                )}
               </div>
             </div>
           </div>

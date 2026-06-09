@@ -51,8 +51,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
       // ── Detect user switch: if a different user is logging in, clear all caches ──
       const currentViewer = useAppStore.getState().viewer;
-      if (currentViewer && currentViewer.id !== userId) {
-        console.log("[AppStoreProvider] User switch detected, clearing all caches");
+      if (!currentViewer || currentViewer.id !== userId) {
+        console.log("[AppStoreProvider] User switch or guest login detected, clearing all caches");
         clearAll();
       }
 

@@ -19,6 +19,7 @@ export interface NormalizedMedia {
   width?:            number | null;
   height?:           number | null;
   aspectRatio?:      number | null;
+  durationSeconds?:  number | null;
 }
 
 interface PostMediaViewerProps {
@@ -42,6 +43,8 @@ interface PostMediaViewerProps {
   username?:             string;
   avatarUrl?:            string | null;
   caption?:              string | null;
+  durationSeconds?:      number | null;
+  postData?:             PostFullscreenData;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -264,7 +267,7 @@ function SubscribeButton({ label, badge, onClick }: {
 }
 
 // ── PostMediaViewer ──────────────────────────────────────────────────────────
-import type { VideoPlayerHandle } from "@/components/video/VideoPlayer";
+import type { VideoPlayerHandle, PostFullscreenData } from "@/components/video/VideoPlayer";
 
 export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(function PostMediaViewer({
   media,
@@ -287,6 +290,8 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   username,
   avatarUrl,
   caption,
+  durationSeconds,
+  postData,
 }: PostMediaViewerProps, ref) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
@@ -465,13 +470,13 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
 
     return (
       <DoubleTapLike onDoubleTap={doubleTap} style={{ width: "100%", display: "block" }}>
-        <div style={{ width: containerWidth, borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: "inset(0 round 14px)" }}>
+        <div style={{ width: containerWidth, borderRadius: "14px", border: "1px solid #1E1E2E", overflow: "hidden", clipPath: isMobileView ? "inset(0 round 14px)" : "none" }}>
         <div
           style={{
             width:                "100%",
             position:             "relative",
             aspectRatio:          !isMobileView && isPortrait ? "4 / 3" : String(videoRatio),
-            overflow:             "hidden",
+            overflow:             isMobileView ? "hidden" : "visible",
             backgroundColor:      "#000",
             backgroundImage:      blurSrc ? `url(${blurSrc})` : undefined,
             backgroundSize:       "cover",
@@ -509,6 +514,8 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               username={username}
               avatarUrl={avatarUrl}
               caption={caption}
+              durationSeconds={first.durationSeconds ?? null}
+              postData={postData}
             />
           </div>
           {isUnlockedPPV && <UnlockedPPVBadge />}

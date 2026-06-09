@@ -104,7 +104,8 @@ export async function GET(
           blur_hash,
           width,
           height,
-          aspect_ratio
+          aspect_ratio,
+          duration_seconds
         )
       `)
       .eq("creator_id", creator.id)
