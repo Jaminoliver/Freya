@@ -314,40 +314,6 @@ function FullscreenOverlay({
         style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 8, display: "flex", flexDirection: "column", justifyContent: "flex-end", pointerEvents: "auto" }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Avatar + name + caption — hidden while seeking */}
-        {!isSeeking && (
-          <div style={{ paddingLeft: 14, paddingRight: 14, paddingBottom: 0 }}>
-            <div
-  onClick={onProfileClick}
-  style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: caption ? 8 : 0, cursor: onProfileClick ? "pointer" : "default" }}
->
-              <div style={{ width: 44, height: 44, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "2px solid rgba(255,255,255,0.3)" }}>
-                {avatarUrl && !avatarErr
-                  ? <img src={avatarUrl} alt="" onError={() => setAvatarErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                  : <div style={{ width: "100%", height: "100%", background: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16, fontWeight: 700 }}>{initials}</div>
-                }
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Inter',sans-serif" }}>{name}</span>
-                {username && <span style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter',sans-serif" }}>@{username}</span>}
-              </div>
-            </div>
-            {caption && (
-              <p
-                onClick={() => setCaptionExp((x) => !x)}
-                style={{
-                  margin: 0, fontSize: 14, lineHeight: "1.4",
-                  color: "rgba(255,255,255,0.9)", fontFamily: "'Inter',sans-serif",
-                  wordBreak: "break-word", cursor: "pointer",
-                  ...(!captionExp ? { overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any } : {}),
-                }}
-              >
-                {caption}
-              </p>
-            )}
-          </div>
-        )}
-
         {/* Big timer while seeking */}
         {isSeeking && (
           <div style={{ paddingLeft: 14, paddingBottom: 10 }}>
@@ -1036,6 +1002,12 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     container.style.transform    = `translate(${dx}px,${dy}px) scale(${scaleX},${scaleY})`;
     container.style.borderRadius = "0px";
 
+    // Fade out portal buttons before container animates back
+    portalRef.current?.querySelectorAll("button").forEach((btn) => {
+      (btn as HTMLElement).style.transition = "opacity 150ms ease";
+      (btn as HTMLElement).style.opacity    = "0";
+    });
+
     if (portalRef.current) {
       portalRef.current.style.transition      = "background-color 280ms cubic-bezier(0.4,0,0.2,1)";
       portalRef.current.style.backgroundColor = "rgba(0,0,0,0)";
@@ -1108,10 +1080,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     container.classList.add("vp-portal-active");
     portal.appendChild(container);
 
-    // Close button — sibling of container (not inside it, so no z-index fight)
+    // Exit fullscreen button — bottom right, matches mute button style
     const xBtn = document.createElement("button");
-    xBtn.style.cssText = "position:absolute;top:12px;left:12px;z-index:10001;background:rgba(0,0,0,0.45);border:none;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);-webkit-tap-highlight-color:transparent;";
-    xBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    xBtn.style.cssText = "position:absolute;bottom:12px;right:12px;z-index:10001;background:rgba(0,0,0,0.45);border:none;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);-webkit-tap-highlight-color:transparent;";
+    xBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>`;
     xBtn.addEventListener("click",    (ev) => { ev.stopPropagation(); exitFakeFullscreen(); });
     xBtn.addEventListener("touchend", (ev) => { ev.preventDefault(); ev.stopPropagation(); exitFakeFullscreen(); });
     portal.appendChild(xBtn);
@@ -1221,10 +1193,13 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       });
     });
 
+    [xBtn, muteBtn].forEach((btn) => { btn.style.opacity = "0"; btn.style.transition = "none"; });
+
     const onDone = (ev: TransitionEvent) => {
       if (ev.propertyName !== "transform") return;
       container.style.willChange = "";
       container.removeEventListener("transitionend", onDone);
+      [xBtn, muteBtn].forEach((btn) => { btn.style.transition = "opacity 200ms ease"; btn.style.opacity = "1"; });
     };
     container.addEventListener("transitionend", onDone);
 
