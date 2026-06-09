@@ -132,7 +132,7 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
           flex:       1,
           minWidth:   0,
           maxWidth:   isSettings || isMessageChat || isNotifications ? "100%" : "720px",
-          height:     isMessageChat ? "100dvh" : isWindowScrollPage ? "auto" : isSettings || isMessages ? "100dvh" : "100vh",
+          height:     isMessageChat ? "100dvh" : isWindowScrollPage ? "auto" : "100dvh",
           boxSizing:  "border-box",
           borderRight: showRightPanel ? "1px solid #1F1F2A" : "none",
           overflowY:   isMessageChat || isSettings || isMessages ? "hidden" : isWindowScrollPage ? "visible" : "auto",
