@@ -131,8 +131,17 @@ function FullscreenOverlay({
 }: FullscreenOverlayProps) {
   const [currentTime, setCurrentTime] = React.useState(() => videoRef.current?.currentTime ?? 0);
   const [duration,    setDuration]    = React.useState(() => videoRef.current?.duration    ?? 0);
-  const [isPaused,    setIsPaused]    = React.useState(() => videoRef.current?.paused      ?? false);
-  const [isBuffering, setIsBuffering] = React.useState(false);
+  const [isPaused,    setIsPaused]    = React.useState(() => {
+    const v = videoRef.current;
+    if (!v) return false;
+    // treat as not paused if video hasn't started yet — loading state handles this
+    if (v.currentTime === 0 && v.readyState < 2) return false;
+    return v.paused;
+  });
+  const [isBuffering, setIsBuffering] = React.useState(() => {
+    const v = videoRef.current;
+    return !!v && v.readyState < 3 && !v.paused;
+  });
   const [captionExp,  setCaptionExp]  = React.useState(false);
   const [avatarErr,   setAvatarErr]   = React.useState(false);
 
@@ -150,7 +159,11 @@ function FullscreenOverlay({
     const onTime    = () => { setCurrentTime(video.currentTime); };
     const onMeta    = () => { setDuration(video.duration); durationRef.current = video.duration; };
     const onPlay    = () => { setIsPaused(false); setIsBuffering(false); };
-    const onPause   = () => setIsPaused(true);
+    const onPause   = () => {
+      const v = videoRef.current;
+      if (v && v.currentTime === 0) return;
+      setIsPaused(true);
+    };
     const onPlaying = () => { setIsBuffering(false); setIsPaused(false); };
     const onWaiting = () => {
       setIsBuffering(true);
@@ -641,10 +654,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const [showPoster,    setShowPoster]    = React.useState(true);
   const [posterLoaded,  setPosterLoaded]  = React.useState(false);
   const [isBuffering, setIsBuffering] = React.useState(false);
-  const setIsBufferingSync = React.useCallback((v: boolean) => {
-    isBufferingRef.current = v;
-    setIsBuffering(v);
-  }, []);
+
   const [hasError,      setHasError]      = React.useState(false);
   const [hasStarted,    setHasStarted]    = React.useState(false);
   const [showSlowDots,  setShowSlowDots]  = React.useState(false);
@@ -966,6 +976,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (portalRef.current) {
       portalRef.current.style.transition      = "background-color 280ms cubic-bezier(0.4,0,0.2,1)";
       portalRef.current.style.backgroundColor = "rgba(0,0,0,0)";
+    }
+    if (fsOverlayRootRef.current) {
+      const overlayEl = portalRef.current?.querySelector("[style*='z-index: 10000']") as HTMLElement | null;
+      if (overlayEl) { overlayEl.style.transition = "opacity 200ms ease"; overlayEl.style.opacity = "0"; }
     }
 
     requestAnimationFrame(() => {
