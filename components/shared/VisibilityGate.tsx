@@ -43,29 +43,22 @@ export default function VisibilityGate({
     const el = ref.current;
     if (!el) return;
 
-    const margin = `${Math.round(rootMarginVH * 100)}%`;
+    const marginPx = Math.round(rootMarginVH * window.innerHeight);
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          console.log(`%c[VisibilityGate] 🟢 MOUNT`, "color: #10B981; font-weight: bold", { rootMargin: margin });
           setMounted(true);
           observer.disconnect();
         }
       },
-      { rootMargin: `${margin} 0px ${margin} 0px` }
+      { rootMargin: `${marginPx}px 0px ${marginPx}px 0px` }
     );
 
     observer.observe(el);
     return () => observer.disconnect();
   }, [mounted, rootMarginVH]);
 
-  React.useEffect(() => {
-    if (eager) {
-      console.log(`%c[VisibilityGate] ⚡ EAGER (mounted immediately)`, "color: #F59E0B; font-weight: bold");
-    } else {
-      console.log(`%c[VisibilityGate] ⏸  GATED (placeholder shown)`, "color: #6B6B8A");
-    }
-  }, [eager]);
+  
 
   const firedRef = React.useRef(false);
   React.useEffect(() => {
