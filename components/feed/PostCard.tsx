@@ -477,23 +477,6 @@ function PostCardInner({
               avatarUrl={post.creator.avatar_url ?? null}
               caption={post.caption ?? null}
               durationSeconds={normalizedMedia[0]?.durationSeconds ?? null}
-              postData={{
-                post_id:        post.id,
-                bunny_video_id: normalizedMedia[0]?.bunnyVideoId ?? null,
-                thumbnail_url:  normalizedMedia[0]?.thumbnailUrl ?? null,
-                display_name:   post.creator.name,
-                username:       post.creator.username,
-                avatar_url:     post.creator.avatar_url ?? null,
-                creator_id:     post.creator.id,
-                caption:        post.caption ?? null,
-                like_count:     post.likes,
-                liked:          post.liked,
-                comment_count:  post.comments,
-                subscriber_count: 0,
-                aspect_ratio:   normalizedMedia[0]?.aspectRatio ?? null,
-                width:          normalizedMedia[0]?.width ?? null,
-                height:         normalizedMedia[0]?.height ?? null,
-              }}
             />
             </div>
           </VisibilityGate>

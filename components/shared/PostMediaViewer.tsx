@@ -44,7 +44,6 @@ interface PostMediaViewerProps {
   avatarUrl?:            string | null;
   caption?:              string | null;
   durationSeconds?:      number | null;
-  postData?:             PostFullscreenData;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -267,7 +266,7 @@ function SubscribeButton({ label, badge, onClick }: {
 }
 
 // ── PostMediaViewer ──────────────────────────────────────────────────────────
-import type { VideoPlayerHandle, PostFullscreenData } from "@/components/video/VideoPlayer";
+import type { VideoPlayerHandle } from "@/components/video/VideoPlayer";
 
 export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(function PostMediaViewer({
   media,
@@ -291,7 +290,6 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   avatarUrl,
   caption,
   durationSeconds,
-  postData,
 }: PostMediaViewerProps, ref) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
@@ -515,7 +513,6 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               avatarUrl={avatarUrl}
               caption={caption}
               durationSeconds={first.durationSeconds ?? null}
-              postData={postData}
             />
           </div>
           {isUnlockedPPV && <UnlockedPPVBadge />}

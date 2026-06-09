@@ -40,7 +40,7 @@ function CaptionExpander({ caption }: { caption: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <p
-      onClick={() => setExpanded((e) => !e)}
+      onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
       style={{
         margin: 0,
         fontSize: 14,
@@ -670,28 +670,14 @@ export function VideoFullscreenModal({
               <span>{formatCount(commentCount)}</span>
             </button>
           </div>
-          {/* ── Bottom left: creator info ── */}
+          {/* ── Bottom stack: avatar + caption + timer + seekbar ── */}
           <div
-            style={{
-              position: "absolute",
-              bottom: isMobile ? 12 : 10,
-              left: 12,
-              right: 76,
-              zIndex: 10000,
-              animation: mounted ? "vfm-bar-up 0.25s ease-out 0.05s both" : "none",
-            }}
+            style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 10001, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}
+            onClick={(e) => e.stopPropagation()}
           >
-            {isSeeking ? (
-              <div style={{ paddingBottom: "8px" }}>
-                <span style={{ fontSize: 36, fontWeight: 700, color: "#fff", fontFamily: "'Inter',sans-serif", letterSpacing: "-0.5px", lineHeight: 1 }}>
-                  {formatTime(currentTime)}
-                </span>
-                <span style={{ fontSize: 16, fontWeight: 400, color: "rgba(255,255,255,0.5)", fontFamily: "'Inter',sans-serif", marginLeft: "6px" }}>
-                  / {formatTime(duration)}
-                </span>
-              </div>
-            ) : (
-              <>
+            {/* Avatar + name + caption — hidden while seeking */}
+            {!isSeeking && (
+              <div style={{ paddingLeft: 14, paddingRight: 76, paddingBottom: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: data.caption ? 8 : 0 }}>
                   <div style={{ position: "relative", flexShrink: 0 }}>
                     <button
@@ -710,57 +696,43 @@ export function VideoFullscreenModal({
                       <button
                         onClick={handleFollowToggle}
                         disabled={followLoading}
-                        style={{
-                          position: "absolute", bottom: 0, right: 0,
-                          width: 18, height: 18, borderRadius: "50%",
-                          background: "#8B5CF6", border: "2px solid #0a0a0f",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          cursor: "pointer", padding: 0,
-                          WebkitTapHighlightColor: "transparent",
-                          transition: "background 0.2s",
-                          opacity: followLoading ? 0.6 : 1,
-                        }}
+                        style={{ position: "absolute", bottom: 0, right: 0, width: 18, height: 18, borderRadius: "50%", background: "#8B5CF6", border: "2px solid #0a0a0f", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, WebkitTapHighlightColor: "transparent", transition: "background 0.2s", opacity: followLoading ? 0.6 : 1 }}
                       >
                         <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="12" y1="5" x2="12" y2="19" />
-                          <line x1="5" y1="12" x2="19" y2="12" />
+                          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
                       </button>
                     )}
                   </div>
                   <div onClick={handleProfileClick} style={{ cursor: "pointer", minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {name}
-                    </p>
-                    <p style={{ margin: "2px 0 0", fontSize: 13, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      @{data.username}
-                    </p>
+                    <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</p>
+                    <p style={{ margin: "2px 0 0", fontSize: 13, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>@{data.username}</p>
                   </div>
                 </div>
-                {data.caption && (
-                  <CaptionExpander caption={data.caption} />
-                )}
-              </>
+                {data.caption && <CaptionExpander caption={data.caption} />}
+              </div>
             )}
-          </div>
 
-          {/* ── Seek bar + timer ── */}
-          <div
-            style={{
-              position: "absolute", bottom: 0, left: 0, right: 0,
-              zIndex: 10001,
-              background: "transparent",
-              padding: 0,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+            {/* Big timer while seeking */}
+            {isSeeking && (
+              <div style={{ paddingLeft: 14, paddingBottom: 0 }}>
+                <span style={{ fontSize: 36, fontWeight: 700, color: "#fff", fontFamily: "'Inter',sans-serif", letterSpacing: "-0.5px", lineHeight: 1 }}>
+                  {formatTime(currentTime)}
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 400, color: "rgba(255,255,255,0.5)", fontFamily: "'Inter',sans-serif", marginLeft: "6px" }}>
+                  / {formatTime(duration)}
+                </span>
+              </div>
+            )}
+
+            {/* Seekbar */}
             <div
               ref={seekBarRef}
               onPointerDown={handleSeekPointerDown}
               onPointerMove={handleSeekPointerMove}
               onPointerUp={handleSeekPointerUp}
               onPointerCancel={handleSeekPointerUp}
-              style={{ position: "relative", width: "100%", height: "36px", display: "flex", alignItems: "flex-end", touchAction: "none", cursor: "pointer", paddingBottom: "2px", boxSizing: "border-box" }}
+              style={{ position: "relative", width: "100%", height: "36px", display: "flex", alignItems: "flex-end", touchAction: "none", cursor: "pointer", paddingBottom: "2px", boxSizing: "border-box", pointerEvents: "auto" }}
             >
               <div style={{ position: "absolute", left: 0, right: 0, height: isSeeking ? "5px" : "3px", borderRadius: "2px", background: "rgba(255,255,255,0.25)", transition: "height 0.15s ease" }}>
                 <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${progress}%`, background: "rgba(255,255,255,0.95)", borderRadius: "2px" }} />

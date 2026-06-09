@@ -3,30 +3,6 @@
 import * as React from "react";
 import { decode } from "blurhash";
 import Hls from "hls.js";
-import { useAppStore } from "@/lib/store/appStore";
-import { useRouter } from "next/navigation";
-import { postSyncStore } from "@/lib/store/postSyncStore";
-import { followCreator, unfollowCreator } from "@/lib/utils/follow";
-import CommentSection from "@/components/profile/CommentSection";
-import type { ApiComment } from "@/components/profile/CommentSection";
-
-export interface PostFullscreenData {
-  post_id:          string | number;
-  bunny_video_id:   string | null;
-  thumbnail_url?:   string | null;
-  display_name:     string;
-  username:         string;
-  avatar_url?:      string | null;
-  creator_id?:      string;
-  caption?:         string | null;
-  like_count:       number;
-  liked:            boolean;
-  comment_count:    number;
-  subscriber_count: number;
-  aspect_ratio?:    number | null;
-  width?:           number | null;
-  height?:          number | null;
-}
 
 // ── Mute persistence ──────────────────────────────────────────────────────────
 const MUTE_KEY = "vp_muted";
@@ -38,7 +14,6 @@ function saveMute(v: boolean) {
 }
 
 const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
-const STREAM_CDN      = process.env.NEXT_PUBLIC_BUNNY_STREAM_CDN_HOSTNAME ?? BUNNY_PULL_ZONE;
 
 const watchedVideoIds = new Set<string>();
 export const warmedVideoIds    = new Set<string>();
@@ -49,8 +24,12 @@ let currentlyPlayingVideo: HTMLVideoElement | null = null;
 
 export function setGlobalFullscreenOpen(open: boolean) { anyFullscreenOpen = open; }
 
-export function getBunnyThumbnail(videoId: string) { return `https://${BUNNY_PULL_ZONE}/${videoId}/thumbnail.jpg`; }
-export function getBunnyHLS(videoId: string)        { return `https://${BUNNY_PULL_ZONE}/${videoId}/playlist.m3u8`; }
+export function getBunnyThumbnail(videoId: string) {
+  return `https://${BUNNY_PULL_ZONE}/${videoId}/thumbnail.jpg`;
+}
+export function getBunnyHLS(videoId: string) {
+  return `https://${BUNNY_PULL_ZONE}/${videoId}/playlist.m3u8`;
+}
 export function getBunnyMP4(videoId: string, resolution: "1080" | "720" | "480" = "1080") {
   return `https://${BUNNY_PULL_ZONE}/${videoId}/play_${resolution}p.mp4`;
 }
@@ -69,7 +48,9 @@ function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProper
       ctx.putImageData(imageData, 0, 0);
     } catch { }
   }, [hash]);
-  return <canvas ref={canvasRef} width={W} height={H} style={{ ...style, imageRendering: "auto" }} />;
+  return (
+    <canvas ref={canvasRef} width={W} height={H} style={{ ...style, imageRendering: "auto" }} />
+  );
 }
 
 function formatTime(seconds: number): string {
@@ -79,13 +60,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
-  return String(n);
-}
-
-// ── Seek Hook ─────────────────────────────────────────────────────────────────
+// ── Unified Seek Hook ─────────────────────────────────────────────────────────
 function useSeekBar(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const trackRef      = React.useRef<HTMLDivElement>(null);
   const isSeekingRef  = React.useRef(false);
@@ -100,11 +75,11 @@ function useSeekBar(videoRef: React.RefObject<HTMLVideoElement | null>) {
   }, []);
 
   const onPointerDown = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation(); e.preventDefault();
+    e.stopPropagation();
+    e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     const video = videoRef.current;
     wasPlayingRef.current = !!(video && !video.paused);
-    if (wasPlayingRef.current) video?.pause();
     isSeekingRef.current = true;
     setIsSeeking(true);
     const t = getFraction(e.clientX) * (video?.duration || 0);
@@ -113,7 +88,8 @@ function useSeekBar(videoRef: React.RefObject<HTMLVideoElement | null>) {
 
   const onPointerMove = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!isSeekingRef.current) return;
-    e.stopPropagation(); e.preventDefault();
+    e.stopPropagation();
+    e.preventDefault();
     const video = videoRef.current;
     const t = getFraction(e.clientX) * (video?.duration || 0);
     if (video) video.currentTime = t;
@@ -123,681 +99,269 @@ function useSeekBar(videoRef: React.RefObject<HTMLVideoElement | null>) {
     e.stopPropagation();
     isSeekingRef.current = false;
     setIsSeeking(false);
+    // Don't play/pause — caller decides
+  }, [videoRef]);
+
+  return { trackRef, isSeeking, isSeekingRef, wasPlayingRef, onPointerDown, onPointerMove, onPointerUp };
+}
+
+// ── Fullscreen Overlay (rendered inside portal div) ───────────────────────────
+interface FullscreenOverlayProps {
+  videoRef:    React.RefObject<HTMLVideoElement | null>;
+  onClose:     () => void;
+  isMuted:     boolean;
+  onToggleMute: () => void;
+  onPlay?:     () => void;
+  displayName?: string;
+  username?:   string;
+  avatarUrl?:  string | null;
+  caption?:    string | null;
+}
+
+function FullscreenOverlay({
+  videoRef,
+  onClose,
+  isMuted,
+  onToggleMute,
+  onPlay,
+  displayName,
+  username,
+  avatarUrl,
+  caption,
+}: FullscreenOverlayProps) {
+  const [currentTime, setCurrentTime] = React.useState(() => videoRef.current?.currentTime ?? 0);
+  const [duration,    setDuration]    = React.useState(() => videoRef.current?.duration    ?? 0);
+  const [isPaused,    setIsPaused]    = React.useState(() => videoRef.current?.paused      ?? false);
+  const [isBuffering, setIsBuffering] = React.useState(false);
+  const [captionExp,  setCaptionExp]  = React.useState(false);
+  const [avatarErr,   setAvatarErr]   = React.useState(false);
+
+  const durationRef = React.useRef(duration);
+  React.useEffect(() => { durationRef.current = duration; }, [duration]);
+
+  const seekBarRef    = React.useRef<HTMLDivElement>(null);
+  const isSeekingRef  = React.useRef(false);
+  const wasPlayingRef = React.useRef(false);
+  const [isSeeking,   setIsSeeking] = React.useState(false);
+
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onTime    = () => { setCurrentTime(video.currentTime); };
+    const onMeta    = () => { setDuration(video.duration); durationRef.current = video.duration; };
+    const onPlay    = () => { setIsPaused(false); setIsBuffering(false); };
+    const onPause   = () => setIsPaused(true);
+    const onPlaying = () => { setIsBuffering(false); setIsPaused(false); };
+    const onWaiting = () => {
+      setIsBuffering(true);
+      if (video.seeking) return;
+      const hls = (video as any).__hls;
+      if (hls) { try { hls.stopLoad(); hls.startLoad(-1); } catch {} }
+      video.play().catch(() => {});
+    };
+    video.addEventListener("timeupdate",     onTime);
+    video.addEventListener("loadedmetadata", onMeta);
+    video.addEventListener("play",           onPlay);
+    video.addEventListener("pause",          onPause);
+    video.addEventListener("playing",        onPlaying);
+    video.addEventListener("waiting",        onWaiting);
+    if (video.duration) { setDuration(video.duration); durationRef.current = video.duration; }
+    return () => {
+      video.removeEventListener("timeupdate",     onTime);
+      video.removeEventListener("loadedmetadata", onMeta);
+      video.removeEventListener("play",           onPlay);
+      video.removeEventListener("pause",          onPause);
+      video.removeEventListener("playing",        onPlaying);
+      video.removeEventListener("waiting",        onWaiting);
+    };
+  }, [videoRef]);
+
+  const seekRectRef = React.useRef<DOMRect | null>(null);
+
+  const handleSeekPointerDown = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const video = videoRef.current;
+    wasPlayingRef.current = !video?.paused;
+    if (wasPlayingRef.current) video?.pause();
+    isSeekingRef.current = true;
+    setIsSeeking(true);
+    seekRectRef.current = seekBarRef.current!.getBoundingClientRect();
+    const t = Math.max(0, Math.min(1, (e.clientX - seekRectRef.current.left) / seekRectRef.current.width)) * durationRef.current;
+    setCurrentTime(t);
+    if (video) video.currentTime = t;
+  }, [videoRef]);
+
+  const handleSeekPointerMove = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    e.stopPropagation();
+    const rect = seekRectRef.current;
+    if (!rect) return;
+    const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * durationRef.current;
+    setCurrentTime(t);
+    if (videoRef.current) videoRef.current.currentTime = t;
+  }, [videoRef]);
+
+  const handleSeekPointerUp = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    isSeekingRef.current = false;
+    setIsSeeking(false);
     if (wasPlayingRef.current) videoRef.current?.play().catch(() => {});
   }, [videoRef]);
 
-  return { trackRef, isSeeking, onPointerDown, onPointerMove, onPointerUp };
-}
-
-// ── Caption Expander ──────────────────────────────────────────────────────────
-function CaptionExpander({ caption }: { caption: string }) {
-  const [expanded, setExpanded] = React.useState(false);
-  return (
-    <p
-      onClick={() => setExpanded((e) => !e)}
-      style={{
-        margin: 0, fontSize: 14, lineHeight: "1.4",
-        color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif",
-        wordBreak: "break-word", cursor: "pointer",
-        ...(expanded ? {} : { overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }),
-      }}
-    >
-      {caption}
-    </p>
-  );
-}
-
-// ── Fullscreen Modal ──────────────────────────────────────────────────────────
-interface ModalProps {
-  data:               PostFullscreenData;
-  onClose:            () => void;
-  initialTime?:       number;
-  existingHls?:       any;
-  isMuted:            boolean;
-  onMuteChange:       (muted: boolean) => void;
-  initialIsFollowing?: boolean;
-  onFollowChange?:    (creatorId: string, isFollowing: boolean) => void;
-}
-
-function VideoFullscreenModal({
-  data,
-  onClose,
-  initialTime = 0,
-  existingHls,
-  isMuted,
-  onMuteChange,
-  initialIsFollowing = false,
-  onFollowChange,
-}: ModalProps) {
-  const router        = useRouter();
-  const openAuthModal = useAppStore((s) => s.openAuthModal);
-
-  console.log("[VideoModal] mounted at", performance.now().toFixed(1));
-
-  useEffect(() => { if (data.username) router.prefetch(`/${data.username}`); }, [data.username, router]);
-
-  const videoRef   = React.useRef<HTMLVideoElement>(null);
-  const hlsRef     = React.useRef<any>(null);
-  const innerRef   = React.useRef<HTMLDivElement>(null);
-  const swipeStartYRef = React.useRef(0);
-
-  const [avatarError, setAvatarError] = React.useState(false);
-  const [mounted,     setMounted]     = React.useState(false);
-  const [isPaused,    setIsPaused]    = React.useState(false);
-  const [isMobile,    setIsMobile]    = React.useState(false);
-
-  const postId = String(data.post_id);
-  const cached = postSyncStore.get(postId);
-  const [likeCount,    setLikeCount]    = React.useState(cached?.like_count    ?? data.like_count    ?? 0);
-  const [liked,        setLiked]        = React.useState(cached?.liked         ?? data.liked ?? false);
-  const [commentCount, setCommentCount] = React.useState(cached?.comment_count ?? data.comment_count ?? 0);
-
-  const [isFollowing,   setIsFollowing]   = React.useState(initialIsFollowing);
-  const [followLoading, setFollowLoading] = React.useState(false);
-
-  const [commentsOpen,    setCommentsOpen]    = React.useState(false);
-  const [comments,        setComments]        = React.useState<ApiComment[]>([]);
-  const [commentsLoading, setCommentsLoading] = React.useState(false);
-  const [viewer,          setViewer]          = React.useState<{ username: string; display_name: string; avatar_url?: string } | null>(null);
-  const [viewerUserId,    setViewerUserId]    = React.useState<string | undefined>(undefined);
-
-  const [currentTime,  setCurrentTime]  = React.useState(initialTime);
-  const [duration,     setDuration]     = React.useState(0);
-  const [isSeeking,    setIsSeeking]    = React.useState(false);
-  const [isVideoReady, setIsVideoReady] = React.useState(false);
-  const [showSlowDots, setShowSlowDots] = React.useState(false);
-
-  const slowDotsTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const seekBarRef       = React.useRef<HTMLDivElement>(null);
-  const wasPlayingRef    = React.useRef(false);
-
-  React.useEffect(() => {
-    setIsMobile(!window.matchMedia("(hover: hover) and (pointer: fine)").matches);
-  }, []);
-
-  React.useEffect(() => {
-    import("@/lib/supabase/client").then(({ createClient }) => {
-      const supabase = createClient();
-      supabase.auth.getUser().then((authRes: any) => {
-        if (!authRes.data.user) return;
-        setViewerUserId(authRes.data.user.id);
-        supabase.from("profiles").select("username, display_name, avatar_url").eq("id", authRes.data.user.id).single().then((profileRes: any) => {
-          if (profileRes.data) setViewer({ username: profileRes.data.username, display_name: profileRes.data.display_name ?? profileRes.data.username, avatar_url: profileRes.data.avatar_url ?? undefined });
-        });
-      });
-    });
-  }, []);
-
-  React.useEffect(() => {
-    const unsub = postSyncStore.subscribe((event) => {
-      if (event.postId !== postId) return;
-      setLikeCount(event.like_count);
-      setLiked(event.liked);
-      if (event.comment_count !== undefined) setCommentCount(event.comment_count);
-    });
-    return unsub;
-  }, [postId]);
-
-  React.useEffect(() => {
-    if (!commentsOpen) return;
-    setCommentsLoading(true);
-    fetch(`/api/posts/${data.post_id}/comments`)
-      .then((r) => r.json())
-      .then((d) => { if (d.comments) setComments(d.comments); })
-      .catch(() => {})
-      .finally(() => setCommentsLoading(false));
-  }, [commentsOpen, data.post_id]);
-
-  const videoSrc = data.bunny_video_id
-    ? `https://${STREAM_CDN}/${data.bunny_video_id}/playlist.m3u8`
-    : null;
-
-  const videoRatio = (() => {
-    if (data.aspect_ratio != null && data.aspect_ratio > 0) return data.aspect_ratio;
-    if (data.width && data.height) return data.width / data.height;
-    return null;
-  })();
-  const isPortrait = videoRatio != null ? videoRatio < 0.6 : false;
-
-  const name     = data.display_name || data.username;
-  const initials = (name[0] ?? "?").toUpperCase();
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-  // Mount animation + slow dots
-  React.useEffect(() => {
-    const t = requestAnimationFrame(() => setMounted(true));
-    slowDotsTimerRef.current = setTimeout(() => setShowSlowDots(true), 800);
-    return () => {
-      cancelAnimationFrame(t);
-      if (slowDotsTimerRef.current) clearTimeout(slowDotsTimerRef.current);
-    };
-  }, []);
-
-  // Lock body scroll
-  React.useEffect(() => {
-    const savedScroll = window.scrollY;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.scrollTo({ top: 0, behavior: "instant" });
-    return () => {
-      document.body.style.overflow = prev;
-      window.scrollTo({ top: savedScroll, behavior: "instant" });
-    };
-  }, []);
-
-  // HLS setup — attach existing or init new
-  React.useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !videoSrc) return;
-    video.muted = isMuted;
-
-    const tryPlay = () => {
-      video.currentTime = initialTime;
-      video.play().catch(() => {});
-    };
-
-    (async () => {
-      if (existingHls) {
-        hlsRef.current = existingHls;
-        existingHls.attachMedia(video);
-        existingHls.on(Hls.Events.MANIFEST_PARSED, () => { tryPlay(); });
-        if (existingHls.media) tryPlay();
-      } else {
-        const HlsMod = (await import("hls.js")).default;
-        if (HlsMod.isSupported()) {
-          const hls = new HlsMod({ startLevel: -1, capLevelToPlayerSize: false });
-          hlsRef.current = hls;
-          hls.loadSource(videoSrc);
-          hls.attachMedia(video);
-          hls.on(HlsMod.Events.MANIFEST_PARSED, () => { tryPlay(); });
-        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          video.src = videoSrc;
-          video.addEventListener("loadeddata", tryPlay, { once: true });
-        }
-      }
-    })();
-
-    return () => {
-      const v = videoRef.current;
-      if (v) { v.pause(); if (!existingHls) v.src = ""; }
-      if (!existingHls && hlsRef.current) {
-        hlsRef.current.destroy();
-      }
-      hlsRef.current = null;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoSrc]);
-
-  // Sync mute
-  React.useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = isMuted;
-  }, [isMuted]);
-
-  // Sync play/pause state
-  React.useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const onPlay  = () => setIsPaused(false);
-    const onPause = () => setIsPaused(true);
-    video.addEventListener("play",  onPlay);
-    video.addEventListener("pause", onPause);
-    return () => {
-      video.removeEventListener("play",  onPlay);
-      video.removeEventListener("pause", onPause);
-    };
-  }, []);
-
   const handleVideoTap = (e: React.MouseEvent) => {
     e.stopPropagation();
+    console.log("[FullscreenOverlay] handleVideoTap fired");
     const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) video.play().catch(() => {});
-    else video.pause();
-  };
-
-  const handleTimeUpdate = React.useCallback(() => {
-    const video = videoRef.current;
-    if (!video || isSeeking) return;
-    setCurrentTime(video.currentTime);
-  }, [isSeeking]);
-
-  const handleLoadedMetadata = React.useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    setDuration(video.duration);
-  }, []);
-
-  const getSeekFraction = (clientX: number): number => {
-    const bar = seekBarRef.current;
-    if (!bar) return 0;
-    const rect = bar.getBoundingClientRect();
-    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  };
-
-  const handleSeekPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    wasPlayingRef.current = !videoRef.current?.paused;
-    videoRef.current?.pause();
-    setIsSeeking(true);
-    const newTime = getSeekFraction(e.clientX) * duration;
-    setCurrentTime(newTime);
-    if (videoRef.current) videoRef.current.currentTime = newTime;
-  };
-
-  const handleSeekPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    e.stopPropagation();
-    const newTime = getSeekFraction(e.clientX) * duration;
-    setCurrentTime(newTime);
-    if (videoRef.current) videoRef.current.currentTime = newTime;
-  };
-
-  const handleSeekPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    setIsSeeking(false);
-    if (wasPlayingRef.current) videoRef.current?.play().catch(() => {});
-  };
-
-  const toggleMute = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onMuteChange(!isMuted);
-  };
-
-  const handleClose = () => {
-    if (videoRef.current) videoRef.current.pause();
-    onClose();
-  };
-
-  const handleProfileClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    router.push(`/${data.username}`);
-  };
-
-  const handleFollowToggle = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!viewerUserId) { openAuthModal(); return; }
-    if (followLoading || !data.creator_id) return;
-    setFollowLoading(true);
-    try {
-      if (isFollowing) {
-        await unfollowCreator(data.creator_id);
-        setIsFollowing(false);
-        onFollowChange?.(data.creator_id, false);
+    if (!video) { console.log("[FullscreenOverlay] no video ref"); return; }
+    console.log("[FullscreenOverlay] paused:", video.paused, "src:", video.src, "hls:", !!(video as any).__hls);
+    if (video.paused) {
+      const hls = (video as any).__hls;
+      const isReady = hls ? hls.media && video.readyState >= 1 : (video.src && !video.src.includes("/dashboard"));
+      console.log("[FullscreenOverlay] isReady:", isReady, "readyState:", video.readyState, "hls.media:", !!hls?.media);
+      if (!isReady) {
+        console.log("[FullscreenOverlay] not ready — calling onPlay");
+        setIsPaused(false);
+        onPlay?.();
       } else {
-        await followCreator(data.creator_id);
-        setIsFollowing(true);
-        onFollowChange?.(data.creator_id, true);
+        console.log("[FullscreenOverlay] calling video.play()");
+        setIsPaused(false);
+        video.muted = getSavedMute();
+        video.play().catch((err) => { console.log("[FullscreenOverlay] play() failed:", err); setIsPaused(true); });
       }
-    } catch (err) {
-      console.error("Follow error:", err);
-    } finally {
-      setFollowLoading(false);
+    } else {
+      console.log("[FullscreenOverlay] pausing");
+      video.pause();
     }
   };
 
-  const handleLike = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!viewerUserId) { openAuthModal(); return; }
-    const newLiked = !liked;
-    const newCount = newLiked ? likeCount + 1 : Math.max(likeCount - 1, 0);
-    setLiked(newLiked);
-    setLikeCount(newCount);
-    postSyncStore.emit({ postId, liked: newLiked, like_count: newCount });
-    try {
-      const res  = await fetch(`/api/posts/${data.post_id}/like`, { method: "POST" });
-      const json = await res.json();
-      setLiked(json.liked);
-      setLikeCount(json.like_count);
-      postSyncStore.emit({ postId, liked: json.liked, like_count: json.like_count });
-    } catch {
-      setLiked(!newLiked);
-      setLikeCount(likeCount);
-      postSyncStore.emit({ postId, liked: !newLiked, like_count: likeCount });
-    }
-  };
-
-  const handleAddComment = async (postId: string, text: string, gif_url?: string, parent_comment_id?: string | number, reply_to_username?: string | null, reply_to_id?: string | number | null) => {
-    const res  = await fetch(`/api/posts/${postId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text, gif_url, parent_comment_id, reply_to_username, reply_to_id }),
-    });
-    const json = await res.json();
-    if (res.ok && json.comment) {
-      if (!parent_comment_id) {
-        const newCount = commentCount + 1;
-        setCommentCount(newCount);
-        postSyncStore.emit({ postId, liked, like_count: likeCount, comment_count: newCount });
-        setComments((prev) => [json.comment, ...prev]);
-      }
-    }
-  };
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const name     = displayName || username || "";
+  const initials = (name[0] ?? "?").toUpperCase();
 
   return (
     <>
       <style>{`
-        @keyframes vfm-scale-in {
-          from { opacity: 0; transform: scale(0.96); }
-          to   { opacity: 1; transform: scale(1); }
-        }
-        @keyframes vfm-bar-up {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
         @keyframes vfm-play-pop {
-          0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
-          40%  { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
-          70%  { transform: translate(-50%, -50%) scale(0.95); }
-          100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.6); }
+          40%  { opacity: 1; transform: translate(-50%,-50%) scale(1.1); }
+          100% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
         }
         @keyframes vfm-dot { 0%,80%,100%{opacity:0.3;transform:scale(0.85)} 40%{opacity:1;transform:scale(1)} }
-
-        .vfm-panel {
-          position: fixed; inset: 0; z-index: 9999;
-          display: flex; align-items: center; justify-content: center;
-          height: 100vh; height: 100dvh;
-          left: var(--sidebar-w, 0px); right: var(--right-panel-w, 0px);
-        }
-        .vfm-inner {
-          position: relative; width: 100%; height: 100%; overflow: hidden;
-        }
-        @media (min-width: 1024px) {
-          .vfm-panel { left: 280px; right: 380px; }
-          .vfm-backdrop { left: 280px; right: 380px; background: transparent !important; }
-          .vfm-inner { max-width: 100% !important; max-height: 100% !important; border-radius: 0 !important; }
-        }
-        .vfm-action-btn {
-          background: none; border: none; cursor: pointer;
-          display: flex; flex-direction: column; align-items: center;
-          gap: 3px; padding: 0; -webkit-tap-highlight-color: transparent;
-        }
-        .vfm-action-btn span {
-          font-size: 13px; color: rgba(255,255,255,0.75);
-          font-family: 'Inter', sans-serif; font-weight: 600;
-        }
-        @media (min-width: 768px) {
-          .vfm-panel { background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); }
-          .vfm-inner { max-width: 420px; max-height: 90vh; border-radius: 16px; box-shadow: 0 32px 80px rgba(0,0,0,0.8); }
-        }
-        @media (min-width: 1024px) {
-          .vfm-panel { background: transparent; backdrop-filter: none; }
-        }
       `}</style>
 
-      {/* Backdrop */}
+      {/* Tap zone — play/pause */}
       <div
-        className="vfm-backdrop"
-        style={{ position: "fixed", inset: 0, zIndex: 9998, backgroundColor: "#000" }}
-        onClick={handleClose}
-        onTouchMove={(e) => e.preventDefault()}
+        onClick={handleVideoTap}
+        style={{ position: "absolute", inset: 0, zIndex: 6, cursor: "pointer", pointerEvents: "auto" }}
       />
 
-      <div
-        className="vfm-panel"
-        style={{ animation: mounted ? "vfm-scale-in 0.2s ease-out forwards" : "none", opacity: mounted ? undefined : 0, touchAction: "none" }}
-      >
-        {/* Close — top left */}
-        <button
-          onClick={(e) => { e.stopPropagation(); handleClose(); }}
-          style={{ position: "absolute", top: 12, left: 12, zIndex: 10001, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent", transition: "background 0.2s" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.65)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.45)")}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-
-        {/* Mute — top right */}
-        <button
-          onClick={toggleMute}
-          style={{ position: "absolute", top: 12, right: 12, zIndex: 10001, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent", transition: "background 0.2s" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.65)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.45)")}
-        >
-          {isMuted ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-            </svg>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            </svg>
-          )}
-        </button>
-
+      {/* Play icon when paused */}
+      {isPaused && !isSeeking && !isBuffering && (
         <div
-          className="vfm-inner"
-          ref={innerRef}
-          onTouchStart={(e) => {
-            swipeStartYRef.current = e.touches[0].clientY;
-            if (innerRef.current) innerRef.current.style.transition = "none";
-          }}
-          onTouchMove={(e) => {
-            const delta = e.touches[0].clientY - swipeStartYRef.current;
-            if (delta <= 0 || isSeeking) return;
-            const prog = Math.min(delta / 350, 1);
-            if (innerRef.current) {
-              innerRef.current.style.transform    = `translateY(${delta * 0.55}px) scale(${1 - prog * 0.06})`;
-              innerRef.current.style.borderRadius = `${prog * 20}px`;
-            }
-          }}
-          onTouchEnd={(e) => {
-            const delta = e.changedTouches[0].clientY - swipeStartYRef.current;
-            if (delta > 120) {
-              handleClose();
-            } else {
-              if (innerRef.current) {
-                innerRef.current.style.transition   = "transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 280ms ease";
-                innerRef.current.style.transform    = "none";
-                innerRef.current.style.borderRadius = "";
-              }
-            }
-          }}
+          onClick={handleVideoTap}
+          style={{ position: "absolute", top: "50%", left: "50%", zIndex: 10, pointerEvents: "auto", cursor: "pointer", animation: "vfm-play-pop 0.25s ease-out forwards", transform: "translate(-50%,-50%)", filter: "drop-shadow(0 2px 12px rgba(0,0,0,0.6))" }}
         >
-          {/* Thumbnail until first frame */}
-          {!isVideoReady && data.thumbnail_url && (
-            <img
-              src={data.thumbnail_url} alt=""
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: isMobile && isPortrait ? "cover" : "contain", zIndex: 9999, pointerEvents: "none" }}
-            />
-          )}
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.92)" style={{ marginLeft: 5 }}>
+            <polygon points="5,3 19,12 5,21"/>
+          </svg>
+        </div>
+      )}
 
-          {/* Slow dots */}
-          {!isVideoReady && showSlowDots && (
-            <div style={{ position: "absolute", left: 0, right: 0, top: "50%", transform: "translateY(-50%)", zIndex: 10002, display: "flex", justifyContent: "center", gap: "6px", pointerEvents: "none" }}>
-              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#8B5CF6", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
-              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#B44DD4", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.2s" }} />
-              <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#EC4899", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.4s" }} />
-            </div>
-          )}
+      {/* Bottom gradient */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "280px", background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)", pointerEvents: "none", zIndex: 2 }} />
 
-          {/* Video */}
-          {videoSrc && (
-            <video
-              ref={videoRef}
-              muted={isMuted}
-              playsInline loop preload="auto"
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              onPlaying={() => {
-                console.log("[VideoModal] video playing at", performance.now().toFixed(1));
-                if (slowDotsTimerRef.current) { clearTimeout(slowDotsTimerRef.current); slowDotsTimerRef.current = null; }
-                setShowSlowDots(false);
-                setIsVideoReady(true);
-              }}
-              onClick={handleVideoTap}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: isMobile && isPortrait ? "cover" : "contain", backgroundColor: "#000", display: "block", cursor: "pointer" }}
-            />
-          )}
-
-          {/* Play icon when paused */}
-          {isPaused && !isSeeking && (
-            <div
-              onClick={handleVideoTap}
-              style={{ position: "absolute", top: "50%", left: "50%", zIndex: 10000, pointerEvents: "auto", cursor: "pointer", animation: "vfm-play-pop 0.25s ease-out forwards", transform: "translate(-50%, -50%)", filter: "drop-shadow(0 2px 12px rgba(0,0,0,0.6))" }}
-            >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.92)" stroke="none" style={{ marginLeft: 5 }}>
-                <polygon points="5,3 19,12 5,21"/>
-              </svg>
-            </div>
-          )}
-
-          {/* Right-side action column */}
-          <div
-            style={{ position: "absolute", right: 4, bottom: isMobile ? 220 : 120, zIndex: 10001, display: "flex", flexDirection: "column", alignItems: "center", gap: 20, animation: mounted ? "vfm-bar-up 0.25s ease-out 0.05s both" : "none" }}
-          >
-            {/* Subscribers */}
-            <button className="vfm-action-btn" onClick={handleProfileClick}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="#F5C842" stroke="none">
-                <path d="M2 18h20" stroke="#F5C842" strokeWidth="1.7" strokeLinecap="round"/>
-                <path d="M4 18L2 8l4.5 4L12 4l5.5 8L22 8l-2 10H4z"/>
-              </svg>
-              <span style={{ color: "#F5C842" }}>{formatCount(data.subscriber_count)}</span>
-            </button>
-
-            {/* Likes */}
-            <button className="vfm-action-btn" onClick={handleLike}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill={liked ? "#EC4899" : "rgba(255,255,255,0.9)"} stroke="none">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-              </svg>
-              <span>{formatCount(likeCount)}</span>
-            </button>
-
-            {/* Comments */}
-            <button className="vfm-action-btn" onClick={(e) => { e.stopPropagation(); if (!viewerUserId) { openAuthModal(); return; } setCommentsOpen(true); }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" stroke="none">
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-              </svg>
-              <span>{formatCount(commentCount)}</span>
-            </button>
-          </div>
-
-          {/* Bottom left: creator info */}
-          <div
-            style={{ position: "absolute", bottom: isMobile ? 12 : 10, left: 12, right: 76, zIndex: 10000, animation: mounted ? "vfm-bar-up 0.25s ease-out 0.05s both" : "none" }}
-          >
-            {isSeeking ? (
-              <div style={{ paddingBottom: "8px" }}>
-                <span style={{ fontSize: 36, fontWeight: 700, color: "#fff", fontFamily: "'Inter',sans-serif", letterSpacing: "-0.5px", lineHeight: 1 }}>
-                  {formatTime(currentTime)}
-                </span>
-                <span style={{ fontSize: 16, fontWeight: 400, color: "rgba(255,255,255,0.5)", fontFamily: "'Inter',sans-serif", marginLeft: "6px" }}>
-                  / {formatTime(duration)}
-                </span>
+      {/* Bottom stack */}
+      <div
+        style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 8, display: "flex", flexDirection: "column", justifyContent: "flex-end", pointerEvents: "auto" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Avatar + name + caption — hidden while seeking */}
+        {!isSeeking && (
+          <div style={{ paddingLeft: 14, paddingRight: 14, paddingBottom: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: caption ? 8 : 0 }}>
+              <div style={{ width: 44, height: 44, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "2px solid rgba(255,255,255,0.3)" }}>
+                {avatarUrl && !avatarErr
+                  ? <img src={avatarUrl} alt="" onError={() => setAvatarErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  : <div style={{ width: "100%", height: "100%", background: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16, fontWeight: 700 }}>{initials}</div>
+                }
               </div>
-            ) : (
-              <>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: data.caption ? 8 : 0 }}>
-                  <div style={{ position: "relative", flexShrink: 0 }}>
-                    <button
-                      onClick={handleProfileClick}
-                      style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", border: "2px solid rgba(255,255,255,0.3)", padding: 0, cursor: "pointer", display: "block", WebkitTapHighlightColor: "transparent", background: "none" }}
-                    >
-                      {avatarError || !data.avatar_url ? (
-                        <div style={{ width: "100%", height: "100%", background: "#8B5CF6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16, fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
-                          {initials}
-                        </div>
-                      ) : (
-                        <img src={data.avatar_url} alt={name} onError={() => setAvatarError(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                      )}
-                    </button>
-                    {!isFollowing && (
-                      <button
-                        onClick={handleFollowToggle}
-                        disabled={followLoading}
-                        style={{ position: "absolute", bottom: 0, right: 0, width: 18, height: 18, borderRadius: "50%", background: "#8B5CF6", border: "2px solid #0a0a0f", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, WebkitTapHighlightColor: "transparent", transition: "background 0.2s", opacity: followLoading ? 0.6 : 1 }}
-                      >
-                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  <div onClick={handleProfileClick} style={{ cursor: "pointer", minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {name}
-                    </p>
-                    <p style={{ margin: "2px 0 0", fontSize: 13, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      @{data.username}
-                    </p>
-                  </div>
-                </div>
-                {data.caption && <CaptionExpander caption={data.caption} />}
-              </>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Inter',sans-serif" }}>{name}</span>
+                {username && <span style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", fontFamily: "'Inter',sans-serif" }}>@{username}</span>}
+              </div>
+            </div>
+            {caption && (
+              <p
+                onClick={() => setCaptionExp((x) => !x)}
+                style={{
+                  margin: 0, fontSize: 14, lineHeight: "1.4",
+                  color: "rgba(255,255,255,0.9)", fontFamily: "'Inter',sans-serif",
+                  wordBreak: "break-word", cursor: "pointer",
+                  ...(!captionExp ? { overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any } : {}),
+                }}
+              >
+                {caption}
+              </p>
             )}
           </div>
+        )}
 
-          {/* Seekbar */}
-          <div
-            style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 10001, background: "transparent", padding: 0 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              ref={seekBarRef}
-              onPointerDown={handleSeekPointerDown}
-              onPointerMove={handleSeekPointerMove}
-              onPointerUp={handleSeekPointerUp}
-              onPointerCancel={handleSeekPointerUp}
-              style={{ position: "relative", width: "100%", height: "36px", display: "flex", alignItems: "flex-end", touchAction: "none", cursor: "pointer", paddingBottom: "2px", boxSizing: "border-box" }}
-            >
-              <div style={{ position: "absolute", left: 0, right: 0, height: isSeeking ? "5px" : "3px", borderRadius: "2px", background: "rgba(255,255,255,0.25)", transition: "height 0.15s ease" }}>
-                <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${progress}%`, background: "rgba(255,255,255,0.95)", borderRadius: "2px" }} />
-                {isSeeking && (
-                  <div style={{ position: "absolute", top: "50%", left: `${progress}%`, transform: "translate(-50%, -50%)", width: "13px", height: "13px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
-                )}
-              </div>
-            </div>
+        {/* Big timer while seeking */}
+        {isSeeking && (
+          <div style={{ paddingLeft: 14, paddingBottom: 10 }}>
+            <span style={{ fontSize: 36, fontWeight: 700, color: "#fff", fontFamily: "'Inter',sans-serif", letterSpacing: "-0.5px", lineHeight: 1 }}>
+              {formatTime(currentTime)}
+            </span>
+            <span style={{ fontSize: 16, fontWeight: 400, color: "rgba(255,255,255,0.5)", fontFamily: "'Inter',sans-serif", marginLeft: 6 }}>
+              / {formatTime(duration)}
+            </span>
           </div>
+        )}
 
-          {/* Bottom gradient */}
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "220px", background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)", pointerEvents: "none", zIndex: 9999 }} />
+        {/* Seekbar */}
+        <div
+          ref={seekBarRef}
+          data-seekbar="1"
+          onPointerDown={handleSeekPointerDown}
+          onPointerMove={handleSeekPointerMove}
+          onPointerUp={handleSeekPointerUp}
+          onPointerCancel={handleSeekPointerUp}
+          style={{ position: "relative", width: "100%", height: "36px", display: "flex", alignItems: "flex-end", touchAction: "none", cursor: "pointer", userSelect: "none", WebkitUserSelect: "none", paddingBottom: "2px", boxSizing: "border-box" }}
+        >
+          <div style={{ position: "relative", width: "100%", height: isSeeking ? "5px" : "3px", borderRadius: "3px", background: "rgba(255,255,255,0.25)", transition: "height 0.15s ease" }}>
+            <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${progress}%`, background: "rgba(255,255,255,0.95)", borderRadius: "2px" }} />
+            {isSeeking && (
+              <div style={{ position: "absolute", top: "50%", left: `${progress}%`, transform: "translate(-50%,-50%)", width: 13, height: 13, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)", pointerEvents: "none" }} />
+            )}
+          </div>
         </div>
       </div>
-
-      <CommentSection
-        postId={String(data.post_id)}
-        comments={comments}
-        viewer={viewer}
-        viewerUserId={viewerUserId}
-        onAddComment={handleAddComment}
-        onDeleteComment={() => {
-          const newCount = Math.max(commentCount - 1, 0);
-          setCommentCount(newCount);
-          postSyncStore.emit({ postId, liked, like_count: likeCount, comment_count: newCount });
-        }}
-        isOpen={commentsOpen}
-        onClose={() => setCommentsOpen(false)}
-        isLoading={commentsLoading}
-        totalCommentCount={commentCount}
-      />
     </>
   );
 }
 
 // ── Custom Controls Overlay ───────────────────────────────────────────────────
 interface ControlsProps {
-  videoRef:         React.RefObject<HTMLVideoElement | null>;
-  containerRef:     React.RefObject<HTMLDivElement | null>;
-  isMuted:          boolean;
-  onToggleMute:     () => void;
-  onFirstPlay?:     () => void;
-  isMobile?:        boolean;
-  isPortrait?:      boolean;
-  bottomOffset?:    number;
-  isPlaying?:       boolean;
-  isStarted?:       boolean;
+  videoRef:          React.RefObject<HTMLVideoElement | null>;
+  containerRef:      React.RefObject<HTMLDivElement | null>;
+  isMuted:           boolean;
+  onToggleMute:      () => void;
+  onFirstPlay?:      () => void;
+  isMobile?:         boolean;
+  isPortrait?:       boolean;
+  bottomOffset?:     number;
+  isPlaying?:        boolean;
+  isStarted?:        boolean;
   onOpenFullscreen?: () => void;
-  displayName?:     string;
-  username?:        string;
-  avatarUrl?:       string | null;
-  caption?:         string | null;
-  isBuffering?:     boolean;
-  isLoading?:       boolean;
-  onPosterPlay?:    () => void;
-  durationSeconds?: number | null;
+  displayName?:      string;
+  username?:         string;
+  avatarUrl?:        string | null;
+  caption?:          string | null;
+  isBuffering?:      boolean;
+  isLoading?:        boolean;
+  onPosterPlay?:     () => void;
+  durationSeconds?:  number | null;
 }
 
 function VideoControls({
@@ -806,7 +370,6 @@ function VideoControls({
   onToggleMute,
   onFirstPlay,
   isMobile,
-  bottomOffset = 0,
   isPlaying: isPlayingProp = false,
   isStarted = false,
   onOpenFullscreen,
@@ -815,17 +378,16 @@ function VideoControls({
   onPosterPlay,
   durationSeconds = null,
 }: ControlsProps) {
-  const [playing,     setPlaying]    = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
+  const [playing,     setPlaying]     = React.useState(() => !!(videoRef.current && !videoRef.current.paused));
   const [centerFlash, setCenterFlash] = React.useState<"play" | "pause" | null>(null);
   const [currentTime, setCurrentTime] = React.useState(0);
-  const [duration,    setDuration]   = React.useState(() => durationSeconds ?? videoRef.current?.duration ?? 0);
-  const [timerFaded,  setTimerFaded] = React.useState(false);
-  const [buffered,    setBuffered]   = React.useState(0);
-  const [visible,     setVisible]    = React.useState(true);
+  const [duration,    setDuration]    = React.useState(() => durationSeconds ?? videoRef.current?.duration ?? 0);
+  const [timerFaded,  setTimerFaded]  = React.useState(false);
+  const [buffered,    setBuffered]    = React.useState(0);
+  const [visible,     setVisible]     = React.useState(true);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
   const hideTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const { trackRef, isSeeking, onPointerDown: seekPointerDown, onPointerMove: seekPointerMove, onPointerUp: seekPointerUp } = useSeekBar(videoRef);
 
   const showControls = React.useCallback(() => {
@@ -894,17 +456,15 @@ function VideoControls({
   return (
     <>
       <style>{`
-        @keyframes vp-fadein  { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes vp-fadeout { from { opacity: 1; } to { opacity: 0; } }
-        @keyframes vp-pop     { 0% { transform: translate(-50%,-50%) scale(0.6); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; } }
-        .vp-controls-bar { transition: opacity 0.25s ease; }
-        .vp-seek-thumb { position: absolute; top: 50%; right: -6px; transform: translateY(-50%); width: 14px; height: 14px; border-radius: 50%; background: #8B5CF6; box-shadow: 0 0 0 3px rgba(139,92,246,0.35); pointer-events: none; }
-        .vp-center-flash { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0.6); pointer-events: none; animation: vp-pop 0.55s ease forwards; }
+        @keyframes vp-pop { 0% { transform: translate(-50%,-50%) scale(0.6); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; } }
+        .vp-controls-bar  { transition: opacity 0.25s ease; }
+        .vp-seek-thumb    { position: absolute; top: 50%; right: -6px; transform: translateY(-50%); width: 14px; height: 14px; border-radius: 50%; background: #8B5CF6; box-shadow: 0 0 0 3px rgba(139,92,246,0.35); pointer-events: none; }
+        .vp-center-flash  { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0.6); pointer-events: none; animation: vp-pop 0.55s ease forwards; }
       `}</style>
 
       {/* Tap zone */}
       <div
-        style={{ position: "absolute", inset: 0, zIndex: 10, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none", touchAction: "manipulation" }}
+        style={{ position: "absolute", inset: 0, zIndex: 12, WebkitTapHighlightColor: "transparent", userSelect: "none", WebkitUserSelect: "none", touchAction: "manipulation" }}
         onClick={(e) => { if ((e.target as HTMLElement).closest("button")) return; if (isMobile) return; handlePlayPause(e); }}
         onTouchStart={(e) => {
           e.stopPropagation();
@@ -931,10 +491,7 @@ function VideoControls({
       {/* Center flash */}
       {centerFlash && (
         <div className="vp-center-flash" style={{ zIndex: 20 }}>
-          {centerFlash === "play"
-            ? <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><polygon points="5,3 19,12 5,21"/></svg>
-            : <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-          }
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><polygon points="5,3 19,12 5,21"/></svg>
         </div>
       )}
 
@@ -951,7 +508,7 @@ function VideoControls({
           className="vp-controls-bar"
           style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 20, opacity: visible ? 1 : 0, pointerEvents: "auto", background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)", padding: "32px 48px 10px 12px", display: "flex", flexDirection: "column", gap: "4px" }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: "4px" }}>
             <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", fontWeight: 500, background: "rgba(0,0,0,0.55)", borderRadius: "6px", padding: "2px 8px", backdropFilter: "blur(6px)" }}>
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
@@ -1021,10 +578,6 @@ interface VideoPlayerProps {
   autoPlay?:          boolean;
   hideMuteButton?:    boolean;
   durationSeconds?:   number | null;
-  // For fullscreen modal
-  postData?:          PostFullscreenData;
-  initialIsFollowing?: boolean;
-  onFollowChange?:    (creatorId: string, isFollowing: boolean) => void;
 }
 
 export interface VideoPlayerHandle {
@@ -1060,9 +613,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   autoPlay          = false,
   hideMuteButton    = false,
   durationSeconds   = null,
-  postData,
-  initialIsFollowing = false,
-  onFollowChange,
 }: VideoPlayerProps, ref) {
   const videoRef      = React.useRef<HTMLVideoElement | null>(null);
   const containerRef  = React.useRef<HTMLDivElement | null>(null);
@@ -1072,8 +622,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const loadingTimer     = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPausedByScroll = React.useRef(false);
 
+  // ── FLIP fullscreen state ──────────────────────────────────────────────────
   const portalRef           = React.useRef<HTMLDivElement | null>(null);
-  const overlayRootRef      = React.useRef<any>(null);
+  const fsOverlayRootRef    = React.useRef<any>(null);
   const originalParent      = React.useRef<Element | null>(null);
   const originalNextSibling = React.useRef<ChildNode | null>(null);
   const origRadiusRef       = React.useRef<string>("");
@@ -1089,7 +640,11 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
   const [showPoster,    setShowPoster]    = React.useState(true);
   const [posterLoaded,  setPosterLoaded]  = React.useState(false);
-  const [isBuffering,   setIsBuffering]   = React.useState(false);
+  const [isBuffering, setIsBuffering] = React.useState(false);
+  const setIsBufferingSync = React.useCallback((v: boolean) => {
+    isBufferingRef.current = v;
+    setIsBuffering(v);
+  }, []);
   const [hasError,      setHasError]      = React.useState(false);
   const [hasStarted,    setHasStarted]    = React.useState(false);
   const [showSlowDots,  setShowSlowDots]  = React.useState(false);
@@ -1106,7 +661,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
   const slowTimer    = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const waitStartRef = React.useRef<number>(0);
-  const stallTimer   = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stallTimer      = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isBufferingRef  = React.useRef(false);
+  const isPlayingRef    = React.useRef(false);
+  const isLoadingRef    = React.useRef(false);
   const autoPlayRef  = React.useRef(autoPlay);
   React.useEffect(() => { autoPlayRef.current = autoPlay; }, [autoPlay]);
 
@@ -1180,6 +738,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
   const teardown = React.useCallback((force = false) => {
     if (!force && !hasInitialized.current) return;
+    if (!force && isPlayingRef.current) return;
     const video = videoRef.current;
     if (!force && bunnyVideoId && watchedVideoIds.has(bunnyVideoId)) {
       if (video) video.pause();
@@ -1195,7 +754,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (hlsRef.current) { try { hlsRef.current.destroy(); } catch {} hlsRef.current = null; }
     if (slowTimer.current) { clearTimeout(slowTimer.current); slowTimer.current = null; }
     hasInitialized.current = false;
-    setIsBuffering(false); setHasStarted(false); setShowSlowDots(false);
+    setIsBuffering(false); setHasStarted(false); setShowSlowDots(false); setShowPoster(true);
+    console.log("[teardown] reset — showPoster:true");
   }, [bunnyVideoId]);
 
   const initVideo = React.useCallback(async () => {
@@ -1239,6 +799,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         });
         hls.loadSource(hlsSrc);
         hls.attachMedia(video);
+        (video as any).__hls = hls;
         video.addEventListener("loadedmetadata", () => {
           const dur = video.duration;
           if (!isFinite(dur) || dur <= 0) return;
@@ -1284,11 +845,37 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       const rect    = entry.boundingClientRect;
       const centerY = rect.top + rect.height / 2;
       const inView  = centerY > 0 && centerY < window.innerHeight;
-      if (!inView) { if (!isBuffering) teardown(); setShowPoster(true); }
+      if (!inView) {
+        console.log("[IO] out of view — isPlayingRef:", isPlayingRef.current, "isBufferingRef:", isBufferingRef.current, "isLoadingRef:", isLoadingRef.current);
+        if (isPlayingRef.current) {
+          videoRef.current?.pause();
+          return;
+        }
+        if (isBufferingRef.current || isLoadingRef.current) {
+          // Cancel all pending timers
+          if (bufferTimer.current)  { clearTimeout(bufferTimer.current);  bufferTimer.current  = null; }
+          if (stallTimer.current)   { clearTimeout(stallTimer.current);   stallTimer.current   = null; }
+          if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
+          // Stop HLS loading and reset video
+          const video = videoRef.current;
+          if (video) { video.pause(); video.src = ""; }
+          if (hlsRef.current) { try { hlsRef.current.destroy(); } catch {} hlsRef.current = null; }
+          hasInitialized.current = false;
+          setIsBuffering(false);
+          setIsLoading(false);
+          setHasStarted(false);
+          setShowPoster(true);
+          setShowSlowDots(false);
+          console.log("[scroll-away] state reset — showPoster:true, hasStarted:false, isBuffering:false");
+        } else {
+          teardown();
+        }
+        setShowPoster(true);
+      }
     }, { threshold: Array.from({ length: 21 }, (_, i) => i / 20) });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [teardown, isBuffering]);
+  }, [teardown]);
 
   const handleLoadedMetadata = React.useCallback(() => {
     if (fillParent || externalRatio) return;
@@ -1301,15 +888,35 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
   const handlePosterPlay = React.useCallback(async () => {
     isPausedByScroll.current = false;
+    setIsBuffering(false);
+    setIsLoading(false);
     if (loadingTimer.current) clearTimeout(loadingTimer.current);
-    loadingTimer.current = setTimeout(() => setIsLoading(true), 300);
+    loadingTimer.current = setTimeout(() => { isLoadingRef.current = true; setIsLoading(true); }, 300);
     const video = videoRef.current;
+    console.log("[handlePosterPlay] start — hasInitialized:", hasInitialized.current, "readyState:", video?.readyState, "hls:", !!hlsRef.current, "hls.media:", !!hlsRef.current?.media);
     if (!hasInitialized.current) await initVideo();
+    if (hlsRef.current && !hlsRef.current.media) {
+      console.log("[handlePosterPlay] re-attaching HLS");
+      hlsRef.current.attachMedia(video!);
+    }
     const savedMute = getSavedMute();
     if (video) video.muted = savedMute;
     setIsMuted(savedMute);
     if (video) { video.setAttribute("playsinline", ""); video.setAttribute("webkit-playsinline", ""); }
-    try { await video?.play(); } catch { }
+    console.log("[handlePosterPlay] readyState before play:", video?.readyState);
+    if (video) {
+      if (video.readyState >= 3) {
+        console.log("[handlePosterPlay] readyState ok — calling play()");
+        try { await video.play(); } catch (err) { console.log("[handlePosterPlay] play() failed:", err); }
+      } else {
+        console.log("[handlePosterPlay] waiting for canplay");
+        const tryPlay = () => {
+          console.log("[handlePosterPlay] canplay fired — calling play()");
+          video.play().catch((err) => console.log("[handlePosterPlay] play() after canplay failed:", err));
+        };
+        video.addEventListener("canplay", tryPlay, { once: true });
+      }
+    }
   }, [initVideo]);
 
   React.useEffect(() => {
@@ -1327,19 +934,27 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     saveMute(next);
   }, []);
 
+  // ── FLIP fullscreen open ───────────────────────────────────────────────────
   const exitFakeFullscreen = React.useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
+
     const first   = container.getBoundingClientRect();
     const parent  = originalParent.current;
     const sibling = originalNextSibling.current;
+
     container.style.willChange      = "transform";
     container.style.transformOrigin = "top left";
-    Object.assign(container.style, { width: originalSizeRef.current.width, height: originalSizeRef.current.height, transition: "none" });
+    Object.assign(container.style, {
+      width:      originalSizeRef.current.width,
+      height:     originalSizeRef.current.height,
+      transition: "none",
+    });
     if (parent) {
       if (sibling) parent.insertBefore(container, sibling);
       else parent.appendChild(container);
     }
+
     const last   = container.getBoundingClientRect();
     const dx     = first.left - last.left;
     const dy     = first.top  - last.top;
@@ -1347,10 +962,12 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const scaleY = first.height / last.height;
     container.style.transform    = `translate(${dx}px,${dy}px) scale(${scaleX},${scaleY})`;
     container.style.borderRadius = "0px";
+
     if (portalRef.current) {
       portalRef.current.style.transition      = "background-color 280ms cubic-bezier(0.4,0,0.2,1)";
       portalRef.current.style.backgroundColor = "rgba(0,0,0,0)";
     }
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         container.style.transition   = "transform 280ms cubic-bezier(0.4,0,0.2,1), border-radius 280ms cubic-bezier(0.4,0,0.2,1)";
@@ -1358,13 +975,14 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         container.style.borderRadius = origRadiusRef.current || "";
       });
     });
+
     const onDone = (ev: TransitionEvent) => {
       if (ev.propertyName !== "transform") return;
       container.style.willChange      = "";
       container.style.transformOrigin = "";
       container.style.transition      = "";
-      overlayRootRef.current?.unmount();
-      overlayRootRef.current = null;
+      fsOverlayRootRef.current?.unmount();
+      fsOverlayRootRef.current = null;
       portalRef.current?.remove();
       portalRef.current = null;
       document.body.style.overflow = "";
@@ -1372,6 +990,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       container.removeEventListener("transitionend", onDone);
       setIsFakeFullscreen(false);
       setGlobalFullscreenOpen(false);
+      // Re-sync video state after returning inline
+      const video = videoRef.current;
+      if (video && !video.paused) setIsPlaying(true);
+      if (video && !video.paused) setShowPoster(false);
     };
     container.addEventListener("transitionend", onDone);
   }, [containerRef]);
@@ -1390,6 +1012,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     container.style.willChange      = "transform";
     container.style.transformOrigin = "top left";
 
+    // Create portal backdrop
     const portal = document.createElement("div");
     Object.assign(portal.style, {
       position: "fixed", inset: "0", zIndex: "9999",
@@ -1400,10 +1023,12 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     document.body.appendChild(portal);
     portalRef.current = portal;
 
+    // Move container into portal
     Object.assign(container.style, { width: "100%", height: "100%", transition: "none" });
     container.classList.add("vp-portal-active");
     portal.appendChild(container);
 
+    // Close button — sibling of container (not inside it, so no z-index fight)
     const xBtn = document.createElement("button");
     xBtn.style.cssText = "position:absolute;top:12px;left:12px;z-index:10001;background:rgba(0,0,0,0.45);border:none;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);-webkit-tap-highlight-color:transparent;";
     xBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
@@ -1411,6 +1036,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     xBtn.addEventListener("touchend", (ev) => { ev.preventDefault(); ev.stopPropagation(); exitFakeFullscreen(); });
     portal.appendChild(xBtn);
 
+    // Mute button — sibling of container
     const muteBtn = document.createElement("button");
     const getMuteIcon = (muted: boolean) => muted
       ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`
@@ -1430,6 +1056,45 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     muteBtn.addEventListener("touchend", toggleMutePortal);
     portal.appendChild(muteBtn);
 
+    // React overlay div for FullscreenOverlay component
+    const overlayDiv = document.createElement("div");
+    overlayDiv.style.cssText = "position:absolute;inset:0;z-index:10000;pointer-events:auto;";
+    // We need pointer-events on children only
+    portal.appendChild(overlayDiv);
+
+    // Render FullscreenOverlay into overlayDiv
+    const ReactDOMClient = (await import("react-dom/client")).default;
+    const React2 = (await import("react")).default;
+    fsOverlayRootRef.current = ReactDOMClient.createRoot(overlayDiv);
+
+    const videoRefSnapshot = videoRef; // capture ref for closure
+
+    function FullscreenOverlayWrapper() {
+      const [mutedState, setMutedState] = React2.useState(getSavedMute());
+      return React2.createElement(FullscreenOverlay, {
+        videoRef:     videoRefSnapshot,
+        onClose:      exitFakeFullscreen,
+        isMuted:      mutedState,
+        onPlay:       handlePosterPlay,
+        onToggleMute: () => {
+          const next = !getSavedMute();
+          const video = videoRefSnapshot.current;
+          if (video) video.muted = next;
+          setIsMuted(next);
+          saveMute(next);
+          setMutedState(next);
+          muteBtn.innerHTML = getMuteIcon(next);
+        },
+        displayName,
+        username,
+        avatarUrl,
+        caption,
+      });
+    }
+
+    fsOverlayRootRef.current.render(React2.createElement(FullscreenOverlayWrapper));
+
+    // FLIP: position container where it started, then animate to fill
     const last   = container.getBoundingClientRect();
     const dx     = first.left - last.left;
     const dy     = first.top  - last.top;
@@ -1453,8 +1118,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       container.removeEventListener("transitionend", onDone);
     };
     container.addEventListener("transitionend", onDone);
-    portal.addEventListener("wheel", (ev) => ev.preventDefault(), { passive: false });
 
+    // Swipe-down to dismiss
+    portal.addEventListener("wheel", (ev) => ev.preventDefault(), { passive: false });
     let swipeStartY = 0;
     portal.addEventListener("touchstart", (ev) => {
       if ((ev.target as HTMLElement).closest("[data-seekbar]")) return;
@@ -1488,7 +1154,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     document.body.style.overflow = "hidden";
     setIsFakeFullscreen(true);
     setGlobalFullscreenOpen(true);
-  }, [containerRef, exitFakeFullscreen, videoRef]);
+  }, [containerRef, exitFakeFullscreen, videoRef, displayName, username, avatarUrl, caption]);
 
   React.useImperativeHandle(ref, () => ({
     pause:          () => videoRef.current?.pause(),
@@ -1511,7 +1177,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       setShowPoster(false);
       const doPlay = async () => {
         if (!hasInitialized.current) await initVideo();
-        if (hlsRef.current) hlsRef.current.attachMedia(video);
+        if (hlsRef.current && !hlsRef.current.media) hlsRef.current.attachMedia(video);
         if (time !== undefined) video.currentTime = time;
         video.muted = getSavedMute();
         video.play().catch(() => {});
@@ -1547,6 +1213,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         @keyframes spin   { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes vp-dot { 0%, 60%, 100% { opacity: 0.25; transform: scale(0.75); } 30% { opacity: 1; transform: scale(1.15); } }
+        .vp-portal-active [data-creator-watermark] { font-size: 17px !important; padding: 2px 8px 20px 64px !important; }
       `}</style>
 
       <div ref={containerRef} data-videoplayer style={{ ...containerStyle, position: "relative" }}>
@@ -1561,11 +1228,11 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
         {(showPoster || isLoading) && (
           <div
-            onClick={showPoster ? handlePosterPlay : undefined}
+            onClick={showPoster && !isLoading ? handlePosterPlay : undefined}
             style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: showPoster ? "pointer" : "default", opacity: showPoster ? 1 : 0, transition: showPoster ? "opacity 0.25s ease" : "none", pointerEvents: showPoster ? "auto" : "none" }}
           >
             <img src={posterSrc} alt="" fetchPriority="high" onLoad={handlePosterLoad} onError={() => {}} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }} />
-            {!isLoading && !isAutoplaying && !autoPlay && !isBuffering && (
+            {!isLoading && !isAutoplaying && !autoPlay && !isBuffering && !isFakeFullscreen && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}><polygon points="5,3 19,12 5,21"/></svg>
             )}
           </div>
@@ -1576,6 +1243,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             ref={videoRef} playsInline preload="metadata" loop muted={isMuted}
             onLoadedMetadata={handleLoadedMetadata}
             onPause={() => {
+              isPlayingRef.current = false;
               setIsPlaying(false); setIsBuffering(false); setIsLoading(false);
               if (bufferTimer.current) { clearTimeout(bufferTimer.current); bufferTimer.current = null; }
               if (stallTimer.current)  { clearTimeout(stallTimer.current);  stallTimer.current  = null; }
@@ -1593,7 +1261,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               if (bufferTimer.current) clearTimeout(bufferTimer.current);
               if (stallTimer.current)  clearTimeout(stallTimer.current);
               waitStartRef.current = Date.now();
+              isBufferingRef.current = true;
               setIsBuffering(true);
+              console.log("[onWaiting] isBufferingRef=true — time:", Date.now());
               const conn2   = (navigator as any).connection;
               const isSlow2 = (conn2?.downlink ?? 10) < 5 || ["3g","2g","slow-2g"].includes(conn2?.effectiveType ?? "");
               bufferTimer.current = setTimeout(() => {
@@ -1617,6 +1287,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               if (currentlyPlayingVideo && currentlyPlayingVideo !== videoRef.current) currentlyPlayingVideo.pause();
               currentlyPlayingVideo = videoRef.current;
               if (bunnyVideoId) watchedVideoIds.add(bunnyVideoId);
+              isPlayingRef.current = true;
+              isLoadingRef.current = false;
               setIsBuffering(false); setHasStarted(true); setIsPlaying(true);
               setShowSlowDots(false); setIsLoading(false); setShowPoster(false); setIsAutoplaying(false);
               if (bunnyVideoId) window.dispatchEvent(new CustomEvent("freya:video-playing", { detail: { bunnyVideoId } }));
@@ -1630,7 +1302,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           />
         </div>
 
-        {(isLoading || (!hasError && isBuffering)) && (
+        {(isLoading || (!hasError && isBuffering && hasStarted)) && (
           <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
             <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#8B5CF6", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
             <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#9B4FE8", animation: "vp-dot 1.2s infinite ease-in-out", animationDelay: "0.15s" }} />
@@ -1639,7 +1311,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           </div>
         )}
 
-        {!hideMuteButton && (
+        {!hideMuteButton && !isFakeFullscreen && (
           <button
             style={{ position: "absolute", top: 12, right: 12, zIndex: 13, background: "rgba(0,0,0,0.45)", border: "none", borderRadius: "50%", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(6px)", WebkitTapHighlightColor: "transparent" }}
             onClick={(e) => { e.stopPropagation(); handleToggleMute(); }}
@@ -1660,7 +1332,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           </div>
         )}
 
-        {!hasError && (
+        {!hasError && !isFakeFullscreen && (
           <VideoControls
             videoRef={videoRef}
             containerRef={containerRef}
@@ -1693,13 +1365,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           </div>
         )}
       </div>
-
-   
     </>
   );
 });
 
-// ── re-export useEffect alias used inside VideoFullscreenModal ────────────────
-const { useEffect } = React;
-
-export default VideoPlayerInner
+export default VideoPlayerInner;
