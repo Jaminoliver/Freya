@@ -139,13 +139,15 @@ function FullscreenOverlay({
   const [duration,    setDuration]    = React.useState(() => videoRef.current?.duration    ?? 0);
   const [isPaused,    setIsPaused]    = React.useState(() => {
     const v = videoRef.current;
+    console.log("[FS-INIT] paused:", v?.paused, "readyState:", v?.readyState, "currentTime:", v?.currentTime);
     if (!v) return false;
-    return v.paused && !v.seeking && v.readyState > 0;
+    return v.paused;
   });
   const [isBuffering, setIsBuffering] = React.useState(() => {
-    if (wasBuffering) return true;
     const v = videoRef.current;
-    return !!v && v.readyState < 3 && !v.paused;
+    const result = !!v && !v.paused && v.readyState < 3;
+    console.log("[FS-INIT] isBuffering:", result, "paused:", v?.paused, "readyState:", v?.readyState);
+    return result;
   });
   const [captionExp,  setCaptionExp]  = React.useState(false);
   const [avatarErr,   setAvatarErr]   = React.useState(false);
@@ -163,14 +165,16 @@ function FullscreenOverlay({
     if (!video) return;
     const onTime    = () => { setCurrentTime(video.currentTime); };
     const onMeta    = () => { setDuration(video.duration); durationRef.current = video.duration; };
-    const onPlay    = () => { setIsPaused(false); setIsBuffering(false); };
+    const onPlay    = () => { console.log("[FS-EVENT] play"); setIsPaused(false); setIsBuffering(false); };
     const onPause   = () => {
       const v = videoRef.current;
+      console.log("[FS-EVENT] pause — currentTime:", v?.currentTime);
       if (v && v.currentTime === 0) return;
       setIsPaused(true);
     };
-    const onPlaying = () => { setIsBuffering(false); setIsPaused(false); };
+    const onPlaying = () => { console.log("[FS-EVENT] playing"); setIsBuffering(false); setIsPaused(false); };
     const onWaiting = () => {
+      console.log("[FS-EVENT] waiting — readyState:", videoRef.current?.readyState);
       setIsBuffering(true);
       if (video.seeking) return;
       const hls = (video as any).__hls;
@@ -663,6 +667,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const origRadiusRef       = React.useRef<string>("");
   const originalSizeRef     = React.useRef<{ width: string; height: string }>({ width: "", height: "" });
   const [isFakeFullscreen,  setIsFakeFullscreen] = React.useState(false);
+  const [fsOpening,         setFsOpening]         = React.useState(false);
 
   React.useEffect(() => {
     const video = videoRef.current;
@@ -1032,6 +1037,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       container.classList.remove("vp-portal-active");
       container.removeEventListener("transitionend", onDone);
       setIsFakeFullscreen(false);
+      setFsOpening(false);
       setGlobalFullscreenOpen(false);
       // Re-sync video state after returning inline
       const video = videoRef.current;
@@ -1045,6 +1051,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const container = containerRef.current;
     if (!container) return;
 
+    setFsOpening(true);
     originalParent.current      = container.parentElement;
     originalNextSibling.current = container.nextSibling;
     const first      = container.getBoundingClientRect();
@@ -1389,6 +1396,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         )}
 
         {!hasError && !isFakeFullscreen && (
+          <div style={{ display: fsOpening ? "none" : "contents" }}>
           <VideoControls
             videoRef={videoRef}
             containerRef={containerRef}
@@ -1410,6 +1418,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             onPosterPlay={handlePosterPlay}
             durationSeconds={durationSeconds}
           />
+          </div>
         )}
 
         {hasError && (

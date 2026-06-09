@@ -207,10 +207,14 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
     staleTime: staleTimes.feed,
   });
 
-  const posts: FeedPost[] = useMemo(
-    () => (data?.pages ?? []).flatMap((page) => page.posts as FeedPost[]),
-    [data?.pages]
-  );
+  const posts: FeedPost[] = useMemo(() => {
+    const seen = new Set<number>();
+    return (data?.pages ?? []).flatMap((page) => page.posts as FeedPost[]).filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }, [data?.pages]);
 
   const firstVideoPreloaded = useRef(false);
 
