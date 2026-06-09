@@ -477,6 +477,7 @@ function PostCardInner({
               avatarUrl={post.creator.avatar_url ?? null}
               caption={post.caption ?? null}
               durationSeconds={normalizedMedia[0]?.durationSeconds ?? null}
+              onProfileClick={() => router.push(`/${post.creator.username}`)}
             />
             </div>
           </VisibilityGate>

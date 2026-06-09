@@ -44,6 +44,7 @@ interface PostMediaViewerProps {
   avatarUrl?:            string | null;
   caption?:              string | null;
   durationSeconds?:      number | null;
+  onProfileClick?:       () => void;
 }
 
 const thumbRatioCache = new Map<string, number>();
@@ -290,6 +291,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   avatarUrl,
   caption,
   durationSeconds,
+  onProfileClick,
 }: PostMediaViewerProps, ref) {
   const first      = media[0] ?? null;
   const isVideo    = first?.type === "video";
@@ -513,6 +515,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               avatarUrl={avatarUrl}
               caption={caption}
               durationSeconds={first.durationSeconds ?? null}
+              onProfileClick={onProfileClick}
             />
           </div>
           {isUnlockedPPV && <UnlockedPPVBadge />}

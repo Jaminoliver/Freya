@@ -357,6 +357,7 @@ export default function PostRow({
           caption={caption}
           eager={eager}
           durationSeconds={viewerMedia[0]?.durationSeconds ?? null}
+          onProfileClick={() => router.push(`/${post.profiles.username}`)}
         />
         </div>
         );

@@ -115,7 +115,10 @@ interface FullscreenOverlayProps {
   displayName?: string;
   username?:   string;
   avatarUrl?:  string | null;
-  caption?:    string | null;
+  caption?:        string | null;
+  onProfileClick?: () => void;
+  wasStarted?:     boolean;
+  wasBuffering?:   boolean;
 }
 
 function FullscreenOverlay({
@@ -128,17 +131,19 @@ function FullscreenOverlay({
   username,
   avatarUrl,
   caption,
+  onProfileClick,
+  wasStarted   = false,
+  wasBuffering = false,
 }: FullscreenOverlayProps) {
   const [currentTime, setCurrentTime] = React.useState(() => videoRef.current?.currentTime ?? 0);
   const [duration,    setDuration]    = React.useState(() => videoRef.current?.duration    ?? 0);
   const [isPaused,    setIsPaused]    = React.useState(() => {
     const v = videoRef.current;
     if (!v) return false;
-    // treat as not paused if video hasn't started yet — loading state handles this
-    if (v.currentTime === 0 && v.readyState < 2) return false;
-    return v.paused;
+    return v.paused && !v.seeking && v.readyState > 0;
   });
   const [isBuffering, setIsBuffering] = React.useState(() => {
+    if (wasBuffering) return true;
     const v = videoRef.current;
     return !!v && v.readyState < 3 && !v.paused;
   });
@@ -269,6 +274,16 @@ function FullscreenOverlay({
         style={{ position: "absolute", inset: 0, zIndex: 6, cursor: "pointer", pointerEvents: "auto" }}
       />
 
+      {/* Buffering dots in fullscreen */}
+      {isBuffering && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+          <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#8B5CF6", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
+          <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#9B4FE8", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.15s" }} />
+          <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#B44DD4", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.3s" }} />
+          <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#EC4899", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.45s" }} />
+        </div>
+      )}
+
       {/* Play icon when paused */}
       {isPaused && !isSeeking && !isBuffering && (
         <div
@@ -292,7 +307,10 @@ function FullscreenOverlay({
         {/* Avatar + name + caption — hidden while seeking */}
         {!isSeeking && (
           <div style={{ paddingLeft: 14, paddingRight: 14, paddingBottom: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: caption ? 8 : 0 }}>
+            <div
+  onClick={onProfileClick}
+  style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: caption ? 8 : 0, cursor: onProfileClick ? "pointer" : "default" }}
+>
               <div style={{ width: 44, height: 44, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "2px solid rgba(255,255,255,0.3)" }}>
                 {avatarUrl && !avatarErr
                   ? <img src={avatarUrl} alt="" onError={() => setAvatarErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
@@ -591,6 +609,7 @@ interface VideoPlayerProps {
   autoPlay?:          boolean;
   hideMuteButton?:    boolean;
   durationSeconds?:   number | null;
+  onProfileClick?:    () => void;
 }
 
 export interface VideoPlayerHandle {
@@ -626,6 +645,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   autoPlay          = false,
   hideMuteButton    = false,
   durationSeconds   = null,
+  onProfileClick,
 }: VideoPlayerProps, ref) {
   const videoRef      = React.useRef<HTMLVideoElement | null>(null);
   const containerRef  = React.useRef<HTMLDivElement | null>(null);
@@ -949,6 +969,14 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     const container = containerRef.current;
     if (!container) return;
 
+    // Show video immediately so no black flash during FLIP
+    const video = videoRef.current;
+    if (video) {
+      video.style.opacity = "1";
+      video.style.transition = "none";
+    }
+    setShowPoster(false);
+
     const first   = container.getBoundingClientRect();
     const parent  = originalParent.current;
     const sibling = originalNextSibling.current;
@@ -976,6 +1004,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (portalRef.current) {
       portalRef.current.style.transition      = "background-color 280ms cubic-bezier(0.4,0,0.2,1)";
       portalRef.current.style.backgroundColor = "rgba(0,0,0,0)";
+      portalRef.current.style.backdropFilter  = "none";
     }
     if (fsOverlayRootRef.current) {
       const overlayEl = portalRef.current?.querySelector("[style*='z-index: 10000']") as HTMLElement | null;
@@ -1103,6 +1132,19 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         username,
         avatarUrl,
         caption,
+        wasStarted:   hasStarted || isLoading || isPlaying,
+        wasBuffering: isBuffering,
+        onProfileClick: onProfileClick ? () => {
+          onProfileClick();
+          setTimeout(() => {
+            portalRef.current?.remove();
+            portalRef.current = null;
+            fsOverlayRootRef.current = null;
+            document.body.style.overflow = "";
+            setIsFakeFullscreen(false);
+            setGlobalFullscreenOpen(false);
+          }, 80);
+        } : undefined,
       });
     }
 
@@ -1168,7 +1210,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     document.body.style.overflow = "hidden";
     setIsFakeFullscreen(true);
     setGlobalFullscreenOpen(true);
-  }, [containerRef, exitFakeFullscreen, videoRef, displayName, username, avatarUrl, caption]);
+  }, [containerRef, exitFakeFullscreen, videoRef, displayName, username, avatarUrl, caption, onProfileClick]);
 
   React.useImperativeHandle(ref, () => ({
     pause:          () => videoRef.current?.pause(),
