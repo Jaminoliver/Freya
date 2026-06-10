@@ -113,20 +113,26 @@ function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProper
 }
 
 // ── ProgressiveImage ──────────────────────────────────────────────────────────
+const loadedImageUrls = new Set<string>();
+
 function ProgressiveImage({ src, blurHash, style, eager }: {
   src?:      string | null;
   blurHash?: string | null;
   style?:    React.CSSProperties;
   eager?:    boolean;
 }) {
-  const [loaded, setLoaded] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(() => !!src && loadedImageUrls.has(src));
   const imgRef = React.useRef<HTMLImageElement>(null);
 
   React.useEffect(() => {
-    setLoaded(false);
+    if (!src) return;
+    if (loadedImageUrls.has(src)) { setLoaded(true); return; }
     if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      loadedImageUrls.add(src);
       setLoaded(true);
+      return;
     }
+    setLoaded(false);
   }, [src]);
 
   return (
@@ -142,7 +148,7 @@ function ProgressiveImage({ src, blurHash, style, eager }: {
         loading={eager ? "eager" : "lazy"}
         decoding="async"
         fetchPriority={eager ? "high" : "low"}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => { if (src) loadedImageUrls.add(src); setLoaded(true); }}
         style={{ ...style, opacity: loaded ? 1 : 0, transition: "opacity 0.25s ease", position: "relative", zIndex: 2 }}
       />
     </div>
@@ -462,7 +468,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
 
     // X-style: portrait videos on mobile sit in a narrower container (left-aligned)
     // Width shrinks → height naturally follows the same ratio → nothing cropped
-    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "82%" : "100%";
+    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "80%" : "100%";
 
     const blurSrc = first.bunnyVideoId
       ? getBunnyThumbnail(first.bunnyVideoId)

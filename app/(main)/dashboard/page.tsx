@@ -14,6 +14,7 @@ import { type CreatorStoryGroup, applyLocalViewed } from "@/components/story/Sto
 import { warmedVideoIds, preloadedSegments } from "@/components/video/VideoPlayer";
 import type { User } from "@/lib/types/profile";
 import { useAppStore } from "@/lib/store/appStore";
+import { getFeedCache, isFeedCacheStale, setFeedPages, setFeedStoriesData, patchFeedPost, clearFeedCache, subscribeFeedCache } from "@/lib/cache/feedCache";
 
 const SCROLL_KEY       = "home_feed_scroll";
 const SLIDES_KEY       = "home_feed_slides";
@@ -129,6 +130,10 @@ function loadSlides(): Record<string, number>  { try { return JSON.parse(session
 export default function HomePage() {
   const queryClient = useQueryClient();
   const viewerReady = useAppStore((s) => s.viewerReady);
+  useEffect(() => {
+    console.log("[HomePage] MOUNTED");
+    return () => console.log("[HomePage] UNMOUNTED");
+  }, []);
 
   const [slideMap, setSlideMap] = useState<Record<string, number>>({});
   const [subscribedCreatorIds, setSubscribedCreatorIds] = useState<Set<string>>(new Set());
@@ -174,7 +179,15 @@ export default function HomePage() {
         ? { subOffset: lastPage.nextSubOffset ?? 0, freshOffset: lastPage.nextFreshOffset ?? 0, hotOffset: lastPage.nextHotOffset ?? 0 }
         : undefined,
     staleTime:       staleTimes.feed,
-    placeholderData: (prev) => prev,
+    initialData:     () => {
+      const cached = getFeedCache();
+      if (cached.pages.length > 0 && !isFeedCacheStale()) {
+        return { pages: cached.pages, pageParams: Array(cached.pages.length).fill(null) };
+      }
+      return undefined;
+    },
+    initialDataUpdatedAt: () => getFeedCache().fetchedAt ?? undefined,
+    gcTime:          Infinity,
     enabled:         true,
   });
 
@@ -185,13 +198,25 @@ export default function HomePage() {
     if (newId !== prevViewerIdRef.current) {
       prevViewerIdRef.current = newId;
       if (newId) {
+        clearFeedCache();
         queryClient.invalidateQueries({ queryKey: queryKeys.feed() });
       }
     }
   }, [viewer?.id, queryClient]);
 
+  useEffect(() => {
+    const handler = () => clearFeedCache();
+    window.addEventListener("freya:clear-caches", handler);
+    return () => window.removeEventListener("freya:clear-caches", handler);
+  }, []);
+
   const storiesFromFeed = data?.pages?.[0]?.stories ?? null;
   const hasStories      = data?.pages?.[0]?.hasStories ?? undefined;
+
+  useEffect(() => {
+    if (data?.pages?.length) setFeedPages(data.pages);
+  }, [data?.pages]);
+  console.log("[HomePage] data pages:", data?.pages?.length, "hasStories:", hasStories, "storiesFromFeed:", storiesFromFeed);
   const { data: storiesData, isLoading: storiesLoading } = useQuery({
   queryKey: ["stories"],
   enabled: storiesFromFeed === null,
@@ -204,12 +229,15 @@ export default function HomePage() {
       for (const g of visibleGroups) {
         if (g.latestThumbnail) { const img = new Image(); img.src = g.latestThumbnail; }
       }
+      setFeedStoriesData(fetchedGroups);
       return fetchedGroups;
     },
     staleTime: staleTimes.feed,
   });
 
-  const pageReady = viewerReady && !isLoading && !storiesLoading;
+  console.log("[HomePage] viewerReady:", viewerReady, "isLoading:", isLoading, "storiesLoading:", storiesLoading, "hasData:", !!data, "hasStoriesData:", !!storiesData);
+  const pageReady = viewerReady && (!isLoading || !!data) && (!storiesLoading || !!storiesData);
+  console.log("[HomePage] pageReady:", pageReady);
 
   const posts: FeedPost[] = useMemo(() => {
     const seen = new Set<number>();
@@ -482,6 +510,7 @@ export default function HomePage() {
           })),
         };
       });
+      patchFeedPost(ppvPostId, { locked: false, can_access: true });
     }
   }, [ppvPostId, queryClient]);
 

@@ -21,6 +21,10 @@ import type { NotificationItem } from "@/lib/types/notifications";
 
 function MainLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  useEffect(() => {
+    console.log("[MainLayoutInner] MOUNTED");
+    return () => console.log("[MainLayoutInner] UNMOUNTED");
+  }, []);
 
   const isSettings      = pathname.startsWith("/settings");
   const isSubscriptions = pathname.startsWith("/subscriptions");
