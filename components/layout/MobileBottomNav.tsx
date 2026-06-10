@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { MoreDrawer } from "@/components/layout/MoreDrawer";
 import { useNav } from "@/lib/hooks/useNav";
@@ -18,6 +18,9 @@ export function MobileBottomNav() {
   useEffect(() => { setMounted(true); }, []);
   const guard = useGuestGuard();
   const unreadCount = useUnreadConversationCount();
+  const router = useRouter();
+
+  useEffect(() => { router.prefetch("/dashboard"); }, [router]);
 
   useEffect(() => { setTappedHref(null); }, [pathname]);
 

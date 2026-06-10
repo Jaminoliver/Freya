@@ -462,7 +462,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
 
     // X-style: portrait videos on mobile sit in a narrower container (left-aligned)
     // Width shrinks → height naturally follows the same ratio → nothing cropped
-    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "85%" : "100%";
+    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "82%" : "100%";
 
     const blurSrc = first.bunnyVideoId
       ? getBunnyThumbnail(first.bunnyVideoId)
@@ -478,12 +478,12 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
             aspectRatio:          !isMobileView && isPortrait ? "4 / 3" : String(videoRatio),
             overflow:             isMobileView ? "hidden" : "visible",
             backgroundColor:      "#000",
-            backgroundImage:      blurSrc ? `url(${blurSrc})` : undefined,
+            backgroundImage:      !isMobileView && first.thumbnailUrl ? `url(${first.thumbnailUrl})` : undefined,
             backgroundSize:       "cover",
             backgroundPosition:   "center",
           }}
         >
-          {!isMobileView && blurSrc && (
+          {!isMobileView && first.thumbnailUrl && (
             <div style={{
               position:             "absolute",
               inset:                0,
@@ -493,6 +493,12 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               zIndex:               0,
               pointerEvents:        "none",
             }} />
+          )}
+          {isMobileView && first.blurHash && (
+            <BlurHashCanvas
+              hash={first.blurHash}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 1, pointerEvents: "none" }}
+            />
           )}
           <div style={{ position: "relative", zIndex: 2, width: "100%", height: "100%" }}>
             <VideoPlayer

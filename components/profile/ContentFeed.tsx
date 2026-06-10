@@ -330,24 +330,32 @@ export default function ContentFeed({
     if (!videoId) return;
     const conn = (navigator as any).connection;
     const ect: string = conn?.effectiveType ?? "4g";
-    if (ect === "slow-2g" || ect === "2g") return;
-    fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${videoId}/playlist.m3u8`, {
-      method: "GET",
-      cache: "force-cache",
-    }).catch(() => {});
-    const thumbUrl = firstVideoPost?.media?.find(
-      (m) => m.media_type === "video" && m.bunny_video_id
-    )?.thumbnail_url ?? `https://vz-8bc100f4-3c0.b-cdn.net/${videoId}/thumbnail.jpg`;
-    const img = new Image();
-    img.src = thumbUrl;
 
-    // Preload thumbnails for next 9 posts
-    apiPosts.slice(0, 10).forEach((p) => {
-      const m = p.media?.find((m) => m.bunny_video_id || m.thumbnail_url);
-      if (!m) return;
-      const src = m.thumbnail_url ?? (m.bunny_video_id ? `https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/thumbnail.jpg` : null);
-      if (src) { const i = new Image(); i.src = src; }
+    apiPosts.slice(0, 5).forEach((p) => {
+      if (p.content_type === "text" || p.content_type === "poll") return;
+      const images = p.media?.filter((m) => m.media_type !== "video") ?? [];
+      images.slice(0, 3).forEach((m) => {
+        const src = m.thumbnail_url ?? m.file_url;
+        if (src) { const i = new Image(); i.src = src; }
+      });
+      const video = p.media?.find((m) => m.media_type === "video");
+      if (video?.thumbnail_url) { const i = new Image(); i.src = video.thumbnail_url; }
     });
+
+    if (ect !== "slow-2g" && ect !== "2g") {
+      apiPosts.slice(5).forEach((p, idx) => {
+        setTimeout(() => {
+          if (p.content_type === "text" || p.content_type === "poll") return;
+          const images = p.media?.filter((m) => m.media_type !== "video") ?? [];
+          images.slice(0, 3).forEach((m) => {
+            const src = m.thumbnail_url ?? m.file_url;
+            if (src) { const i = new Image(); i.src = src; }
+          });
+          const video = p.media?.find((m) => m.media_type === "video");
+          if (video?.thumbnail_url) { const i = new Image(); i.src = video.thumbnail_url; }
+        }, 2000 + idx * 300);
+      });
+    }
   }, [apiPosts]);
 
   

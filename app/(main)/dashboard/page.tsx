@@ -173,8 +173,9 @@ export default function HomePage() {
       lastPage.hasMore
         ? { subOffset: lastPage.nextSubOffset ?? 0, freshOffset: lastPage.nextFreshOffset ?? 0, hotOffset: lastPage.nextHotOffset ?? 0 }
         : undefined,
-    staleTime: staleTimes.feed,
-    enabled: true,
+    staleTime:       staleTimes.feed,
+    placeholderData: (prev) => prev,
+    enabled:         true,
   });
 
   const viewer = useAppStore((s) => s.viewer);
@@ -190,7 +191,8 @@ export default function HomePage() {
   }, [viewer?.id, queryClient]);
 
   const storiesFromFeed = data?.pages?.[0]?.stories ?? null;
-const { data: storiesData, isLoading: storiesLoading } = useQuery({
+  const hasStories      = data?.pages?.[0]?.hasStories ?? undefined;
+  const { data: storiesData, isLoading: storiesLoading } = useQuery({
   queryKey: ["stories"],
   enabled: storiesFromFeed === null,
     queryFn: async () => {
@@ -207,6 +209,8 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
     staleTime: staleTimes.feed,
   });
 
+  const pageReady = viewerReady && !isLoading && !storiesLoading;
+
   const posts: FeedPost[] = useMemo(() => {
     const seen = new Set<number>();
     return (data?.pages ?? []).flatMap((page) => page.posts as FeedPost[]).filter((p) => {
@@ -218,37 +222,57 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
 
   const firstVideoPreloaded = useRef(false);
 
+  // Prefetch suggestions images as soon as posts arrive
+  useEffect(() => {
+    if (!posts.length || firstVideoPreloaded.current) return;
+    const conn = (navigator as any).connection;
+    const ect: string = conn?.effectiveType ?? "4g";
+    if (ect === "slow-2g" || ect === "2g") return;
+    fetch("/api/creators/suggested")
+      .then((r) => r.json())
+      .then((d) => {
+        const creators = d.creators ?? [];
+        creators.forEach((c: { avatar_url?: string | null; banner_url?: string | null }) => {
+          if (c.banner_url) { const i = new Image(); i.src = c.banner_url; }
+          if (c.avatar_url) { const i = new Image(); i.src = c.avatar_url; }
+        });
+        console.log(`[SUGGESTIONS] preloaded ${creators.length} creator images`);
+      })
+      .catch(() => {});
+  }, [posts]);
+
   // Prefetch manifest for first video as soon as posts arrive
   useEffect(() => {
     if (!posts.length || firstVideoPreloaded.current) return;
     firstVideoPreloaded.current = true;
-    const firstVideoPost = posts.find((p) =>
-      p.media.some((m) => m.media_type === "video" && m.bunny_video_id)
-    );
-    const videoId = firstVideoPost?.media.find(
-      (m) => m.media_type === "video" && m.bunny_video_id
-    )?.bunny_video_id;
-    if (!videoId) return;
     const conn = (navigator as any).connection;
     const ect: string = conn?.effectiveType ?? "4g";
-    if (ect === "slow-2g" || ect === "2g") return;
-    fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${videoId}/playlist.m3u8`, {
-      method: "GET",
-      cache: "force-cache",
-    }).catch(() => {});
-    const thumbUrl = firstVideoPost?.media.find(
-      (m) => m.media_type === "video" && m.bunny_video_id
-    )?.thumbnail_url ?? `https://vz-8bc100f4-3c0.b-cdn.net/${videoId}/thumbnail.jpg`;
-    const img = new Image();
-    img.src = thumbUrl;
 
-    // Preload thumbnails for next 9 posts
-    posts.slice(0, 10).forEach((p) => {
-      const m = p.media.find((m) => m.bunny_video_id || m.thumbnail_url);
-      if (!m) return;
-      const src = m.thumbnail_url ?? (m.bunny_video_id ? `https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/thumbnail.jpg` : null);
-      if (src) { const i = new Image(); i.src = src; }
+    posts.slice(0, 5).forEach((p) => {
+      if (p.content_type === "text" || p.content_type === "poll") return;
+      const images = p.media.filter((m) => m.media_type !== "video");
+      images.slice(0, 3).forEach((m) => {
+        const src = m.thumbnail_url ?? m.file_url;
+        if (src) { const i = new Image(); i.src = src; }
+      });
+      const video = p.media.find((m) => m.media_type === "video");
+      if (video?.thumbnail_url) { const i = new Image(); i.src = video.thumbnail_url; }
     });
+
+    if (ect !== "slow-2g" && ect !== "2g") {
+      posts.slice(5).forEach((p, idx) => {
+        setTimeout(() => {
+          if (p.content_type === "text" || p.content_type === "poll") return;
+          const images = p.media.filter((m) => m.media_type !== "video");
+          images.slice(0, 3).forEach((m) => {
+            const src = m.thumbnail_url ?? m.file_url;
+            if (src) { const i = new Image(); i.src = src; }
+          });
+          const video = p.media.find((m) => m.media_type === "video");
+          if (video?.thumbnail_url) { const i = new Image(); i.src = video.thumbnail_url; }
+        }, 2000 + idx * 300);
+      });
+    }
   }, [posts]);
 
   // Lookahead: pre-warm based on actual video playback and skip events
@@ -560,12 +584,12 @@ const { data: storiesData, isLoading: storiesLoading } = useQuery({
       )}
 
       <div style={{ padding: "0 16px", backgroundColor: "#0A0A0F" }}>
-        <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} initialGroups={storiesFromFeed ?? storiesData} storiesLoading={storiesFromFeed ? false : storiesLoading} />
+        {pageReady && <StoryBar onOpenViewer={handleOpenViewer} externalGroups={externalGroups} initialGroups={storiesFromFeed ?? storiesData} storiesLoading={storiesFromFeed ? false : storiesLoading} />}
       </div>
 
       <div style={{ padding: "0 0 40px", minHeight: "200px" }}>
-        {(!viewerReady || isLoading) && <FeedSkeleton count={5} />}
-        {viewerReady && !isLoading && (
+        {!pageReady && <FeedSkeleton count={5} includeStoryBar={hasStories !== false} />}
+        {pageReady && (
           <>
             {error && (
               <div style={{ textAlign: "center", padding: "48px 24px" }}>

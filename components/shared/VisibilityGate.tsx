@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+// Survives page remount — keyed by postId passed as gateKey
+const mountedGates = new Set<string>();
+
 interface VisibilityGateProps {
   /** Aspect ratio for the placeholder (e.g. 1, 0.8, 1.91). Prevents layout shift. */
   aspectRatio?: number;
@@ -17,6 +20,8 @@ interface VisibilityGateProps {
   placeholder?: React.ReactNode;
   /** Called once when children are first mounted. */
   onMount?: () => void;
+  /** Stable key (e.g. post ID) — if provided, mounted state survives page remount. */
+  gateKey?: string;
 }
 
 /**
@@ -32,8 +37,11 @@ export default function VisibilityGate({
   children,
   placeholder,
   onMount,
+  gateKey,
 }: VisibilityGateProps) {
-  const [mounted, setMounted] = React.useState(eager);
+  const [mounted, setMounted] = React.useState(
+    eager || (!!gateKey && mountedGates.has(gateKey))
+  );
   const onMountRef = React.useRef(onMount);
   React.useEffect(() => { onMountRef.current = onMount; }, [onMount]);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -62,8 +70,11 @@ export default function VisibilityGate({
 
   const firedRef = React.useRef(false);
   React.useEffect(() => {
-    if (mounted && !firedRef.current) { firedRef.current = true; onMountRef.current?.(); }
-  }, [mounted]);
+    if (mounted) {
+      if (gateKey) mountedGates.add(gateKey);
+      if (!firedRef.current) { firedRef.current = true; onMountRef.current?.(); }
+    }
+  }, [mounted, gateKey]);
 
   if (mounted) return <>{children}</>;
 

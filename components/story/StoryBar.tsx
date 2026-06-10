@@ -469,14 +469,7 @@ export function StoryBar({ onOpenViewer, externalGroups, initialGroups, storiesL
           )}
 
           {/* ── SKELETON ── */}
-          {loading
-            ? Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, flexShrink:0 }}>
-                  <div style={{ width:CARD_W, height:CARD_H, borderRadius:CARD_RADIUS, backgroundColor:"#1C1C2E" }} />
-                  <div style={{ width:50, height:10, borderRadius:4, backgroundColor:"#1C1C2E" }} />
-                </div>
-              ))
-            : displayGroups.map((group, idx) => {
+          {displayGroups.map((group, idx) => {
                 const isViewed = !group.hasUnviewed;
                 return (
                   <div

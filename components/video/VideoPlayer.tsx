@@ -743,7 +743,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   })();
 
   const useRawFallback = processingStatus !== "completed" && !!rawVideoUrl;
-  const posterSrc      = thumbnailUrl ?? (bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "");
+  const [posterSrc, setPosterSrc] = React.useState(thumbnailUrl ?? (bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : ""));
 
   React.useEffect(() => {
     if (posterLoaded) return;
@@ -1315,7 +1315,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             onClick={showPoster && !isLoading ? handlePosterPlay : undefined}
             style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: showPoster ? "pointer" : "default", opacity: showPoster ? 1 : 0, transition: showPoster ? "opacity 0.25s ease" : "none", pointerEvents: showPoster ? "auto" : "none" }}
           >
-            <img src={posterSrc} alt="" fetchPriority="high" onLoad={handlePosterLoad} onError={() => {}} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }} />
+            <img src={posterSrc} alt="" fetchPriority="high" onLoad={handlePosterLoad} onError={() => { if (thumbnailUrl && bunnyVideoId) setPosterSrc(getBunnyThumbnail(bunnyVideoId)); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }} />
             {!isLoading && !isAutoplaying && !autoPlay && !isBuffering && !isFakeFullscreen && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}><polygon points="5,3 19,12 5,21"/></svg>
             )}

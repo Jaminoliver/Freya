@@ -223,19 +223,36 @@ export async function GET(req: NextRequest) {
     const service     = createServiceSupabaseClient();
 
     // ── Fetch active subs + lapsed subs in parallel (authenticated users only) ──
-    const [{ data: activeSubs }, { data: lapsedSubs }] = user
+    const [{ data: activeSubs }, { data: lapsedSubs }, { data: viewerProfile }] = user
       ? await Promise.all([
           service.from("subscriptions").select("creator_id")
             .eq("fan_id", user.id).eq("status", "active"),
           service.from("subscriptions").select("creator_id")
             .eq("fan_id", user.id).in("status", LAPSED_STATUSES),
+          service.from("profiles").select("role")
+            .eq("id", user.id).single(),
         ])
-      : [{ data: [] }, { data: [] }];
+      : [{ data: [] }, { data: [] }, { data: null }];
 
     const subscribedIds = (activeSubs ?? []).map((s: { creator_id: string }) => s.creator_id);
     const lapsedIds     = (lapsedSubs ?? []).map((s: { creator_id: string }) => s.creator_id);
     const subscribedSet = new Set<string>(subscribedIds);
     const lapsedSet     = new Set<string>(lapsedIds);
+
+    const storyCreatorIds = [...new Set([
+      ...(user && (viewerProfile as any)?.role === "creator" ? [user.id] : []),
+      ...subscribedIds,
+    ])];
+    const { count: storiesCount } = storyCreatorIds.length > 0
+      ? await service.from("stories")
+          .select("id", { count: "exact", head: true })
+          .in("creator_id", storyCreatorIds)
+          .eq("is_expired", false)
+          .gt("expires_at", new Date().toISOString())
+          .eq("is_processing", false)
+          .limit(1)
+      : { count: 0 };
+    const hasStories = (storiesCount ?? 0) > 0;
 
     // ── Time boundaries ──────────────────────────────────────────────────
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -324,6 +341,10 @@ export async function GET(req: NextRequest) {
     // ── Parallel lookups (authenticated users only) ───────────────────────
     const postIds        = merged.map((p) => Number(p.id));
     const pageCreatorIds = [...new Set(merged.map((p) => p.creator_id as string))];
+    const pollPostIds = merged
+      .filter((p) => p.content_type === "poll")
+      .map((p) => Number(p.id));
+
     const [
       { data: userLikes },
       { data: ppvUnlocksRaw },
@@ -344,30 +365,19 @@ export async function GET(req: NextRequest) {
           pageCreatorIds.length > 0
             ? service.from("saved_creators").select("creator_id").eq("user_id", user.id).in("creator_id", pageCreatorIds)
             : Promise.resolve({ data: [] }),
-          (() => {
-            const pollPostIds = merged
-              .filter((p) => p.content_type === "poll")
-              .map((p) => Number(p.id));
-            return pollPostIds.length > 0
-              ? service.from("polls")
-                  .select("id, post_id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)")
-                  .in("post_id", pollPostIds)
-              : Promise.resolve({ data: [] });
-          })(),
+          pollPostIds.length > 0
+            ? service.from("polls")
+                .select("id, post_id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)")
+                .in("post_id", pollPostIds)
+            : Promise.resolve({ data: [] }),
         ])
       : [
           { data: [] }, { data: [] }, { data: [] }, { data: [] },
-          // Still fetch polls for guests so they can see poll content
-          await (() => {
-            const pollPostIds = merged
-              .filter((p) => p.content_type === "poll")
-              .map((p) => Number(p.id));
-            return pollPostIds.length > 0
-              ? service.from("polls")
-                  .select("id, post_id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)")
-                  .in("post_id", pollPostIds)
-              : Promise.resolve({ data: [] });
-          })(),
+          await (pollPostIds.length > 0
+            ? service.from("polls")
+                .select("id, post_id, question, total_votes, ends_at, poll_options (id, option_text, vote_count, display_order)")
+                .in("post_id", pollPostIds)
+            : Promise.resolve({ data: [] })),
         ];
 
     const likedSet        = new Set((userLikes     ?? []).map((l: { post_id: number | string }) => Number(l.post_id)));
@@ -462,8 +472,9 @@ export async function GET(req: NextRequest) {
       nextFreshOffset,
       nextHotOffset,
       hasMore,
+      hasStories,
     });
-    res.headers.set("Cache-Control", "private, s-maxage=30, stale-while-revalidate=60");
+    res.headers.set("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
     return res;
 
   } catch (err) {

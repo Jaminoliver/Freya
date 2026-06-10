@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, memo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { VideoPlayerHandle } from "@/components/video/VideoPlayer";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, MoreHorizontal } from "lucide-react";
@@ -19,6 +20,7 @@ import SubscribeBannerPill from "@/components/feed/SubscribeBannerPill";
 import { PollDisplay } from "@/components/feed/PollDisplay";
 
 import { useBlockRestrict } from "@/lib/hooks/useBlockRestrict";
+import { queryKeys, staleTimes } from "@/lib/query/keys";
 import { useNav } from "@/lib/hooks/useNav";
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
 import { useViewer } from "@/lib/hooks/useViewer";
@@ -81,6 +83,8 @@ interface Post {
   taggedCreators?: TaggedCreator[];
 }
 
+const prefetchedUsernames = new Set<string>();
+
 function toLightboxPost(post: Post): LightboxPost {
   return {
     id: Number(post.id),
@@ -124,9 +128,68 @@ function PostCardInner({
   preWarmVideoId?:       string | null;
 }) {
   const { navigate } = useNav();
-  const router  = useRouter();
-  const viewer  = useViewer();
+  const router       = useRouter();
+  const viewer       = useViewer();
   const openAuthModal = useAppStore((s) => s.openAuthModal);
+  const queryClient  = useQueryClient();
+
+  // ── Profile prefetch on viewport entry ───────────────────────────────
+  const prefetchProfile = useCallback(async () => {
+    const username = post.creator.username;
+    if (prefetchedUsernames.has(username)) return;
+
+    const conn = (navigator as any).connection;
+    const ect: string = conn?.effectiveType ?? "4g";
+    if (ect === "slow-2g" || ect === "2g") return;
+
+    prefetchedUsernames.add(username);
+
+    // Prefetch JS bundle
+    router.prefetch(`/${username}`);
+
+    // Skip if profile cache is fresh
+    const profileKey   = queryKeys.profile(username);
+    const profileState = queryClient.getQueryState(profileKey);
+    const now          = Date.now();
+    if (profileState?.dataUpdatedAt && now - profileState.dataUpdatedAt < staleTimes.profile) return;
+
+    // Fetch + cache profile
+    try {
+      const supabase = createClient();
+      const { data: raw, error } = await supabase
+        .from("profiles")
+        .select("*, subscription_price, bundle_price_3_months, bundle_price_6_months")
+        .eq("username", username)
+        .single();
+      if (error || !raw) return;
+
+      const user = {
+        ...raw,
+        subscriptionPrice: raw.subscription_price ?? 0,
+        bundlePricing: {
+          threeMonths: raw.bundle_price_3_months ?? undefined,
+          sixMonths:   raw.bundle_price_6_months ?? undefined,
+        },
+        _likes_count: raw.likes_count ?? 0,
+      };
+      queryClient.setQueryData(profileKey, user);
+
+      // Skip posts if cache is fresh
+      const postsKey   = [...profileKey, "posts"] as const;
+      const postsState = queryClient.getQueryState(postsKey);
+      if (postsState?.dataUpdatedAt && now - postsState.dataUpdatedAt < staleTimes.profile) return;
+
+      // Fetch + cache posts
+      const res  = await fetch(`/api/posts/creator/${username}`);
+      const data = await res.json();
+      if (res.ok && data.posts) {
+        queryClient.setQueryData(postsKey, data.posts);
+      }
+    } catch {
+      // silent fail — prefetch is best-effort
+      prefetchedUsernames.delete(username);
+    }
+  }, [post.creator.username, router, queryClient]);
 
   const { group: storyGroup, hasUnviewed, refresh } = useCreatorStory(post.creator.id);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
@@ -171,6 +234,17 @@ function PostCardInner({
   const videoPlayerRef = useRef<VideoPlayerHandle | null>(null);
 
   const { isBlocked, isRestricted, block, unblock, restrict, unrestrict, fetchStatus } = useBlockRestrict({ userId: post.creator.id });
+
+  // Trigger profile prefetch when card enters viewport
+  useEffect(() => {
+    const el = engagement.prefetchRef.current as HTMLElement | null;
+    if (!el) return;
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { prefetchProfile(); obs.disconnect(); }
+    }, { rootMargin: "300px" });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [prefetchProfile]);
 
   const isFree    = (subscriptionPrice ?? 0) === 0;
 
@@ -448,6 +522,7 @@ function PostCardInner({
           <VisibilityGate
             aspectRatio={placeholderRatio}
             eager={eager}
+            gateKey={post.id}
             onMount={() => {
               const attempt = (tries: number) => {
                 if (videoPlayerRef.current) { videoPlayerRef.current.prewarm(); return; }

@@ -21,11 +21,14 @@ interface PostHeaderProps {
 }
 
 function CaptionText({ text }: { text: string }) {
-  const [expanded, setExpanded] = React.useState(false);
-  const CHAR_LIMIT = 180;
+  const [expanded,    setExpanded]    = React.useState(false);
+  const [sliceIndex,  setSliceIndex]  = React.useState<number | null>(null);
+  const measureRef  = React.useRef<HTMLDivElement>(null);
 
-  const isLong = text.length > CHAR_LIMIT || text.split("\n").length > 3;
-  const displayText = !isLong || expanded ? text : text.slice(0, CHAR_LIMIT).trimEnd();
+  const LINE_HEIGHT   = 1.6;
+  const FONT_SIZE     = 14;
+  const LINES         = 3;
+  const clampedHeight = LINE_HEIGHT * FONT_SIZE * LINES;
 
   const toHtml = (str: string) =>
     str
@@ -37,35 +40,87 @@ function CaptionText({ text }: { text: string }) {
         '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#1D9BF0;text-decoration:none;word-break:break-all;">$1</a>'
       );
 
+  React.useEffect(() => {
+    const el = measureRef.current;
+    if (!el) return;
+    el.innerHTML = toHtml(text);
+    if (el.scrollHeight <= clampedHeight + 2) {
+      setSliceIndex(null);
+      return;
+    }
+    let lo = 0, hi = text.length, best = 0;
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      el.innerHTML = toHtml(text.slice(0, mid)) + "... more";
+      if (el.scrollHeight <= clampedHeight + 2) {
+        best = mid;
+        lo   = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    setSliceIndex(best);
+  }, [text, clampedHeight]);
+
+  const isClamped = sliceIndex !== null;
+
   return (
-    <p style={{ fontSize: "14px", color: "#FFFFFF", lineHeight: 1.6, margin: "0", padding: "0 16px 2px 5px", whiteSpace: "pre-wrap" }}>
-      <span dangerouslySetInnerHTML={{ __html: toHtml(displayText) }} />
-      {isLong && !expanded && (
-        <>
-          {"... "}
-          <span
-            onClick={() => setExpanded(true)}
-            style={{ color: "#8B5CF6", cursor: "pointer", fontWeight: 500, fontSize: "14px" }}
-          >
-            more
-          </span>
-        </>
-      )}
-      {isLong && expanded && (
-        <>
-          {" "}
-          <span
-            onClick={() => setExpanded(false)}
-            style={{ color: "#8B5CF6", cursor: "pointer", fontWeight: 500, fontSize: "14px" }}
-          >
-            less
-          </span>
-        </>
-      )}
-    </p>
+    <>
+      <div
+        ref={measureRef}
+        aria-hidden
+        style={{
+          position:      "fixed",
+          top:           "-9999px",
+          left:          "-9999px",
+          width:         "calc(100vw - 80px)",
+          fontSize:      `${FONT_SIZE}px`,
+          lineHeight:    LINE_HEIGHT,
+          whiteSpace:    "pre-wrap",
+          wordBreak:     "break-word",
+          visibility:    "hidden",
+          pointerEvents: "none",
+        }}
+      />
+      <p style={{
+        fontSize:   `${FONT_SIZE}px`,
+        color:      "#FFFFFF",
+        lineHeight: LINE_HEIGHT,
+        margin:     "0",
+        padding:    "0 16px 2px 5px",
+        whiteSpace: "pre-wrap",
+        wordBreak:  "break-word",
+      }}>
+        {!isClamped || expanded ? (
+          <>
+            <span dangerouslySetInnerHTML={{ __html: toHtml(text) }} />
+            {isClamped && expanded && (
+              <span
+                onClick={() => setExpanded(false)}
+                style={{ color: "#8B5CF6", cursor: "pointer", fontWeight: 500, fontSize: `${FONT_SIZE}px` }}
+              >
+                {" "}less
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <span dangerouslySetInnerHTML={{ __html: toHtml(text.slice(0, sliceIndex).trimEnd()) }} />
+            <span style={{ color: "#FFFFFF" }}>... </span>
+            <span
+              onClick={() => setExpanded(true)}
+              style={{ color: "#8B5CF6", cursor: "pointer", fontWeight: 500, fontSize: `${FONT_SIZE}px` }}
+            >
+              more
+            </span>
+          </>
+        )}
+      </p>
+    </>
   );
 }
 
+  
 export default function PostHeader({
   avatarUrl,
   displayName,

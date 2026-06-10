@@ -55,20 +55,7 @@ export async function GET(
     const isOwnProfile = user?.id === creator.id;
     let isSubscribed   = false;
 
-    if (user && !isOwnProfile) {
-      const { data: sub } = await service
-        .from("subscriptions")
-        .select("id")
-        .eq("fan_id", user.id)
-        .eq("creator_id", creator.id)
-        .eq("status", "active")
-        .maybeSingle();
-      isSubscribed = !!sub;
-    }
-
-    if (isOwnProfile) isSubscribed = true;
-
-    const { data: posts, error } = await service
+    const postsPromise = service
       .from("posts")
       .select(`
         id,
@@ -113,6 +100,20 @@ export async function GET(
       .eq("is_deleted", false)
       .order("published_at", { ascending: false })
       .limit(50);
+
+    const subPromise = (user && !isOwnProfile)
+      ? service.from("subscriptions").select("id")
+          .eq("fan_id", user.id).eq("creator_id", creator.id)
+          .eq("status", "active").maybeSingle()
+      : Promise.resolve({ data: null });
+
+    const [{ data: posts, error }, { data: subData }] = await Promise.all([
+      postsPromise,
+      subPromise,
+    ]);
+
+    if (isOwnProfile) isSubscribed = true;
+    else isSubscribed = !!subData;
 
     if (error) {
       console.error("[Creator Posts] Query error:", error.message);
@@ -281,7 +282,7 @@ export async function GET(
     });
 
     const res = NextResponse.json({ posts: processed, isSubscribed });
-    res.headers.set("Cache-Control", "private, s-maxage=60, stale-while-revalidate=120");
+    res.headers.set("Cache-Control", "private, max-age=60, stale-while-revalidate=120");
     return res;
 
   } catch (err) {

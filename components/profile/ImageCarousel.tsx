@@ -366,7 +366,7 @@ export default function ImageCarousel({
                 shouldLoad ? (
                   <>
                     <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
-                      {item.file_url && <img src={item.file_url} alt="" aria-hidden style={{ width: "100%", height: "100%", objectFit: "cover", filter: "blur(24px) brightness(0.5)", transform: "scale(1.08)" }} />}
+                      {item.blur_hash && <BlurHashCanvas hash={item.blur_hash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />}
                     </div>
                     <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%" }}>
                       <ProgressiveImage

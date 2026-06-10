@@ -45,6 +45,18 @@ function SkeletonBlock({
   );
 }
 
+function StoryBarSkeleton() {
+  return (
+    <div style={{ display: "flex", gap: 10, padding: "14px 0 10px", overflowX: "hidden" }}>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <div style={{ width: 135, height: 175, borderRadius: 14, ...shimmerStyle }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FeedSkeletonCard() {
   return (
     <div
@@ -86,12 +98,12 @@ function FeedSkeletonCard() {
         <SkeletonBlock width="60%" height={12} />
       </div>
 
-      {/* Media block — square aspect ratio like PostCard */}
+      {/* Media block — portrait ratio matches most mobile content */}
       <SkeletonBlock
         width="100%"
         height={undefined}
         style={{
-          aspectRatio: "1 / 1",
+          aspectRatio: "9 / 16",
           borderRadius: "0",
           height: undefined,
         }}
@@ -117,16 +129,11 @@ function FeedSkeletonCard() {
   );
 }
 
-export function FeedSkeleton({ count = 5 }: { count?: number }) {
-  React.useEffect(() => {
-    const el = document.createElement("style");
-    el.textContent = SHIMMER_KEYFRAMES;
-    document.head.appendChild(el);
-    return () => { document.head.removeChild(el); };
-  }, []);
-
+export function FeedSkeleton({ count = 5, includeStoryBar = false }: { count?: number; includeStoryBar?: boolean }) {
   return (
     <>
+      <style>{SHIMMER_KEYFRAMES}</style>
+      {includeStoryBar && <StoryBarSkeleton />}
       {Array.from({ length: count }).map((_, i) => (
         <FeedSkeletonCard key={i} />
       ))}
