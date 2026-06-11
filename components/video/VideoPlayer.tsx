@@ -18,6 +18,7 @@ const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
 const watchedVideoIds = new Set<string>();
 export const warmedVideoIds    = new Set<string>();
 export const preloadedSegments = new Set<string>();
+const loadedPosterUrls = new Set<string>();
 
 let anyFullscreenOpen = false;
 let currentlyPlayingVideo: HTMLVideoElement | null = null;
@@ -666,7 +667,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   }, []);
 
   const [showPoster,    setShowPoster]    = React.useState(true);
-  const [posterLoaded,  setPosterLoaded]  = React.useState(false);
+  const [posterLoaded,  setPosterLoaded]  = React.useState(() => {
+    const src = thumbnailUrl ?? (bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "");
+    return !!src && loadedPosterUrls.has(src);
+  });
   const [isBuffering, setIsBuffering] = React.useState(false);
 
   const [hasError,      setHasError]      = React.useState(false);
@@ -747,18 +751,20 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
   React.useEffect(() => {
     if (posterLoaded) return;
+    if (posterSrc && loadedPosterUrls.has(posterSrc)) { setPosterLoaded(true); return; }
     const t = setTimeout(() => setPosterLoaded(true), 2500);
     return () => clearTimeout(t);
-  }, [posterLoaded]);
+  }, [posterLoaded, posterSrc]);
 
   const handlePosterLoad = React.useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    if (posterSrc) loadedPosterUrls.add(posterSrc);
     setPosterLoaded(true);
     if (fillParent || externalRatio) return;
     const img = e.currentTarget;
     const { naturalWidth: w, naturalHeight: h } = img;
     if (!w || !h) return;
     setInternalRatio(`${w}/${h}`);
-  }, [fillParent, externalRatio]);
+  }, [fillParent, externalRatio, posterSrc]);
 
   const teardown = React.useCallback((force = false) => {
     if (!force && !hasInitialized.current) return;
@@ -1303,7 +1309,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       <div ref={containerRef} data-videoplayer style={{ ...containerStyle, position: "relative" }}>
 
         {!hideInternalBlur && posterSrc && (
-          <img src={posterSrc} alt="" aria-hidden style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.45)", transform: "scale(1.1)", zIndex: 0, pointerEvents: "none", opacity: showPoster ? 0 : 1, transition: showPoster ? "none" : "opacity 0.2s ease" }} />
+          <img src={posterSrc} alt="" aria-hidden fetchPriority="high" loading="eager" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) brightness(0.45)", transform: "scale(1.1)", zIndex: 0, pointerEvents: "none", opacity: showPoster ? 0 : 1, transition: showPoster ? "none" : "opacity 0.2s ease" }} />
         )}
 
         {blurHash && !posterLoaded && (
