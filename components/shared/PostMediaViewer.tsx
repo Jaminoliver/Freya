@@ -468,7 +468,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
 
     // X-style: portrait videos on mobile sit in a narrower container (left-aligned)
     // Width shrinks → height naturally follows the same ratio → nothing cropped
-    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "80%" : "100%";
+    const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "77%" : "100%";
 
     const blurSrc = first.bunnyVideoId
       ? getBunnyThumbnail(first.bunnyVideoId)
