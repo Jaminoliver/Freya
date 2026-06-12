@@ -1114,7 +1114,18 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     // Override objectFit to match modal logic (cover only for tall portrait ≤0.6)
     const videoEl = videoRef.current;
     if (videoEl) {
-      videoEl.style.objectFit = isTallPortrait ? "cover" : "contain";
+      const vw = videoEl.videoWidth || knownWidth || 0;
+      const vh = videoEl.videoHeight || knownHeight || 0;
+      let tallPortrait = false;
+      if (vw && vh) {
+        tallPortrait = vw / vh <= 0.6;
+      } else if (externalRatio) {
+        const parsed = externalRatio.includes("/")
+          ? Number(externalRatio.split("/")[0]) / Number(externalRatio.split("/")[1])
+          : parseFloat(externalRatio);
+        tallPortrait = parsed <= 0.6;
+      }
+      videoEl.style.objectFit = tallPortrait ? "cover" : "contain";
     }
 
     // Exit fullscreen button — bottom right, matches mute button style
@@ -1144,6 +1155,13 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     muteBtn.addEventListener("click",    toggleMutePortal);
     muteBtn.addEventListener("touchend", toggleMutePortal);
     portal.appendChild(muteBtn);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.style.cssText = "position:absolute;top:12px;left:12px;z-index:10001;background:rgba(0,0,0,0.45);border:none;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);-webkit-tap-highlight-color:transparent;";
+    closeBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    closeBtn.addEventListener("click",    (ev) => { ev.stopPropagation(); exitFakeFullscreen(); });
+    closeBtn.addEventListener("touchend", (ev) => { ev.preventDefault(); ev.stopPropagation(); exitFakeFullscreen(); });
+    portal.appendChild(closeBtn);
 
     // React overlay div for FullscreenOverlay component
     const overlayDiv = document.createElement("div");
@@ -1230,13 +1248,13 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       });
     });
 
-    [xBtn, muteBtn].forEach((btn) => { btn.style.opacity = "0"; btn.style.transition = "none"; });
+    [xBtn, muteBtn, closeBtn].forEach((btn) => { btn.style.opacity = "0"; btn.style.transition = "none"; });
 
     const onDone = (ev: TransitionEvent) => {
       if (ev.propertyName !== "transform") return;
       container.style.willChange = "";
       container.removeEventListener("transitionend", onDone);
-      [xBtn, muteBtn].forEach((btn) => { btn.style.transition = "opacity 200ms ease"; btn.style.opacity = "1"; });
+      [xBtn, muteBtn, closeBtn].forEach((btn) => { btn.style.transition = "opacity 200ms ease"; btn.style.opacity = "1"; });
     };
     container.addEventListener("transitionend", onDone);
 

@@ -247,6 +247,7 @@ function PostCardInner({
   }, [prefetchProfile]);
 
   const isFree    = (subscriptionPrice ?? 0) === 0;
+  console.log("[PostCard] showSubscribeBanner:", showSubscribeBanner, "is_subscribed:", post.creator.id, "raw:", post);
 
   const handleSubscribeToMessage = useCallback(async () => {
     setSubToMsgMonthly(isFree ? 0 : (subscriptionPrice ?? 0));
