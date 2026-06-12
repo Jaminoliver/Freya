@@ -981,6 +981,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (video && hasStarted) {
       video.style.opacity = "1";
       video.style.transition = "none";
+      video.style.objectFit = "";
     }
     if (hasStarted) setShowPoster(false);
 
@@ -1082,9 +1083,39 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     portalRef.current = portal;
 
     // Move container into portal
-    Object.assign(container.style, { width: "100%", height: "100%", transition: "none" });
-    container.classList.add("vp-portal-active");
-    portal.appendChild(container);
+    const isDesktop = window.matchMedia("(min-width: 768px)").matches;
+    let containerSlot: HTMLDivElement;
+    if (isDesktop) {
+      containerSlot = document.createElement("div");
+      Object.assign(containerSlot.style, {
+        position: "absolute", inset: "0",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      });
+      const inner = document.createElement("div");
+      Object.assign(inner.style, {
+        position: "relative",
+        width: "100%", maxWidth: "420px",
+        height: "100%", maxHeight: "90vh",
+        borderRadius: "16px", overflow: "hidden",
+      });
+      containerSlot.appendChild(inner);
+      portal.appendChild(containerSlot);
+      Object.assign(container.style, { width: "100%", height: "100%", transition: "none" });
+      container.classList.add("vp-portal-active");
+      inner.appendChild(container);
+    } else {
+      containerSlot = document.createElement("div");
+      portal.appendChild(containerSlot);
+      Object.assign(container.style, { width: "100%", height: "100%", transition: "none" });
+      container.classList.add("vp-portal-active");
+      portal.appendChild(container);
+    }
+
+    // Override objectFit to match modal logic (cover only for tall portrait ≤0.6)
+    const videoEl = videoRef.current;
+    if (videoEl) {
+      videoEl.style.objectFit = isTallPortrait ? "cover" : "contain";
+    }
 
     // Exit fullscreen button — bottom right, matches mute button style
     const xBtn = document.createElement("button");
