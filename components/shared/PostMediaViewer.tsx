@@ -142,7 +142,7 @@ function ProgressiveImage({ src, blurHash, style, eager }: {
       )}
       <img
         ref={imgRef}
-        src={src ?? ""}
+        src={src ?? undefined}
         alt=""
         draggable={false}
         loading={eager ? "eager" : "lazy"}

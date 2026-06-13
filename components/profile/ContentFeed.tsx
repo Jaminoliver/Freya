@@ -259,11 +259,20 @@ export default function ContentFeed({
     if (!initialApiPosts) return;
     if (prevInitialPostsRef.current === initialApiPosts) return;
     prevInitialPostsRef.current = initialApiPosts;
-    setApiPosts(initialApiPosts);
-    const freshMedia = buildMediaFromPosts(initialApiPosts);
+    // Apply current subscription state to incoming posts so a refetch
+    // with stale locked:true data doesn't overwrite a correctly unlocked UI
+    const posts = isSubscribed
+      ? initialApiPosts.map((p) =>
+          p.is_ppv || (p.ppv_price != null && p.ppv_price > 0)
+            ? p
+            : { ...p, locked: false, can_access: true }
+        )
+      : initialApiPosts;
+    setApiPosts(posts);
+    const freshMedia = buildMediaFromPosts(posts);
     setApiMedia(freshMedia);
-    feedPostsCache.set(cacheKey, { posts: initialApiPosts, media: freshMedia });
-  }, [initialApiPosts, cacheKey]);
+    feedPostsCache.set(cacheKey, { posts, media: freshMedia });
+  }, [initialApiPosts, cacheKey, isSubscribed]);
 
   React.useEffect(() => {
     feedLayoutCache.set(cacheKey, { activeTab, isPostsGridView, isMediaGridView });

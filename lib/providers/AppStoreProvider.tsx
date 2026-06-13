@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/lib/store/appStore";
+import { getQueryClient } from "@/lib/providers/QueryProvider";
 
 const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -28,9 +29,6 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const fetchingRef = useRef<string | null>(null);
 
   // Hydrate viewer from sessionStorage synchronously before first paint.
-  // useLayoutEffect runs after DOM mutations but before the browser paints,
-  // so the component renders with the real viewer on the very first frame —
-  // no flicker, and no SSR mismatch (useLayoutEffect is skipped on the server).
   useLayoutEffect(() => {
     const stored = sessionStorage.getItem("freya_viewer_cache");
     if (stored) {
@@ -49,14 +47,15 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       if (fetchingRef.current === userId) return;
       fetchingRef.current = userId;
 
-      // ── Detect user switch: if a different user is logging in, clear all caches ──
       const currentViewer = useAppStore.getState().viewer;
-      if (!currentViewer || currentViewer.id !== userId) {
-        console.log("[AppStoreProvider] User switch or guest login detected, clearing all caches");
+      const isUserSwitch  = !currentViewer || currentViewer.id !== userId;
+
+      if (isUserSwitch) {
+        // Clear all stale caches immediately before fetching new profile
         clearAll();
       }
 
-      // Defer to next event loop tick to break out of Supabase auth lock chain
+      // Defer to next tick to break out of Supabase auth lock chain
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       try {
@@ -69,11 +68,19 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
             avatar_url:   data.avatar_url || null,
             role:         data.role || "fan",
           });
+
+          // After setting viewer, invalidate all queries so pages
+          // immediately refetch with the authenticated user's data.
+          // This fixes: guest feed persisting after login, locked posts
+          // still showing after login on profile pages.
+          const qc = getQueryClient();
+          qc.invalidateQueries({ queryKey: ["feed"] });
+          qc.invalidateQueries({ queryKey: ["profile"] });
+          qc.invalidateQueries({ queryKey: ["subscriptions"] });
+          qc.invalidateQueries({ queryKey: ["stories"] });
         }
-        // If data is null, keep existing cached viewer — don't wipe it
       } catch (err: unknown) {
         console.error("[AppStoreProvider] profile fetch failed:", err);
-        // Keep existing cached viewer on error — don't wipe it
       } finally {
         setViewerReady(true);
         fetchingRef.current = null;
@@ -85,10 +92,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         if (session?.user && session.access_token) {
           await fetchAndSetViewer(session.user.id, session.access_token);
         } else {
-          // ── FIXED: clear ALL caches on logout, not just viewer ──────────
-          // Previously only called setViewer(null) which left freya_feed_cache,
-          // freya_profiles_cache, freya_content_feeds_cache in sessionStorage.
-          // Next login on the same tab would show the old user's feed.
+          // Clear ALL caches on logout
           const hadViewer = !!useAppStore.getState().viewer;
           clearAll();
           setViewerReady(true);

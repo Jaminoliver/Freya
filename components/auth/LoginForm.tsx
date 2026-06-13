@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect, Suspense } from "react";
-import { Eye, EyeOff, ArrowLeft, AlertCircle, CheckCircle2, Check } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -18,10 +18,7 @@ type BannerState =
   | null;
 
 async function resolveEmail(identifier: string): Promise<string | null> {
-  // If it looks like an email, return as-is
   if (identifier.includes("@")) return identifier.trim();
-
-  // Otherwise treat as username — look up email via RPC
   const supabase = createClient();
   const { data, error } = await supabase.rpc("get_email_by_username", {
     p_username: identifier.trim().toLowerCase().replace(/^@/, ""),
@@ -65,8 +62,7 @@ function LoginFormInner() {
   }, [searchParams]);
 
   const validateIdentifier = (v: string): string | undefined => {
-    const trimmed = v.trim();
-    if (!trimmed) return "Please enter your email or username";
+    if (!v.trim()) return "Please enter your email or username";
     return undefined;
   };
 
@@ -108,7 +104,6 @@ function LoginFormInner() {
 
     setLoading(true);
 
-    // Resolve username → email if needed
     const email = await resolveEmail(formData.identifier);
     if (!email) {
       setBanner({ type: "error", message: "No account found with that username." });
@@ -117,7 +112,7 @@ function LoginFormInner() {
     }
 
     const supabase = createClient();
-    const { data, error: loginError } = await supabase.auth.signInWithPassword({
+    const { error: loginError } = await supabase.auth.signInWithPassword({
       email,
       password: formData.password,
     });
@@ -147,7 +142,8 @@ function LoginFormInner() {
       return;
     }
 
-    router.push("/dashboard");
+    // Hard redirect so all caches (TanStack Query, module-level) are fully reset
+    window.location.href = "/dashboard";
   };
 
   const handleGoogle = async () => {
@@ -160,12 +156,10 @@ function LoginFormInner() {
 
   const getInputStyle = (field: keyof FieldErrors): React.CSSProperties => {
     const hasError = !!fieldErrors[field];
-    let borderColor = "#1F1F2A";
-    if (hasError) borderColor = "#EF4444";
     return {
       width: "100%", borderRadius: "10px", padding: "12px 14px",
       fontSize: "14px", outline: "none", backgroundColor: "#141420",
-      border: `1.5px solid ${borderColor}`, color: "#F1F5F9",
+      border: `1.5px solid ${hasError ? "#EF4444" : "#1F1F2A"}`, color: "#F1F5F9",
       boxSizing: "border-box", transition: "border-color 0.15s ease",
     };
   };
@@ -214,7 +208,6 @@ function LoginFormInner() {
 
         <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
-          {/* Email or Username */}
           <div>
             <div style={{ position: "relative" }}>
               <input
@@ -235,7 +228,6 @@ function LoginFormInner() {
             )}
           </div>
 
-          {/* Password */}
           <div>
             <div style={{ position: "relative" }}>
               <input
@@ -280,14 +272,10 @@ function LoginFormInner() {
             <div style={{ flex: 1, height: "1px", backgroundColor: "#1F1F2A" }} />
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <button type="button" onClick={handleGoogle} style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "center", gap: "10px", borderRadius: "10px", padding: "12px 16px", fontSize: "14px", fontWeight: 500, cursor: "pointer", backgroundColor: "#141420", border: "1.5px solid #1F1F2A", color: "#FFFFFF", boxSizing: "border-box" }}>
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M19.8055 10.2292C19.8055 9.52422 19.7493 8.81576 19.6299 8.12109H10.2002V12.0879H15.6014C15.3768 13.3266 14.6508 14.4057 13.6106 15.0873V17.5865H16.8251C18.7173 15.8445 19.8055 13.2723 19.8055 10.2292Z" fill="#4285F4" /><path d="M10.2002 20.0006C12.9516 20.0006 15.2719 19.1048 16.8286 17.5865L13.6141 15.0873C12.7322 15.6977 11.5719 16.0427 10.2037 16.0427C7.5479 16.0427 5.29461 14.2831 4.52135 11.9092H1.2207V14.4833C2.81587 17.6535 6.34655 20.0006 10.2002 20.0006Z" fill="#34A853" /><path d="M4.51789 11.909C4.06107 10.6703 4.06107 9.33348 4.51789 8.09473V5.52063H1.22067C-0.192965 8.33598 -0.192965 11.6677 1.22067 14.483L4.51789 11.909Z" fill="#FBBC04" /><path d="M10.2002 3.95817C11.6465 3.93567 13.0404 4.47379 14.0876 5.46098L16.9373 2.61129C15.1859 0.990234 12.7358 0.0979004 10.2002 0.124651C6.34655 0.124651 2.81587 2.47176 1.2207 5.64536L4.51792 8.21946C5.28771 5.84207 7.54447 3.95817 10.2002 3.95817Z" fill="#EA4335" /></svg>
-              Sign in with Google
-            </button>
-            
-            
-          </div>
+          <button type="button" onClick={handleGoogle} style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "center", gap: "10px", borderRadius: "10px", padding: "12px 16px", fontSize: "14px", fontWeight: 500, cursor: "pointer", backgroundColor: "#141420", border: "1.5px solid #1F1F2A", color: "#FFFFFF", boxSizing: "border-box" }}>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M19.8055 10.2292C19.8055 9.52422 19.7493 8.81576 19.6299 8.12109H10.2002V12.0879H15.6014C15.3768 13.3266 14.6508 14.4057 13.6106 15.0873V17.5865H16.8251C18.7173 15.8445 19.8055 13.2723 19.8055 10.2292Z" fill="#4285F4" /><path d="M10.2002 20.0006C12.9516 20.0006 15.2719 19.1048 16.8286 17.5865L13.6141 15.0873C12.7322 15.6977 11.5719 16.0427 10.2037 16.0427C7.5479 16.0427 5.29461 14.2831 4.52135 11.9092H1.2207V14.4833C2.81587 17.6535 6.34655 20.0006 10.2002 20.0006Z" fill="#34A853" /><path d="M4.51789 11.909C4.06107 10.6703 4.06107 9.33348 4.51789 8.09473V5.52063H1.22067C-0.192965 8.33598 -0.192965 11.6677 1.22067 14.483L4.51789 11.909Z" fill="#FBBC04" /><path d="M10.2002 3.95817C11.6465 3.93567 13.0404 4.47379 14.0876 5.46098L16.9373 2.61129C15.1859 0.990234 12.7358 0.0979004 10.2002 0.124651C6.34655 0.124651 2.81587 2.47176 1.2207 5.64536L4.51792 8.21946C5.28771 5.84207 7.54447 3.95817 10.2002 3.95817Z" fill="#EA4335" /></svg>
+            Sign in with Google
+          </button>
         </form>
       </div>
     </div>

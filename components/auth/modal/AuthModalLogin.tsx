@@ -80,7 +80,7 @@ const [username, setUsername]         = useState("");
     const { data: profile } = await supabase.from("profiles").select("username").eq("id", loginData.user?.id).single();
     setUsername(profile?.username ?? "");
     setSuccess(true);
-    setTimeout(() => onSuccess(), 1800);
+    setTimeout(() => window.location.reload(), 1800);
   };
 
   const handleGoogle = async () => {

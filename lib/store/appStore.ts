@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { ApiPost } from "@/components/profile/PostRow";
 import { getQueryClient } from "@/lib/providers/QueryProvider";
+import { clearFeedCache } from "@/lib/cache/feedCache";
 
 const STALE_MS          = 20 * 1000; // 20s — instant SPA nav, fresh on hard refresh
 const PROFILES_KEY      = "freya_profiles_cache";
@@ -46,8 +47,8 @@ export interface ProfileEntry {
   isFollowing: boolean;
   isSubscribed: boolean;
   subscriptionPeriodEnd: string | null;
-  pricePaid?: number;      // FIX: was missing, caused price to be dropped on cache save
-  selectedTier?: string;   // FIX: was missing, caused tier to be dropped on cache save
+  pricePaid?: number;
+  selectedTier?: string;
   apiPosts: ApiPost[];
   fetchedAt: number;
   fanSubscription?: any | null;
@@ -136,15 +137,17 @@ export const useAppStore = create<AppStore>((set) => ({
         sessionStorage.removeItem("home_spotlight_scroll");
         sessionStorage.removeItem("home_feed_slides");
       } catch {}
+      // Clear module-level feed cache directly — no event needed
+      clearFeedCache();
       // Clear TanStack Query cache (owns all server state)
       getQueryClient().clear();
-      // Notify module-level caches (ContentFeed, FeedSuggestions, PostCard viewer)
+      // Notify other module-level caches (ContentFeed, FeedSuggestions, PostCard viewer)
       window.dispatchEvent(new Event("freya:clear-caches"));
     }
     set({
       viewer: null,
       viewerFetchedAt: null,
-      viewerReady: false,
+      viewerReady: true, // keep true so guest mode renders immediately, not stuck on splash
       profiles: {},
       contentFeeds: {},
       storyUpload: DEFAULT_STORY_UPLOAD,

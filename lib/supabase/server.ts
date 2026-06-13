@@ -50,8 +50,14 @@ export async function getUser(): Promise<{ user: User | null; error: any }> {
     const cookieStore = await cookies();
     const allCookies  = cookieStore.getAll();
 
-    const cacheKey = allCookies
-      .filter((c) => c.name.startsWith('sb-'))
+    const sbCookies = allCookies.filter((c) => c.name.startsWith('sb-'));
+
+    // No auth cookies = definitely logged out — skip cache entirely
+    if (sbCookies.length === 0) {
+      return { user: null, error: null };
+    }
+
+    const cacheKey = sbCookies
       .map((c) => `${c.name}=${c.value}`)
       .sort()
       .join('|');
@@ -63,16 +69,17 @@ export async function getUser(): Promise<{ user: User | null; error: any }> {
       }
     }
 
-    // Decode JWT locally — no network call, near instant
     const client = await createServerSupabaseClient();
-    const { data: { session }, error } = await client.auth.getSession();
-    const user = session?.user ?? null;
+    const { data: { user }, error } = await client.auth.getUser();
 
     if (user && cacheKey) {
       userCache.set(cacheKey, {
         user,
         expiresAt: Date.now() + USER_CACHE_TTL,
       });
+    } else if (!user) {
+      // No valid user — remove any stale cache entry for this key
+      userCache.delete(cacheKey);
     }
 
     return { user: user ?? null, error };
