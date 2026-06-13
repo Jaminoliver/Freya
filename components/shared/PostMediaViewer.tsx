@@ -39,6 +39,8 @@ interface PostMediaViewerProps {
   creatorHandle?:        string;
   disableMobileShrink?:  boolean;
   eager?:                boolean;
+  autoPlay?:             boolean;
+  prewarmLight?:         boolean;
   displayName?:          string;
   username?:             string;
   avatarUrl?:            string | null;
@@ -115,40 +117,18 @@ function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProper
 // ── ProgressiveImage ──────────────────────────────────────────────────────────
 const loadedImageUrls = new Set<string>();
 
-// Check browser HTTP cache synchronously — avoids blur flash on return visits
-function isImageCached(src: string): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const img = new window.Image();
-    img.src = src;
-    return img.complete && img.naturalWidth > 0;
-  } catch { return false; }
-}
-
-// Clear on logout/user-switch
-if (typeof window !== "undefined") {
-  window.addEventListener("freya:clear-caches", () => loadedImageUrls.clear());
-}
-
 function ProgressiveImage({ src, blurHash, style, eager }: {
   src?:      string | null;
   blurHash?: string | null;
   style?:    React.CSSProperties;
   eager?:    boolean;
 }) {
-  // Initialize synchronously — if image is in browser cache, start loaded with no blur
-  const [loaded, setLoaded] = React.useState(() => {
-    if (!src) return false;
-    if (loadedImageUrls.has(src)) return true;
-    if (isImageCached(src)) { loadedImageUrls.add(src); return true; }
-    return false;
-  });
+  const [loaded, setLoaded] = React.useState(() => !!src && loadedImageUrls.has(src));
   const imgRef = React.useRef<HTMLImageElement>(null);
 
   React.useEffect(() => {
     if (!src) return;
     if (loadedImageUrls.has(src)) { setLoaded(true); return; }
-    // Double-check after mount — browser may have cached between render and effect
     if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
       loadedImageUrls.add(src);
       setLoaded(true);
@@ -164,14 +144,14 @@ function ProgressiveImage({ src, blurHash, style, eager }: {
       )}
       <img
         ref={imgRef}
-        src={src ?? undefined}
+        src={src ?? ""}
         alt=""
         draggable={false}
         loading={eager ? "eager" : "lazy"}
         decoding="async"
-        fetchPriority={eager ? "high" : "auto"}
+        fetchPriority={eager ? "high" : "low"}
         onLoad={() => { if (src) loadedImageUrls.add(src); setLoaded(true); }}
-        style={{ ...style, opacity: loaded ? 1 : 0, transition: loaded ? "none" : "opacity 0.25s ease", position: "relative", zIndex: 2 }}
+        style={{ ...style, opacity: loaded ? 1 : 0, transition: "opacity 0.25s ease", position: "relative", zIndex: 2 }}
       />
     </div>
   );
@@ -314,6 +294,8 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   creatorHandle,
   disableMobileShrink = false,
   eager = false,
+  autoPlay = false,
+  prewarmLight = false,
   displayName,
   username,
   avatarUrl,
@@ -476,6 +458,8 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
     );
   }
 
+  
+
   if (isVideo) {
     const rawVideoRatio = (() => {
       if (first?.aspectRatio != null && first.aspectRatio > 0) return first.aspectRatio;
@@ -486,6 +470,8 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
     const isPortrait  = rawVideoRatio < 1;
     const videoRatio  = Math.min(Math.max(rawVideoRatio, 9 / 16), 1.91);
 
+    // X-style: portrait videos on mobile sit in a narrower container (left-aligned)
+    // Width shrinks → height naturally follows the same ratio → nothing cropped
     const containerWidth = isMobileView && isPortrait && !disableMobileShrink ? "77%" : "100%";
 
     const blurSrc = first.bunnyVideoId
@@ -540,6 +526,8 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               knownHeight={first.height ?? null}
               creatorHandle={creatorHandle}
               eager={eager}
+              autoPlay={autoPlay}
+              prewarmLight={prewarmLight}
               displayName={displayName}
               username={username}
               avatarUrl={avatarUrl}

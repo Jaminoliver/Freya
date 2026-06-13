@@ -78,6 +78,7 @@ export default function PostRow({
   post, isOwnProfile, isSubscribed,
   onLike, onComment, onTip, onUnlock,
   viewer, onDelete, onImageClick, onPPVUpdated, eager = false,
+  autoPlay = false, prewarmLight = false,
 }: {
   post:          ApiPost;
   isOwnProfile?: boolean;
@@ -91,6 +92,8 @@ export default function PostRow({
   onImageClick?:      (post: LightboxPost, index: number) => void;
   onPPVUpdated?:      (id: string, priceKobo: number) => void;
   eager?: boolean;
+  autoPlay?: boolean;
+  prewarmLight?: boolean;
 }) {
   const router = useRouter();
   const openAuthModal = useAppStore((s) => s.openAuthModal);
@@ -356,6 +359,8 @@ export default function PostRow({
           avatarUrl={post.profiles.avatar_url ?? null}
           caption={caption}
           eager={eager}
+          autoPlay={autoPlay}
+          prewarmLight={prewarmLight}
           durationSeconds={viewerMedia[0]?.durationSeconds ?? null}
           onProfileClick={() => router.push(`/${post.profiles.username}`)}
         />

@@ -12,20 +12,36 @@ const GoogleIcon = () => (
   </svg>
 );
 
+function Spinner() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2.5" strokeLinecap="round"
+      style={{ animation: "spin 0.75s linear infinite", flexShrink: 0 }}>
+      <path d="M12 2a10 10 0 0 1 10 10" />
+    </svg>
+  );
+}
+
+function timeout<T>(ms: number): Promise<T> {
+  return new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms));
+}
+
 async function resolveEmail(identifier: string): Promise<string | null> {
   if (identifier.includes("@")) return identifier.trim();
   const supabase = createClient();
-  const { data, error } = await supabase.rpc("get_email_by_username", {
-    p_username: identifier.trim().toLowerCase().replace(/^@/, ""),
-  });
+  const { data, error } = await Promise.race([
+    supabase.rpc("get_email_by_username", {
+      p_username: identifier.trim().toLowerCase().replace(/^@/, ""),
+    }),
+    timeout<{ data: null; error: Error }>(10000),
+  ]) as any;
   if (error || !data) return null;
   return data as string;
 }
 
 interface Props {
   onNavigate: (screen: number) => void;
-  onClose: () => void;
-  onSuccess: () => void;
+  onClose:    () => void;
+  onSuccess:  () => void;
 }
 
 type Banner = { type: "error" | "info"; message: string } | null;
@@ -35,52 +51,91 @@ export function AuthModalLogin({ onNavigate, onClose, onSuccess }: Props) {
   const [password, setPassword]         = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading]           = useState(false);
-const [username, setUsername]         = useState("");
+  const [slowNetwork, setSlowNetwork]   = useState(false);
+  const [username, setUsername]         = useState("");
   const [success, setSuccess]           = useState(false);
   const [banner, setBanner]             = useState<Banner>(null);
   const [errors, setErrors]             = useState<{ identifier?: string; password?: string }>({});
   const identifierRef                   = useRef<HTMLInputElement>(null);
   const passwordRef                     = useRef<HTMLInputElement>(null);
+  const slowTimerRef                    = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const startSlowTimer = () => {
+    slowTimerRef.current = setTimeout(() => setSlowNetwork(true), 6000);
+  };
+  const clearSlowTimer = () => {
+    if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    setSlowNetwork(false);
+  };
 
   const handleSubmit = async () => {
     setBanner(null);
     const newErrors: typeof errors = {};
     if (!identifier.trim()) newErrors.identifier = "Please enter your email or username";
-    if (!password) newErrors.password = "Please enter your password";
+    if (!password)           newErrors.password   = "Please enter your password";
     setErrors(newErrors);
     if (newErrors.identifier) { identifierRef.current?.focus(); return; }
     if (newErrors.password)   { passwordRef.current?.focus(); return; }
 
+    // Offline check
+    if (!navigator.onLine) {
+      setBanner({ type: "error", message: "You're offline. Connect to the internet and try again." });
+      return;
+    }
+
     setLoading(true);
-    const email = await resolveEmail(identifier);
-    if (!email) {
-      setBanner({ type: "error", message: "No account found with that username." });
-      setLoading(false);
-      return;
-    }
+    startSlowTimer();
 
-    const supabase = createClient();
-    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (loginError) {
-      const msg = loginError.message.toLowerCase();
-      if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
-        setBanner({ type: "error", message: "The email/username or password you entered is incorrect." });
-      } else if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
-        setBanner({ type: "error", message: "Please verify your email before logging in." });
-      } else if (msg.includes("rate limit") || msg.includes("too many")) {
-        setBanner({ type: "error", message: "Too many login attempts. Please wait a few minutes." });
-      } else {
-        setBanner({ type: "error", message: "Something went wrong. Please try again." });
+    try {
+      const email = await resolveEmail(identifier);
+      if (!email) {
+        clearSlowTimer();
+        setBanner({ type: "error", message: "No account found with that username." });
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-      return;
-    }
 
-    const { data: profile } = await supabase.from("profiles").select("username").eq("id", loginData.user?.id).single();
-    setUsername(profile?.username ?? "");
-    setSuccess(true);
-    setTimeout(() => window.location.reload(), 1800);
+      const supabase = createClient();
+      const { data: loginData, error: loginError } = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        timeout<never>(10000),
+      ]) as any;
+
+      clearSlowTimer();
+
+      if (loginError) {
+        const msg = loginError.message.toLowerCase();
+        if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
+          setBanner({ type: "error", message: "The email/username or password you entered is incorrect." });
+        } else if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
+          setBanner({ type: "error", message: "Please verify your email before logging in." });
+        } else if (msg.includes("rate limit") || msg.includes("too many")) {
+          setBanner({ type: "error", message: "Too many login attempts. Please wait a few minutes." });
+        } else {
+          setBanner({ type: "error", message: "Something went wrong. Please try again." });
+        }
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await supabase.from("profiles").select("username").eq("id", loginData.user?.id).single();
+      setUsername(profile?.username ?? "");
+      setSuccess(true);
+      onSuccess();
+
+    } catch (err: any) {
+      clearSlowTimer();
+      // Timeout — check if session exists anyway (Supabase can succeed but not resolve)
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setSuccess(true);
+        onSuccess();
+        return;
+      }
+      setBanner({ type: "error", message: "Connection timed out. Check your internet and try again." });
+      setLoading(false);
+    }
   };
 
   const handleGoogle = async () => {
@@ -100,7 +155,7 @@ const [username, setUsername]         = useState("");
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
-        <img src="/freya_logo.png" alt="Fréya" style={{ height: "70px", width: "auto" }} />
+        <img src="/freya_logo.png" alt="Fréya" style={{ height: "48px", width: "auto" }} />
         <button style={styles.iconBtn} onClick={onClose} aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -108,7 +163,8 @@ const [username, setUsername]         = useState("");
         </button>
       </div>
 
-      {success && <SuccessOverlay message={`Welcome back, @${username}!`} />}
+      {success && <SuccessOverlay message={`Welcome back${username ? `, @${username}` : ""}!`} />}
+
       {/* Body */}
       <div style={styles.modalBody}>
         <div>
@@ -123,7 +179,6 @@ const [username, setUsername]         = useState("");
         )}
 
         <div style={styles.formStack}>
-          {/* Identifier */}
           <div>
             <input
               ref={identifierRef}
@@ -138,7 +193,6 @@ const [username, setUsername]         = useState("");
             {errors.identifier && <p style={styles.fieldError}>{errors.identifier}</p>}
           </div>
 
-          {/* Password */}
           <div>
             <div style={styles.fieldLabel}>
               <span>Password</span>
@@ -170,12 +224,22 @@ const [username, setUsername]         = useState("");
           </div>
 
           <button
-            style={{ ...styles.btnPrimary, opacity: loading ? 0.7 : 1 }}
+            style={{ ...styles.btnPrimary, opacity: loading ? 0.75 : 1 }}
             onClick={handleSubmit}
             disabled={loading}
           >
-            {loading ? "Logging in…" : "Log In"}
+            {loading ? (
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                <Spinner /> Logging in…
+              </span>
+            ) : "Log In"}
           </button>
+
+          {slowNetwork && (
+            <p style={{ textAlign: "center", fontSize: "12px", color: "#6B6B8A", margin: "-6px 0 0" }}>
+              Taking longer than usual… Check your connection
+            </p>
+          )}
 
           <p style={styles.terms}>
             By logging in you agree to our <span style={styles.termsLink}>Terms</span> and confirm you are at least 18 years old.
@@ -201,34 +265,29 @@ const [username, setUsername]         = useState("");
 
 const styles: Record<string, React.CSSProperties> = {
   modalTop: {
-    display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 0",
-  },
-  brand: {
-    fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px",
-    background: "linear-gradient(90deg, #8B5CF6, #EC4899)",
-    WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
+    display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px 0",
   },
   iconBtn: {
     background: "none", border: "none", cursor: "pointer", color: "#A3A3C2",
     display: "flex", alignItems: "center", padding: "4px", borderRadius: "8px",
   },
-  modalBody: { padding: "12px 24px 28px", display: "flex", flexDirection: "column", gap: "16px" },
+  modalBody: { padding: "12px 20px 24px", display: "flex", flexDirection: "column", gap: "14px" },
   heading: {
-    fontSize: "18px", fontWeight: 600, lineHeight: 1.25,
+    fontSize: "17px", fontWeight: 600, lineHeight: 1.25,
     background: "linear-gradient(90deg, #8B5CF6, #EC4899)",
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
   },
-  subtext: { fontSize: "13px", color: "#A3A3C2", lineHeight: 1.5, marginTop: "6px" },
-  banner: { padding: "12px 14px", borderRadius: "10px", border: "1.5px solid", display: "flex", alignItems: "center" },
-  formStack: { display: "flex", flexDirection: "column", gap: "14px" },
+  subtext: { fontSize: "13px", color: "#A3A3C2", lineHeight: 1.5, marginTop: "4px" },
+  banner: { padding: "10px 14px", borderRadius: "10px", border: "1.5px solid", display: "flex", alignItems: "center" },
+  formStack: { display: "flex", flexDirection: "column", gap: "12px" },
   fieldLabel: {
     display: "flex", justifyContent: "space-between", alignItems: "center",
-    fontSize: "12px", fontWeight: 500, color: "#A3A3C2", marginBottom: "7px",
+    fontSize: "12px", fontWeight: 500, color: "#A3A3C2", marginBottom: "6px",
   },
   inp: {
-    width: "100%", padding: "12px 14px", background: "#141420",
+    width: "100%", padding: "11px 14px", background: "#141420",
     border: "1.5px solid #1F1F2A", borderRadius: "10px", color: "#F1F5F9",
-    fontSize: "14px", outline: "none", fontFamily: "'Inter', sans-serif",
+    fontSize: "16px", outline: "none", fontFamily: "'Inter', sans-serif",
     transition: "border-color 0.15s", boxSizing: "border-box",
   },
   inpWrap: { position: "relative" },
@@ -237,19 +296,19 @@ const styles: Record<string, React.CSSProperties> = {
     background: "none", border: "none", cursor: "pointer", color: "#A3A3C2",
     display: "flex", alignItems: "center",
   },
-  fieldError: { margin: "6px 2px 0", fontSize: "12px", color: "#EF4444", lineHeight: 1.4 },
+  fieldError: { margin: "5px 2px 0", fontSize: "12px", color: "#EF4444", lineHeight: 1.4 },
   btnPrimary: {
     width: "100%", padding: "11px 24px", background: "#8B5CF6", border: "none",
     borderRadius: "10px", color: "#fff", fontSize: "14px", fontWeight: 600,
     cursor: "pointer", fontFamily: "'Inter', sans-serif",
-    boxShadow: "0 4px 24px rgba(139,92,246,0.35)", transition: "background 0.15s", marginTop: "4px",
+    boxShadow: "0 4px 20px rgba(139,92,246,0.35)", transition: "opacity 0.15s",
   },
   dividerRow: { display: "flex", alignItems: "center", gap: "12px" },
   dividerLine: { flex: 1, height: "1px", background: "#1F1F2A" },
   dividerLabel: { fontSize: "12px", color: "#6B6B8A" },
   btnSecondary: {
     width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-    gap: "10px", padding: "12px 16px", background: "#141420",
+    gap: "10px", padding: "11px 16px", background: "#141420",
     border: "1.5px solid #1F1F2A", borderRadius: "10px", color: "#F1F5F9",
     fontSize: "14px", fontWeight: 500, cursor: "pointer",
     fontFamily: "'Inter', sans-serif", transition: "border-color 0.15s",
@@ -271,26 +330,27 @@ function SuccessOverlay({ message }: { message: string }) {
   return (
     <div style={{
       position: "absolute", inset: 0, zIndex: 10,
-      background: "#0A0A0F", borderRadius: "16px",
+      background: "#0D0D14", borderRadius: "inherit",
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       padding: "48px 24px", gap: "16px",
     }}>
       <style>{`
-        @keyframes successCheck { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-        @keyframes successFade  { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+        @keyframes successCheck { 0% { transform: scale(0); opacity: 0 } 50% { transform: scale(1.2); opacity: 1 } 100% { transform: scale(1); opacity: 1 } }
+        @keyframes successFade  { 0% { opacity: 0; transform: translateY(8px) } 100% { opacity: 1; transform: translateY(0) } }
+        @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
       <div style={{
-        width: "64px", height: "64px", borderRadius: "50%",
+        width: "60px", height: "60px", borderRadius: "50%",
         background: "linear-gradient(135deg, #22C55E, #16A34A)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        animation: "successCheck 0.5s ease-out forwards",
+        animation: "successCheck 0.45s ease-out forwards",
       }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12"/>
         </svg>
       </div>
-      <p style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "#FFFFFF", animation: "successFade 0.4s ease-out 0.3s forwards", opacity: 0 }}>{message}</p>
+      <p style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "#FFFFFF", animation: "successFade 0.4s ease-out 0.3s forwards", opacity: 0 }}>{message}</p>
     </div>
   );
 }

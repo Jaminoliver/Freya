@@ -3,16 +3,15 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { PostCard } from "@/components/feed/PostCard";
 import { StoryBar } from "@/components/story/StoryBar";
+import StoryViewer from "@/components/story/StoryViewer";
 import { FeedSkeleton } from "@/components/loadscreen/FeedSkeleton";
-import dynamic from "next/dynamic";
-const StoryViewer   = dynamic(() => import("@/components/story/StoryViewer"),      { ssr: false });
-const CheckoutModal = dynamic(() => import("@/components/checkout/CheckoutModal"),  { ssr: false });
-const FeedSuggestions = dynamic(() => import("@/components/feed/FeedSuggestions").then((m) => ({ default: m.FeedSuggestions })), { ssr: false });
+import CheckoutModal from "@/components/checkout/CheckoutModal";
+import { FeedSuggestions } from "@/components/feed/FeedSuggestions";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, staleTimes } from "@/lib/query/keys";
 import type { PollData } from "@/components/feed/PollDisplay";
 import { type CreatorStoryGroup, applyLocalViewed } from "@/components/story/StoryBar";
-import { warmedVideoIds, preloadedSegments } from "@/components/video/VideoPlayer";
+import { useActiveVideo } from "@/lib/hooks/useActiveVideo";
 import type { User } from "@/lib/types/profile";
 import { useAppStore } from "@/lib/store/appStore";
 import { getFeedCache, isFeedCacheStale, setFeedPages, setFeedStoriesData, patchFeedPost, clearFeedCache, subscribeFeedCache } from "@/lib/cache/feedCache";
@@ -132,6 +131,8 @@ export default function HomePage() {
   const queryClient = useQueryClient();
   const viewerReady = useAppStore((s) => s.viewerReady);
   useEffect(() => {
+    console.log("[HomePage] MOUNTED");
+    return () => console.log("[HomePage] UNMOUNTED");
   }, []);
 
   const [slideMap, setSlideMap] = useState<Record<string, number>>({});
@@ -215,6 +216,7 @@ export default function HomePage() {
   useEffect(() => {
     if (data?.pages?.length) setFeedPages(data.pages);
   }, [data?.pages]);
+  console.log("[HomePage] data pages:", data?.pages?.length, "hasStories:", hasStories, "storiesFromFeed:", storiesFromFeed);
   const { data: storiesData, isLoading: storiesLoading } = useQuery({
   queryKey: ["stories"],
   enabled: storiesFromFeed === null,
@@ -233,8 +235,9 @@ export default function HomePage() {
     staleTime: staleTimes.feed,
   });
 
+  console.log("[HomePage] viewerReady:", viewerReady, "isLoading:", isLoading, "storiesLoading:", storiesLoading, "hasData:", !!data, "hasStoriesData:", !!storiesData);
   const pageReady = viewerReady && (!isLoading || !!data) && (!storiesLoading || !!storiesData);
-  console.log("[HP]", { pageReady, viewerReady, isLoading, hasData: !!data, storiesLoading, feedCachePages: getFeedCache().pages.length, feedCacheStale: isFeedCacheStale() });
+  console.log("[HomePage] pageReady:", pageReady);
 
   const posts: FeedPost[] = useMemo(() => {
     const seen = new Set<number>();
@@ -244,6 +247,22 @@ export default function HomePage() {
       return true;
     });
   }, [data?.pages]);
+
+  // Feed-level autoplay coordinator: ordered video post ids + id→bunnyVideoId map.
+  const { videoPostIds, videoIdMap } = useMemo(() => {
+    const ids: string[] = [];
+    const map = new Map<string, string>();
+    posts.forEach((p) => {
+      const v = p.media.find((m) => m.media_type === "video" && m.bunny_video_id);
+      if (v?.bunny_video_id) {
+        ids.push(String(p.id));
+        map.set(String(p.id), v.bunny_video_id);
+      }
+    });
+    return { videoPostIds: ids, videoIdMap: map };
+  }, [posts]);
+
+  const { isActive, isInWindow, registerFeed } = useActiveVideo(videoPostIds, videoIdMap);
 
   const firstVideoPreloaded = useRef(false);
 
@@ -261,6 +280,7 @@ export default function HomePage() {
           if (c.banner_url) { const i = new Image(); i.src = c.banner_url; }
           if (c.avatar_url) { const i = new Image(); i.src = c.avatar_url; }
         });
+        console.log(`[SUGGESTIONS] preloaded ${creators.length} creator images`);
       })
       .catch(() => {});
   }, [posts]);
@@ -299,92 +319,6 @@ export default function HomePage() {
     }
   }, [posts]);
 
-  // Lookahead: pre-warm based on actual video playback and skip events
-  useEffect(() => {
-    if (!posts.length) return;
-    const videoPosts = posts.filter((p) =>
-      p.media.some((m) => m.media_type === "video" && m.bunny_video_id)
-    );
-    const videoIdToIndex = new Map(
-      videoPosts.map((p, i) => [p.media.find((m) => m.media_type === "video" && m.bunny_video_id)?.bunny_video_id, i])
-    );
-
-    const preWarm = (fromIndex: number, count: number) => {
-      const conn = (navigator as any).connection;
-      const ect: string = conn?.effectiveType ?? "4g";
-      const ahead = ect === "3g" ? Math.min(count, 1) : count;
-      videoPosts.slice(fromIndex + 1, fromIndex + 1 + ahead).forEach((p) => {
-        const m = p.media.find((m) => m.media_type === "video" && m.bunny_video_id);
-        if (!m?.bunny_video_id) return;
-        fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/playlist.m3u8`, {
-          method: "GET", cache: "force-cache",
-        }).catch(() => {});
-        if (m.thumbnail_url) { const img = new Image(); img.src = m.thumbnail_url; }
-      });
-    };
-
-    const onPlaying = (e: Event) => {
-      const { bunnyVideoId } = (e as CustomEvent).detail;
-      const idx = videoIdToIndex.get(bunnyVideoId);
-      if (idx === undefined) return;
-      preWarm(idx, 3);
-    };
-
-    const onSkipped = (e: Event) => {
-      const { bunnyVideoId } = (e as CustomEvent).detail;
-      const idx = videoIdToIndex.get(bunnyVideoId);
-      if (idx === undefined) return;
-      preWarm(idx, 2);
-    };
-
-    window.addEventListener("freya:video-playing", onPlaying);
-    window.addEventListener("freya:video-skipped", onSkipped);
-
-    const observers: IntersectionObserver[] = [];
-    videoPosts.forEach((p, i) => {
-      const m = p.media.find((m) => m.media_type === "video" && m.bunny_video_id);
-      if (!m?.bunny_video_id) return;
-      const el = document.querySelector(`[data-postid="${p.id}"]`);
-      if (!el) return;
-      const obs = new IntersectionObserver(([entry]) => {
-        if (!entry.isIntersecting) return;
-        if (warmedVideoIds.has(m.bunny_video_id!)) return;
-        warmedVideoIds.add(m.bunny_video_id!);
-        const conn = (navigator as any).connection;
-        const ect: string = conn?.effectiveType ?? "4g";
-        fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/playlist.m3u8`, { method: "GET", cache: "force-cache" }).catch(() => {});
-        if (ect !== "slow-2g" && ect !== "2g" && ect !== "3g") {
-          const ahead = 3;
-          videoPosts.slice(i, i + ahead).forEach((vp) => {
-            const vm = vp.media.find((mm) => mm.media_type === "video" && mm.bunny_video_id);
-            if (!vm?.bunny_video_id) return;
-            if (preloadedSegments.has(vm.bunny_video_id)) return;
-            preloadedSegments.add(vm.bunny_video_id);
-            const savedBw = Number(typeof localStorage !== "undefined" ? localStorage.getItem("hls_bw") : 0) || 0;
-            const dl: number = conn?.downlink ?? 10;
-            const effectiveBw = savedBw > 0 ? Math.max(savedBw, dl * 1_000_000) : dl * 1_000_000;
-            const prefetchRes = effectiveBw >= 8_000_000 ? "1080p" : effectiveBw >= 4_000_000 ? "720p" : effectiveBw >= 2_000_000 ? "480p" : "360p";
-            fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${vm.bunny_video_id}/${prefetchRes}/video0.ts`, { method: "GET", cache: "force-cache" }).catch(() => {});
-          });
-        } else if (ect === "3g") {
-          if (!preloadedSegments.has(m.bunny_video_id!)) {
-            preloadedSegments.add(m.bunny_video_id!);
-            fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/360p/video0.ts`, { method: "GET", cache: "force-cache" }).catch(() => {});
-          }
-        }
-        preWarm(i, 2);
-        obs.disconnect();
-      }, { rootMargin: "400px" });
-      obs.observe(el);
-      observers.push(obs);
-    });
-
-    return () => {
-      window.removeEventListener("freya:video-playing", onPlaying);
-      window.removeEventListener("freya:video-skipped", onSkipped);
-      observers.forEach((o) => o.disconnect());
-    };
-  }, [posts]);
 
   useEffect(() => { setSlideMap(loadSlides()); }, []);
 
@@ -552,6 +486,7 @@ export default function HomePage() {
         <div
           key={post.id}
           data-postid={post.id}
+          data-video={videoIdMap.has(String(post.id)) ? "1" : undefined}
           style={{ margin: "10px 12px", borderRadius: "14px", overflow: "hidden" }}
         >
           {index === 0 && (
@@ -571,7 +506,8 @@ export default function HomePage() {
             initialSavedPost={post.saved_post ?? false}
             initialSavedCreator={post.saved_creator ?? false}
             eager={index < 2}
-            preWarmVideoId={index === 0 ? (post.media.find((m) => m.media_type === "video" && m.bunny_video_id)?.bunny_video_id ?? null) : null}
+            autoPlay={isActive(String(post.id))}
+            prewarmLight={isInWindow(String(post.id))}
           />
         </div>
       );
@@ -580,10 +516,10 @@ export default function HomePage() {
       }
     });
     return items;
-  }, [posts, slideMap, subscribedCreatorIds, handleUnlock, handleSlideChange, handleSubscribed]);
+  }, [posts, slideMap, subscribedCreatorIds, handleUnlock, handleSlideChange, handleSubscribed, isActive, isInWindow, videoIdMap]);
 
   return (
-    <div style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>
+    <div ref={registerFeed} style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>
 
       {ppvCreator && (
         <CheckoutModal

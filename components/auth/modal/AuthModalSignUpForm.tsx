@@ -5,8 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   onNavigate: (screen: number) => void;
-  onClose: () => void;
-  onSuccess: () => void;
+  onClose:    () => void;
+  onSuccess:  () => void;
 }
 
 type Banner = { type: "error" | "success" | "info"; message: string } | null;
@@ -28,33 +28,58 @@ function EyeIcon({ show }: { show: boolean }) {
   );
 }
 
-export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
-  const [month, setMonth]           = useState("");
-  const [day, setDay]               = useState("");
-  const [year, setYear]             = useState("");
-  const [email, setEmail]           = useState("");
-  const [password, setPassword]     = useState("");
-  const [confirmPw, setConfirmPw]   = useState("");
-  const [code, setCode]             = useState("");
-  const [newsletter, setNewsletter] = useState(false);
-  const [showPw, setShowPw]         = useState(false);
-  const [showConf, setShowConf]     = useState(false);
-  const [loading, setLoading]       = useState(false);
-  const [success, setSuccess]       = useState(false);
-  const [sendingCode, setSendingCode] = useState(false);
-  const [codeSent, setCodeSent]     = useState(false);
-  const [locked, setLocked]         = useState(false);
-  const [countdown, setCountdown]   = useState(0);
-  const [banner, setBanner]         = useState<Banner>(null);
-  const [errors, setErrors]         = useState<Record<string, string>>({});
-  const timerRef                    = useRef<ReturnType<typeof setInterval> | null>(null);
+function Spinner() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2.5" strokeLinecap="round"
+      style={{ animation: "spin 0.75s linear infinite", flexShrink: 0 }}>
+      <path d="M12 2a10 10 0 0 1 10 10" />
+    </svg>
+  );
+}
 
-  // Generate days/years
+function timeout<T>(ms: number): Promise<T> {
+  return new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms));
+}
+
+export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
+  const [month, setMonth]             = useState("");
+  const [day, setDay]                 = useState("");
+  const [year, setYear]               = useState("");
+  const [email, setEmail]             = useState("");
+  const [password, setPassword]       = useState("");
+  const [confirmPw, setConfirmPw]     = useState("");
+  const [code, setCode]               = useState("");
+  const [newsletter, setNewsletter]   = useState(false);
+  const [showPw, setShowPw]           = useState(false);
+  const [showConf, setShowConf]       = useState(false);
+  const [loading, setLoading]         = useState(false);
+  const [slowNetwork, setSlowNetwork] = useState(false);
+  const [success, setSuccess]         = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [codeSent, setCodeSent]       = useState(false);
+  const [locked, setLocked]           = useState(false);
+  const [countdown, setCountdown]     = useState(0);
+  const [banner, setBanner]           = useState<Banner>(null);
+  const [errors, setErrors]           = useState<Record<string, string>>({});
+  const timerRef                      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const slowTimerRef                  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const days  = Array.from({ length: 31 }, (_, i) => i + 1);
   const curY  = new Date().getFullYear();
   const years = Array.from({ length: 100 }, (_, i) => curY - 18 - i);
 
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+  useEffect(() => () => {
+    if (timerRef.current)   clearInterval(timerRef.current);
+    if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+  }, []);
+
+  const startSlowTimer = () => {
+    slowTimerRef.current = setTimeout(() => setSlowNetwork(true), 6000);
+  };
+  const clearSlowTimer = () => {
+    if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    setSlowNetwork(false);
+  };
 
   const startLockout = () => {
     setLocked(true);
@@ -80,17 +105,23 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       newErrors.email = "Please enter a valid email address";
     }
-    if (!validateAge()) {
-      newErrors.dob = "You must be 18 or older to join Fréya";
-    }
+    if (!validateAge()) newErrors.dob = "You must be 18 or older to join Fréya";
     if (Object.values(newErrors).some(Boolean)) { setErrors((p) => ({ ...p, ...newErrors })); return; }
+
+    if (!navigator.onLine) {
+      setBanner({ type: "error", message: "You're offline. Connect to the internet and try again." });
+      return;
+    }
 
     setSendingCode(true);
     try {
-      const res  = await fetch("/api/check-email", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-      });
+      const res  = await Promise.race([
+        fetch("/api/check-email", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim() }),
+        }),
+        timeout<never>(10000),
+      ]) as Response;
       const data = await res.json();
       if (data.exists) {
         setBanner({ type: "info", message: "An account with this email exists. Try logging in instead." });
@@ -100,85 +131,123 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
     } catch {}
 
     const supabase = createClient();
-    const { error: otpError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password: Math.random().toString(36), // temp; will be replaced on submit
-      options: { emailRedirectTo: undefined },
-    });
+    try {
+      const { error: otpError } = await Promise.race([
+        supabase.auth.signUp({
+          email: email.trim(),
+          password: Math.random().toString(36),
+          options: { emailRedirectTo: undefined },
+        }),
+        timeout<never>(10000),
+      ]) as any;
 
-    setSendingCode(false);
-    if (otpError && !otpError.message.includes("already registered")) {
-      setBanner({ type: "error", message: otpError.message });
-      return;
+      setSendingCode(false);
+      if (otpError && !otpError.message.includes("already registered")) {
+        setBanner({ type: "error", message: otpError.message });
+        return;
+      }
+      setCodeSent(true);
+      setBanner({ type: "success", message: "Code sent! Check your inbox." });
+      startLockout();
+    } catch {
+      setSendingCode(false);
+      setBanner({ type: "error", message: "Connection timed out. Check your internet and try again." });
     }
-    setCodeSent(true);
-    setBanner({ type: "success", message: "Code sent! Check your inbox." });
-    startLockout();
   };
 
   const handleVerifyCode = async () => {
     if (!code.trim()) return;
     const supabase = createClient();
-    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "signup" });
-    if (error) { setBanner({ type: "error", message: "Invalid or expired code." }); }
-    else { setBanner({ type: "success", message: "Email verified! Click Create Account to finish." }); }
+    try {
+      const { error } = await Promise.race([
+        supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "signup" }),
+        timeout<never>(10000),
+      ]) as any;
+      if (error) { setBanner({ type: "error", message: "Invalid or expired code." }); }
+      else        { setBanner({ type: "success", message: "Email verified! Click Create Account to finish." }); }
+    } catch {
+      setBanner({ type: "error", message: "Connection timed out. Check your internet and try again." });
+    }
   };
 
   const handleSubmit = async () => {
     setBanner(null);
     const newErrors: Record<string, string> = {};
-    if (!month || !day || !year)           newErrors.dob = "Please select your date of birth";
-    if (!validateAge())                    newErrors.dob = "You must be 18 or older to join Fréya";
-    if (!email.trim())                     newErrors.email = "Please enter your email";
-    if (!password)                         newErrors.password = "Please enter a password";
-    if (password.length < 8)              newErrors.password = "Password must be at least 8 characters";
-    if (password !== confirmPw)           newErrors.confirmPw = "Passwords do not match";
-    if (!code.trim())                      newErrors.code = "Please enter the verification code";
+    if (!month || !day || !year)  newErrors.dob       = "Please select your date of birth";
+    if (!validateAge())            newErrors.dob       = "You must be 18 or older to join Fréya";
+    if (!email.trim())             newErrors.email     = "Please enter your email";
+    if (!password)                 newErrors.password  = "Please enter a password";
+    if (password.length < 8)      newErrors.password  = "Password must be at least 8 characters";
+    if (password !== confirmPw)   newErrors.confirmPw = "Passwords do not match";
+    if (!code.trim())              newErrors.code      = "Please enter the verification code";
     setErrors(newErrors);
     if (Object.values(newErrors).some(Boolean)) return;
 
+    if (!navigator.onLine) {
+      setBanner({ type: "error", message: "You're offline. Connect to the internet and try again." });
+      return;
+    }
+
     setLoading(true);
+    startSlowTimer();
+
     const supabase = createClient();
 
-    // Verify the OTP code first
-    const { error: verifyError } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: code.trim(),
-      type: "signup",
-    });
+    try {
+      // Verify OTP
+      const { error: verifyError } = await Promise.race([
+        supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "signup" }),
+        timeout<never>(10000),
+      ]) as any;
 
-    if (verifyError) {
-      setBanner({ type: "error", message: "Invalid or expired code. Please request a new one." });
+      if (verifyError) {
+        clearSlowTimer();
+        setBanner({ type: "error", message: "Invalid or expired code. Please request a new one." });
+        setLoading(false);
+        return;
+      }
+
+      // Update password
+      const { error: updateError } = await Promise.race([
+        supabase.auth.updateUser({ password, data: { account_type: "fan" } }),
+        timeout<never>(10000),
+      ]) as any;
+
+      if (updateError) {
+        clearSlowTimer();
+        setBanner({ type: "error", message: updateError.message });
+        setLoading(false);
+        return;
+      }
+
+      // Save DOB
+      const dobString = `${year}-${String(MONTHS.indexOf(month) + 1).padStart(2, "0")}-${String(parseInt(day)).padStart(2, "0")}`;
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser) {
+        await supabase.from("profiles").update({
+          date_of_birth:   dobString,
+          is_age_verified: true,
+          age_verified_at: new Date().toISOString(),
+        }).eq("id", currentUser.id);
+      }
+
+      clearSlowTimer();
       setLoading(false);
-      return;
-    }
+      setSuccess(true);
+      onSuccess();
 
-    // Update password after OTP verified
-    const { error: updateError } = await supabase.auth.updateUser({
-      password,
-      data: { account_type: "fan" },
-    });
-
-    if (updateError) {
+    } catch {
+      clearSlowTimer();
+      // Check if session exists despite timeout
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setSuccess(true);
+        onSuccess();
+        return;
+      }
+      setBanner({ type: "error", message: "Connection timed out. Check your internet and try again." });
       setLoading(false);
-      setBanner({ type: "error", message: updateError.message });
-      return;
     }
-
-    // Save DOB to profile
-    const dobString = `${year}-${String(MONTHS.indexOf(month) + 1).padStart(2, "0")}-${String(parseInt(day)).padStart(2, "0")}`;
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (currentUser) {
-      await supabase.from("profiles").update({
-        date_of_birth: dobString,
-        is_age_verified: true,
-        age_verified_at: new Date().toISOString(),
-      }).eq("id", currentUser.id);
-    }
-
-    setLoading(false);
-    setSuccess(true);
-    setTimeout(() => window.location.reload(), 1800);
   };
 
   const selStyle = (hasError?: boolean): React.CSSProperties => ({
@@ -190,8 +259,10 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
     <>
       <style>{`
         @keyframes sendPulse { 0%{transform:scale(1)} 50%{transform:scale(0.94)} 100%{transform:scale(1)} }
+        @keyframes spin { to { transform: rotate(360deg) } }
         .send-btn-pulse:active { animation: sendPulse 0.2s ease; }
       `}</style>
+
       {/* Header */}
       <div style={styles.modalTop}>
         <button style={styles.iconBtn} onClick={() => onNavigate(3)} aria-label="Back">
@@ -199,7 +270,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
-        <img src="/freya_logo.png" alt="Fréya" style={{ height: "70px", width: "auto" }} />
+        <img src="/freya_logo.png" alt="Fréya" style={{ height: "48px", width: "auto" }} />
         <button style={styles.iconBtn} onClick={onClose} aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -208,6 +279,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
       </div>
 
       {success && <SuccessOverlay message="Account created!" />}
+
       {/* Body */}
       <div style={styles.modalBody}>
         <div>
@@ -218,8 +290,8 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
         {banner && (
           <div style={{
             ...styles.banner,
-            background: banner.type === "error" ? "rgba(239,68,68,0.1)" : banner.type === "success" ? "rgba(16,185,129,0.1)" : "rgba(139,92,246,0.1)",
-            borderColor: banner.type === "error" ? "#EF4444" : banner.type === "success" ? "#10B981" : "#8B5CF6",
+            background:  banner.type === "error" ? "rgba(239,68,68,0.1)" : banner.type === "success" ? "rgba(16,185,129,0.1)" : "rgba(139,92,246,0.1)",
+            borderColor: banner.type === "error" ? "#EF4444"             : banner.type === "success" ? "#10B981"              : "#8B5CF6",
           }}>
             <span style={{ color: banner.type === "error" ? "#EF4444" : banner.type === "success" ? "#10B981" : "#A78BFA", fontSize: "13px" }}>
               {banner.message}
@@ -228,7 +300,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
         )}
 
         <div style={styles.formStack}>
-          {/* Date of birth */}
+          {/* DOB */}
           <div>
             <div style={styles.fieldLabel}><span>Date of birth</span></div>
             <div style={styles.dobRow}>
@@ -256,8 +328,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
             <div style={styles.fieldLabel}><span>Email address</span></div>
             <input
               style={{ ...styles.inp, borderColor: errors.email ? "#EF4444" : "#1F1F2A" }}
-              type="email"
-              placeholder="Enter your email address"
+              type="email" placeholder="Enter your email address"
               value={email}
               onChange={(e) => { setEmail(e.target.value); setErrors((p) => ({ ...p, email: "" })); }}
             />
@@ -270,14 +341,11 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
             <div style={styles.inpWrap}>
               <input
                 style={{ ...styles.inp, paddingRight: "46px", borderColor: errors.password ? "#EF4444" : "#1F1F2A" }}
-                type={showPw ? "text" : "password"}
-                placeholder="Create a password"
+                type={showPw ? "text" : "password"} placeholder="Create a password"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setErrors((p) => ({ ...p, password: "" })); }}
               />
-              <button style={styles.eyeBtn} onClick={() => setShowPw(!showPw)} aria-label="Toggle">
-                <EyeIcon show={showPw} />
-              </button>
+              <button style={styles.eyeBtn} onClick={() => setShowPw(!showPw)} aria-label="Toggle"><EyeIcon show={showPw} /></button>
             </div>
             {errors.password && <p style={styles.fieldError}>{errors.password}</p>}
           </div>
@@ -288,14 +356,11 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
             <div style={styles.inpWrap}>
               <input
                 style={{ ...styles.inp, paddingRight: "46px", borderColor: errors.confirmPw ? "#EF4444" : "#1F1F2A" }}
-                type={showConf ? "text" : "password"}
-                placeholder="Re-enter your password"
+                type={showConf ? "text" : "password"} placeholder="Re-enter your password"
                 value={confirmPw}
                 onChange={(e) => { setConfirmPw(e.target.value); setErrors((p) => ({ ...p, confirmPw: "" })); }}
               />
-              <button style={styles.eyeBtn} onClick={() => setShowConf(!showConf)} aria-label="Toggle">
-                <EyeIcon show={showConf} />
-              </button>
+              <button style={styles.eyeBtn} onClick={() => setShowConf(!showConf)} aria-label="Toggle"><EyeIcon show={showConf} /></button>
             </div>
             {errors.confirmPw && <p style={styles.fieldError}>{errors.confirmPw}</p>}
           </div>
@@ -306,10 +371,8 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
             <div style={styles.codeRow}>
               <input
                 style={{ ...styles.inp, flex: 1, borderColor: errors.code ? "#EF4444" : "#1F1F2A" }}
-                type="text"
-                placeholder="Enter 8-digit code"
-                value={code}
-                maxLength={8}
+                type="text" placeholder="Enter 8-digit code"
+                value={code} maxLength={8}
                 onChange={(e) => {
                   const val = e.target.value;
                   setCode(val);
@@ -319,7 +382,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
               />
               <button
                 className="send-btn-pulse"
-                style={{ ...styles.sendBtn, opacity: locked || sendingCode || !email.trim() || !validateAge() ? 0.6 : 1, transition: "all 0.15s" }}
+                style={{ ...styles.sendBtn, opacity: locked || sendingCode || !email.trim() || !validateAge() ? 0.6 : 1 }}
                 onClick={handleSendCode}
                 disabled={locked || sendingCode || !email.trim() || !validateAge()}
               >
@@ -332,9 +395,7 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
           {/* Newsletter */}
           <div style={styles.checkRow}>
             <input
-              type="checkbox"
-              id="modal-nl"
-              checked={newsletter}
+              type="checkbox" id="modal-nl" checked={newsletter}
               onChange={(e) => setNewsletter(e.target.checked)}
               style={{ marginTop: "3px", accentColor: "#8B5CF6", width: "14px", height: "14px", flexShrink: 0 }}
             />
@@ -344,12 +405,22 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
           </div>
 
           <button
-            style={{ ...styles.btnPrimary, opacity: loading ? 0.7 : 1 }}
+            style={{ ...styles.btnPrimary, opacity: loading ? 0.75 : 1 }}
             onClick={handleSubmit}
             disabled={loading}
           >
-            {loading ? "Creating account…" : "Create Account"}
+            {loading ? (
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                <Spinner /> Creating account…
+              </span>
+            ) : "Create Account"}
           </button>
+
+          {slowNetwork && (
+            <p style={{ textAlign: "center", fontSize: "12px", color: "#6B6B8A", margin: "-4px 0 0" }}>
+              Taking longer than usual… Check your connection
+            </p>
+          )}
 
           <p style={styles.terms}>
             By signing up you agree to our <span style={styles.termsLink}>Terms of Service</span> and <span style={styles.termsLink}>Privacy Policy</span>.
@@ -366,55 +437,51 @@ export function AuthModalSignUpForm({ onNavigate, onClose, onSuccess }: Props) {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  modalTop: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 0" },
-  brand: {
-    fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px",
-    background: "linear-gradient(90deg, #8B5CF6, #EC4899)",
-    WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
-  },
-  iconBtn: { background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "8px" },
-  modalBody: { padding: "12px 24px 28px", display: "flex", flexDirection: "column", gap: "16px", maxHeight: "80vh", overflowY: "auto" },
+  modalTop: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px 0" },
+  iconBtn:  { background: "none", border: "none", cursor: "pointer", color: "#A3A3C2", display: "flex", alignItems: "center", padding: "4px", borderRadius: "8px" },
+  modalBody: { padding: "12px 20px 24px", display: "flex", flexDirection: "column", gap: "14px", maxHeight: "80vh", overflowY: "auto" },
   heading: {
-    fontSize: "18px", fontWeight: 600, lineHeight: 1.25,
+    fontSize: "17px", fontWeight: 600, lineHeight: 1.25,
     background: "linear-gradient(90deg, #8B5CF6, #EC4899)",
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
   },
-  subtext: { fontSize: "13px", color: "#A3A3C2", lineHeight: 1.5, marginTop: "6px" },
-  banner: { padding: "12px 14px", borderRadius: "10px", border: "1.5px solid" },
-  formStack: { display: "flex", flexDirection: "column", gap: "14px" },
-  fieldLabel: { fontSize: "12px", fontWeight: 500, color: "#A3A3C2", marginBottom: "7px" },
+  subtext:    { fontSize: "13px", color: "#A3A3C2", lineHeight: 1.5, marginTop: "4px" },
+  banner:     { padding: "10px 14px", borderRadius: "10px", border: "1.5px solid" },
+  formStack:  { display: "flex", flexDirection: "column", gap: "12px" },
+  fieldLabel: { fontSize: "12px", fontWeight: 500, color: "#A3A3C2", marginBottom: "6px" },
   inp: {
-    width: "100%", padding: "12px 14px", background: "#141420", border: "1.5px solid #1F1F2A",
-    borderRadius: "10px", color: "#F1F5F9", fontSize: "14px", outline: "none",
-    fontFamily: "'Inter', sans-serif", transition: "border-color 0.15s", boxSizing: "border-box",
+    width: "100%", padding: "11px 14px", background: "#141420",
+    border: "1.5px solid #1F1F2A", borderRadius: "10px", color: "#F1F5F9",
+    fontSize: "16px", outline: "none", fontFamily: "'Inter', sans-serif",
+    transition: "border-color 0.15s", boxSizing: "border-box",
   },
   inpWrap: { position: "relative" },
-  eyeBtn: { position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" },
-  dobRow: { display: "flex", gap: "8px" },
+  eyeBtn:  { position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" },
+  dobRow:  { display: "flex", gap: "8px" },
   dobSel: {
-    flex: 1, padding: "12px 8px", background: "#141420", border: "1.5px solid #1F1F2A",
+    flex: 1, padding: "11px 8px", background: "#141420", border: "1.5px solid #1F1F2A",
     borderRadius: "10px", color: "#F1F5F9", fontSize: "13px", outline: "none",
     appearance: "none" as const, textAlign: "center" as const, cursor: "pointer",
     fontFamily: "'Inter', sans-serif", transition: "border-color 0.15s",
   },
-  dobHint: { fontSize: "11px", color: "#6B6B8A", marginTop: "5px" },
-  codeRow: { display: "flex", gap: "8px" },
+  dobHint:    { fontSize: "11px", color: "#6B6B8A", marginTop: "5px" },
+  codeRow:    { display: "flex", gap: "8px" },
   sendBtn: {
-    flexShrink: 0, padding: "0 16px", background: "#141420", border: "1.5px solid #1F1F2A",
+    flexShrink: 0, padding: "0 14px", background: "#141420", border: "1.5px solid #1F1F2A",
     borderRadius: "10px", color: "#8B5CF6", fontSize: "13px", fontWeight: 600,
-    cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Inter', sans-serif",
+    cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Inter', sans-serif", transition: "opacity 0.15s",
   },
-  checkRow: { display: "flex", alignItems: "flex-start", gap: "10px" },
-  fieldError: { margin: "6px 2px 0", fontSize: "12px", color: "#EF4444", lineHeight: 1.4 },
+  checkRow:   { display: "flex", alignItems: "flex-start", gap: "10px" },
+  fieldError: { margin: "5px 2px 0", fontSize: "12px", color: "#EF4444", lineHeight: 1.4 },
   btnPrimary: {
     width: "100%", padding: "11px 24px", background: "#8B5CF6", border: "none",
     borderRadius: "10px", color: "#fff", fontSize: "14px", fontWeight: 600,
     cursor: "pointer", fontFamily: "'Inter', sans-serif",
-    boxShadow: "0 4px 24px rgba(139,92,246,0.35)", transition: "background 0.15s",
+    boxShadow: "0 4px 20px rgba(139,92,246,0.35)", transition: "opacity 0.15s",
   },
   footerLinks: { display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" },
-  lnk: { color: "#8B5CF6", background: "none", border: "none", cursor: "pointer", fontSize: "13px", fontFamily: "'Inter', sans-serif", fontWeight: 500 },
-  terms: { fontSize: "11px", color: "#6B6B8A", textAlign: "center", lineHeight: 1.6 },
+  lnk:  { color: "#8B5CF6", background: "none", border: "none", cursor: "pointer", fontSize: "13px", fontFamily: "'Inter', sans-serif", fontWeight: 500 },
+  terms:    { fontSize: "11px", color: "#6B6B8A", textAlign: "center", lineHeight: 1.6 },
   termsLink: { color: "#8B5CF6", cursor: "pointer" },
 };
 
@@ -422,26 +489,27 @@ function SuccessOverlay({ message }: { message: string }) {
   return (
     <div style={{
       position: "absolute", inset: 0, zIndex: 10,
-      background: "#0A0A0F", borderRadius: "16px",
+      background: "#0D0D14", borderRadius: "inherit",
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       padding: "48px 24px", gap: "16px",
     }}>
       <style>{`
-        @keyframes successCheck { 0% { transform: scale(0); opacity: 0; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-        @keyframes successFade  { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+        @keyframes successCheck { 0%{transform:scale(0);opacity:0} 50%{transform:scale(1.2);opacity:1} 100%{transform:scale(1);opacity:1} }
+        @keyframes successFade  { 0%{opacity:0;transform:translateY(8px)} 100%{opacity:1;transform:translateY(0)} }
+        @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
       <div style={{
-        width: "64px", height: "64px", borderRadius: "50%",
+        width: "60px", height: "60px", borderRadius: "50%",
         background: "linear-gradient(135deg, #22C55E, #16A34A)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        animation: "successCheck 0.5s ease-out forwards",
+        animation: "successCheck 0.45s ease-out forwards",
       }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="20 6 9 17 4 12"/>
         </svg>
       </div>
-      <p style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "#FFFFFF", animation: "successFade 0.4s ease-out 0.3s forwards", opacity: 0 }}>{message}</p>
+      <p style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "#FFFFFF", animation: "successFade 0.4s ease-out 0.3s forwards", opacity: 0 }}>{message}</p>
     </div>
   );
 }

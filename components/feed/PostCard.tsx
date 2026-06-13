@@ -110,7 +110,8 @@ function PostCardInner({
   initialSavedPost = false,
   initialSavedCreator = false,
   eager = false,
-  preWarmVideoId = null,
+  autoPlay = false,
+  prewarmLight = false,
 }: {
   post:                  Post;
   onLike?:               (postId: string) => void;
@@ -125,7 +126,8 @@ function PostCardInner({
   initialSavedPost?:     boolean;
   initialSavedCreator?:  boolean;
   eager?:                boolean;
-  preWarmVideoId?:       string | null;
+  autoPlay?:             boolean;
+  prewarmLight?:         boolean;
 }) {
   const { navigate } = useNav();
   const router       = useRouter();
@@ -524,13 +526,6 @@ function PostCardInner({
             aspectRatio={placeholderRatio}
             eager={eager}
             gateKey={post.id}
-            onMount={() => {
-              const attempt = (tries: number) => {
-                if (videoPlayerRef.current) { videoPlayerRef.current.prewarm(); return; }
-                if (tries > 0) setTimeout(() => attempt(tries - 1), 50);
-              };
-              attempt(10);
-            }}
             placeholder={
               firstMedia?.blurHash ? (
                 <BlurHashPlaceholder hash={firstMedia.blurHash} />
@@ -552,6 +547,8 @@ function PostCardInner({
               username={post.creator.username}
               avatarUrl={post.creator.avatar_url ?? null}
               caption={post.caption ?? null}
+              autoPlay={autoPlay}
+              prewarmLight={prewarmLight}
               durationSeconds={normalizedMedia[0]?.durationSeconds ?? null}
               onProfileClick={() => router.push(`/${post.creator.username}`)}
             />
@@ -601,7 +598,8 @@ export const PostCard = memo(PostCardInner, (prev, next) => {
   if (prev.initialSavedPost     !== next.initialSavedPost)     return false;
   if (prev.is_renewal           !== next.is_renewal)           return false;
   if (prev.eager                !== next.eager)                return false;
-  if (prev.preWarmVideoId       !== next.preWarmVideoId)       return false;
+  if (prev.autoPlay             !== next.autoPlay)             return false;
+  if (prev.prewarmLight         !== next.prewarmLight)         return false;
   return true;
 });
 
