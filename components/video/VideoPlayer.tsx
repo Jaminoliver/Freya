@@ -3,6 +3,7 @@
 import * as React from "react";
 import { decode } from "blurhash";
 import Hls from "hls.js";
+import { registerHlsLoader, unregisterHlsLoader, isLoadAllowed } from "@/lib/video/hlsGovernor";
 
 // ── Mute persistence ──────────────────────────────────────────────────────────
 const MUTE_KEY = "vp_muted";
@@ -19,6 +20,21 @@ const watchedVideoIds = new Set<string>();
 export const warmedVideoIds    = new Set<string>();
 export const preloadedSegments = new Set<string>();
 const loadedPosterUrls = new Set<string>();
+
+// Synchronous browser-cache check — avoids the blurhash/poster flash on
+// return visits when the image is already in the HTTP cache.
+function isPosterCached(src: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const img = new window.Image();
+    img.src = src;
+    return img.complete && img.naturalWidth > 0;
+  } catch { return false; }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("freya:clear-caches", () => loadedPosterUrls.clear());
+}
 
 let anyFullscreenOpen = false;
 let currentlyPlayingVideo: HTMLVideoElement | null = null;
@@ -512,8 +528,8 @@ function VideoControls({
         </div>
       )}
 
-      {/* Play indicator when paused */}
-      {!playing && isStarted && !isBuffering && !isLoading && (
+      {/* Play indicator when paused — only in fullscreen, never in the feed */}
+      {isFullscreen && !playing && isStarted && !isBuffering && !isLoading && (
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 6, pointerEvents: "none" }}>
           <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><polygon points="5,3 19,12 5,21"/></svg>
         </div>
@@ -665,7 +681,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const [showPoster,    setShowPoster]    = React.useState(true);
   const [posterLoaded,  setPosterLoaded]  = React.useState(() => {
     const src = thumbnailUrl ?? (bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "");
-    return !!src && loadedPosterUrls.has(src);
+    if (!src) return false;
+    if (loadedPosterUrls.has(src)) return true;
+    if (isPosterCached(src)) { loadedPosterUrls.add(src); return true; }
+    return false;
   });
   const [isBuffering, setIsBuffering] = React.useState(false);
 
@@ -795,20 +814,21 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         const savedBw        = Number(localStorage.getItem("hls_bw")) || 0;
         const conn           = (navigator as any).connection;
         const downlink: number      = conn?.downlink ?? 10;
-        const effectiveType: string = conn?.effectiveType ?? "4g";
-        const isSlow         = downlink < 5 || effectiveType === "3g" || effectiveType === "2g" || effectiveType === "slow-2g";
-        const defaultEstimate = savedBw > 0 ? Math.min(savedBw, downlink * 1_000_000 * 0.8) : downlink * 1_000_000 * 0.8;
         const effectiveBw    = savedBw > 0 ? Math.max(savedBw, downlink * 1_000_000) : downlink * 1_000_000;
-        // When we have a saved estimate, pick a start level for instant first-frame.
-        // With no estimate, hand off to hls.js auto (-1) so it probes the first segment.
+        // Saved estimate → pick a start level for instant first-frame (fastest).
+        // No estimate → hls.js auto (-1) probes the first segment.
         const startLevel     = savedBw > 0
           ? (effectiveBw >= 8_000_000 ? 4 : effectiveBw >= 4_000_000 ? 3 : effectiveBw >= 2_000_000 ? 2 : effectiveBw >= 1_200_000 ? 1 : 0)
           : -1;
         const hls = new Hls({
-          startLevel, testBandwidth: !isSlow, capLevelToPlayerSize: true, lowLatencyMode: false,
-          abrEwmaDefaultEstimate: defaultEstimate, abrEwmaFastVoD: 2, abrEwmaSlowVoD: 6,
-          abrBandWidthFactor: 0.85, abrBandWidthUpFactor: 0.6,
-          maxBufferLength: 15, maxMaxBufferLength: 60, backBufferLength: 30, maxStarvationDelay: 2,
+          startLevel,
+          capLevelToPlayerSize: true,
+          lowLatencyMode: false,
+          // Governed loading: instance attaches but downloads nothing until the
+          // load governor promotes it (active + N ahead). Prevents many nearby
+          // videos from all buffering at once and starving bandwidth.
+          autoStartLoad: false,
+          maxBufferLength: 10, maxMaxBufferLength: 30, backBufferLength: 15, maxStarvationDelay: 2,
         });
         hlsRef.current = hls;
         hls.on(Hls.Events.FRAG_LOADED, () => { localStorage.setItem("hls_bw", String(hls.bandwidthEstimate)); });
@@ -823,11 +843,21 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         hls.loadSource(hlsSrc);
         hls.attachMedia(video);
         (video as any).__hls = hls;
+        // Register with the load governor. It decides when this instance may
+        // actually download segments (active + N ahead). If already allowed
+        // (e.g. this is the active video), start loading immediately.
+        if (bunnyVideoId) {
+          registerHlsLoader(bunnyVideoId, {
+            startLoad: () => { try { hls.startLoad(); } catch {} },
+            stopLoad:  () => { try { hls.stopLoad(); }  catch {} },
+          });
+          if (isLoadAllowed(bunnyVideoId)) { try { hls.startLoad(); } catch {} }
+        }
         video.addEventListener("loadedmetadata", () => {
           const dur = video.duration;
           if (!isFinite(dur) || dur <= 0) return;
-          hls.config.maxBufferLength    = Math.min(Math.ceil(dur * 0.5), 60);
-          hls.config.maxMaxBufferLength = Math.min(Math.ceil(dur), 120);
+          hls.config.maxBufferLength    = Math.min(Math.ceil(dur * 0.5), 15);
+          hls.config.maxMaxBufferLength = Math.min(Math.ceil(dur), 30);
         }, { once: true });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = getBunnyHLS(bunnyVideoId);
@@ -848,9 +878,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       if (bufferTimer.current)  clearTimeout(bufferTimer.current);
       if (loadingTimer.current) clearTimeout(loadingTimer.current);
       if (stallTimer.current)   clearTimeout(stallTimer.current);
+      if (bunnyVideoId) unregisterHlsLoader(bunnyVideoId);
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
     };
-  }, []);
+  }, [bunnyVideoId]);
 
   React.useEffect(() => {
     if (!bunnyVideoId) return;
@@ -913,6 +944,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     if (hlsRef.current && !hlsRef.current.media) {
       hlsRef.current.attachMedia(video!);
     }
+    // Active video always loads (autoStartLoad is false, so kick it explicitly).
+    if (hlsRef.current) { try { hlsRef.current.startLoad(); } catch {} }
     const savedMute = getSavedMute();
     if (video) video.muted = savedMute;
     setIsMuted(savedMute);
@@ -1363,8 +1396,8 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             onClick={showPoster && !isLoading ? handlePosterPlay : undefined}
             style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: showPoster ? "pointer" : "default", opacity: showPoster ? 1 : 0, transition: showPoster ? "opacity 0.25s ease" : "none", pointerEvents: showPoster ? "auto" : "none" }}
           >
-            <img src={posterSrc} alt="" fetchPriority="high" onLoad={handlePosterLoad} onError={() => { if (thumbnailUrl && bunnyVideoId) setPosterSrc(getBunnyThumbnail(bunnyVideoId)); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }} />
-            {!isLoading && !isAutoplaying && !autoPlay && !isBuffering && !isFakeFullscreen && (
+            <img src={posterSrc} alt="" fetchPriority="high" onLoad={handlePosterLoad} onError={() => { if (thumbnailUrl && bunnyVideoId) setPosterSrc(getBunnyThumbnail(bunnyVideoId)); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: posterLoaded ? "none" : "opacity 0.25s ease" }} />
+            {false && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}><polygon points="5,3 19,12 5,21"/></svg>
             )}
           </div>
