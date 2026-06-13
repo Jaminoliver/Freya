@@ -20,6 +20,19 @@ export const warmedVideoIds    = new Set<string>();
 export const preloadedSegments = new Set<string>();
 const loadedPosterUrls = new Set<string>();
 
+function isPosterCached(src: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const img = new window.Image();
+    img.src = src;
+    return img.complete && img.naturalWidth > 0;
+  } catch { return false; }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("freya:clear-caches", () => loadedPosterUrls.clear());
+}
+
 let anyFullscreenOpen = false;
 let currentlyPlayingVideo: HTMLVideoElement | null = null;
 
@@ -669,7 +682,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const [showPoster,    setShowPoster]    = React.useState(true);
   const [posterLoaded,  setPosterLoaded]  = React.useState(() => {
     const src = thumbnailUrl ?? (bunnyVideoId ? getBunnyThumbnail(bunnyVideoId) : "");
-    return !!src && loadedPosterUrls.has(src);
+    if (!src) return false;
+    if (loadedPosterUrls.has(src)) return true;
+    if (isPosterCached(src)) { loadedPosterUrls.add(src); return true; }
+    return false;
   });
   const [isBuffering, setIsBuffering] = React.useState(false);
 
@@ -1370,7 +1386,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             onClick={showPoster && !isLoading ? handlePosterPlay : undefined}
             style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: showPoster ? "pointer" : "default", opacity: showPoster ? 1 : 0, transition: showPoster ? "opacity 0.25s ease" : "none", pointerEvents: showPoster ? "auto" : "none" }}
           >
-            <img src={posterSrc} alt="" fetchPriority="high" onLoad={handlePosterLoad} onError={() => { if (thumbnailUrl && bunnyVideoId) setPosterSrc(getBunnyThumbnail(bunnyVideoId)); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: "opacity 0.25s ease" }} />
+            <img src={posterSrc} alt="" fetchPriority="high" onLoad={handlePosterLoad} onError={() => { if (thumbnailUrl && bunnyVideoId) setPosterSrc(getBunnyThumbnail(bunnyVideoId)); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: posterLoaded ? "none" : "opacity 0.25s ease" }} />
             {!isLoading && !isAutoplaying && !autoPlay && !isBuffering && !isFakeFullscreen && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}><polygon points="5,3 19,12 5,21"/></svg>
             )}
