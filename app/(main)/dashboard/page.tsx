@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { PostCard } from "@/components/feed/PostCard";
 import { StoryBar } from "@/components/story/StoryBar";
-import StoryViewer from "@/components/story/StoryViewer";
 import { FeedSkeleton } from "@/components/loadscreen/FeedSkeleton";
-import CheckoutModal from "@/components/checkout/CheckoutModal";
-import { FeedSuggestions } from "@/components/feed/FeedSuggestions";
+import dynamic from "next/dynamic";
+const StoryViewer   = dynamic(() => import("@/components/story/StoryViewer"),      { ssr: false });
+const CheckoutModal = dynamic(() => import("@/components/checkout/CheckoutModal"),  { ssr: false });
+const FeedSuggestions = dynamic(() => import("@/components/feed/FeedSuggestions").then((m) => ({ default: m.FeedSuggestions })), { ssr: false });
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, staleTimes } from "@/lib/query/keys";
 import type { PollData } from "@/components/feed/PollDisplay";
@@ -131,8 +132,6 @@ export default function HomePage() {
   const queryClient = useQueryClient();
   const viewerReady = useAppStore((s) => s.viewerReady);
   useEffect(() => {
-    console.log("[HomePage] MOUNTED");
-    return () => console.log("[HomePage] UNMOUNTED");
   }, []);
 
   const [slideMap, setSlideMap] = useState<Record<string, number>>({});
@@ -216,7 +215,6 @@ export default function HomePage() {
   useEffect(() => {
     if (data?.pages?.length) setFeedPages(data.pages);
   }, [data?.pages]);
-  console.log("[HomePage] data pages:", data?.pages?.length, "hasStories:", hasStories, "storiesFromFeed:", storiesFromFeed);
   const { data: storiesData, isLoading: storiesLoading } = useQuery({
   queryKey: ["stories"],
   enabled: storiesFromFeed === null,
@@ -235,9 +233,8 @@ export default function HomePage() {
     staleTime: staleTimes.feed,
   });
 
-  console.log("[HomePage] viewerReady:", viewerReady, "isLoading:", isLoading, "storiesLoading:", storiesLoading, "hasData:", !!data, "hasStoriesData:", !!storiesData);
   const pageReady = viewerReady && (!isLoading || !!data) && (!storiesLoading || !!storiesData);
-  console.log("[HomePage] pageReady:", pageReady);
+  console.log("[HP]", { pageReady, viewerReady, isLoading, hasData: !!data, storiesLoading, feedCachePages: getFeedCache().pages.length, feedCacheStale: isFeedCacheStale() });
 
   const posts: FeedPost[] = useMemo(() => {
     const seen = new Set<number>();
@@ -264,7 +261,6 @@ export default function HomePage() {
           if (c.banner_url) { const i = new Image(); i.src = c.banner_url; }
           if (c.avatar_url) { const i = new Image(); i.src = c.avatar_url; }
         });
-        console.log(`[SUGGESTIONS] preloaded ${creators.length} creator images`);
       })
       .catch(() => {});
   }, [posts]);
@@ -316,13 +312,10 @@ export default function HomePage() {
     const preWarm = (fromIndex: number, count: number) => {
       const conn = (navigator as any).connection;
       const ect: string = conn?.effectiveType ?? "4g";
-      if (ect === "slow-2g" || ect === "2g") { console.log(`[PREWARM] ⛔ skipped — network too slow (${ect})`); return; }
       const ahead = ect === "3g" ? Math.min(count, 1) : count;
-      console.log(`[PREWARM] 🔥 lookahead from index=${fromIndex} count=${ahead} network=${ect}`);
       videoPosts.slice(fromIndex + 1, fromIndex + 1 + ahead).forEach((p) => {
         const m = p.media.find((m) => m.media_type === "video" && m.bunny_video_id);
         if (!m?.bunny_video_id) return;
-        console.log(`[PREWARM] 📡 warming ${m.bunny_video_id.slice(0,8)}`);
         fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/playlist.m3u8`, {
           method: "GET", cache: "force-cache",
         }).catch(() => {});
@@ -359,7 +352,6 @@ export default function HomePage() {
         warmedVideoIds.add(m.bunny_video_id!);
         const conn = (navigator as any).connection;
         const ect: string = conn?.effectiveType ?? "4g";
-        console.log(`[PREWARM] 👁 scroll-based warming ${m.bunny_video_id!.slice(0,8)} network=${ect}`);
         fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/playlist.m3u8`, { method: "GET", cache: "force-cache" }).catch(() => {});
         if (ect !== "slow-2g" && ect !== "2g" && ect !== "3g") {
           const ahead = 3;
@@ -368,7 +360,6 @@ export default function HomePage() {
             if (!vm?.bunny_video_id) return;
             if (preloadedSegments.has(vm.bunny_video_id)) return;
             preloadedSegments.add(vm.bunny_video_id);
-            console.log(`[PREWARM] 📦 prefetching segment ${vm.bunny_video_id.slice(0,8)}`);
             const savedBw = Number(typeof localStorage !== "undefined" ? localStorage.getItem("hls_bw") : 0) || 0;
             const dl: number = conn?.downlink ?? 10;
             const effectiveBw = savedBw > 0 ? Math.max(savedBw, dl * 1_000_000) : dl * 1_000_000;
@@ -378,7 +369,6 @@ export default function HomePage() {
         } else if (ect === "3g") {
           if (!preloadedSegments.has(m.bunny_video_id!)) {
             preloadedSegments.add(m.bunny_video_id!);
-            console.log(`[PREWARM] 📦 prefetching segment (3g) ${m.bunny_video_id!.slice(0,8)}`);
             fetch(`https://vz-8bc100f4-3c0.b-cdn.net/${m.bunny_video_id}/360p/video0.ts`, { method: "GET", cache: "force-cache" }).catch(() => {});
           }
         }
