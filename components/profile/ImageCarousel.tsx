@@ -38,18 +38,44 @@ function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProper
   return <canvas ref={canvasRef} width={W} height={H} style={{ ...style, imageRendering: "auto" }} />;
 }
 
+const carouselLoadedUrls = new Set<string>();
+
+function isCarouselImageCached(src: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const img = new window.Image();
+    img.src = src;
+    return img.complete && img.naturalWidth > 0;
+  } catch { return false; }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("freya:clear-caches", () => carouselLoadedUrls.clear());
+}
+
 function ProgressiveImage({ src, blurHash, style, eager }: {
   src?:      string | null;
   blurHash?: string | null;
   style?:    React.CSSProperties;
   eager?:    boolean;
 }) {
-  const [loaded, setLoaded] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(() => {
+    if (!src) return false;
+    if (carouselLoadedUrls.has(src)) return true;
+    if (isCarouselImageCached(src)) { carouselLoadedUrls.add(src); return true; }
+    return false;
+  });
   const imgRef = React.useRef<HTMLImageElement>(null);
 
   React.useEffect(() => {
+    if (!src) return;
+    if (carouselLoadedUrls.has(src)) { setLoaded(true); return; }
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      carouselLoadedUrls.add(src);
+      setLoaded(true);
+      return;
+    }
     setLoaded(false);
-    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) setLoaded(true);
   }, [src]);
 
   return (
@@ -64,13 +90,13 @@ function ProgressiveImage({ src, blurHash, style, eager }: {
         draggable={false}
         loading={eager ? "eager" : "lazy"}
         decoding="async"
-        fetchPriority={eager ? "high" : "low"}
-        onLoad={() => setLoaded(true)}
+        fetchPriority={eager ? "high" : "auto"}
+        onLoad={() => { if (src) carouselLoadedUrls.add(src); setLoaded(true); }}
         style={{
           ...style,
           position: "relative", zIndex: 2,
           opacity:    loaded ? 1 : 0,
-          transition: "opacity 0.25s ease",
+          transition: loaded ? "none" : "opacity 0.25s ease",
         }}
       />
     </div>
