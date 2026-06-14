@@ -63,6 +63,28 @@ function lightWarm(bunnyVideoId: string) {
   }).catch(() => {});
 }
 
+// Find the index (within the ordered video post ids) of the video nearest the
+// viewport center line. Used to anchor the prewarm window when a non-video item
+// (landscape image / feed suggestion) currently owns the center.
+function nearestVideoIndexToCenter(
+  items: HTMLElement[],
+  order: string[],
+  centerY: number,
+): number {
+  let nearestId: string | null = null;
+  let nearestDist = Infinity;
+  for (const node of items) {
+    if (node.getAttribute("data-video") !== "1") continue;
+    const pid = node.getAttribute("data-postid");
+    if (!pid) continue;
+    const rect = node.getBoundingClientRect();
+    const elCenter = rect.top + rect.height / 2;
+    const dist = Math.abs(elCenter - centerY);
+    if (dist < nearestDist) { nearestDist = dist; nearestId = pid; }
+  }
+  return nearestId ? order.indexOf(nearestId) : -1;
+}
+
 export interface ActiveVideoApi {
   /** The post id of the currently active (should-be-playing) video, or null. */
   activeId: string | null;
@@ -97,6 +119,7 @@ export function useActiveVideo(
   // Registry of mounted player handles, keyed by post id. Lets the coordinator
   // call play/pause directly (imperatively) without going through React props.
   const playersRef      = useRef<Map<string, VideoPlayerHandle>>(new Map());
+  const lastScrollYRef  = useRef<number>(0);
 
   useEffect(() => { orderedRef.current  = orderedVideoPostIds; }, [orderedVideoPostIds]);
   useEffect(() => { videoMapRef.current = videoIdByPostId;     }, [videoIdByPostId]);
@@ -123,99 +146,96 @@ export function useActiveVideo(
   const computeActive = useCallback(() => {
     rafRef.current = null;
 
-    // Find every video wrapper currently in the DOM.
     const root = feedElRef.current ?? document;
-    const nodes = root.querySelectorAll<HTMLElement>('[data-postid][data-video="1"]');
-    if (!nodes.length) {
-      if (lastActiveRef.current !== null) {
-        const prev = playersRef.current.get(lastActiveRef.current);
-        if (prev) { try { prev.pauseActive(); } catch {} }
-        lastActiveRef.current = null;
-        setActiveId(null);
-      }
-      return;
-    }
+    // Query ALL feed items (videos, image/landscape posts, and interstitials
+    // like feed suggestions) in DOM order — not just videos. We need to know
+    // when a NON-video owns the screen center so we can pause all videos there,
+    // instead of falsely picking a nearby video (the old "closest center" bug).
+    const items = Array.from(
+      root.querySelectorAll<HTMLElement>('[data-postid], [data-feeditem]')
+    );
+    if (!items.length) return;
 
-    const viewportCenter = window.innerHeight / 2;
-    let bestId: string | null = null;
-    let bestDistance = Infinity;
-
-    nodes.forEach((node) => {
+    // The active item is the one whose box crosses the viewport center line.
+    // This is deterministic and direction-independent: the same scroll position
+    // always yields the same active item regardless of scroll direction. (The
+    // old closest-center heuristic flipped its answer around tall landscape
+    // items and suggestions depending on approach direction.)
+    const centerY = window.innerHeight / 2;
+    let centerItem: HTMLElement | null = null;
+    for (const node of items) {
       const rect = node.getBoundingClientRect();
-      // Skip elements fully off-screen.
-      if (rect.bottom <= 0 || rect.top >= window.innerHeight) return;
-      const elementCenter = rect.top + rect.height / 2;
-      const distance = Math.abs(elementCenter - viewportCenter);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestId = node.getAttribute("data-postid");
-      }
-    });
-
-    if (bestId !== lastActiveRef.current) {
-      console.log("[COORD] computeActive picked:", bestId, "| nodes in DOM:", nodes.length, "| current:", lastActiveRef.current);
+      if (rect.top <= centerY && rect.bottom > centerY) { centerItem = node; break; }
     }
+
+    // Resolve to a video post id only if the centered item is actually a video.
+    // A landscape image post (data-postid, no data-video) or a feed suggestion
+    // (data-feeditem) owning the center → no active video → pause all.
+    let bestId: string | null = null;
+    if (centerItem && centerItem.getAttribute("data-video") === "1") {
+      bestId = centerItem.getAttribute("data-postid");
+    }
+
     // Active changed — drive playback IMPERATIVELY before React re-renders.
     if (bestId !== lastActiveRef.current) {
       const prevId = lastActiveRef.current;
       lastActiveRef.current = bestId;
 
-      console.log("[COORD] active change:", prevId, "→", bestId,
-        "| registered players:", Array.from(playersRef.current.keys()),
-        "| has next handle:", bestId ? playersRef.current.has(bestId) : false);
-
       // Pause the outgoing video (keeps currentTime for resume-from-frame).
       if (prevId) {
         const prev = playersRef.current.get(prevId);
-        if (prev) { try { prev.pauseActive(); } catch (e) { console.log("[COORD] pause err", e); } }
+        if (prev) { try { prev.pauseActive(); } catch {} }
       }
-      // Play the incoming video instantly.
+      // Play the incoming video instantly (if a video owns the center).
       if (bestId) {
         const next = playersRef.current.get(bestId);
-        if (next) { console.log("[COORD] calling playActive on", bestId); try { next.playActive(); } catch (e) { console.log("[COORD] play err", e); } }
-        else      { console.log("[COORD] NO HANDLE for active", bestId); }
+        if (next) { try { next.playActive(); } catch {} }
       }
 
-      // Update React state for non-critical consumers (button hiding, etc).
       setActiveId(bestId);
     }
 
-    // Recompute prewarm window: active-1 .. active+2 (ahead-weighted).
-    // Shrinks on slow networks to protect the active stream's bandwidth.
-    if (bestId) {
-      const order = orderedRef.current;
-      const idx = order.indexOf(bestId);
-      if (idx !== -1) {
-        const { ect } = getNetwork();
-        const ahead = ect === "slow-2g" || ect === "2g" ? 1 : 2;
-        const behind = 1;
-        const next = new Set<string>();
-        const allowedVideoIds: string[] = [];
-        for (let i = idx - behind; i <= idx + ahead; i++) {
-          const pid = order[i];
-          if (pid) {
-            next.add(pid);
-            const vid = videoMapRef.current.get(pid);
-            if (vid) allowedVideoIds.push(vid);
-          }
+    // Track scroll direction for directional preloading.
+    const scrollY = window.scrollY;
+    const dir: "down" | "up" = scrollY >= lastScrollYRef.current ? "down" : "up";
+    lastScrollYRef.current = scrollY;
+
+    // Prewarm window: ahead in the scroll direction (Mux/Slop-Social pattern),
+    // 1 behind for quick back-scroll. Centered on the active video if there is
+    // one, else on the video nearest the center line.
+    const order = orderedRef.current;
+    let anchorIdx = bestId ? order.indexOf(bestId) : -1;
+    if (anchorIdx === -1) {
+      // No active video (a non-video owns center) — anchor the window on the
+      // nearest video to the center so the next/prev videos still prewarm.
+      anchorIdx = nearestVideoIndexToCenter(items, order, centerY);
+    }
+    if (anchorIdx !== -1) {
+      const { ect } = getNetwork();
+      const aheadN  = ect === "slow-2g" || ect === "2g" ? 1 : 2;
+      const downAhead = dir === "down";
+      const next = new Set<string>();
+      const allowedVideoIds: string[] = [];
+      const lo = downAhead ? anchorIdx - 1 : anchorIdx - aheadN;
+      const hi = downAhead ? anchorIdx + aheadN : anchorIdx + 1;
+      for (let i = lo; i <= hi; i++) {
+        const pid = order[i];
+        if (pid) {
+          next.add(pid);
+          const vid = videoMapRef.current.get(pid);
+          if (vid) allowedVideoIds.push(vid);
         }
-        windowRef.current = next;
-        forceWindowRender((n) => n + 1);
-
-        // Tell the load governor exactly which video ids may download segments.
-        // Everything else is held (manifest only) so bandwidth concentrates on
-        // the active video + the next couple — instant on good networks, safe
-        // on slow ones.
-        setAllowedLoaders(allowedVideoIds);
-
-        // Warm manifests for the window (cheap; helps cold instances attach fast).
-        const map = videoMapRef.current;
-        next.forEach((pid) => {
-          if (pid === bestId) return;
-          const vid = map.get(pid);
-          if (vid) lightWarm(vid);
-        });
       }
+      windowRef.current = next;
+      forceWindowRender((n) => n + 1);
+      setAllowedLoaders(allowedVideoIds);
+
+      const map = videoMapRef.current;
+      next.forEach((pid) => {
+        if (pid === bestId) return;
+        const vid = map.get(pid);
+        if (vid) lightWarm(vid);
+      });
     }
   }, []);
 

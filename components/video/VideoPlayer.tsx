@@ -835,10 +835,23 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         });
         hlsRef.current = hls;
         hls.on(Hls.Events.FRAG_LOADED, () => { localStorage.setItem("hls_bw", String(hls.bandwidthEstimate)); });
-        let mediaErrorRecovered = false;
+        let mediaErrorRecoveries = 0;
+        let lastRecoveryAt = 0;
         hls.on(Hls.Events.ERROR, (_evt: any, data: any) => {
           if (!data?.fatal) return;
-          if (data.type === "mediaError" && !mediaErrorRecovered) { mediaErrorRecovered = true; hls.recoverMediaError(); return; }
+          if (data.type === "mediaError") {
+            const now = Date.now();
+            // Allow recovery repeatedly, but rate-limit to avoid a tight loop.
+            // iOS tears down the media decoder when backgrounded; on return this
+            // fires and we must recover rather than permanently error out.
+            if (now - lastRecoveryAt > 3000) mediaErrorRecoveries = 0;
+            if (mediaErrorRecoveries < 3) {
+              mediaErrorRecoveries++;
+              lastRecoveryAt = now;
+              try { hls.recoverMediaError(); } catch {}
+              return;
+            }
+          }
           try { hls.destroy(); } catch {}
           hlsRef.current = null; hasInitialized.current = false;
           setHasError(true); setIsBuffering(false);
@@ -939,72 +952,112 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   }, [fillParent, externalRatio]);
 
   const handlePosterPlay = React.useCallback(async () => {
-    console.log("[HPP]", bunnyVideoId?.slice(0,8), "start | hasInit:", hasInitialized.current, "readyState:", videoRef.current?.readyState, "showPoster:", showPoster, "pausedByUser:", isPausedByUser.current, "__pbu:", (videoRef.current as any)?.__isPausedByUser, "paused:", videoRef.current?.paused);
     isPausedByScroll.current = false;
     setIsBuffering(false);
-    setIsLoading(false);
-    if (loadingTimer.current) clearTimeout(loadingTimer.current);
-    loadingTimer.current = setTimeout(() => { isLoadingRef.current = true; setIsLoading(true); }, 300);
     const video = videoRef.current;
     if (!hasInitialized.current) await initVideo();
     if (hlsRef.current && !hlsRef.current.media) {
       hlsRef.current.attachMedia(video!);
     }
-    // Active video always loads (autoStartLoad is false, so kick it explicitly).
+    // Active video must download regardless of governor state.
     if (hlsRef.current) { try { hlsRef.current.startLoad(); } catch {} }
     const savedMute = getSavedMute();
     if (video) video.muted = savedMute;
     setIsMuted(savedMute);
     if (video) { video.setAttribute("playsinline", ""); video.setAttribute("webkit-playsinline", ""); }
-    if (video) {
-      if (video.readyState >= 3) {
-        vmark(bunnyVideoId, "canplay");
-        vmark(bunnyVideoId, "play_call");
-        console.log("[HPP]", bunnyVideoId?.slice(0,8), "→ readyState>=3, calling play()");
-        setShowPoster(false);
-        try {
-          await video.play();
-          console.log("[HPP]", bunnyVideoId?.slice(0,8), "play() RESOLVED, paused:", video.paused);
-          if (!video.paused) {
-            // Reflect playing state immediately — don't wait for the 'playing'
-            // event, which can be delayed or skipped for already-buffered video.
-            isPlayingRef.current = true;
-            setIsPlaying(true);
-            setShowPoster(false);
-            if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
-            isLoadingRef.current = false; setIsLoading(false);
-            // Diagnostic: is the media pipeline actually advancing?
-            const t0 = video.currentTime;
-            setTimeout(() => {
-              console.log("[HPP]", bunnyVideoId?.slice(0,8), "1s later | currentTime:", video.currentTime.toFixed(2), "advanced:", (video.currentTime - t0).toFixed(2), "paused:", video.paused, "readyState:", video.readyState, "buffered:", video.buffered.length ? video.buffered.end(0).toFixed(1) : "0", "hlsLevel:", hlsRef.current?.currentLevel, "videoW:", video.videoWidth, "offsetParent:", !!video.offsetParent);
-            }, 1000);
-          }
-        }
-        catch (e) { console.log("[HPP]", bunnyVideoId?.slice(0,8), "play() THREW:", e); }
-      } else {
-        console.log("[HPP]", bunnyVideoId?.slice(0,8), "→ readyState<3, waiting for canplay");
-        const tryPlay = () => {
-          canplayListenerRef.current = null;
-          vmark(bunnyVideoId, "canplay");
-          if (isPausedByUser.current || (video as any).__isPausedByUser) {
-            console.log("[HPP]", bunnyVideoId?.slice(0,8), "canplay fired but BLOCKED by pausedByUser");
-            return;
-          }
-          vmark(bunnyVideoId, "play_call");
-          console.log("[HPP]", bunnyVideoId?.slice(0,8), "canplay fired, calling play()");
-          setShowPoster(false);
-          video.play().catch((e) => console.log("[HPP]", bunnyVideoId?.slice(0,8), "play() threw after canplay:", e));
-        };
-        canplayListenerRef.current = tryPlay;
-        video.addEventListener("canplay", tryPlay, { once: true });
-      }
-    }
-  }, [initVideo, bunnyVideoId, showPoster]);
+    if (!video) return;
 
-  // autoPlay prop is now used only for state (e.g. knowing this is the active
-  // video). The actual play() is triggered imperatively by the coordinator via
-  // playActive() — that bypasses React's render/effect delay. We keep a pause
-  // fallback here in case the prop flips false without an imperative call.
+    let played = false;
+    const markPlaying = () => {
+      if (!video.paused) {
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+        setShowPoster(false);
+        if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
+        isLoadingRef.current = false; setIsLoading(false);
+      }
+    };
+    const attemptPlay = () => {
+      if (played) return;
+      if (isPausedByUser.current || (video as any).__isPausedByUser) return;
+      played = true;
+      vmark(bunnyVideoId, "play_call");
+      setShowPoster(false);
+      video.play().then(markPlaying).catch(() => {
+        // The browser can block UNMUTED autoplay when play() comes from scroll
+        // rather than a direct tap. In that case play the element muted so the
+        // video never stalls — but DO NOT change the user's mute choice or the
+        // global mute flag. Audio returns on their next gesture automatically.
+        if (!video.muted) {
+          video.muted = true;            // element only — not setIsMuted, not saveMute
+          video.play().then(() => {
+            markPlaying();
+            // Try to restore the user's intended (unmuted) audio right away;
+            // if still blocked it stays muted silently until a gesture.
+            if (!getSavedMute()) { video.muted = false; }
+          }).catch(() => { played = false; });
+        } else {
+          played = false;
+        }
+      });
+    };
+
+    // Try immediately (works when data is already buffered/prewarmed).
+    if (video.readyState >= 3) {
+      vmark(bunnyVideoId, "canplay");
+      attemptPlay();
+    } else {
+      // Not ready yet — play as soon as ANY of these fire. Multiple events for
+      // robustness across browsers and HLS timing.
+      const onReady = () => { vmark(bunnyVideoId, "canplay"); attemptPlay(); };
+      video.addEventListener("loadeddata", onReady, { once: true });
+      video.addEventListener("canplay",    onReady, { once: true });
+      video.addEventListener("playing",    onReady, { once: true });
+      canplayListenerRef.current = onReady;
+      // Show loading state only if it's actually taking a moment.
+      if (loadingTimer.current) clearTimeout(loadingTimer.current);
+      loadingTimer.current = setTimeout(() => { if (!played) { isLoadingRef.current = true; setIsLoading(true); } }, 300);
+      // Safety retry: if no event fired in 1.2s, force another startLoad + play.
+      setTimeout(() => {
+        if (played) return;
+        try { hlsRef.current?.startLoad(); } catch {}
+        if (video.readyState >= 2) attemptPlay();
+      }, 1200);
+    }
+  }, [initVideo, bunnyVideoId]);
+
+  // iOS Safari tears down media/decoder resources when the page is backgrounded
+  // (phone sleep, app switch). On return, video buffers are invalid (black /
+  // stuck) and posters may have been evicted. Recover when we come back to the
+  // foreground: reload the poster, recover the HLS instance, and resume the
+  // video if it was the one playing.
+  React.useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const video = videoRef.current;
+      // Reload poster if its decoded image was evicted while backgrounded.
+      if (posterSrc && video && (video.readyState === 0 || !video.videoWidth)) {
+        setPosterLoaded(false);
+      }
+      // Recover the HLS media pipeline (decoder may have been torn down).
+      if (hlsRef.current) {
+        try { hlsRef.current.recoverMediaError(); } catch {}
+        try { hlsRef.current.startLoad(); } catch {}
+      }
+      // If this instance was the active/playing one, resume it.
+      if (isPlayingRef.current || autoPlay) {
+        if (video && !isPausedByUser.current && !(video as any).__isPausedByUser) {
+          handlePosterPlay().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onVisible);
+    };
+  }, [autoPlay, posterSrc, handlePosterPlay]);
   React.useEffect(() => {
     if (!bunnyVideoId) return;
     if (!autoPlay && isPlayingRef.current) {

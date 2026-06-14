@@ -513,7 +513,11 @@ export default function HomePage() {
         </div>
       );
       if ((index + 1) % SUGGESTIONS_EVERY === 0 && index < posts.length - 1) {
-        items.push(<FeedSuggestions key={`suggestions-${index}`} />);
+        items.push(
+          <div key={`suggestions-${index}`} data-feeditem="1">
+            <FeedSuggestions />
+          </div>
+        );
       }
     });
     return items;
