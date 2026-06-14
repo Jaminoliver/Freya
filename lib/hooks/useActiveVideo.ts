@@ -23,7 +23,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { setAllowedLoaders } from "@/lib/video/hlsGovernor";
 import type { VideoPlayerHandle } from "@/components/video/VideoPlayer";
 
 const BUNNY_PULL_ZONE = "vz-8bc100f4-3c0.b-cdn.net";
@@ -215,20 +214,14 @@ export function useActiveVideo(
       const aheadN  = ect === "slow-2g" || ect === "2g" ? 1 : 2;
       const downAhead = dir === "down";
       const next = new Set<string>();
-      const allowedVideoIds: string[] = [];
       const lo = downAhead ? anchorIdx - 1 : anchorIdx - aheadN;
       const hi = downAhead ? anchorIdx + aheadN : anchorIdx + 1;
       for (let i = lo; i <= hi; i++) {
         const pid = order[i];
-        if (pid) {
-          next.add(pid);
-          const vid = videoMapRef.current.get(pid);
-          if (vid) allowedVideoIds.push(vid);
-        }
+        if (pid) next.add(pid);
       }
       windowRef.current = next;
       forceWindowRender((n) => n + 1);
-      setAllowedLoaders(allowedVideoIds);
 
       const map = videoMapRef.current;
       next.forEach((pid) => {

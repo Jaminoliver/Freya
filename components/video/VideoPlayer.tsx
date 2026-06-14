@@ -3,7 +3,6 @@
 import * as React from "react";
 import { decode } from "blurhash";
 import Hls from "hls.js";
-import { registerHlsLoader, unregisterHlsLoader, isLoadAllowed } from "@/lib/video/hlsGovernor";
 import { vmark } from "@/lib/video/perfTrace";
 
 // ── Mute persistence ──────────────────────────────────────────────────────────
@@ -827,10 +826,9 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           startLevel,
           capLevelToPlayerSize: true,
           lowLatencyMode: false,
-          // Governed loading: instance attaches but downloads nothing until the
-          // load governor promotes it (active + N ahead). Prevents many nearby
-          // videos from all buffering at once and starving bandwidth.
-          autoStartLoad: false,
+          // Load on attach (hls.js default). Concurrency is bounded by the
+          // prewarm window: only the active video + a couple ahead are ever
+          // initialized, so only those load. Small buffer keeps each modest.
           maxBufferLength: 10, maxMaxBufferLength: 30, backBufferLength: 15, maxStarvationDelay: 2,
         });
         hlsRef.current = hls;
@@ -860,16 +858,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         hls.loadSource(hlsSrc);
         hls.attachMedia(video);
         (video as any).__hls = hls;
-        // Register with the load governor. It decides when this instance may
-        // actually download segments (active + N ahead). If already allowed
-        // (e.g. this is the active video), start loading immediately.
-        if (bunnyVideoId) {
-          registerHlsLoader(bunnyVideoId, {
-            startLoad: () => { vmark(bunnyVideoId, "load_allowed"); try { hls.startLoad(); } catch {} },
-            stopLoad:  () => { try { hls.stopLoad(); }  catch {} },
-          });
-          if (isLoadAllowed(bunnyVideoId)) { vmark(bunnyVideoId, "load_allowed"); try { hls.startLoad(); } catch {} }
-        }
         video.addEventListener("loadedmetadata", () => {
           const dur = video.duration;
           if (!isFinite(dur) || dur <= 0) return;
@@ -896,7 +884,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       if (bufferTimer.current)  clearTimeout(bufferTimer.current);
       if (loadingTimer.current) clearTimeout(loadingTimer.current);
       if (stallTimer.current)   clearTimeout(stallTimer.current);
-      if (bunnyVideoId) unregisterHlsLoader(bunnyVideoId);
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
     };
   }, [bunnyVideoId]);
