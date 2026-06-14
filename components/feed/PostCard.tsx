@@ -112,6 +112,7 @@ function PostCardInner({
   eager = false,
   autoPlay = false,
   prewarmLight = false,
+  registerPlayer,
 }: {
   post:                  Post;
   onLike?:               (postId: string) => void;
@@ -128,6 +129,7 @@ function PostCardInner({
   eager?:                boolean;
   autoPlay?:             boolean;
   prewarmLight?:         boolean;
+  registerPlayer?:       (postId: string, handle: VideoPlayerHandle | null) => void;
 }) {
   const { navigate } = useNav();
   const router       = useRouter();
@@ -234,6 +236,31 @@ function PostCardInner({
 
   const [pollData,             setPollData]             = useState<PollData | null>(post.poll ?? null);
   const videoPlayerRef = useRef<VideoPlayerHandle | null>(null);
+
+  // Register this video's imperative handle with the feed coordinator so it can
+  // play/pause directly (bypassing React) the instant the post becomes active.
+  // The proxy delegates lazily to the live ref, so we register it IMMEDIATELY —
+  // even before VideoPlayer mounts. By the time playActive() is called, the ref
+  // is populated. (The old retry loop raced against VisibilityGate mount timing
+  // and meant most players never registered.)
+  useEffect(() => {
+    if (!registerPlayer) return;
+    const proxy = {
+      pause:          () => videoPlayerRef.current?.pause(),
+      getHls:         () => videoPlayerRef.current?.getHls(),
+      getCurrentTime: () => videoPlayerRef.current?.getCurrentTime() ?? 0,
+      get _videoEl()  { return videoPlayerRef.current?._videoEl ?? null; },
+      resume:         (t?: number) => videoPlayerRef.current?.resume(t),
+      toggleMute:     () => videoPlayerRef.current?.toggleMute(),
+      isMuted:        () => videoPlayerRef.current?.isMuted() ?? false,
+      prewarm:        () => videoPlayerRef.current?.prewarm(),
+      playActive:     () => videoPlayerRef.current?.playActive(),
+      pauseActive:    () => videoPlayerRef.current?.pauseActive(),
+    } as VideoPlayerHandle;
+
+    registerPlayer(post.id, proxy);
+    return () => { registerPlayer(post.id, null); };
+  }, [registerPlayer, post.id]);
 
   const { isBlocked, isRestricted, block, unblock, restrict, unrestrict, fetchStatus } = useBlockRestrict({ userId: post.creator.id });
 

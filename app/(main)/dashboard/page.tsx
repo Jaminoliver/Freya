@@ -262,7 +262,7 @@ export default function HomePage() {
     return { videoPostIds: ids, videoIdMap: map };
   }, [posts]);
 
-  const { isActive, isInWindow, registerFeed } = useActiveVideo(videoPostIds, videoIdMap);
+  const { isActive, isInWindow, registerFeed, registerPlayer } = useActiveVideo(videoPostIds, videoIdMap);
 
   const firstVideoPreloaded = useRef(false);
 
@@ -508,6 +508,7 @@ export default function HomePage() {
             eager={index < 2}
             autoPlay={isActive(String(post.id))}
             prewarmLight={isInWindow(String(post.id))}
+            registerPlayer={registerPlayer}
           />
         </div>
       );
@@ -516,7 +517,7 @@ export default function HomePage() {
       }
     });
     return items;
-  }, [posts, slideMap, subscribedCreatorIds, handleUnlock, handleSlideChange, handleSubscribed, isActive, isInWindow, videoIdMap]);
+  }, [posts, slideMap, subscribedCreatorIds, handleUnlock, handleSlideChange, handleSubscribed, isActive, isInWindow, videoIdMap, registerPlayer]);
 
   return (
     <div ref={registerFeed} style={{ maxWidth: "680px", margin: "0 auto", padding: "0" }}>

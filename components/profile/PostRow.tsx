@@ -78,7 +78,7 @@ export default function PostRow({
   post, isOwnProfile, isSubscribed,
   onLike, onComment, onTip, onUnlock,
   viewer, onDelete, onImageClick, onPPVUpdated, eager = false,
-  autoPlay = false, prewarmLight = false,
+  autoPlay = false, prewarmLight = false, registerPlayer,
 }: {
   post:          ApiPost;
   isOwnProfile?: boolean;
@@ -94,6 +94,7 @@ export default function PostRow({
   eager?: boolean;
   autoPlay?: boolean;
   prewarmLight?: boolean;
+  registerPlayer?: (postId: string, handle: import("@/components/video/VideoPlayer").VideoPlayerHandle | null) => void;
 }) {
   const router = useRouter();
   const openAuthModal = useAppStore((s) => s.openAuthModal);
@@ -123,6 +124,30 @@ export default function PostRow({
   const [pollData,         setPollData]         = React.useState<PollData | null>(post.poll ?? null);
   
   const videoPlayerRef = React.useRef<import("@/components/video/VideoPlayer").VideoPlayerHandle>(null);
+
+  React.useEffect(() => {
+    if (!registerPlayer) return;
+    const proxy = {
+      pause:          () => videoPlayerRef.current?.pause(),
+      getHls:         () => videoPlayerRef.current?.getHls(),
+      getCurrentTime: () => videoPlayerRef.current?.getCurrentTime() ?? 0,
+      get _videoEl()  { return videoPlayerRef.current?._videoEl ?? null; },
+      resume:         (t?: number) => videoPlayerRef.current?.resume(t),
+      toggleMute:     () => videoPlayerRef.current?.toggleMute(),
+      isMuted:        () => videoPlayerRef.current?.isMuted() ?? false,
+      prewarm:        () => videoPlayerRef.current?.prewarm(),
+      playActive:     () => videoPlayerRef.current?.playActive(),
+      pauseActive:    () => videoPlayerRef.current?.pauseActive(),
+    } as import("@/components/video/VideoPlayer").VideoPlayerHandle;
+
+    let tries = 0;
+    const attempt = () => {
+      if (videoPlayerRef.current) { registerPlayer(String(post.id), proxy); return; }
+      if (tries++ < 10) setTimeout(attempt, 50);
+    };
+    attempt();
+    return () => { registerPlayer(String(post.id), null); };
+  }, [registerPlayer, post.id]);
   const [caption,          setCaption]          = React.useState<string | null>(post.caption);
   const [editOpen,         setEditOpen]         = React.useState(false);
   const [ppvEditOpen,      setPpvEditOpen]      = React.useState(false);

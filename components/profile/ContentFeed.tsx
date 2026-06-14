@@ -293,7 +293,7 @@ export default function ContentFeed({
     return { videoPostIds: ids, videoIdMap: map };
   }, [filteredPosts, isOwnProfile]);
 
-  const { isActive, isInWindow } = useActiveVideo(videoPostIds, videoIdMap);
+  const { isActive, isInWindow, registerPlayer } = useActiveVideo(videoPostIds, videoIdMap);
 
   const { freePosts, lockedPosts } = React.useMemo(() => {
     if (isSubscribed || isOwnProfile) return { freePosts: filteredPosts, lockedPosts: [] };
@@ -428,6 +428,7 @@ export default function ContentFeed({
           eager={index === 0}
           autoPlay={isActive(String(post.id))}
           prewarmLight={isInWindow(String(post.id))}
+          registerPlayer={registerPlayer}
         />
       </div>
     );

@@ -4,6 +4,7 @@ import * as React from "react";
 import { decode } from "blurhash";
 import Hls from "hls.js";
 import { registerHlsLoader, unregisterHlsLoader, isLoadAllowed } from "@/lib/video/hlsGovernor";
+import { vmark } from "@/lib/video/perfTrace";
 
 // ── Mute persistence ──────────────────────────────────────────────────────────
 const MUTE_KEY = "vp_muted";
@@ -624,6 +625,8 @@ export interface VideoPlayerHandle {
   toggleMute:     () => void;
   isMuted:        () => boolean;
   prewarm:        () => void;
+  playActive:     () => void;
+  pauseActive:    () => void;
 }
 
 const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer({
@@ -840,6 +843,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           hlsRef.current = null; hasInitialized.current = false;
           setHasError(true); setIsBuffering(false);
         });
+        vmark(bunnyVideoId, "manifest_req");
         hls.loadSource(hlsSrc);
         hls.attachMedia(video);
         (video as any).__hls = hls;
@@ -848,10 +852,10 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
         // (e.g. this is the active video), start loading immediately.
         if (bunnyVideoId) {
           registerHlsLoader(bunnyVideoId, {
-            startLoad: () => { try { hls.startLoad(); } catch {} },
+            startLoad: () => { vmark(bunnyVideoId, "load_allowed"); try { hls.startLoad(); } catch {} },
             stopLoad:  () => { try { hls.stopLoad(); }  catch {} },
           });
-          if (isLoadAllowed(bunnyVideoId)) { try { hls.startLoad(); } catch {} }
+          if (isLoadAllowed(bunnyVideoId)) { vmark(bunnyVideoId, "load_allowed"); try { hls.startLoad(); } catch {} }
         }
         video.addEventListener("loadedmetadata", () => {
           const dur = video.duration;
@@ -874,6 +878,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   }, [initVideo]);
 
   React.useEffect(() => {
+    vmark(bunnyVideoId, "mount");
     return () => {
       if (bufferTimer.current)  clearTimeout(bufferTimer.current);
       if (loadingTimer.current) clearTimeout(loadingTimer.current);
@@ -900,6 +905,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       const centerY = rect.top + rect.height / 2;
       const inView  = centerY > 0 && centerY < window.innerHeight;
       if (!inView) {
+        console.log("[VP] IntersectionObserver: NOT inView, pausing", bunnyVideoId?.slice(0,8), "isPlayingRef:", isPlayingRef.current, "rect.top:", rect.top, "rect.bottom:", rect.bottom, "innerHeight:", window.innerHeight);
         // Resume-from-frame model: pause in place, keep currentTime + source.
         // We never null video.src or destroy HLS on scroll-away, so scrolling
         // back resumes exactly where it left off without a re-fetch.
@@ -936,50 +942,80 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   const handlePosterPlay = React.useCallback(async () => {
     isPausedByScroll.current = false;
     setIsBuffering(false);
-    setIsLoading(false);
-    if (loadingTimer.current) clearTimeout(loadingTimer.current);
-    loadingTimer.current = setTimeout(() => { isLoadingRef.current = true; setIsLoading(true); }, 300);
     const video = videoRef.current;
     if (!hasInitialized.current) await initVideo();
     if (hlsRef.current && !hlsRef.current.media) {
       hlsRef.current.attachMedia(video!);
     }
-    // Active video always loads (autoStartLoad is false, so kick it explicitly).
+    // Active video must download regardless of governor state.
     if (hlsRef.current) { try { hlsRef.current.startLoad(); } catch {} }
     const savedMute = getSavedMute();
     if (video) video.muted = savedMute;
     setIsMuted(savedMute);
     if (video) { video.setAttribute("playsinline", ""); video.setAttribute("webkit-playsinline", ""); }
-    if (video) {
-      if (video.readyState >= 3) {
-        try { await video.play(); } catch {}
-      } else {
-        const tryPlay = () => {
-          canplayListenerRef.current = null;
-          if (isPausedByUser.current || (video as any).__isPausedByUser) {
-            return;
-          }
-          video.play().catch(() => {});
-        };
-        canplayListenerRef.current = tryPlay;
-        video.addEventListener("canplay", tryPlay, { once: true });
-      }
-    }
-  }, [initVideo]);
+    if (!video) return;
 
-  // Autoplay: plays when this video becomes the active one. Reacts to the
-  // autoPlay prop flipping true (the feed coordinator sets this on scroll),
-  // and pauses when it flips false.
+    let played = false;
+    const attemptPlay = () => {
+      if (played) return;
+      if (isPausedByUser.current || (video as any).__isPausedByUser) return;
+      played = true;
+      vmark(bunnyVideoId, "play_call");
+      setShowPoster(false);
+      console.log("[VP] play() called for", bunnyVideoId?.slice(0,8), "paused before:", video.paused, "muted:", video.muted, "readyState:", video.readyState);
+      video.play().then(() => {
+        console.log("[VP] play() resolved for", bunnyVideoId?.slice(0,8), "paused after:", video.paused);
+        if (!video.paused) {
+          isPlayingRef.current = true;
+          setIsPlaying(true);
+          setShowPoster(false);
+          if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
+          isLoadingRef.current = false; setIsLoading(false);
+        }
+      }).catch((err) => { console.log("[VP] play() REJECTED for", bunnyVideoId?.slice(0,8), err); played = false; });
+    };
+
+    // Try immediately (works when data is already buffered/prewarmed).
+    if (hlsRef.current) {
+      const hls = hlsRef.current;
+      console.log("[VP] HLS state on activate", bunnyVideoId?.slice(0,8),
+        "media:", !!hls.media, "loadLevel:", hls.loadLevel, "currentLevel:", hls.currentLevel,
+        "bufferLength:", video.buffered.length,
+        "bufferRanges:", Array.from({length: video.buffered.length}, (_, i) => `${video.buffered.start(i).toFixed(2)}-${video.buffered.end(i).toFixed(2)}`));
+    }
+    if (video.readyState >= 3) {
+      vmark(bunnyVideoId, "canplay");
+      attemptPlay();
+    } else {
+      // Not ready yet — play as soon as ANY of these fire. Multiple events for
+      // robustness across browsers and HLS timing.
+      const onReady = () => { vmark(bunnyVideoId, "canplay"); attemptPlay(); };
+      video.addEventListener("loadeddata", onReady, { once: true });
+      video.addEventListener("canplay",    onReady, { once: true });
+      video.addEventListener("playing",    onReady, { once: true });
+      canplayListenerRef.current = onReady;
+      // Show loading state only if it's actually taking a moment.
+      if (loadingTimer.current) clearTimeout(loadingTimer.current);
+      loadingTimer.current = setTimeout(() => { if (!played) { isLoadingRef.current = true; setIsLoading(true); } }, 300);
+      // Safety retry: if no event fired in 1.2s, force another startLoad + play.
+      setTimeout(() => {
+        if (played) return;
+        try { hlsRef.current?.startLoad(); } catch {}
+        if (video.readyState >= 2) attemptPlay();
+      }, 1200);
+    }
+  }, [initVideo, bunnyVideoId]);
+
+  // autoPlay prop is now used only for state (e.g. knowing this is the active
+  // video). The actual play() is triggered imperatively by the coordinator via
+  // playActive() — that bypasses React's render/effect delay. We keep a pause
+  // fallback here in case the prop flips false without an imperative call.
   React.useEffect(() => {
     if (!bunnyVideoId) return;
-    if (autoPlay) {
-      const t = setTimeout(() => { handlePosterPlay().catch(() => {}); }, 100);
-      return () => clearTimeout(t);
-    } else {
-      // No longer the active video — pause in place (keep currentTime + source).
-      if (isPlayingRef.current) videoRef.current?.pause();
+    if (!autoPlay && isPlayingRef.current) {
+      videoRef.current?.pause();
     }
-  }, [autoPlay, bunnyVideoId, handlePosterPlay]);
+  }, [autoPlay, bunnyVideoId]);
 
   // Light prewarm: in-window but not active. Attach HLS (manifest + low-level
   // first segment) so playback starts instantly on arrival, without playing
@@ -987,7 +1023,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   React.useEffect(() => {
     if (!prewarmLight || autoPlay || !bunnyVideoId) return;
     if (hasInitialized.current) return;
-    const t = setTimeout(() => { if (!hasInitialized.current) initVideo(); }, 150);
+    const t = setTimeout(() => { if (!hasInitialized.current) { vmark(bunnyVideoId, "prewarm_start"); initVideo(); } }, 150);
     return () => clearTimeout(t);
   }, [prewarmLight, autoPlay, bunnyVideoId, initVideo]);
 
@@ -1319,6 +1355,14 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     document.body.style.overflow = "hidden";
     setIsFakeFullscreen(true);
     setGlobalFullscreenOpen(true);
+    // Moving the <video> into the portal can pause it in some browsers. Ensure
+    // it keeps playing (unless the user explicitly paused it).
+    requestAnimationFrame(() => {
+      const v = videoRef.current;
+      if (v && !isPausedByUser.current && !(v as any).__isPausedByUser) {
+        v.play().catch(() => {});
+      }
+    });
   }, [containerRef, exitFakeFullscreen, videoRef, displayName, username, avatarUrl, caption, onProfileClick]);
 
   React.useImperativeHandle(ref, () => ({
@@ -1334,6 +1378,17 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       const ect: string = conn?.effectiveType ?? "4g";
       if (ect === "slow-2g" || ect === "2g") return;
       initVideo();
+    },
+    // Imperative play — called directly by the feed coordinator the instant
+    // this video becomes centered. Bypasses React state/effects entirely so
+    // there is no render→commit→effect delay before play() fires.
+    playActive: () => {
+      console.log("[VP] playActive called for", bunnyVideoId?.slice(0,8), "hasInit:", hasInitialized.current, "readyState:", videoRef.current?.readyState);
+      vmark(bunnyVideoId, "active");
+      handlePosterPlay().catch(() => {});
+    },
+    pauseActive: () => {
+      if (isPlayingRef.current) videoRef.current?.pause();
     },
     resume: (time?: number) => {
       const video = videoRef.current;
@@ -1391,7 +1446,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           <BlurHashCanvas hash={blurHash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />
         )}
 
-        {(showPoster || isLoading) && (
+        {(showPoster || isLoading) && !isPlaying && (
           <div
             onClick={showPoster && !isLoading ? handlePosterPlay : undefined}
             style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: showPoster ? "pointer" : "default", opacity: showPoster ? 1 : 0, transition: showPoster ? "opacity 0.25s ease" : "none", pointerEvents: showPoster ? "auto" : "none" }}
@@ -1405,7 +1460,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
         <div style={{ position: "absolute", inset: 0, zIndex: 2 }}>
           <video
-            ref={videoRef} playsInline preload="metadata" loop muted={isMuted}
+            playsInline preload="metadata" loop muted={isMuted}
             onLoadedMetadata={handleLoadedMetadata}
             onPause={() => {
               isPlayingRef.current = false;
@@ -1449,7 +1504,41 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
                 }, isSlow2 ? 8000 : 3000);
               }, isSlow2 ? 2000 : 800);
             }}
+            ref={(el) => {
+              videoRef.current = el;
+              if (el && !(el as any).__pauseLogged) {
+                (el as any).__pauseLogged = true;
+                const origPause = el.pause.bind(el);
+                el.pause = function() {
+                  console.log("[VP] video.pause() CALLED for", bunnyVideoId?.slice(0,8), new Error().stack);
+                  return origPause();
+                };
+              }
+            }}
             onPlaying={() => {
+              console.log("[VP] onPlaying fired for", bunnyVideoId?.slice(0,8));
+              const v = videoRef.current;
+              if (v) {
+                const cs = getComputedStyle(v);
+                const rect = v.getBoundingClientRect();
+                const hls = hlsRef.current;
+                console.log("[VP] video element state:", bunnyVideoId?.slice(0,8),
+                  "opacity:", cs.opacity, "display:", cs.display, "visibility:", cs.visibility,
+                  "zIndex:", cs.zIndex, "rect:", rect.width, "x", rect.height,
+                  "currentTime:", v.currentTime, "paused:", v.paused, "muted:", v.muted, "volume:", v.volume,
+                  "bufferRanges:", Array.from({length: v.buffered.length}, (_, i) => `${v.buffered.start(i).toFixed(2)}-${v.buffered.end(i).toFixed(2)}`),
+                  "hlsMedia:", !!hls?.media, "loadLevel:", hls?.loadLevel);
+                // Watchdog: check again after 1s to see if currentTime advanced
+                const startTime = v.currentTime;
+                setTimeout(() => {
+                  console.log("[VP] WATCHDOG +1s", bunnyVideoId?.slice(0,8),
+                    "currentTime:", v.currentTime, "advanced:", v.currentTime - startTime,
+                    "paused:", v.paused, "readyState:", v.readyState,
+                    "bufferRanges:", Array.from({length: v.buffered.length}, (_, i) => `${v.buffered.start(i).toFixed(2)}-${v.buffered.end(i).toFixed(2)}`),
+                    "hlsMedia:", !!hlsRef.current?.media, "loadLevel:", hlsRef.current?.loadLevel);
+                }, 1000);
+              }
+              vmark(bunnyVideoId, "first_frame");
               if (bufferTimer.current)  { clearTimeout(bufferTimer.current);  bufferTimer.current  = null; }
               if (slowTimer.current)    { clearTimeout(slowTimer.current);    slowTimer.current    = null; }
               if (stallTimer.current)   { clearTimeout(stallTimer.current);   stallTimer.current   = null; }
@@ -1470,7 +1559,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               if (!hasStarted) return;
               setHasError(true); setIsBuffering(false);
             }}
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, display: "block", zIndex: 2, opacity: showPoster ? 0 : 1, transition: showPoster ? "opacity 0.25s ease" : "none" }}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, display: "block", zIndex: 2, opacity: (showPoster && !isPlaying) ? 0 : 1, transition: (showPoster && !isPlaying) ? "opacity 0.25s ease" : "none" }}
           />
         </div>
 
