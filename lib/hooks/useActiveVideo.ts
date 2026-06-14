@@ -152,7 +152,6 @@ export function useActiveVideo(
       }
     });
 
-    console.log("[COORD] computeActive run | nodes in DOM:", nodes.length, "| best:", bestId, "| current:", lastActiveRef.current);
     if (bestId !== lastActiveRef.current) {
       console.log("[COORD] computeActive picked:", bestId, "| nodes in DOM:", nodes.length, "| current:", lastActiveRef.current);
     }
@@ -226,7 +225,6 @@ export function useActiveVideo(
   }, [computeActive]);
 
   useEffect(() => {
-    console.log("[COORD] mount effect firing, orderedVideoPostIds:", orderedVideoPostIds);
     schedule(); // initial pass on mount
 
     window.addEventListener("scroll", schedule, { passive: true });
@@ -246,10 +244,7 @@ export function useActiveVideo(
   }, [schedule]);
 
   // Recompute when the set of video posts changes (e.g. infinite scroll appends).
-  useEffect(() => {
-    console.log("[COORD] orderedVideoPostIds.length changed:", orderedVideoPostIds.length);
-    schedule();
-  }, [orderedVideoPostIds.length, schedule]);
+  useEffect(() => { schedule(); }, [orderedVideoPostIds.length, schedule]);
 
   const isActive   = useCallback((postId: string) => postId === activeId, [activeId]);
   const isInWindow = useCallback((postId: string) => windowRef.current.has(postId), [activeId]);

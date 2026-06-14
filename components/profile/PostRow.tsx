@@ -140,12 +140,7 @@ export default function PostRow({
       pauseActive:    () => videoPlayerRef.current?.pauseActive(),
     } as import("@/components/video/VideoPlayer").VideoPlayerHandle;
 
-    let tries = 0;
-    const attempt = () => {
-      if (videoPlayerRef.current) { registerPlayer(String(post.id), proxy); return; }
-      if (tries++ < 10) setTimeout(attempt, 50);
-    };
-    attempt();
+    registerPlayer(String(post.id), proxy);
     return () => { registerPlayer(String(post.id), null); };
   }, [registerPlayer, post.id]);
   const [caption,          setCaption]          = React.useState<string | null>(post.caption);

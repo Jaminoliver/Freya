@@ -905,7 +905,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       const centerY = rect.top + rect.height / 2;
       const inView  = centerY > 0 && centerY < window.innerHeight;
       if (!inView) {
-        console.log("[VP] IntersectionObserver: NOT inView, pausing", bunnyVideoId?.slice(0,8), "isPlayingRef:", isPlayingRef.current, "rect.top:", rect.top, "rect.bottom:", rect.bottom, "innerHeight:", window.innerHeight);
         // Resume-from-frame model: pause in place, keep currentTime + source.
         // We never null video.src or destroy HLS on scroll-away, so scrolling
         // back resumes exactly where it left off without a re-fetch.
@@ -940,71 +939,67 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   }, [fillParent, externalRatio]);
 
   const handlePosterPlay = React.useCallback(async () => {
+    console.log("[HPP]", bunnyVideoId?.slice(0,8), "start | hasInit:", hasInitialized.current, "readyState:", videoRef.current?.readyState, "showPoster:", showPoster, "pausedByUser:", isPausedByUser.current, "__pbu:", (videoRef.current as any)?.__isPausedByUser, "paused:", videoRef.current?.paused);
     isPausedByScroll.current = false;
     setIsBuffering(false);
+    setIsLoading(false);
+    if (loadingTimer.current) clearTimeout(loadingTimer.current);
+    loadingTimer.current = setTimeout(() => { isLoadingRef.current = true; setIsLoading(true); }, 300);
     const video = videoRef.current;
     if (!hasInitialized.current) await initVideo();
     if (hlsRef.current && !hlsRef.current.media) {
       hlsRef.current.attachMedia(video!);
     }
-    // Active video must download regardless of governor state.
+    // Active video always loads (autoStartLoad is false, so kick it explicitly).
     if (hlsRef.current) { try { hlsRef.current.startLoad(); } catch {} }
     const savedMute = getSavedMute();
     if (video) video.muted = savedMute;
     setIsMuted(savedMute);
     if (video) { video.setAttribute("playsinline", ""); video.setAttribute("webkit-playsinline", ""); }
-    if (!video) return;
-
-    let played = false;
-    const attemptPlay = () => {
-      if (played) return;
-      if (isPausedByUser.current || (video as any).__isPausedByUser) return;
-      played = true;
-      vmark(bunnyVideoId, "play_call");
-      setShowPoster(false);
-      console.log("[VP] play() called for", bunnyVideoId?.slice(0,8), "paused before:", video.paused, "muted:", video.muted, "readyState:", video.readyState);
-      video.play().then(() => {
-        console.log("[VP] play() resolved for", bunnyVideoId?.slice(0,8), "paused after:", video.paused);
-        if (!video.paused) {
-          isPlayingRef.current = true;
-          setIsPlaying(true);
-          setShowPoster(false);
-          if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
-          isLoadingRef.current = false; setIsLoading(false);
+    if (video) {
+      if (video.readyState >= 3) {
+        vmark(bunnyVideoId, "canplay");
+        vmark(bunnyVideoId, "play_call");
+        console.log("[HPP]", bunnyVideoId?.slice(0,8), "→ readyState>=3, calling play()");
+        setShowPoster(false);
+        try {
+          await video.play();
+          console.log("[HPP]", bunnyVideoId?.slice(0,8), "play() RESOLVED, paused:", video.paused);
+          if (!video.paused) {
+            // Reflect playing state immediately — don't wait for the 'playing'
+            // event, which can be delayed or skipped for already-buffered video.
+            isPlayingRef.current = true;
+            setIsPlaying(true);
+            setShowPoster(false);
+            if (loadingTimer.current) { clearTimeout(loadingTimer.current); loadingTimer.current = null; }
+            isLoadingRef.current = false; setIsLoading(false);
+            // Diagnostic: is the media pipeline actually advancing?
+            const t0 = video.currentTime;
+            setTimeout(() => {
+              console.log("[HPP]", bunnyVideoId?.slice(0,8), "1s later | currentTime:", video.currentTime.toFixed(2), "advanced:", (video.currentTime - t0).toFixed(2), "paused:", video.paused, "readyState:", video.readyState, "buffered:", video.buffered.length ? video.buffered.end(0).toFixed(1) : "0", "hlsLevel:", hlsRef.current?.currentLevel, "videoW:", video.videoWidth, "offsetParent:", !!video.offsetParent);
+            }, 1000);
+          }
         }
-      }).catch((err) => { console.log("[VP] play() REJECTED for", bunnyVideoId?.slice(0,8), err); played = false; });
-    };
-
-    // Try immediately (works when data is already buffered/prewarmed).
-    if (hlsRef.current) {
-      const hls = hlsRef.current;
-      console.log("[VP] HLS state on activate", bunnyVideoId?.slice(0,8),
-        "media:", !!hls.media, "loadLevel:", hls.loadLevel, "currentLevel:", hls.currentLevel,
-        "bufferLength:", video.buffered.length,
-        "bufferRanges:", Array.from({length: video.buffered.length}, (_, i) => `${video.buffered.start(i).toFixed(2)}-${video.buffered.end(i).toFixed(2)}`));
+        catch (e) { console.log("[HPP]", bunnyVideoId?.slice(0,8), "play() THREW:", e); }
+      } else {
+        console.log("[HPP]", bunnyVideoId?.slice(0,8), "→ readyState<3, waiting for canplay");
+        const tryPlay = () => {
+          canplayListenerRef.current = null;
+          vmark(bunnyVideoId, "canplay");
+          if (isPausedByUser.current || (video as any).__isPausedByUser) {
+            console.log("[HPP]", bunnyVideoId?.slice(0,8), "canplay fired but BLOCKED by pausedByUser");
+            return;
+          }
+          vmark(bunnyVideoId, "play_call");
+          console.log("[HPP]", bunnyVideoId?.slice(0,8), "canplay fired, calling play()");
+          setShowPoster(false);
+          video.play().catch((e) => console.log("[HPP]", bunnyVideoId?.slice(0,8), "play() threw after canplay:", e));
+        };
+        canplayListenerRef.current = tryPlay;
+        video.addEventListener("canplay", tryPlay, { once: true });
+      }
     }
-    if (video.readyState >= 3) {
-      vmark(bunnyVideoId, "canplay");
-      attemptPlay();
-    } else {
-      // Not ready yet — play as soon as ANY of these fire. Multiple events for
-      // robustness across browsers and HLS timing.
-      const onReady = () => { vmark(bunnyVideoId, "canplay"); attemptPlay(); };
-      video.addEventListener("loadeddata", onReady, { once: true });
-      video.addEventListener("canplay",    onReady, { once: true });
-      video.addEventListener("playing",    onReady, { once: true });
-      canplayListenerRef.current = onReady;
-      // Show loading state only if it's actually taking a moment.
-      if (loadingTimer.current) clearTimeout(loadingTimer.current);
-      loadingTimer.current = setTimeout(() => { if (!played) { isLoadingRef.current = true; setIsLoading(true); } }, 300);
-      // Safety retry: if no event fired in 1.2s, force another startLoad + play.
-      setTimeout(() => {
-        if (played) return;
-        try { hlsRef.current?.startLoad(); } catch {}
-        if (video.readyState >= 2) attemptPlay();
-      }, 1200);
-    }
-  }, [initVideo, bunnyVideoId]);
+  }, [initVideo, bunnyVideoId, showPoster]);
 
   // autoPlay prop is now used only for state (e.g. knowing this is the active
   // video). The actual play() is triggered imperatively by the coordinator via
@@ -1460,7 +1455,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
         <div style={{ position: "absolute", inset: 0, zIndex: 2 }}>
           <video
-            playsInline preload="metadata" loop muted={isMuted}
+            ref={videoRef} playsInline preload="metadata" loop muted={isMuted}
             onLoadedMetadata={handleLoadedMetadata}
             onPause={() => {
               isPlayingRef.current = false;
@@ -1504,40 +1499,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
                 }, isSlow2 ? 8000 : 3000);
               }, isSlow2 ? 2000 : 800);
             }}
-            ref={(el) => {
-              videoRef.current = el;
-              if (el && !(el as any).__pauseLogged) {
-                (el as any).__pauseLogged = true;
-                const origPause = el.pause.bind(el);
-                el.pause = function() {
-                  console.log("[VP] video.pause() CALLED for", bunnyVideoId?.slice(0,8), new Error().stack);
-                  return origPause();
-                };
-              }
-            }}
             onPlaying={() => {
-              console.log("[VP] onPlaying fired for", bunnyVideoId?.slice(0,8));
-              const v = videoRef.current;
-              if (v) {
-                const cs = getComputedStyle(v);
-                const rect = v.getBoundingClientRect();
-                const hls = hlsRef.current;
-                console.log("[VP] video element state:", bunnyVideoId?.slice(0,8),
-                  "opacity:", cs.opacity, "display:", cs.display, "visibility:", cs.visibility,
-                  "zIndex:", cs.zIndex, "rect:", rect.width, "x", rect.height,
-                  "currentTime:", v.currentTime, "paused:", v.paused, "muted:", v.muted, "volume:", v.volume,
-                  "bufferRanges:", Array.from({length: v.buffered.length}, (_, i) => `${v.buffered.start(i).toFixed(2)}-${v.buffered.end(i).toFixed(2)}`),
-                  "hlsMedia:", !!hls?.media, "loadLevel:", hls?.loadLevel);
-                // Watchdog: check again after 1s to see if currentTime advanced
-                const startTime = v.currentTime;
-                setTimeout(() => {
-                  console.log("[VP] WATCHDOG +1s", bunnyVideoId?.slice(0,8),
-                    "currentTime:", v.currentTime, "advanced:", v.currentTime - startTime,
-                    "paused:", v.paused, "readyState:", v.readyState,
-                    "bufferRanges:", Array.from({length: v.buffered.length}, (_, i) => `${v.buffered.start(i).toFixed(2)}-${v.buffered.end(i).toFixed(2)}`),
-                    "hlsMedia:", !!hlsRef.current?.media, "loadLevel:", hlsRef.current?.loadLevel);
-                }, 1000);
-              }
               vmark(bunnyVideoId, "first_frame");
               if (bufferTimer.current)  { clearTimeout(bufferTimer.current);  bufferTimer.current  = null; }
               if (slowTimer.current)    { clearTimeout(slowTimer.current);    slowTimer.current    = null; }
