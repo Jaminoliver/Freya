@@ -96,6 +96,7 @@ export function VideoFullscreenModal({
   }, [data.username, router]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
+  const loadedSrcRef = useRef<string | null>(null);
   const [avatarError, setAvatarError] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -118,6 +119,25 @@ export function VideoFullscreenModal({
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [viewer,          setViewer]          = useState<{ username: string; display_name: string; avatar_url?: string } | null>(null);
   const [viewerUserId,    setViewerUserId]    = useState<string | undefined>(undefined);
+
+  // C1 — react to data changing on a stable (recycled) slot. When the pager
+  // moves this element to a new post, resync the per-post state instead of
+  // relying on mount-time initialisation (which would otherwise show stale
+  // like/comment/follow + a re-buffer). Paired with stable slot keys, this lets
+  // the already-loaded neighbour video become current with no remount/flash.
+  useEffect(() => {
+    const c = postSyncStore.get(postId);
+    setLikeCount(c?.like_count ?? data.like_count ?? 0);
+    setLiked(c?.liked ?? data.liked ?? false);
+    setCommentCount(c?.comment_count ?? data.comment_count ?? 0);
+    setIsFollowing(initialIsFollowing);
+    setAvatarError(false);
+    setComments([]);
+    setCommentsOpen(false);
+    setIsVideoReady(false);   // show thumbnail (a real frame) during the source swap → no black flash
+    setIsPaused(false);       // don't flash the paused/play indicator on the incoming video
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.post_id]);
 
   useEffect(() => {
     setIsMobile(!window.matchMedia("(hover: hover) and (pointer: fine)").matches);
@@ -269,6 +289,19 @@ export function VideoFullscreenModal({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
+    // Guard: if this exact src is already attached and loaded on this element
+    // (recycled slot landed back on the same video), do NOT tear down and
+    // reload — that was collapsing readyState to 0 and causing the back-scroll
+    // buffer + AbortError. Just resume.
+    if (loadedSrcRef.current === videoSrc && hlsRef.current) {
+      console.log("[PAGER-DBG] video-effect SKIP reload (same src already loaded)", { post: data.post_id });
+      if (active) { video.muted = isMuted; video.play().catch(() => {}); }
+      return;
+    }
+    loadedSrcRef.current = videoSrc;
+    console.log("[PAGER-DBG] video-effect RUN (mount or videoSrc change)", { post: data.post_id, active, hasExistingHls: !!existingHls });
+    // Genuinely new src for this element — tear down any previous instance first.
+    if (hlsRef.current) { try { hlsRef.current.destroy(); } catch {}; hlsRef.current = null; }
     video.muted = isMuted;
 
     const tryPlay = () => {
@@ -311,15 +344,26 @@ export function VideoFullscreenModal({
     })();
 
     return () => {
+      // Only pause on cleanup. Do NOT destroy/blank here — if the slot recycles
+      // back to the same src, the skip-guard reuses this instance. Genuine src
+      // changes destroy the old instance in the load path below; full teardown
+      // happens on unmount (separate effect).
       const v = videoRef.current;
-      if (v) { v.pause(); v.src = ""; }
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-      }
-      hlsRef.current = null;
+      if (v) { try { v.pause(); } catch {} }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoSrc]);
+
+  // Full teardown on unmount only.
+  useEffect(() => {
+    return () => {
+      const v = videoRef.current;
+      if (v) { try { v.pause(); } catch {}; v.src = ""; }
+      if (hlsRef.current) { try { hlsRef.current.destroy(); } catch {} }
+      hlsRef.current = null;
+      loadedSrcRef.current = null;
+    };
+  }, []);
 
   // Sync mute to video
   useEffect(() => {
@@ -331,8 +375,14 @@ export function VideoFullscreenModal({
     const video = videoRef.current;
     if (!video) return;
     if (active) {
+      const rs = video.readyState;
+      console.log("[PAGER-DBG] activate", { post: data.post_id, readyState: rs, isVideoReady, isPaused, currentTime: video.currentTime.toFixed(2), paused: video.paused });
+      setIsPaused(false);
+      if (video.readyState >= 2) setIsVideoReady(true);
       video.muted = isMuted;
-      video.play().catch(() => { video.muted = true; video.play().catch(() => {}); });
+      video.play().then(() => {
+        console.log("[PAGER-DBG] play() resolved", { post: data.post_id, readyState: video.readyState });
+      }).catch((err) => { console.log("[PAGER-DBG] play() rejected", { post: data.post_id, err: String(err) }); video.muted = true; video.play().catch(() => {}); });
     } else {
       try { video.pause(); } catch {}
     }
@@ -696,7 +746,7 @@ export function VideoFullscreenModal({
           )}
 
           {/* Play icon when paused */}
-          {isPaused && !isSeeking && (
+          {isPaused && !isSeeking && active && (
             <div
               onClick={handleVideoTap}
               style={{

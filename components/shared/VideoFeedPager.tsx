@@ -50,10 +50,6 @@ export default function VideoFeedPager({
   const heightRef = useRef(typeof window !== "undefined" ? window.innerHeight : 800);
   const openerHlsRef = useRef<any>(existingHls);
 
-  const prevItem = items[index - 1];
-  const curItem = items[index];
-  const nextItem = items[index + 1];
-
   const applyTransform = useCallback((offset: number, animate: boolean) => {
     const track = trackRef.current;
     if (!track) return;
@@ -61,8 +57,10 @@ export default function VideoFeedPager({
     track.style.transition = animate
       ? "transform 0.32s cubic-bezier(0.22,1,0.36,1)"
       : "none";
-    track.style.transform = `translate3d(0, ${-H + offset}px, 0)`;
-  }, []);
+    // Each item element lives at top = itemIndex * H. Translate the track so the
+    // CURRENT index sits at viewport 0; `offset` is the live finger drag.
+    track.style.transform = `translate3d(0, ${-index * H + offset}px, 0)`;
+  }, [index]);
 
   useEffect(() => {
     heightRef.current = window.innerHeight;
@@ -136,11 +134,23 @@ export default function VideoFeedPager({
     }
   }, [animating, index, applyTransform, commit, onClose]);
 
-  const slots: Array<{ item: VideoTileData | undefined; slotPos: number; rel: -1 | 0 | 1 }> = [
-    { item: prevItem, slotPos: 0, rel: -1 },
-    { item: curItem, slotPos: 1, rel: 0 },
-    { item: nextItem, slotPos: 2, rel: 1 },
-  ];
+  // Stable slots: three persistent elements keyed by index%3, NOT by post_id.
+  // As `index` changes, each slot's data changes but the React element (and its
+  // already-loaded <video>) persists — the neighbour that was preloaded becomes
+  // Render a small window of items around the current index. Each element is
+  // keyed by post_id and positioned at its ABSOLUTE index (top = i * H). The
+  // track translates to center the current index. Because each item's element
+  // lives at its own fixed position and is keyed by identity, navigating never
+  // changes an element's data or remounts it — the neighbour you scroll to is
+  // already mounted+loaded at its position, so playback is instant and there's
+  // no teardown/reload/flash. (window ±1 keeps only 3 live videos.)
+  const WINDOW = 1;
+  const lo = Math.max(0, index - WINDOW);
+  const hi = Math.min(items.length - 1, index + WINDOW);
+  const windowItems: Array<{ item: VideoTileData; i: number }> = [];
+  for (let i = lo; i <= hi; i++) {
+    if (items[i]) windowItems.push({ item: items[i], i });
+  }
 
   return (
     <div
@@ -160,19 +170,20 @@ export default function VideoFeedPager({
         ref={trackRef}
         style={{ position: "absolute", left: 0, right: 0, top: 0, willChange: "transform" }}
       >
-        {slots.map(({ item, slotPos, rel }) => (
-          <div
-            key={item ? item.post_id : `empty-${slotPos}`}
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              top: slotPos * heightRef.current,
-              height: heightRef.current,
-              background: "#000",
-            }}
-          >
-            {item && (
+        {windowItems.map(({ item, i }) => {
+          const rel = i - index; // 0 = current
+          return (
+            <div
+              key={item.post_id}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: i * heightRef.current,
+                height: heightRef.current,
+                background: "#000",
+              }}
+            >
               <VideoFullscreenModal
                 slotMode
                 active={rel === 0 && !animating}
@@ -187,9 +198,9 @@ export default function VideoFeedPager({
                 hasNext={index < items.length - 1}
                 hasPrev={index > 0}
               />
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
