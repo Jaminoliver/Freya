@@ -66,57 +66,100 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
       }
     });
   }, [items]);
-  // Active tile = the video tile whose center is closest to the viewport
-  // center, updated live (including during scroll). Snapchat-style: exactly one
-  // tile plays, it's always the most-centered one, and scrolling up re-activates
-  // a tile you passed. No scroll-stop gating, no phase machine.
+  // After every intersection update, scan ALL ratios and play only the
+  // single tile that is most visible. When two tiles share the same ratio
+  // (e.g. both tiles in the same row), tie-break by whichever tile's center
+  // is closest to the vertical center of the viewport.
   const selectDominantTile = useCallback(() => {
-    const viewportCenter = window.innerHeight / 2;
-    let bestId: number | null = null;
-    let minDist = Infinity;
-    let anyVisible = false;
-
-    ratioMap.current.forEach((ratio, id) => {
-      if (ratio <= 0.1) return;
-      anyVisible = true;
-      const el = document.querySelector<HTMLElement>(`[data-video-id="${id}"]`);
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const tileCenter = rect.top + rect.height / 2;
-      const dist = Math.abs(tileCenter - viewportCenter);
-      if (dist < minDist) { minDist = dist; bestId = id; }
-    });
-
-    if (!anyVisible) {
+    // ── Scroll guard ─────────────────────────────────────────────────────────
+    // During active scroll: only clear the current tile if it left the viewport.
+    // Never start a new tile mid-scroll — wait until scroll stops.
+    if (isScrollingRef.current) {
       if (activeIdRef.current !== null) {
+        const currentRatio = ratioMap.current.get(activeIdRef.current) ?? 0;
+        if (currentRatio < 0.1) {
+          console.log("[Grid] scroll active — current tile left viewport, clearing", { id: activeIdRef.current });
+          setActiveId(null);
+          activeIdRef.current = null;
+        }
+        // else: tile still visible, let it keep playing
+      }
+      return;
+    }
+
+    const visible = [...ratioMap.current.entries()].filter(([, r]) => r > 0.3);
+
+    if (!visible.length) {
+      if (activeIdRef.current !== null) {
+        console.log("[Grid] selectDominant → no visible tiles, clearing activeId");
         setActiveId(null);
         activeIdRef.current = null;
       }
       return;
     }
 
-    if (bestId !== null && bestId !== activeIdRef.current) {
+    const maxRatio = Math.max(...visible.map(([, r]) => r));
+    const candidates = visible.filter(([, r]) => maxRatio - r < 0.05);
+
+    let bestId: number = candidates[0][0];
+
+    if (candidates.length > 1) {
+      // Tie-break: tile whose center Y is closest to viewport center
+      const viewportCenter = window.innerHeight / 2;
+      let minDist = Infinity;
+
+      candidates.forEach(([id]) => {
+        const el = document.querySelector<HTMLElement>(`[data-video-id="${id}"]`);
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const tileCenter = rect.top + rect.height / 2;
+        const dist = Math.abs(tileCenter - viewportCenter);
+        if (dist < minDist) {
+          minDist = dist;
+          bestId = id;
+        }
+      });
+
+      console.log("[Grid] selectDominant → TIE", {
+        candidates: candidates.map(([id, r]) => ({ id, r: r.toFixed(2) })),
+        winner: bestId,
+        viewportCenter: window.innerHeight / 2,
+      });
+    }
+
+    if (bestId !== activeIdRef.current) {
+      console.log("[Grid] selectDominant → activeId", {
+        from: activeIdRef.current,
+        to: bestId,
+        maxRatio: maxRatio.toFixed(2),
+        visibleCount: visible.length,
+        phase: autoAdvancePhaseRef.current,
+        t: performance.now().toFixed(1),
+      });
       setActiveId(bestId);
       activeIdRef.current = bestId;
+      autoAdvancePhaseRef.current = 0; // user scrolled — reset sequence
     }
   }, []);
 
   // ── Scroll detection ─────────────────────────────────────────────────────
-  // Update the active tile live during scroll (rAF-throttled) so the centered
-  // tile always plays and scrolling up re-activates passed tiles immediately.
+  // Block new tile activation during scroll. 150ms after scroll stops,
+  // run selectDominantTile once to pick the tile the user settled on.
   useEffect(() => {
-    let raf = 0;
     const onScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
+      isScrollingRef.current = true;
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => {
+        isScrollingRef.current = false;
+        console.log("[Grid] scroll stopped — selecting dominant tile");
         selectDominantTile();
-      });
+      }, 150);
     };
+
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("scroll", onScroll);
-      if (raf) cancelAnimationFrame(raf);
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     };
   }, [selectDominantTile]);
 
