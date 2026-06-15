@@ -174,12 +174,6 @@ export function VideoTile({
   const rawThumb = data.thumbnail_url;
   const thumbnail = rawThumb && !rawThumb.includes("undefined") ? rawThumb : null;
 
-  console.log("[VideoTile] thumbnail debug", {
-    post_id: data.post_id,
-    thumbnail_url: data.thumbnail_url,
-    bunny_video_id: data.bunny_video_id,
-    resolved_thumbnail: thumbnail,
-  });
   const name = data.display_name || data.username;
   const initials = (name[0] ?? "?").toUpperCase();
 
@@ -207,7 +201,10 @@ export function VideoTile({
         <img
           src={thumbnail}
           alt=""
-          onError={() => { console.log("[VideoTile] thumbnail img error", { post_id: data.post_id, thumbnail }); setThumbError(true); }}
+          loading="eager"
+          decoding="async"
+          fetchPriority="high"
+          onError={() => setThumbError(true)}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
         />
       ) : (

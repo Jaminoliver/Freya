@@ -16,6 +16,7 @@ import type { NormalizedMedia } from "@/components/shared/PostMediaViewer";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 import { SinglePostSkeleton } from "@/components/loadscreen/SinglePostSkeleton";
 import { useAppStore } from "@/lib/store/appStore";
+import { useGuestGuard } from "@/lib/hooks/useGuestGuard";
 import { useCreatorStory } from "@/lib/hooks/useCreatorStory";
 import StoryViewer from "@/components/story/StoryViewer";
 import { postSyncStore } from "@/lib/store/postSyncStore";
@@ -110,6 +111,7 @@ export default function PostView({ postId, sourceIsMessage, onBack }: PostViewPr
   const [editPPVOpen,      setEditPPVOpen]      = useState(false);
 
   const { viewer: globalViewer } = useAppStore();
+  const guard = useGuestGuard();
   const { group: storyGroup, hasStory, hasUnviewed, refresh: refreshStory } = useCreatorStory(post?.creator_id);
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
   const isLiking    = useRef(false);
@@ -468,14 +470,14 @@ export default function PostView({ postId, sourceIsMessage, onBack }: PostViewPr
         const isLandscapeVideo = rawR > 1;
         return (
         <div style={{ margin: isLandscapeVideo ? "10px 0" : "10px 12px", borderRadius: isLandscapeVideo ? "0" : "14px", border: isLandscapeVideo ? "none" : "1px solid #1E1E2E", clipPath: isLandscapeVideo ? "none" : "inset(0 round 14px)" }}>
-          <PostMediaViewer media={normalizedMedia} isLocked={post.locked} price={post.ppv_price} isPPV={post.is_ppv} isFreeSubscription={(post.profiles?.subscription_price ?? 0) === 0} isUnlockedPPV={post.is_ppv && !post.locked} onDoubleTap={handleDoubleTapLike} onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }} onUnlock={openUnlock} fullscreenTopLeft={true} creatorHandle={post.profiles?.username} disableMobileShrink displayName={post.profiles?.display_name ?? post.profiles?.username} username={post.profiles?.username} avatarUrl={post.profiles?.avatar_url ?? null} caption={post.caption ?? null} />
+          <PostMediaViewer media={normalizedMedia} isLocked={post.locked} price={post.ppv_price} isPPV={post.is_ppv} isFreeSubscription={(post.profiles?.subscription_price ?? 0) === 0} isUnlockedPPV={post.is_ppv && !post.locked} onDoubleTap={guard(handleDoubleTapLike)} onSingleTap={(index) => { setLightboxMediaIdx(index); setLightboxOpen(true); }} onUnlock={guard(openUnlock)} fullscreenTopLeft={true} creatorHandle={post.profiles?.username} disableMobileShrink displayName={post.profiles?.display_name ?? post.profiles?.username} username={post.profiles?.username} avatarUrl={post.profiles?.avatar_url ?? null} caption={post.caption ?? null} tapToExpand={false} />
         </div>
         );
       })()}
 
       {!sourceIsMessage && !post.locked && (
         <div style={{ margin: "0", paddingLeft: "7px" }}>
-          <PostActions likes={post.like_count} comments={commentCount} liked={post.liked} bookmarked={savedPost} isSubscribed={post.can_access} isOwnProfile={isOwnPost} onLike={handleLike} onComment={handleComment} onTip={openTip} onBookmark={handleBookmark} />
+          <PostActions likes={post.like_count} comments={commentCount} liked={post.liked} bookmarked={savedPost} isSubscribed={post.can_access} isOwnProfile={isOwnPost} onLike={guard(handleLike)} onComment={guard(handleComment)} onTip={guard(openTip)} onBookmark={guard(handleBookmark)} />
         </div>
       )}
 
@@ -533,7 +535,7 @@ export default function PostView({ postId, sourceIsMessage, onBack }: PostViewPr
 
       {!sourceIsMessage && !post.locked && (
         <div ref={commentRef} style={{ margin: "8px 16px 48px" }}>
-          <CommentSection postId={String(post.id)} comments={comments} viewer={viewer || { username: "", display_name: "", avatar_url: "" }} viewerUserId={viewerId || undefined} isOpen={commentOpen} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} onAddComment={handleAddComment} />
+          <CommentSection postId={String(post.id)} comments={comments} viewer={viewer || { username: "", display_name: "", avatar_url: "" }} viewerUserId={viewerId || undefined} isOpen={commentOpen} isLoading={commentsLoading} totalCommentCount={commentCount} onClose={() => setCommentOpen(false)} onAddComment={(...args) => guard(handleAddComment)(...args) ?? Promise.resolve()} />
         </div>
       )}
     </div>

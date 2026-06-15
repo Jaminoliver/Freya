@@ -21,6 +21,11 @@ interface Props {
   onMuteChange: (muted: boolean) => void;
   initialIsFollowing?: boolean;
   onFollowChange?: (creatorId: string, isFollowing: boolean) => void;
+  onNext?: () => void;
+  onPrev?: () => void;
+  hasNext?: boolean;
+  hasPrev?: boolean;
+  enterFrom?: "none" | "bottom" | "top";
 }
 
 function formatCount(n: number): string {
@@ -71,6 +76,11 @@ export function VideoFullscreenModal({
   onMuteChange,
   initialIsFollowing = false,
   onFollowChange,
+  onNext,
+  onPrev,
+  hasNext = false,
+  hasPrev = false,
+  enterFrom = "none",
 }: Props) {
   const router = useRouter();
   const openAuthModal = useAppStore((s) => s.openAuthModal);
@@ -264,11 +274,30 @@ export function VideoFullscreenModal({
     (async () => {
       const Hls = (await import("hls.js")).default;
       if (Hls.isSupported()) {
-        const hls = new Hls({ startLevel: -1, capLevelToPlayerSize: false });
-        hlsRef.current = hls;
-        hls.loadSource(videoSrc);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => { tryPlay(); });
+        // Reuse the HLS instance the grid already prewarmed for this tile: its
+        // manifest is parsed and first segments are buffered, so playback starts
+        // almost instantly. Re-attach it to THIS video element instead of doing
+        // a cold loadSource (manifest → child → segment chain) on tap.
+        if (existingHls) {
+          const hls = existingHls;
+          hlsRef.current = hls;
+          try { hls.detachMedia(); } catch {}
+          hls.attachMedia(video);
+          if (hls.media && hls.levels && hls.levels.length) {
+            // Already parsed — play now.
+            tryPlay();
+          } else {
+            hls.on(Hls.Events.MANIFEST_PARSED, () => { tryPlay(); });
+          }
+          // Ensure it's actively loading (prewarm may have used a capped level).
+          try { hls.startLoad(); } catch {}
+        } else {
+          const hls = new Hls({ startLevel: -1, capLevelToPlayerSize: false });
+          hlsRef.current = hls;
+          hls.loadSource(videoSrc);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => { tryPlay(); });
+        }
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = videoSrc;
         video.addEventListener("loadeddata", tryPlay, { once: true });
@@ -382,6 +411,14 @@ export function VideoFullscreenModal({
           from { opacity: 0; transform: scale(0.96); }
           to   { opacity: 1; transform: scale(1); }
         }
+        @keyframes vfm-slide-up {
+          from { transform: translateY(100%); }
+          to   { transform: translateY(0); }
+        }
+        @keyframes vfm-slide-down {
+          from { transform: translateY(-100%); }
+          to   { transform: translateY(0); }
+        }
         @keyframes vfm-bar-up {
           from { opacity: 0; transform: translateY(12px); }
           to   { opacity: 1; transform: translateY(0); }
@@ -476,7 +513,13 @@ export function VideoFullscreenModal({
       <div
         className="vfm-panel"
         style={{
-          animation: mounted ? "vfm-scale-in 0.2s ease-out forwards" : "none",
+          animation: mounted
+            ? (enterFrom === "bottom"
+                ? "vfm-slide-up 0.28s cubic-bezier(0.22,1,0.36,1) forwards"
+                : enterFrom === "top"
+                ? "vfm-slide-down 0.28s cubic-bezier(0.22,1,0.36,1) forwards"
+                : "vfm-scale-in 0.2s ease-out forwards")
+            : "none",
           opacity: mounted ? undefined : 0,
           touchAction: "none",
         }}
@@ -539,23 +582,37 @@ export function VideoFullscreenModal({
           }}
           onTouchMove={(e) => {
             const delta = e.touches[0].clientY - swipeStartYRef.current;
-            if (delta <= 0 || isSeeking) return;
-            const prog = Math.min(delta / 350, 1);
+            if (isSeeking) return;
             if (innerRef.current) {
-              innerRef.current.style.transform = `translateY(${delta * 0.55}px) scale(${1 - prog * 0.06})`;
-              innerRef.current.style.borderRadius = `${prog * 20}px`;
+              if (delta > 0) {
+                // Downward: drag (close or previous).
+                const prog = Math.min(delta / 350, 1);
+                innerRef.current.style.transform = `translateY(${delta * 0.55}px) scale(${1 - prog * 0.06})`;
+                innerRef.current.style.borderRadius = `${prog * 20}px`;
+              } else if (hasNext) {
+                // Upward: small lift hint toward the next video.
+                innerRef.current.style.transform = `translateY(${delta * 0.25}px)`;
+              }
             }
           }}
           onTouchEnd={(e) => {
             const delta = e.changedTouches[0].clientY - swipeStartYRef.current;
-            if (delta > 120) {
-              handleClose();
-            } else {
+            const reset = () => {
               if (innerRef.current) {
                 innerRef.current.style.transition = "transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 280ms ease";
                 innerRef.current.style.transform = "none";
                 innerRef.current.style.borderRadius = "";
               }
+            };
+            if (delta <= -80 && hasNext && onNext) {
+              // Swipe up → next video.
+              onNext();
+            } else if (delta > 120) {
+              // Big swipe down → if there's a previous video go to it, else close.
+              if (hasPrev && onPrev && delta < 260) { onPrev(); reset(); }
+              else handleClose();
+            } else {
+              reset();
             }
           }}
         >
@@ -645,6 +702,43 @@ export function VideoFullscreenModal({
             }}
           >
           
+            {/* Desktop-only paging arrows (hidden on mobile) */}
+            {!isMobile && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                <button
+                  aria-label="Previous video"
+                  onClick={(e) => { e.stopPropagation(); if (hasPrev && onPrev) onPrev(); }}
+                  disabled={!hasPrev}
+                  style={{
+                    width: 40, height: 40, borderRadius: "50%", border: "none",
+                    background: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: hasPrev ? "pointer" : "default", opacity: hasPrev ? 1 : 0.3,
+                    transition: "background 0.2s, opacity 0.2s",
+                  }}
+                  onMouseEnter={(e) => { if (hasPrev) e.currentTarget.style.background = "rgba(0,0,0,0.7)"; }}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.45)")}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+                </button>
+                <button
+                  aria-label="Next video"
+                  onClick={(e) => { e.stopPropagation(); if (hasNext && onNext) onNext(); }}
+                  disabled={!hasNext}
+                  style={{
+                    width: 40, height: 40, borderRadius: "50%", border: "none",
+                    background: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: hasNext ? "pointer" : "default", opacity: hasNext ? 1 : 0.3,
+                    transition: "background 0.2s, opacity 0.2s",
+                  }}
+                  onMouseEnter={(e) => { if (hasNext) e.currentTarget.style.background = "rgba(0,0,0,0.7)"; }}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.45)")}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                </button>
+              </div>
+            )}
 
             {/* Subscribers */}
             <button className="vfm-action-btn" onClick={handleProfileClick}>

@@ -41,6 +41,7 @@ interface PostMediaViewerProps {
   eager?:                boolean;
   autoPlay?:             boolean;
   prewarmLight?:         boolean;
+  tapToExpand?:          boolean;
   displayName?:          string;
   username?:             string;
   avatarUrl?:            string | null;
@@ -296,6 +297,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
   eager = false,
   autoPlay = false,
   prewarmLight = false,
+  tapToExpand = true,
   displayName,
   username,
   avatarUrl,
@@ -528,6 +530,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               eager={eager}
               autoPlay={autoPlay}
               prewarmLight={prewarmLight}
+              tapToExpand={tapToExpand}
               displayName={displayName}
               username={username}
               avatarUrl={avatarUrl}

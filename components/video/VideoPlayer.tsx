@@ -3,7 +3,6 @@
 import * as React from "react";
 import { decode } from "blurhash";
 import Hls from "hls.js";
-import { vmark } from "@/lib/video/perfTrace";
 
 // ── Mute persistence ──────────────────────────────────────────────────────────
 const MUTE_KEY = "vp_muted";
@@ -368,6 +367,7 @@ interface ControlsProps {
   isPlaying?:        boolean;
   isStarted?:        boolean;
   onOpenFullscreen?: () => void;
+  tapToExpand?:      boolean;
   displayName?:      string;
   username?:         string;
   avatarUrl?:        string | null;
@@ -388,6 +388,7 @@ function VideoControls({
   isPlaying: isPlayingProp = false,
   isStarted = false,
   onOpenFullscreen,
+  tapToExpand = true,
   isBuffering = false,
   isLoading = false,
   onPosterPlay,
@@ -465,6 +466,7 @@ function VideoControls({
       if (!video.paused) { if (isPausedByUser) isPausedByUser.current = true; video.pause(); flashCenter("pause"); }
       else {
         if (isPausedByUser) isPausedByUser.current = false;
+        (video as any).__isPausedByUser = false;
         const hls = (video as any).__hls;
         if (hls) { try { hls.startLoad(-1); } catch {} }
         onPosterPlay ? onPosterPlay() : video.play().catch(() => {});
@@ -511,9 +513,10 @@ function VideoControls({
             (e.changedTouches[0].clientY - Number(target.dataset.touchStartY ?? 0)) ** 2
           );
           if (held < 200 && dist < 10) {
-            // Mobile tap expands to fullscreen (does not pause). Desktop keeps
-            // play/pause via the onClick handler above.
-            if (onOpenFullscreen) onOpenFullscreen();
+            // Mobile tap: in the feed (tapToExpand) it expands to fullscreen;
+            // on the single post page it toggles play/pause and the dedicated
+            // fullscreen button is the only way to expand.
+            if (tapToExpand && onOpenFullscreen) onOpenFullscreen();
             else handlePlayPause(e);
           }
         }}
@@ -528,8 +531,9 @@ function VideoControls({
         </div>
       )}
 
-      {/* Play indicator when paused — only in fullscreen, never in the feed */}
-      {isFullscreen && !playing && isStarted && !isBuffering && !isLoading && (
+      {/* Play indicator when paused — in fullscreen and on the post view
+          (tapToExpand false), never in the feed. */}
+      {(isFullscreen || !tapToExpand) && !playing && isStarted && !isBuffering && !isLoading && (
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 6, pointerEvents: "none" }}>
           <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><polygon points="5,3 19,12 5,21"/></svg>
         </div>
@@ -609,6 +613,7 @@ interface VideoPlayerProps {
   avatarUrl?:         string | null;
   caption?:           string | null;
   autoPlay?:          boolean;
+  tapToExpand?:       boolean;
   prewarmLight?:      boolean;
   hideMuteButton?:    boolean;
   durationSeconds?:   number | null;
@@ -648,6 +653,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   avatarUrl,
   caption,
   autoPlay          = false,
+  tapToExpand       = true,
   prewarmLight      = false,
   hideMuteButton    = false,
   durationSeconds   = null,
@@ -781,27 +787,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     setInternalRatio(`${w}/${h}`);
   }, [fillParent, externalRatio, posterSrc]);
 
-  const teardown = React.useCallback((force = false) => {
-    if (!force && !hasInitialized.current) return;
-    if (!force && isPlayingRef.current) return;
-    const video = videoRef.current;
-    if (!force && bunnyVideoId && watchedVideoIds.has(bunnyVideoId)) {
-      if (video) video.pause();
-      try { hlsRef.current?.pauseBuffering(); } catch {}
-      if (slowTimer.current) { clearTimeout(slowTimer.current); slowTimer.current = null; }
-      setIsBuffering(false); setShowSlowDots(false);
-      return;
-    }
-    if (video) {
-      video.pause();
-      if (force || !(bunnyVideoId && watchedVideoIds.has(bunnyVideoId))) video.src = "";
-    }
-    if (hlsRef.current) { try { hlsRef.current.destroy(); } catch {} hlsRef.current = null; }
-    if (slowTimer.current) { clearTimeout(slowTimer.current); slowTimer.current = null; }
-    hasInitialized.current = false;
-    setIsBuffering(false); setHasStarted(false); setShowSlowDots(false); setShowPoster(true);
-  }, [bunnyVideoId]);
-
   const initVideo = React.useCallback(async () => {
     const video = videoRef.current;
     if (!video || !bunnyVideoId || hasInitialized.current) return;
@@ -854,7 +839,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
           hlsRef.current = null; hasInitialized.current = false;
           setHasError(true); setIsBuffering(false);
         });
-        vmark(bunnyVideoId, "manifest_req");
         hls.loadSource(hlsSrc);
         hls.attachMedia(video);
         (video as any).__hls = hls;
@@ -879,7 +863,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   }, [initVideo]);
 
   React.useEffect(() => {
-    vmark(bunnyVideoId, "mount");
     return () => {
       if (bufferTimer.current)  clearTimeout(bufferTimer.current);
       if (loadingTimer.current) clearTimeout(loadingTimer.current);
@@ -968,7 +951,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
       if (played) return;
       if (isPausedByUser.current || (video as any).__isPausedByUser) return;
       played = true;
-      vmark(bunnyVideoId, "play_call");
       setShowPoster(false);
       video.play().then(markPlaying).catch(() => {
         // The browser can block UNMUTED autoplay when play() comes from scroll
@@ -991,12 +973,11 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
     // Try immediately (works when data is already buffered/prewarmed).
     if (video.readyState >= 3) {
-      vmark(bunnyVideoId, "canplay");
       attemptPlay();
     } else {
       // Not ready yet — play as soon as ANY of these fire. Multiple events for
       // robustness across browsers and HLS timing.
-      const onReady = () => { vmark(bunnyVideoId, "canplay"); attemptPlay(); };
+      const onReady = () => { attemptPlay(); };
       video.addEventListener("loadeddata", onReady, { once: true });
       video.addEventListener("canplay",    onReady, { once: true });
       video.addEventListener("playing",    onReady, { once: true });
@@ -1058,7 +1039,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
   React.useEffect(() => {
     if (!prewarmLight || autoPlay || !bunnyVideoId) return;
     if (hasInitialized.current) return;
-    const t = setTimeout(() => { if (!hasInitialized.current) { vmark(bunnyVideoId, "prewarm_start"); initVideo(); } }, 150);
+    const t = setTimeout(() => { if (!hasInitialized.current) { initVideo(); } }, 150);
     return () => clearTimeout(t);
   }, [prewarmLight, autoPlay, bunnyVideoId, initVideo]);
 
@@ -1418,8 +1399,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
     // this video becomes centered. Bypasses React state/effects entirely so
     // there is no render→commit→effect delay before play() fires.
     playActive: () => {
-      console.log("[VP] playActive called for", bunnyVideoId?.slice(0,8), "hasInit:", hasInitialized.current, "readyState:", videoRef.current?.readyState);
-      vmark(bunnyVideoId, "active");
       handlePosterPlay().catch(() => {});
     },
     pauseActive: () => {
@@ -1487,7 +1466,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             style={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", cursor: showPoster ? "pointer" : "default", opacity: showPoster ? 1 : 0, transition: showPoster ? "opacity 0.25s ease" : "none", pointerEvents: showPoster ? "auto" : "none" }}
           >
             <img src={posterSrc} alt="" fetchPriority="high" onLoad={handlePosterLoad} onError={() => { if (thumbnailUrl && bunnyVideoId) setPosterSrc(getBunnyThumbnail(bunnyVideoId)); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: objectFit, opacity: posterLoaded ? 1 : 0, transition: posterLoaded ? "none" : "opacity 0.25s ease" }} />
-            {false && (
+            {!tapToExpand && showPoster && !isLoading && (
               <svg width="44" height="44" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)" style={{ position: "relative", zIndex: 2 }}><polygon points="5,3 19,12 5,21"/></svg>
             )}
           </div>
@@ -1540,7 +1519,6 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
               }, isSlow2 ? 2000 : 800);
             }}
             onPlaying={() => {
-              vmark(bunnyVideoId, "first_frame");
               if (bufferTimer.current)  { clearTimeout(bufferTimer.current);  bufferTimer.current  = null; }
               if (slowTimer.current)    { clearTimeout(slowTimer.current);    slowTimer.current    = null; }
               if (stallTimer.current)   { clearTimeout(stallTimer.current);   stallTimer.current   = null; }
@@ -1609,6 +1587,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
             isPlaying={isPlaying}
             isStarted={hasStarted}
             onOpenFullscreen={handleOpenFullscreen}
+            tapToExpand={tapToExpand}
             displayName={displayName}
             username={username}
             avatarUrl={avatarUrl}
