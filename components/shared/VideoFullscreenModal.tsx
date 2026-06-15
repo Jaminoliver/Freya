@@ -26,6 +26,10 @@ interface Props {
   hasNext?: boolean;
   hasPrev?: boolean;
   enterFrom?: "none" | "bottom" | "top";
+  /** Slot mode: rendered inside the pager track (positioned, no fixed overlay,
+   *  no own gesture). Playback only runs when `active`. */
+  slotMode?: boolean;
+  active?: boolean;
 }
 
 function formatCount(n: number): string {
@@ -81,10 +85,11 @@ export function VideoFullscreenModal({
   hasNext = false,
   hasPrev = false,
   enterFrom = "none",
+  slotMode = false,
+  active = true,
 }: Props) {
   const router = useRouter();
   const openAuthModal = useAppStore((s) => s.openAuthModal);
-  console.log("[VideoModal] mounted at", performance.now().toFixed(1));
 
   useEffect(() => {
     if (data.username) router.prefetch(`/${data.username}`);
@@ -267,6 +272,7 @@ export function VideoFullscreenModal({
     video.muted = isMuted;
 
     const tryPlay = () => {
+      if (!active) { try { video.pause(); } catch {} return; }
       video.currentTime = initialTime;
       video.play().catch(() => {});
     };
@@ -317,8 +323,20 @@ export function VideoFullscreenModal({
 
   // Sync mute to video
   useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = isMuted;
-  }, [isMuted]);
+    if (videoRef.current) videoRef.current.muted = isMuted;  }, [isMuted]);
+
+  // Play only when this slot is the active (centered) one. Neighbours stay
+  // mounted and paused on their first frame so there's never a black gap.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (active) {
+      video.muted = isMuted;
+      video.play().catch(() => { video.muted = true; video.play().catch(() => {}); });
+    } else {
+      try { video.pause(); } catch {}
+    }
+  }, [active, isMuted]);
 
   // Keep isPaused in sync
   useEffect(() => {
@@ -503,26 +521,32 @@ export function VideoFullscreenModal({
       `}</style>
 
       {/* Backdrop */}
-      <div
-        className="vfm-backdrop"
-        style={{ position: "fixed", inset: 0, zIndex: 9998, backgroundColor: "#000" }}
-        onClick={handleClose}
-        onTouchMove={(e) => e.preventDefault()}
-      />
+      {!slotMode && (
+        <div
+          className="vfm-backdrop"
+          style={{ position: "fixed", inset: 0, zIndex: 9998, backgroundColor: "#000" }}
+          onClick={handleClose}
+          onTouchMove={(e) => e.preventDefault()}
+        />
+      )}
 
       <div
         className="vfm-panel"
-        style={{
-          animation: mounted
-            ? (enterFrom === "bottom"
-                ? "vfm-slide-up 0.28s cubic-bezier(0.22,1,0.36,1) forwards"
-                : enterFrom === "top"
-                ? "vfm-slide-down 0.28s cubic-bezier(0.22,1,0.36,1) forwards"
-                : "vfm-scale-in 0.2s ease-out forwards")
-            : "none",
-          opacity: mounted ? undefined : 0,
-          touchAction: "none",
-        }}
+        style={
+          slotMode
+            ? { position: "absolute", inset: 0, opacity: 1 }
+            : {
+                animation: mounted
+                  ? (enterFrom === "bottom"
+                      ? "vfm-slide-up 0.28s cubic-bezier(0.22,1,0.36,1) forwards"
+                      : enterFrom === "top"
+                      ? "vfm-slide-down 0.28s cubic-bezier(0.22,1,0.36,1) forwards"
+                      : "vfm-scale-in 0.2s ease-out forwards")
+                  : "none",
+                opacity: mounted ? undefined : 0,
+                touchAction: "none",
+              }
+        }
       >
         {/* Close button — top left */}
         <button
@@ -577,10 +601,12 @@ export function VideoFullscreenModal({
           className="vfm-inner"
           ref={innerRef}
           onTouchStart={(e) => {
+            if (slotMode) return;
             swipeStartYRef.current = e.touches[0].clientY;
             if (innerRef.current) innerRef.current.style.transition = "none";
           }}
           onTouchMove={(e) => {
+            if (slotMode) return;
             const delta = e.touches[0].clientY - swipeStartYRef.current;
             if (isSeeking) return;
             if (innerRef.current) {
@@ -596,6 +622,7 @@ export function VideoFullscreenModal({
             }
           }}
           onTouchEnd={(e) => {
+            if (slotMode) return;
             const delta = e.changedTouches[0].clientY - swipeStartYRef.current;
             const reset = () => {
               if (innerRef.current) {
@@ -652,7 +679,6 @@ export function VideoFullscreenModal({
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
               onPlaying={() => {
-                console.log("[VideoModal] video playing at", performance.now().toFixed(1));
                 if (slowDotsTimerRef.current) { clearTimeout(slowDotsTimerRef.current); slowDotsTimerRef.current = null; }
                 setShowSlowDots(false);
                 setIsVideoReady(true);

@@ -61,8 +61,6 @@ export function VideoTile({
   const [buffering, setBuffering] = useState(false);
   const bufferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTouchRef = useRef(false);
-  // Guard: prevents onPreviewEnd firing more than once per activation
-  const hasEndedRef = useRef(false);
 
   const previewUrl = data.bunny_video_id
     ? `https://${STREAM_CDN}/${data.bunny_video_id}/play_360p.mp4`
@@ -103,28 +101,13 @@ export function VideoTile({
     video.addEventListener("playing", onPlaying);
 
     if (isActive && !isModalOpen) {
-      // Reset end guard each time this tile becomes active
-      hasEndedRef.current = false;
-
       const tryPlay = () => {
         video.currentTime = 0;
         video.muted = true;
-        console.log("[VideoTile] playing", { post_id: data.post_id, t: performance.now().toFixed(1) });
+        // Native loop attribute keeps the short preview playing while this tile
+        // stays the centered/active one (Snapchat-style). No 5s clip, no advance.
         video.play().catch(() => {});
       };
-
-      // Clip preview to 5 seconds — hasEndedRef prevents double-fire
-      const handleTimeUpdate = () => {
-        if (video.currentTime >= 5 && !hasEndedRef.current) {
-          hasEndedRef.current = true;
-          video.currentTime = 0;
-          video.pause();
-          console.log("[VideoTile] 5s end fired", { post_id: data.post_id, t: performance.now().toFixed(1) });
-          onPreviewEnd?.(data.post_id);
-        }
-      };
-
-      video.addEventListener("timeupdate", handleTimeUpdate);
 
       if (video.readyState >= 3) {
         tryPlay();
@@ -136,11 +119,9 @@ export function VideoTile({
       return () => {
         video.removeEventListener("waiting", onWaiting);
         video.removeEventListener("playing", onPlaying);
-        video.removeEventListener("timeupdate", handleTimeUpdate);
         if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
       };
     } else {
-      console.log("[VideoTile] pausing", { post_id: data.post_id, isActive, isModalOpen });
       video.pause();
       if (bufferTimerRef.current) {
         clearTimeout(bufferTimerRef.current);
@@ -154,16 +135,13 @@ export function VideoTile({
       video.removeEventListener("playing", onPlaying);
       if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
     };
-  }, [isActive, isModalOpen, srcLoaded, onPreviewEnd, data.post_id]);
+  }, [isActive, isModalOpen, srcLoaded, data.post_id]);
 
   // Pass current playback time so modal resumes exactly where tile left off
   const handleClick = () => {
-    const t0 = performance.now();
-    console.log("[VideoTile] click fired", { post_id: data.post_id, t: t0.toFixed(1) });
     const currentTime = videoRef.current?.currentTime ?? 0;
     if (videoRef.current) videoRef.current.pause();
     onOpenFullscreen(data, currentTime);
-    console.log("[VideoTile] onOpenFullscreen called", { delay: (performance.now() - t0).toFixed(1) + "ms" });
   };
 
   const handleAvatarClick = (e: React.MouseEvent) => {
@@ -181,7 +159,7 @@ export function VideoTile({
     <div
       ref={(el) => onTileRef(data.post_id, el)}
       onClick={handleClick}
-      onTouchStart={() => { isTouchRef.current = true; console.log("[VideoTile] touchStart", performance.now().toFixed(1)); }}
+      onTouchStart={() => { isTouchRef.current = true; }}
       style={{
         position: "relative",
         width: "100%",
