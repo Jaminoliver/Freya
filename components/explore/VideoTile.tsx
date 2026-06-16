@@ -102,16 +102,18 @@ export function VideoTile({
 
     if (isActive && !isModalOpen) {
       const tryPlay = () => {
+        console.log("[TILE-DBG] PLAY", { post: data.post_id, readyState: video.readyState, srcLoaded });
         video.currentTime = 0;
         video.muted = true;
         // Native loop attribute keeps the short preview playing while this tile
         // stays the centered/active one (Snapchat-style). No 5s clip, no advance.
-        video.play().catch(() => {});
+        video.play().catch((e) => { console.log("[TILE-DBG] play rejected", { post: data.post_id, e: String(e) }); });
       };
 
       if (video.readyState >= 3) {
         tryPlay();
       } else {
+        console.log("[TILE-DBG] waiting for canplay", { post: data.post_id, readyState: video.readyState, hasSrc: !!video.src });
         if (video.src) video.load();
         video.addEventListener("canplay", tryPlay, { once: true });
       }
@@ -122,6 +124,7 @@ export function VideoTile({
         if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
       };
     } else {
+      console.log("[TILE-DBG] PAUSE", { post: data.post_id, isActive, isModalOpen });
       video.pause();
       if (bufferTimerRef.current) {
         clearTimeout(bufferTimerRef.current);

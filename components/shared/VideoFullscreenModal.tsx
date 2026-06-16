@@ -100,6 +100,7 @@ export function VideoFullscreenModal({
   const [avatarError, setAvatarError] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   // Live post stats from postSyncStore
@@ -136,6 +137,7 @@ export function VideoFullscreenModal({
     setCommentsOpen(false);
     setIsVideoReady(false);   // show thumbnail (a real frame) during the source swap → no black flash
     setIsPaused(false);       // don't flash the paused/play indicator on the incoming video
+    setUserPaused(false);     // user-pause intent is per-video; reset on recycle
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.post_id]);
 
@@ -266,7 +268,6 @@ export function VideoFullscreenModal({
   // Mount animation
   useEffect(() => {
     const t = requestAnimationFrame(() => setMounted(true));
-    slowDotsTimerRef.current = setTimeout(() => setShowSlowDots(true), 800);
     return () => {
       cancelAnimationFrame(t);
       if (slowDotsTimerRef.current) clearTimeout(slowDotsTimerRef.current);
@@ -275,6 +276,7 @@ export function VideoFullscreenModal({
 
   // Lock body scroll + force address bar visible
   useEffect(() => {
+    if (slotMode) return; // pager owns the single scroll lock; per-slot locking corrupts it
     const savedScroll = window.scrollY;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -283,7 +285,7 @@ export function VideoFullscreenModal({
       document.body.style.overflow = prev;
       window.scrollTo({ top: savedScroll, behavior: "instant" });
     };
-  }, []);
+  }, [slotMode]);
 
   // Auto-play on mount using HLS.js
   useEffect(() => {
@@ -378,6 +380,7 @@ export function VideoFullscreenModal({
       const rs = video.readyState;
       console.log("[PAGER-DBG] activate", { post: data.post_id, readyState: rs, isVideoReady, isPaused, currentTime: video.currentTime.toFixed(2), paused: video.paused });
       setIsPaused(false);
+      setUserPaused(false);
       if (video.readyState >= 2) setIsVideoReady(true);
       video.muted = isMuted;
       video.play().then(() => {
@@ -406,8 +409,8 @@ export function VideoFullscreenModal({
     e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) video.play().catch(() => {});
-    else video.pause();
+    if (video.paused) { setUserPaused(false); video.play().catch(() => {}); }
+    else { setUserPaused(true); video.pause(); }
   };
 
   const handleTimeUpdate = useCallback(() => {
@@ -710,7 +713,7 @@ export function VideoFullscreenModal({
           )}
 
           {/* Slow dots */}
-          {!isVideoReady && showSlowDots && (
+          {!isVideoReady && showSlowDots && active && (
             <div style={{ position: "absolute", left: 0, right: 0, top: "50%", transform: "translateY(-50%)", zIndex: 10002, display: "flex", justifyContent: "center", gap: "6px", pointerEvents: "none" }}>
               <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#8B5CF6", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0s" }} />
               <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#B44DD4", animation: "vfm-dot 1.2s infinite ease-in-out", animationDelay: "0.2s" }} />
@@ -728,6 +731,18 @@ export function VideoFullscreenModal({
               preload="auto"
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
+              onWaiting={() => {
+                // Only show the loading dots if the ACTIVE video genuinely
+                // stalls — and only after a short grace period, so a
+                // prewarmed/ready video that starts instantly never shows them.
+                if (!active) return;
+                if (slowDotsTimerRef.current) clearTimeout(slowDotsTimerRef.current);
+                slowDotsTimerRef.current = setTimeout(() => setShowSlowDots(true), 500);
+              }}
+              onCanPlay={() => {
+                if (slowDotsTimerRef.current) { clearTimeout(slowDotsTimerRef.current); slowDotsTimerRef.current = null; }
+                setShowSlowDots(false);
+              }}
               onPlaying={() => {
                 if (slowDotsTimerRef.current) { clearTimeout(slowDotsTimerRef.current); slowDotsTimerRef.current = null; }
                 setShowSlowDots(false);
@@ -746,7 +761,7 @@ export function VideoFullscreenModal({
           )}
 
           {/* Play icon when paused */}
-          {isPaused && !isSeeking && active && (
+          {userPaused && !isSeeking && active && (
             <div
               onClick={handleVideoTap}
               style={{

@@ -92,6 +92,7 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
     }
 
     if (bestId !== null && bestId !== activeIdRef.current) {
+      console.log("[TILE-DBG] activeId change", { from: activeIdRef.current, to: bestId, minDist: Math.round(minDist), visibleCount: [...ratioMap.current.values()].filter((r) => r > 0.1).length });
       setActiveId(bestId);
       activeIdRef.current = bestId;
     }

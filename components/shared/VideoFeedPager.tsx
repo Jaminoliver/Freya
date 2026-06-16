@@ -45,6 +45,10 @@ export default function VideoFeedPager({
 
   const dragRef = useRef(0);
   const startYRef = useRef(0);
+  const startXRef = useRef(0);
+  const dragXRef = useRef(0);
+  const axisRef = useRef<"none" | "v" | "h">("none");
+  const containerRef = useRef<HTMLDivElement>(null);
   const startTRef = useRef(0);
   const trackRef = useRef<HTMLDivElement>(null);
   const heightRef = useRef(typeof window !== "undefined" ? window.innerHeight : 800);
@@ -61,6 +65,18 @@ export default function VideoFeedPager({
     // CURRENT index sits at viewport 0; `offset` is the live finger drag.
     track.style.transform = `translate3d(0, ${-index * H + offset}px, 0)`;
   }, [index]);
+
+  // Single scroll lock for the whole fullscreen session (NOT per-slot, which
+  // would corrupt the saved value and leave the page stuck on return).
+  useEffect(() => {
+    const savedScroll = window.scrollY;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow || "";
+      window.scrollTo({ top: savedScroll, behavior: "instant" as ScrollBehavior });
+    };
+  }, []);
 
   useEffect(() => {
     heightRef.current = window.innerHeight;
@@ -99,13 +115,39 @@ export default function VideoFeedPager({
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (animating) return;
     startYRef.current = e.touches[0].clientY;
+    startXRef.current = e.touches[0].clientX;
     startTRef.current = performance.now();
     dragRef.current = 0;
+    dragXRef.current = 0;
+    axisRef.current = "none";
   }, [animating]);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     if (animating) return;
     const dy = e.touches[0].clientY - startYRef.current;
+    const dx = e.touches[0].clientX - startXRef.current;
+
+    // Lock the gesture axis on the first meaningful movement.
+    if (axisRef.current === "none") {
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+        axisRef.current = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+      }
+    }
+
+    if (axisRef.current === "h") {
+      // Swipe right to dismiss (only rightward; left resists).
+      const x = dx > 0 ? dx : dx * 0.25;
+      dragXRef.current = x;
+      const container = containerRef.current;
+      if (container) {
+        container.style.transition = "none";
+        container.style.transform = `translate3d(${x}px,0,0)`;
+        container.style.opacity = String(Math.max(0.3, 1 - x / window.innerWidth));
+      }
+      return;
+    }
+
+    // Vertical paging.
     let offset = dy;
     if ((dy < 0 && index >= items.length - 1) || (dy > 0 && index <= 0)) {
       offset = dy * 0.35;
@@ -116,6 +158,31 @@ export default function VideoFeedPager({
 
   const onTouchEnd = useCallback(() => {
     if (animating) return;
+
+    // Horizontal: swipe-right-to-dismiss.
+    if (axisRef.current === "h") {
+      const container = containerRef.current;
+      const W = window.innerWidth;
+      const dx = dragXRef.current;
+      const dt = Math.max(1, performance.now() - startTRef.current);
+      const vx = dx / dt;
+      if (dx >= W * 0.3 || vx >= 0.45) {
+        // Slide fully out to the right, then close.
+        if (container) {
+          container.style.transition = "transform 0.26s ease-out, opacity 0.26s ease-out";
+          container.style.transform = `translate3d(${W}px,0,0)`;
+          container.style.opacity = "0";
+        }
+        window.setTimeout(() => onClose(), 240);
+      } else if (container) {
+        container.style.transition = "transform 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease";
+        container.style.transform = "translate3d(0,0,0)";
+        container.style.opacity = "1";
+      }
+      dragXRef.current = 0;
+      return;
+    }
+
     const H = heightRef.current;
     const dy = dragRef.current;
     const dt = Math.max(1, performance.now() - startTRef.current);
@@ -154,6 +221,7 @@ export default function VideoFeedPager({
 
   return (
     <div
+      ref={containerRef}
       style={{
         position: "fixed",
         inset: 0,
