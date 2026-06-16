@@ -1569,7 +1569,7 @@ const VideoPlayerInner = React.forwardRef<VideoPlayerHandle, VideoPlayerProps>(f
 
         {creatorHandle && (
           <div data-creator-watermark style={{ position: "absolute", top: 0, left: 0, zIndex: 12, pointerEvents: "none", fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.9)", fontFamily: "'Inter', sans-serif", letterSpacing: "0.02em", background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 100%)", width: "100%", padding: "2px 8px 20px 8px" }}>
-            {creatorHandle}@Fréya.com
+            {creatorHandle}@freyalinks.com
           </div>
         )}
 
