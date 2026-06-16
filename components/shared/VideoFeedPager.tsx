@@ -229,6 +229,7 @@ export default function VideoFeedPager({
         background: "#000",
         overflow: "hidden",
         touchAction: "none",
+        overscrollBehaviorX: "none",
       }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
