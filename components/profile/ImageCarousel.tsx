@@ -417,7 +417,7 @@ export default function ImageCarousel({
       {isUnlockedPPV && <UnlockedPPVBadge />}
 
       {media.length > 1 && !isUnlockedPPV && (
-        <div style={{ position: "absolute", top: "10px", left: "10px", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+        <div style={{ position: "absolute", top: "24px", left: "10px", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
           {activeIndex + 1} / {media.length}
         </div>
       )}

@@ -594,7 +594,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               width: "100%",
               padding: "2px 8px 20px",
             }}>
-              {creatorHandle}@Fréya.com
+              {creatorHandle}@freyalinks.com
             </div>
           )}
         </div>
@@ -661,7 +661,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
             width: "100%",
             padding: "2px 8px 20px",
           }}>
-            {creatorHandle}@Fréya.com
+            {creatorHandle}@freyalinks.com
           </div>
         )}
       </div>
