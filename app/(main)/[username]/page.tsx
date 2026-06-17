@@ -20,6 +20,7 @@ import { startConversation } from "@/app/(main)/messages/page";
 import SinglePostSheet from "@/components/shared/SinglePostSheet";
 import type { LightboxPost } from "@/components/profile/Lightbox";
 const Lightbox = dynamic(() => import("@/components/profile/Lightbox"), { ssr: false });
+// ── Dynamic imports: only the active view loads ──────────────────────────────
 const CheckoutModal              = dynamic(() => import("@/components/checkout/CheckoutModal"), { ssr: false });
 const OwnCreatorProfile          = dynamic(() => import("@/components/profile/views/OwnCreatorProfile"), { ssr: false });
 const OwnFanProfile              = dynamic(() => import("@/components/profile/views/OwnFanProfile"), { ssr: false });
@@ -42,15 +43,11 @@ function ProfilePageInner() {
     updateProfile,
     clearProfile,
     viewer: globalViewer,
-    openAuthModal,
   } = useAppStore();
 
   const { uploads } = useUpload();
 
-  // ── Use globalViewer directly — no local viewer state ────────────────────
-  // Removed local `viewer` state that was desyncing from globalViewer after login.
-  const viewer = globalViewer as User | null;
-
+  const [viewer,                setViewer]                = React.useState<User | null>(null);
   const [profile,               setProfile]               = React.useState<User | null>(null);
   const [isSubscribed,          setIsSubscribed]          = React.useState(false);
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = React.useState<string | null>(null);
@@ -76,17 +73,26 @@ function ProfilePageInner() {
   const [openPost,           setOpenPost]           = React.useState<{ id: string; sourceIsMessage: boolean } | null>(null);
   const [lightboxPost,       setLightboxPost]       = React.useState<LightboxPost | null>(null);
   const [lightboxMediaIndex, setLightboxMediaIndex] = React.useState(0);
-
   const imagePosts = React.useMemo(() => apiPosts.filter((p) => !p.locked && p.media?.[0]?.media_type !== "video").map((p) => ({ id: p.id, media: p.media })), [apiPosts]);
-
   const openLightboxFromProfile = (p: LightboxPost, index: number) => {
+    console.log("[ProfilePage] openLightbox called", { postId: p.id, index, windowScrollY: window.scrollY });
     setLightboxMediaIndex(index);
     setLightboxPost(p);
+    requestAnimationFrame(() => {
+      console.log("[ProfilePage] windowScrollY after rAF1", window.scrollY);
+      requestAnimationFrame(() => {
+        console.log("[ProfilePage] windowScrollY after rAF2", window.scrollY);
+        setTimeout(() => {
+          console.log("[ProfilePage] windowScrollY after 500ms", window.scrollY);
+        }, 500);
+      });
+    });
   };
 
   const profileIdRef = React.useRef<string | null>(null);
   const viewerIdRef  = React.useRef<string | null>(null);
 
+  // ── Stable refs so realtime callbacks always have fresh values ────────────
   const profileRef      = React.useRef<User | null>(null);
   const refreshPostsRef = React.useRef<((u: string) => Promise<void>) | null>(null);
   const fetchSubRef     = React.useRef<((id: string) => Promise<void>) | null>(null);
@@ -103,6 +109,7 @@ function ProfilePageInner() {
     return "unsubscribedCreator";
   }, [viewer, profile, isSubscribed]);
 
+  const openAuthModal = useAppStore((s) => s.openAuthModal);
   const openCheckout = (type: CheckoutType, tier: SubscriptionTier = "monthly") => {
     if (!viewer) { openAuthModal(); return; }
     setCheckoutType(type);
@@ -127,12 +134,18 @@ function ProfilePageInner() {
 
   const handleCheckoutSuccess = React.useCallback(() => {
     if (checkoutType === "ppv" && lockedPostId) {
+      // Drop the locked UI immediately for instant feedback...
       setApiPosts((prev) =>
         prev.map((p) =>
           p.id === lockedPostId ? { ...p, locked: false, can_access: true } : p
         )
       );
       setFeedRefreshKey((k) => k + 1);
+      setCheckoutOpen(false);
+      // ...then refetch so the post gets its real (unlocked) media URL. Once the
+      // media is in, the active-video coordinator autoplays it (it's the post
+      // the user is looking at), so the reveal feels seamless.
+      if (profile) refreshPostsRef.current?.(profile.username);
     }
     if (checkoutType === "tips" && profile) {
       refreshPostsRef.current?.(profile.username);
@@ -154,9 +167,10 @@ function ProfilePageInner() {
 
   const queryClient = useQueryClient();
 
+  // ── Keep refs in sync so the realtime channel can call them safely ────────
   React.useEffect(() => { profileRef.current = profile; }, [profile]);
 
-  // ── profileQuery ──────────────────────────────────────────────────────────
+  // ── profileQuery: fetch profile from Supabase ─────────────────────────────
   const profileQuery = useQuery({
     queryKey: queryKeys.profile(username),
     queryFn: async () => {
@@ -183,11 +197,12 @@ function ProfilePageInner() {
     enabled: !!username,
   });
 
+  // ── subStatusQuery: fetch subscription status ─────────────────────────────
+  const viewerData   = globalViewer as User | null;
   const profileData  = profileQuery.data ?? null;
-  const isOwnProfile = !!viewer && !!profileData && viewer.id === profileData.id;
+  const isOwnProfile = !!viewerData && !!profileData && viewerData.id === profileData.id;
   const isCreator    = profileData?.role === "creator";
 
-  // ── subStatusQuery ────────────────────────────────────────────────────────
   const subStatusQuery = useQuery({
     queryKey: [...queryKeys.profile(username), "subStatus"],
     queryFn: async () => {
@@ -196,10 +211,10 @@ function ProfilePageInner() {
       return data;
     },
     staleTime: staleTimes.subscriptions,
-    enabled: isCreator && !isOwnProfile && !!viewer, // only run when viewer is known
+    enabled: isCreator && !isOwnProfile,
   });
 
-  // ── postsQuery ────────────────────────────────────────────────────────────
+  // ── postsQuery: fetch creator posts ──────────────────────────────────────
   const postsQuery = useQuery({
     queryKey: [...queryKeys.profile(username), "posts"],
     queryFn: async () => {
@@ -212,40 +227,24 @@ function ProfilePageInner() {
     enabled: !!profileData,
   });
 
-  // ── Invalidate subStatus + posts when viewer changes (guest → logged in) ──
-  // Using ref to track previous viewer ID so we catch the transition
-  // whether this page was already mounted or navigated to post-login.
-  const prevViewerIdRef = React.useRef<string | null | undefined>(undefined);
-  React.useEffect(() => {
-    const newId = viewer?.id ?? null;
-    // undefined means "not yet initialized" — skip first render
-    if (prevViewerIdRef.current === undefined) {
-      prevViewerIdRef.current = newId;
-      return;
-    }
-    if (newId !== prevViewerIdRef.current) {
-      prevViewerIdRef.current = newId;
-      // Reset loading state so skeleton shows while we refetch with new auth context
-      if (newId && isCreator && !isOwnProfile) {
-        setApiLoading(true);
-        setRevealed(false);
-      }
-      queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "subStatus"] });
-      queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "posts"] });
-    }
-  }, [viewer?.id, queryClient, username, isCreator, isOwnProfile]);
-
-  // ── Sync profileQuery into local state ───────────────────────────────────
+  // ── Sync query results into local state ───────────────────────────────────
+  const prevViewerIdRef = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (!profileQuery.data) return;
     const p = profileQuery.data;
     setProfile(p);
     profileIdRef.current = p.id;
     setTotalLikes((p as any)._likes_count ?? 0);
-    if (viewer) {
-      viewerIdRef.current = viewer.id;
+    if (viewerData) {
+      setViewer(viewerData);
+      viewerIdRef.current = viewerData.id;
+      if (prevViewerIdRef.current !== viewerData.id) {
+        prevViewerIdRef.current = viewerData.id;
+        queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "subStatus"] });
+        queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "posts"] });
+      }
     }
-  }, [profileQuery.data, viewer]);
+  }, [profileQuery.data, viewerData]);
 
   React.useEffect(() => {
     if (!subStatusQuery.data) return;
@@ -268,48 +267,33 @@ function ProfilePageInner() {
     setFeedRefreshKey((k) => k + 1);
   }, [postsQuery.data]);
 
-  // ── fanSubscription fetch ─────────────────────────────────────────────────
+  // ── fanSubscription fetch (creator viewing fan) ───────────────────────────
   React.useEffect(() => {
-    if (!profileData || !viewer) return;
-    const ownProfile      = viewer.id === profileData.id;
-    const viewerIsCreator = viewer.role === "creator";
+    if (!profileData || !viewerData) return;
+    const ownProfile  = viewerData.id === profileData.id;
+    const viewerIsCreator = viewerData.role === "creator";
     if (!viewerIsCreator || ownProfile) return;
     fetch(`/api/fans/subscription?fanId=${profileData.id}`)
       .then((r) => r.json())
       .then((d) => { if (d.subscription) setFanSubscription(d.subscription); })
       .catch(() => {});
-  }, [profileData?.id, viewer?.id]);
+  }, [profileData?.id, viewerData?.id]);
 
   // ── followStatus fetch ────────────────────────────────────────────────────
   React.useEffect(() => {
-    if (!profileData || !viewer || isOwnProfile) return;
+    if (!profileData || !viewerData || isOwnProfile) return;
     checkIsFollowing(profileData.id)
       .then((val) => setIsFollowing(val as boolean))
       .catch(() => {});
-  }, [profileData?.id, viewer?.id, isOwnProfile]);
+  }, [profileData?.id, viewerData?.id, isOwnProfile]);
 
-  // ── Loading / revealed states ─────────────────────────────────────────────
-  const subStatusPending = isCreator && !isOwnProfile && !!viewer && subStatusQuery.isLoading;
-  const derivedLoading = profileQuery.isLoading || postsQuery.isLoading || subStatusPending;
-
-  console.log("[Profile]", {
-    profileLoading: profileQuery.isLoading,
-    postsLoading: postsQuery.isLoading,
-    subStatusPending,
-    isCreator,
-    isOwnProfile,
-    hasViewer: !!viewer,
-    subFetched: subStatusQuery.isFetched,
-    subLoading: subStatusQuery.isLoading,
-    isSubscribed,
-    derivedLoading,
-    apiLoading,
-  });
+  // ── Derive loading + revealed states ─────────────────────────────────────
+  const derivedLoading = profileQuery.isLoading || postsQuery.isLoading;
 
   React.useEffect(() => {
     if (!derivedLoading) {
       setApiLoading(false);
-      setRevealed(true);
+      requestAnimationFrame(() => setRevealed(true));
     }
   }, [derivedLoading]);
 
@@ -317,11 +301,11 @@ function ProfilePageInner() {
     if (profileQuery.isError) setFetchError(true);
   }, [profileQuery.isError]);
 
-  // ── Persist to appStore ───────────────────────────────────────────────────
+  // ── Persist to appStore for backward-compat (removed in Phase 11) ─────────
   React.useEffect(() => {
     if (!profileQuery.data || postsQuery.isLoading) return;
     setStoreProfile(username, {
-      viewer,
+      viewer:               viewerData,
       profile:              profileQuery.data,
       totalLikes:           (profileQuery.data as any)._likes_count ?? 0,
       tierId:               undefined,
@@ -345,10 +329,10 @@ function ProfilePageInner() {
     await queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "subStatus"] });
   }, [queryClient, username]);
 
+  // ── Keep refs in sync ────────────────────────────────────────────────────
   React.useEffect(() => { refreshPostsRef.current = refreshPosts; },           [refreshPosts]);
   React.useEffect(() => { fetchSubRef.current     = fetchSubscriptionStatus; }, [fetchSubscriptionStatus]);
 
-  const prevUploadPhases = React.useRef<Record<string, string>>({});
   React.useEffect(() => {
     if (!profile || !viewer || viewer.id !== profile.id) return;
     let shouldRefresh = false;
@@ -362,7 +346,9 @@ function ProfilePageInner() {
     }
   }, [uploads, profile, viewer, queryClient]);
 
-  // ── Realtime: subscription + profile updates ──────────────────────────────
+  const prevUploadPhases = React.useRef<Record<string, string>>({});
+
+  // ── Realtime channel: subscription + profile updates ─────────────────────
   React.useEffect(() => {
     if (!profileIdRef.current || !viewerIdRef.current) return;
     const supabase  = createClient();
@@ -402,6 +388,24 @@ function ProfilePageInner() {
   const handleSubscriptionSuccess = React.useCallback(async () => {
     setIsSubscribed(true);
     updateProfile(username, { isSubscribed: true });
+    // Optimistically unlock all posts so the feed reflects the new subscription
+    // immediately — don't wait on a refetch that can race the DB write / read
+    // replica lag (which left posts showing "subscribe to view" after subscribing).
+    setApiPosts((prev) =>
+      prev.map((p) =>
+        p.is_ppv && !p.can_access
+          ? p
+          : {
+              ...p,
+              locked: false,
+              can_access: true,
+              media: p.media?.map((m) => ({ ...m, locked: false })) ?? p.media,
+            }
+      )
+    );
+    setFeedRefreshKey((k) => k + 1);
+    setCheckoutOpen(false);
+    // Reconcile in the background.
     await queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "subStatus"] });
     await queryClient.invalidateQueries({ queryKey: [...queryKeys.profile(username), "posts"] });
     clearProfile(username);
@@ -460,6 +464,7 @@ function ProfilePageInner() {
   const handleLike    = (_postId: string) => {};
   const handleComment = (id: string) => console.log("Comment:", id);
 
+  // ── FIX: capture post ID so tips are linked to the correct post ──────────
   const handleTip = (id: string) => {
     const post = apiPosts.find((p) => String(p.id) === id);
     setLockedPostId(post?.id);
@@ -523,7 +528,7 @@ function ProfilePageInner() {
           postPrice={lockedPostPrice}
           postId={lockedPostId}
           onSuccess={handleCheckoutSuccess}
-          onSubscriptionSuccess={() => window.location.reload()}
+          onSubscriptionSuccess={handleSubscriptionSuccess}
           autoCloseOnSuccess={checkoutType === "ppv" || checkoutType === "tips"}
           onViewContent={() => router.push(`/${profile.username}`)}
           onGoToSubscriptions={() => router.push("/settings?panel=subscriptions")}
@@ -533,7 +538,7 @@ function ProfilePageInner() {
       {apiLoading && <ProfileSkeleton context={skeletonContext} />}
 
       {!apiLoading && (
-        <div style={{ opacity: revealed ? 1 : 0 }}>
+        <div style={{ opacity: revealed ? 1 : 0, transition: "opacity 0.35s ease" }}>
 
           {isOwnProfile && profile?.role === "creator" && (
             <OwnCreatorProfile

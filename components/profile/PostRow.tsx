@@ -178,6 +178,7 @@ export default function PostRow({
   const isFreePost = !post.locked || post.audience === "everyone";
   const viewerMedia = React.useMemo(() => {
     if (!post.media?.length) return [];
+    console.log("[UNLOCK-DBG][PostRow]", { postId: post.id, locked: post.locked, can_access: post.can_access, is_ppv: (post as any).is_ppv, media: post.media.map((m) => ({ type: m.media_type, hasUrl: !!m.file_url, locked: m.locked })) });
     return post.media.map((m) => ({
       type: m.media_type as "video" | "image", url: m.file_url ?? null,
       bunnyVideoId: m.bunny_video_id ?? null, thumbnailUrl: m.thumbnail_url ?? null,

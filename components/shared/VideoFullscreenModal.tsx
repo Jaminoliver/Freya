@@ -113,6 +113,7 @@ export function VideoFullscreenModal({
   // Follow state
   const [isFollowing,   setIsFollowing]   = useState(initialIsFollowing);
   const [followLoading, setFollowLoading] = useState(false);
+  const [followAnim,    setFollowAnim]    = useState<"idle" | "tick" | "fading">("idle");
 
   // Comment state
   const [commentsOpen,    setCommentsOpen]    = useState(false);
@@ -132,6 +133,7 @@ export function VideoFullscreenModal({
     setLiked(c?.liked ?? data.liked ?? false);
     setCommentCount(c?.comment_count ?? data.comment_count ?? 0);
     setIsFollowing(initialIsFollowing);
+    setFollowAnim("idle");
     setAvatarError(false);
     setComments([]);
     setCommentsOpen(false);
@@ -185,21 +187,36 @@ export function VideoFullscreenModal({
     e.stopPropagation();
     if (!viewerUserId) { openAuthModal(); return; }
     if (followLoading || !data.creator_id) return;
-    setFollowLoading(true);
-    try {
-      if (isFollowing) {
+
+    // Unfollow has no badge UI (button is hidden once following) — keep for completeness.
+    if (isFollowing) {
+      setFollowLoading(true);
+      try {
         await unfollowCreator(data.creator_id);
         setIsFollowing(false);
         onFollowChange?.(data.creator_id, false);
-      } else {
-        await followCreator(data.creator_id);
-        setIsFollowing(true);
-        onFollowChange?.(data.creator_id, true);
+      } catch (err) {
+        console.error("Follow error:", err);
+      } finally {
+        setFollowLoading(false);
       }
+      return;
+    }
+
+    // Follow: instant green tick → hold → fade away. Don't wait on the network.
+    setFollowAnim("tick");
+    onFollowChange?.(data.creator_id, true);   // optimistic
+    setTimeout(() => setFollowAnim("fading"), 650);
+    setTimeout(() => { setIsFollowing(true); setFollowAnim("idle"); }, 1050);
+
+    try {
+      await followCreator(data.creator_id);
     } catch (err) {
       console.error("Follow error:", err);
-    } finally {
-      setFollowLoading(false);
+      // Revert on failure.
+      setIsFollowing(false);
+      setFollowAnim("idle");
+      onFollowChange?.(data.creator_id, false);
     }
   };
 
@@ -501,6 +518,7 @@ export function VideoFullscreenModal({
           100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
         @keyframes vfm-dot { 0%,80%,100%{opacity:0.3;transform:scale(0.85)} 40%{opacity:1;transform:scale(1)} }
+        @keyframes vfm-follow-pop { 0%{transform:scale(0.3);opacity:0} 55%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
 
         .vfm-panel {
           position: fixed;
@@ -880,12 +898,28 @@ export function VideoFullscreenModal({
                     {!isFollowing && (
                       <button
                         onClick={handleFollowToggle}
-                        disabled={followLoading}
-                        style={{ position: "absolute", bottom: 0, right: 0, width: 18, height: 18, borderRadius: "50%", background: "#8B5CF6", border: "2px solid #0a0a0f", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, WebkitTapHighlightColor: "transparent", transition: "background 0.2s", opacity: followLoading ? 0.6 : 1 }}
+                        disabled={followLoading || followAnim !== "idle"}
+                        style={{
+                          position: "absolute", bottom: 0, right: 0, width: 18, height: 18,
+                          borderRadius: "50%",
+                          background: followAnim === "idle" ? "#8B5CF6" : "#22C55E",
+                          border: "2px solid #0a0a0f", display: "flex", alignItems: "center",
+                          justifyContent: "center", cursor: "pointer", padding: 0,
+                          WebkitTapHighlightColor: "transparent",
+                          opacity: followAnim === "fading" ? 0 : 1,
+                          transform: followAnim === "fading" ? "scale(0.6)" : "scale(1)",
+                          transition: "opacity 0.35s ease, transform 0.35s ease, background 0.2s ease",
+                        }}
                       >
-                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
+                        {followAnim === "idle" ? (
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                        ) : (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "vfm-follow-pop 0.3s ease-out" }}>
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
                       </button>
                     )}
                   </div>

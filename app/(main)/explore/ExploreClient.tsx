@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, staleTimes } from "@/lib/query/keys";
 import { CreatorGrid, type GridItem } from "@/components/explore/CreatorGrid";
 import { FeaturedStrip } from "@/components/explore/FeaturedStrip";
@@ -28,6 +28,7 @@ function saveScroll(y: number)  { try { sessionStorage.setItem(SCROLL_KEY, Strin
 function loadScroll(): number   { try { return Number(sessionStorage.getItem(SCROLL_KEY) ?? 0); } catch { return 0; } }
 
 export default function ExploreClient() {
+  const queryClient                       = useQueryClient();
   const [sort, setSort]                   = useState<SortOption>("most_liked");
   const [dropdownOpen, setDropdownOpen]   = useState(false);
   const [followMap, setFollowMap]         = useState<Record<string, boolean>>({});
@@ -37,7 +38,16 @@ export default function ExploreClient() {
   const [hasMore, setHasMore]             = useState(false);
   const scrollRestoredRef                 = useRef(false);
 
-  const { data, isLoading } = useQuery({
+  const { data: stripData } = useQuery({
+    queryKey: queryKeys.explore("strip"),
+    queryFn:  async () => {
+      const res = await fetch(`/api/discover?filter=most_liked`);
+      return res.json();
+    },
+    staleTime: staleTimes.explore,
+  });
+
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: queryKeys.explore(SORT_TO_FILTER[sort]),
     queryFn:  async () => {
       const filter = SORT_TO_FILTER[sort];
@@ -45,9 +55,10 @@ export default function ExploreClient() {
       return res.json();
     },
     staleTime: staleTimes.explore,
+    placeholderData: (prev) => prev,
   });
 
-  const stripCreators: StripCreator[] = data?.strip ?? [];
+  const stripCreators: StripCreator[] = stripData?.strip ?? [];
   const gridItems: GridItem[]         = [...(data?.grid ?? []), ...extraItems];
 
   // Sync cursor/hasMore/extraItems when query data changes (sort change)
@@ -57,6 +68,22 @@ export default function ExploreClient() {
     setCursor(data?.nextCursor ?? null);
     setHasMore(!!data?.nextCursor);
   }, [data]);
+
+  // Prefetch the other sort options in the background so switching filters
+  // is instant (data already cached) instead of waiting on first click.
+  useEffect(() => {
+    (Object.keys(SORT_TO_FILTER) as SortOption[]).forEach((opt) => {
+      if (opt === sort) return;
+      queryClient.prefetchQuery({
+        queryKey: queryKeys.explore(SORT_TO_FILTER[opt]),
+        queryFn: async () => {
+          const res = await fetch(`/api/discover?filter=${SORT_TO_FILTER[opt]}`);
+          return res.json();
+        },
+        staleTime: staleTimes.explore,
+      });
+    });
+  }, [sort, queryClient]);
 
   // Load followMap when base grid changes
   useEffect(() => {
@@ -166,7 +193,7 @@ export default function ExploreClient() {
       <div style={{ padding: "16px 12px 80px" }}>
 
         {/* Featured strip */}
-        {!isLoading && stripCreators.length > 0 && (
+        {stripCreators.length > 0 && (
           <FeaturedStrip creators={stripCreators} />
         )}
 
@@ -230,8 +257,8 @@ export default function ExploreClient() {
         </div>
 
         {isLoading ? (
-  <ExploreSkeleton gridCount={8} />
-) : (
+          <ExploreSkeleton gridCount={8} />
+        ) : (
           <CreatorGrid
             items={gridItems}
             onLoadMore={handleLoadMore}

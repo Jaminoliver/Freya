@@ -232,6 +232,7 @@ export async function GET(
           const rawUrl   = m.file_url as string | null;
           const path     = extractBunnyPath(rawUrl);
           const freshUrl = canAccess && path ? signBunnyUrl(path) : null;
+          console.log("[UNLOCK-DBG][api]", { postId, isPpv, unlocked: unlockedSet.has(postId), isSubscribed, postAudience, canAccess, hasRawUrl: !!rawUrl, extractedPath: !!path, gotFreshUrl: !!freshUrl });
           const { bunnyVideoId, derivedThumb } = resolveVideoMedia(m);
           let freshThumb: string | null = null;
           if (m.media_type === "video") {

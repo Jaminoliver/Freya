@@ -320,7 +320,7 @@ export function StoryBar({ onOpenViewer, externalGroups, initialGroups, storiesL
   const ownThumbnail  = ownGroup?.latestThumbnail ?? null;
   const hasOwnStories = (ownGroup?.items.filter((s) => !s.isProcessing).length ?? 0) > 0;
 
-  if (!loading && !isCreator && displayGroups.length === 0) return null;
+  if (!loading && !isUploading && !hasOwnStories && displayGroups.length === 0) return null;
 
   return (
     <>

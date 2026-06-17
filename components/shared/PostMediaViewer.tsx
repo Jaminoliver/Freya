@@ -127,33 +127,64 @@ function ProgressiveImage({ src, blurHash, style, eager }: {
   const [loaded, setLoaded] = React.useState(() => !!src && loadedImageUrls.has(src));
   const imgRef = React.useRef<HTMLImageElement>(null);
 
-  React.useEffect(() => {
-    if (!src) return;
-    if (loadedImageUrls.has(src)) { setLoaded(true); return; }
-    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
-      loadedImageUrls.add(src);
+  // Detect when the image is ready, covering the case where it was already
+  // cached/complete before React attached onLoad (in which case onLoad never
+  // fires and the image would otherwise stay blurred until a refresh).
+  const markLoadedIfComplete = React.useCallback(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      if (src) loadedImageUrls.add(src);
       setLoaded(true);
-      return;
+      return true;
     }
-    setLoaded(false);
+    return false;
   }, [src]);
+
+  React.useEffect(() => {
+    console.log("[UNLOCK-DBG][PMV-img]", { hasSrc: !!src, srcSample: src ? src.slice(0, 60) : null, loaded });
+    if (!src) { setLoaded(false); return; }
+    if (loadedImageUrls.has(src)) { setLoaded(true); return; }
+    setLoaded(false);
+    let cancelled = false;
+    const finish = () => { if (!cancelled) { loadedImageUrls.add(src); setLoaded(true); } };
+    // 1) Already complete (cached)?
+    if (markLoadedIfComplete()) return;
+    // 2) Use decode() which resolves once the image is ready, even if onLoad
+    //    was missed (off-screen lazy, transformed container, etc.).
+    const probe = new Image();
+    probe.src = src;
+    probe.decode().then(finish).catch(() => {
+      if (probe.complete && probe.naturalWidth > 0) finish();
+    });
+    // 3) Safety poll for a second in case both above miss.
+    let tries = 0;
+    const iv = setInterval(() => {
+      tries++;
+      if (cancelled || markLoadedIfComplete()) { clearInterval(iv); return; }
+      if (tries > 10) clearInterval(iv);
+    }, 100);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [src, markLoadedIfComplete]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       {blurHash && !loaded && (
         <BlurHashCanvas hash={blurHash} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} />
       )}
-      <img
-        ref={imgRef}
-        src={src ?? ""}
-        alt=""
-        draggable={false}
-        loading={eager ? "eager" : "lazy"}
-        decoding="async"
-        fetchPriority={eager ? "high" : "low"}
-        onLoad={() => { if (src) loadedImageUrls.add(src); setLoaded(true); }}
-        style={{ ...style, opacity: loaded ? 1 : 0, transition: "opacity 0.25s ease", position: "relative", zIndex: 2 }}
-      />
+      {src && (
+        <img
+          ref={imgRef}
+          src={src}
+          alt=""
+          draggable={false}
+          loading={eager ? "eager" : "lazy"}
+          decoding="async"
+          fetchPriority={eager ? "high" : "low"}
+          onLoad={() => { if (src) loadedImageUrls.add(src); setLoaded(true); }}
+          onError={() => { /* keep blurhash if the image fails */ }}
+          style={{ ...style, opacity: loaded ? 1 : 0, transition: "opacity 0.25s ease", position: "relative", zIndex: 2 }}
+        />
+      )}
     </div>
   );
 }
@@ -594,7 +625,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
               width: "100%",
               padding: "2px 8px 20px",
             }}>
-              {creatorHandle}@freyalinks.com
+              {creatorHandle}@Fréya.com
             </div>
           )}
         </div>
@@ -661,7 +692,7 @@ export default React.forwardRef<VideoPlayerHandle, PostMediaViewerProps>(functio
             width: "100%",
             padding: "2px 8px 20px",
           }}>
-            {creatorHandle}@freyalinks.com
+            {creatorHandle}@Fréya.com
           </div>
         )}
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { VideoTile, type VideoTileData } from "@/components/explore/VideoTile";
 import { IdentityCard, type IdentityCardData } from "@/components/explore/IdentityCard";
 import VideoFeedPager from "@/components/shared/VideoFeedPager";
@@ -302,22 +303,40 @@ export function CreatorGrid({ items, onLoadMore, loadingMore, hasMore, followMap
 
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", alignItems: "start" }}>
-        {items.map((item) =>
-          item.type === "video" ? (
-            <VideoTile
-              key={`video-${item.post_id}`}
-              data={item}
-              isActive={activeId === item.post_id}
-              isModalOpen={!!fullscreen}
-              onTileRef={handleTileRef}
-              onOpenFullscreen={handleOpenFullscreen}
-            />
-          ) : (
-            <IdentityCard key={`identity-${item.creator_id}`} data={item} />
-          )
-        )}
-      </div>
+      <LayoutGroup>
+        <motion.div layout style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", alignItems: "start" }}>
+          <AnimatePresence mode="popLayout">
+            {items.map((item) => {
+              const key = item.type === "video" ? `video-${item.post_id}` : `identity-${item.creator_id}`;
+              return (
+                <motion.div
+                  key={key}
+                  layout="position"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{
+                    layout: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
+                    opacity: { duration: 0.18 },
+                  }}
+                >
+                  {item.type === "video" ? (
+                    <VideoTile
+                      data={item}
+                      isActive={activeId === item.post_id}
+                      isModalOpen={!!fullscreen}
+                      onTileRef={handleTileRef}
+                      onOpenFullscreen={handleOpenFullscreen}
+                    />
+                  ) : (
+                    <IdentityCard data={item} />
+                  )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </motion.div>
+      </LayoutGroup>
 
       <div ref={sentinelRef} style={{ height: "1px", marginTop: "8px" }} />
 

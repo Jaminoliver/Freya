@@ -38,45 +38,39 @@ function BlurHashCanvas({ hash, style }: { hash: string; style?: React.CSSProper
   return <canvas ref={canvasRef} width={W} height={H} style={{ ...style, imageRendering: "auto" }} />;
 }
 
-const carouselLoadedUrls = new Set<string>();
-
-function isCarouselImageCached(src: string): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const img = new window.Image();
-    img.src = src;
-    return img.complete && img.naturalWidth > 0;
-  } catch { return false; }
-}
-
-if (typeof window !== "undefined") {
-  window.addEventListener("freya:clear-caches", () => carouselLoadedUrls.clear());
-}
-
 function ProgressiveImage({ src, blurHash, style, eager }: {
   src?:      string | null;
   blurHash?: string | null;
   style?:    React.CSSProperties;
   eager?:    boolean;
 }) {
-  const [loaded, setLoaded] = React.useState(() => {
-    if (!src) return false;
-    if (carouselLoadedUrls.has(src)) return true;
-    if (isCarouselImageCached(src)) { carouselLoadedUrls.add(src); return true; }
-    return false;
-  });
+  const [loaded, setLoaded] = React.useState(false);
   const imgRef = React.useRef<HTMLImageElement>(null);
 
+  const markLoadedIfComplete = React.useCallback(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) { setLoaded(true); return true; }
+    return false;
+  }, []);
+
   React.useEffect(() => {
-    if (!src) return;
-    if (carouselLoadedUrls.has(src)) { setLoaded(true); return; }
-    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
-      carouselLoadedUrls.add(src);
-      setLoaded(true);
-      return;
-    }
+    console.log("[UNLOCK-DBG][Carousel-img]", { hasSrc: !!src, srcSample: src ? src.slice(0, 60) : null });
+    if (!src) { setLoaded(false); return; }
     setLoaded(false);
-  }, [src]);
+    let cancelled = false;
+    const finish = () => { if (!cancelled) setLoaded(true); };
+    if (markLoadedIfComplete()) return;
+    const probe = new Image();
+    probe.src = src;
+    probe.decode().then(finish).catch(() => { if (probe.complete && probe.naturalWidth > 0) finish(); });
+    let tries = 0;
+    const iv = setInterval(() => {
+      tries++;
+      if (cancelled || markLoadedIfComplete()) { clearInterval(iv); return; }
+      if (tries > 10) clearInterval(iv);
+    }, 100);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [src, markLoadedIfComplete]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -90,13 +84,14 @@ function ProgressiveImage({ src, blurHash, style, eager }: {
         draggable={false}
         loading={eager ? "eager" : "lazy"}
         decoding="async"
-        fetchPriority={eager ? "high" : "auto"}
-        onLoad={() => { if (src) carouselLoadedUrls.add(src); setLoaded(true); }}
+        fetchPriority={eager ? "high" : "low"}
+        onLoad={() => { console.log("[UNLOCK-DBG][Carousel-img] onLoad fired", src ? src.slice(0,60) : null); setLoaded(true); }}
+        onError={(e) => { console.log("[UNLOCK-DBG][Carousel-img] onError", src ? src.slice(0,60) : null); }}
         style={{
           ...style,
           position: "relative", zIndex: 2,
           opacity:    loaded ? 1 : 0,
-          transition: loaded ? "none" : "opacity 0.25s ease",
+          transition: "opacity 0.25s ease",
         }}
       />
     </div>
@@ -417,7 +412,7 @@ export default function ImageCarousel({
       {isUnlockedPPV && <UnlockedPPVBadge />}
 
       {media.length > 1 && !isUnlockedPPV && (
-        <div style={{ position: "absolute", top: "24px", left: "10px", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+        <div style={{ position: "absolute", top: "10px", left: "10px", zIndex: 10, backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", borderRadius: "20px", padding: "3px 10px", fontSize: "12px", fontWeight: 600, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
           {activeIndex + 1} / {media.length}
         </div>
       )}

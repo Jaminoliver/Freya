@@ -310,6 +310,17 @@ export function MobileHeader({ headerVisible = true }: { headerVisible?: boolean
   }, [query]);
 
   useEffect(() => {
+    if (!plusOpen) return;
+    const dismiss = () => setPlusOpen(false);
+    window.addEventListener("scroll", dismiss, { passive: true });
+    window.addEventListener("touchmove", dismiss, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", dismiss);
+      window.removeEventListener("touchmove", dismiss);
+    };
+  }, [plusOpen]);
+
+  useEffect(() => {
     setSearchOpen(false);
     setPlusOpen(false);
     setQuery("");

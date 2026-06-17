@@ -487,11 +487,8 @@ export default function HomePage() {
           key={post.id}
           data-postid={post.id}
           data-video={videoIdMap.has(String(post.id)) ? "1" : undefined}
-          style={{ margin: "10px 12px", borderRadius: "14px", overflow: "hidden" }}
+          style={{ margin: index === 0 ? "0 12px 10px" : "10px 12px", borderRadius: "14px", overflow: "hidden" }}
         >
-          {index === 0 && (
-            <div style={{ height: "1px", background: "#1A1A2E", borderRadius: "12px 12px 0 0", marginBottom: "0" }} />
-          )}
           <PostCard
             post={adaptPost(post)}
             onLike={() => {}}

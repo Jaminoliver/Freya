@@ -71,9 +71,13 @@ export default function VideoFeedPager({
   useEffect(() => {
     const savedScroll = window.scrollY;
     const prevOverflow = document.body.style.overflow;
+    const prevOverscroll = document.body.style.overscrollBehaviorX;
     document.body.style.overflow = "hidden";
+    // Block the browser's horizontal edge-swipe back-navigation while open.
+    document.body.style.overscrollBehaviorX = "none";
     return () => {
       document.body.style.overflow = prevOverflow || "";
+      document.body.style.overscrollBehaviorX = prevOverscroll || "";
       window.scrollTo({ top: savedScroll, behavior: "instant" as ScrollBehavior });
     };
   }, []);
